@@ -1,0 +1,254 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CaseInsensitiveMap.java
+ * Created: 17-Dec-2002
+ * By: Rick Cameron
+ */
+
+package org.openquark.util;
+
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+
+public final class CaseInsensitiveMap<V> implements Map<String, V> {
+
+    /*
+     * Implementation note:
+     * 
+     * The backing map for CaseInsensitiveMap is a hashmap.
+     * Lookups are done in the hashmap by converting the key to uppercase, then to lowercase.
+     * 
+     * Using these rules:
+     * 'I', 'i', and their dotted and dotless forms respectively (from the Turkish alphabet) are all considered equal.
+     * 'ß', 'ss' and 'SS' are all considered equal.
+     * 
+     * If TS raises an escalation about the first outcome, we can consider using the Turkish locale where it affects this.
+     * 
+     */
+
+    /**
+     * The backing map.
+     * This maps the lower-case version of any key to the object.
+     * This will cause strings to act as keys in the map in a case-insensitive way.
+     */
+    private final Map<String, V> hashMap;
+    
+    /**
+     * Constructor for a CaseInsensitiveMap.
+     */
+    public CaseInsensitiveMap () {
+        hashMap = new HashMap<String, V>();
+    }
+
+    /**
+     * Copy constructor for CaseInsensitiveMap.
+     * @param mapToCopy
+     */
+    public CaseInsensitiveMap(Map<String, V> mapToCopy) {
+        // Note: this constructor is faster than using the arg-less constructor and calling putAll().
+        hashMap = new HashMap<String, V>(mapToCopy);
+    }
+
+    /**
+     * @see java.lang.Object#equals(Object)
+     */
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+
+        CaseInsensitiveMap<?> other = (CaseInsensitiveMap<?>)obj;
+        return hashMap.equals(other.hashMap);
+    }
+
+    /**
+     * @see java.lang.Object#hashCode()
+     */
+    @Override
+    public int hashCode() {
+        return hashMap.hashCode();
+    }
+
+    /**
+     * Returns the number of items in the map.
+     */
+    public int size() {
+        return hashMap.size();
+    }
+
+    /**
+     * Removes all elements from this map.
+     */
+    public void clear() {
+        hashMap.clear();
+    }
+    
+    /**
+     * Returns a set view of the keys contained in this map.
+     * @return Set
+     */
+    public Set<String> keySet() {
+        return hashMap.keySet();
+    }
+
+    public boolean containsKey (String key) {
+        return hashMap.containsKey(getCaseInsensitiveKey(key));
+    }
+    
+    public V get (String key) {
+        return hashMap.get(getCaseInsensitiveKey(key));
+    }
+    
+    public V put (String key, V value) {
+        return hashMap.put(getCaseInsensitiveKey(key), value);
+    }
+    
+    public V remove(String key) {
+        return hashMap.remove(getCaseInsensitiveKey(key));
+    }
+
+    public Collection<V> values () {
+        return hashMap.values();
+    }
+
+    /**
+     * Method isEmpty.
+     * @return whether the map is empty.
+     */
+    public boolean isEmpty () {
+        return hashMap.isEmpty();
+    }
+    
+    /**
+     * Convert the given string to a key which will be equals() to other keys generated by calling this method with
+     *   strings which differ only in case from the one which was passed in.
+     * @param s the string to convert.
+     * @return a corresponding key which will be equals() to other keys generated by calling this method with
+     *   strings which differ only in case from the one which was passed in.
+     */
+    private static final String getCaseInsensitiveKey(String s) {
+        return s.toUpperCase(Locale.ENGLISH).toLowerCase(Locale.ENGLISH);
+    }
+
+    
+    /**
+     * Check that the given key is valid for this map.  In other words, validates that
+     * the key is a String.
+     * @param key
+     */
+    private static final void validateKey(Object key) {
+        if (!(key instanceof String)) {
+            throw new ClassCastException("This Map only accepts keys of type java.lang.String");
+        }
+    }
+    
+    /**
+     * Determine whether two strings are equal in a case-insensitive manner.
+     * @param s1
+     * @param s2
+     * @return whether two strings are equal in a case-insensitive manner.
+     */
+    public static boolean equalsCaseInsensitive(String s1, String s2) {
+        // Check that both arguments are non null
+        if (s1 != null && s2 != null) {
+            // Note: do not perform a quick length comparison, as "ß" is equivalent to "ss"
+            return getCaseInsensitiveKey(s1).equals(getCaseInsensitiveKey(s2));
+        } else {
+            // One of the arguments is null.  They are only equal if they are both null.
+            return s1 == s2;
+        }
+    }
+    
+    /**
+     * Get a hash code on the string s which treats strings which differ only in case as being the same.
+     * Note: this method may be relatively expensive.
+     * @param s the string to hash.
+     * @return a hash code for the string, treating it in a case-insensitive way.
+     */
+    public static int caseInsensitiveHashCode(String s) {
+        return getCaseInsensitiveKey(s).hashCode();
+    }
+
+    /**
+     * @see java.util.Map#entrySet()
+     */
+    public Set<Map.Entry<String, V>> entrySet() {
+        return hashMap.entrySet();
+    }
+
+    /* (non-Javadoc)
+     * @see java.util.Map#containsKey(java.lang.Object)
+     */
+    public boolean containsKey(Object key) {
+        validateKey(key);
+        return containsKey((String)key);
+    }
+
+    /* (non-Javadoc)
+     * @see java.util.Map#containsValue(java.lang.Object)
+     */
+    public boolean containsValue(Object value) {
+        return hashMap.containsValue(value);
+    }
+
+    /**
+     * @see java.util.Map#putAll(java.util.Map)
+     */
+    public void putAll(Map<? extends String, ? extends V> t) {
+        for (final Map.Entry<? extends String, ? extends V> entry : t.entrySet()) {
+            put(entry.getKey(), entry.getValue());
+        }
+    }
+
+    /**
+     * @see java.util.Map#get(java.lang.Object)
+     */
+    public V get(Object key) {
+        validateKey(key);
+        return get((String)key);
+    }
+
+    /**
+     * @see java.util.Map#remove(java.lang.Object)
+     */
+    public V remove(Object key) {
+        validateKey(key);
+        return remove((String)key);
+    }
+}

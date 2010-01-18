@@ -1,0 +1,450 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Record.cal
+ * Created: Jan 11, 2007
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines many useful functions for working with CAL record types. Since
+ * tuples are records, these functions are also useful for working with tuples.
+ *
+ * @author Bo Ilic
+ */
+module Cal.Core.Record;
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable;
+    typeConstructor = Int, Boolean, JList, JMap, JObject, String, CalValue;
+    dataConstructor = False, True;
+    function = input, output, unsafeCoerce;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+import Cal.Collections.List using
+    function = zip, fromJCollection;
+    ;
+//we want to maintain the generality and functional independence of the Record
+//module.
+//Please do not add more imports.
+
+/**
+ * {@code {@link strictRecord@} record@} evaluates each field of {@code record@} to weak-head normal form,
+ * in field-name order, and then returns {@code record@} itself. 
+ * 
+ * As with all sequencing functions in CAL, this function is primarily used for two main reasons:
+ * {@orderedList
+ *    {@item controlling evaluation order when working with CAL records that arise
+ *           from external Java sources e.g. via {@link input@} or {@link fromJMap@}. @}
+ *    {@item controlling space usage since the record type has non-strict fields by definition. @} 
+ * @}
+ * 
+ * {@link strictRecord@} is analogous to functions like {@link List.seqList@} and {@link List.strictList@} for
+ * sequencing lists, and {@link Prelude.strictTuple2@} (and its relatives) for sequencing tuples.
+ * 
+ * An alternative to this function is to use the {@link Prelude.deepSeq@} function, except that {@link Prelude.deepSeq@} is
+ * a much coarser-grained tool since it fully evaluates each field which may be sacrificing valuable lazyness.
+ * 
+ * To illustrate the semantics of this function, for a 3-tuple, it is equivalent to the following:
+ * {@code
+ * strictTuple3 :: (a, b, c) -> (a, b, c);
+ * strictTuple3 !tuple =
+ *     case tuple of
+ *     (x1, x2, x3) -> x1 `seq` x2 `seq` x3 `seq` tuple;
+ *     ;
+ *  @}
+ * 
+ * @arg record
+ * @return record itself after first evaluating each field of the record to weak-head normal form, in field-name order.
+ * @see Prelude.seq, Prelude.deepSeq, Prelude.strictTuple2, List.seqList, List.strictList
+ */
+strictRecord :: {r} -> {r};
+public strictRecord = strictRecordPrimitive;
+
+/**
+ * @arg record
+ * @return record itself, except that each field of the record has been evaluated to weak-head normal form
+ *         in field-name order.
+ */
+primitive private strictRecordPrimitive :: {r} -> {r};
+   
+
+
+/**
+ * {@link JRecordValue@} is a type mainly of interest to Java clients wanting to work with CAL records in Java code.
+ *  
+ * It is a foreign type corresponding to the Java class {@code org.openquark.cal.runtime.RecordValue@}. 
+ * and it implements the {@code java.util.SortedMap@} interface. In particular, it retains field-name
+ * information in the resulting Java value. This can be helpful in avoiding bugs in client code, since the default method of
+ * outputing CAL records using {@link Prelude.output@} produces a Java list. This is efficient, but can be error-prone.
+ */
+data foreign unsafe import jvm public "org.openquark.cal.runtime.RecordValue"
+    public JRecordValue deriving Inputable, Outputable, Show;
+
+foreign unsafe import jvm "cast" 
+    public jRecordValueToJMap :: JRecordValue -> JMap;
+
+/**
+ * Converts a CAL record to a Java map from  {@code org.openquark.cal.compiler.FieldName@}
+ * to {@code java.lang.Object@}. For example, if the CAL record value is {@code {f1 = x1, f2 = x2, f3 = x3}@}, then the resulting
+ * Java map is {@code {f1 = {@link output@} x1, f2 = output x2, f3 = output x3}@}.
+ * 
+ * @arg record a CAL record.
+ * @return a Java representation of the CAL record that includes field-name information.
+ */
+toJRecordValue :: Outputable r => {r} -> JRecordValue;
+public toJRecordValue = recordToJRecordValuePrimitive;
+
+/** 
+ * The CAL record obtained by applying {@link input@} to each value of the Java map from {@code org.openquark.cal.compiler.FieldName@}
+ * to {@code java.lang.Object@}. The nth element of the Java map (in field-name order) is mapped to the nth field (in field-name order) in
+ * the CAL record. For example, if the Java map is {@code {f1 = x1, f2 = x2, f3 = x3}@}, then the resulting CAL record is
+ * {@code {f1 = input x1, f2 = input x2, f3 = input x3}@}. Note that the size of the Java map must be the same as the number of fields 
+ * in the CAL record or an exception results. Similarly the field-names of the Java map must exactly match the field-names in the CAL record.
+ * These conditions are mainly intended to help users catch bugs in their code at an early stage.
+ * 
+ * @arg javaMap must be a {@code java.util.Map@} of {@code org.openquark.cal.compiler.FieldName@} to {@code java.lang.Object@}.
+ * @return the CAL record obtained by applying {@link input@} to each value of the Java map.
+ */
+fromJMap :: Inputable r => JMap -> {r};
+public fromJMap !javaMap = Prelude.input (Prelude.output javaMap);    
+      
+primitive private recordToJRecordValuePrimitive :: Outputable r => {r} -> JRecordValue;
+
+
+/**
+ * {@code fieldNames@} returns the ordered list of field names of its argument record.
+ * Ordinal field names, such as {@code "#1"@}, {@code "#2"@} etc, are first, in ordinal order.
+ * Textual field names such as {@code "orderDate"@}, {@code "shipDate"@} are next, in alphabetical order.
+ * 
+ * @arg recordValue the record whose field names are to be returned.
+ * @return the field names of the record.
+ */
+fieldNames :: {r} -> [String];
+public fieldNames !recordValue = input (output (fieldNamesPrimitive recordValue));
+
+/**
+ * {@code fieldNamesPrimitive@} takes a record, and returns a {@link JList@} that is actually a 
+ * {@code java.util.List@} of {@code java.lang.String@} objects representing the field names of the record.
+ */
+primitive private fieldNamesPrimitive :: {r} -> JList;
+
+/**
+ * Function for determining if a record has a field of the given name.
+ * 
+ * @arg recordValue the record to be checked for the presense of a field of the given name.
+ * @arg fieldName the field name to be checked.
+ * @return {@link True@} if the named field is present in {@code recordValue@}; {@link False@} otherwise.
+ */
+hasField :: {r} -> String -> Boolean;
+public hasField = hasFieldPrimitive;
+
+/**
+ * Primitive function for determining if a record has a field of the given name.
+ * this could be implemented as a non-primitive function based on {@link fieldNames@}, but is done in
+ * this way for efficiency reasons.
+ * 
+ * @arg recordValue the record to be checked for the presense of a field of the given name.
+ * @arg fieldName the field name to be checked.
+ * @return {@link True@} if the named field is present in {@code recordValue@}; {@link False@} otherwise.
+ */
+primitive private hasFieldPrimitive :: {r} -> String -> Boolean;
+
+/**
+ * Converts a record into a list of Java objects representing the values held by the record's fields.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding list of Java objects representing the values held by the record's fields.
+ */
+toValueList :: Outputable r => {r} -> [JObject];
+public toValueList !r = Prelude.input (Prelude.output r);
+
+/**
+ * Converts a record into a list of (fieldName, value) pairs.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding list of (field-name, value) pairs.
+ */
+toFieldValueList :: Outputable r => {r} -> [(String, JObject)];
+public toFieldValueList !r = zip (fieldNames r) (toValueList r);
+
+
+/**
+ * Converts a record with the ordinal fields {@code #1@} and {@code #2@} into a pair.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding pair.
+ */
+toTuple2 :: (r\#1, r\#2) => {r | #1 :: a, #2 :: b} -> (a, b);
+public toTuple2 !r =
+    case r of
+    {_ | #1 = f1, #2 = f2} -> (f1, f2);
+    ;
+
+/**
+ * Converts a record with the ordinal fields {@code #1@} through {@code #3@} into a triple.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding triple.
+ */
+toTuple3 :: (r\#1, r\#2, r\#3) => {r | #1 :: a, #2 :: b, #3 :: c} -> (a, b, c);
+public toTuple3 !r =
+    case r of
+    {_ | #1 = f1, #2 = f2, #3 = f3} -> (f1, f2, f3);
+    ;
+
+/**
+ * Converts a record with the ordinal fields {@code #1@} through {@code #4@} into a 4-tuple.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding 4-tuple.
+ */
+toTuple4 :: (r\#1, r\#2, r\#3, r\#4) => {r | #1 :: a, #2 :: b, #3 :: c, #4 :: d} -> (a, b, c, d);
+public toTuple4 !r =
+    case r of
+    {_ | #1 = f1, #2 = f2, #3 = f3, #4 = f4} -> (f1, f2, f3, f4);
+    ;
+
+/**
+ * Converts a record with the ordinal fields {@code #1@} through {@code #5@} into a 5-tuple.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding 5-tuple.
+ */
+toTuple5 :: (r\#1, r\#2, r\#3, r\#4, r\#5) => {r | #1 :: a, #2 :: b, #3 :: c, #4 :: d, #5 :: e} -> (a, b, c, d, e);
+public toTuple5 !r =
+    case r of
+    {_ | #1 = f1, #2 = f2, #3 = f3, #4 = f4, #5 = f5} -> (f1, f2, f3, f4, f5);
+    ;
+
+/**
+ * Converts a record with the ordinal fields {@code #1@} through {@code #6@} into a 6-tuple.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding 6-tuple.
+ */
+toTuple6 :: (r\#1, r\#2, r\#3, r\#4, r\#5, r\#6) => {r | #1 :: a, #2 :: b, #3 :: c, #4 :: d, #5 :: e, #6 :: f} -> (a, b, c, d, e, f);
+public toTuple6 !r =
+    case r of {_ | #1 = f1, #2 = f2, #3 = f3, #4 = f4, #5 = f5, #6 = f6} -> (f1, f2, f3, f4, f5, f6);
+    ;
+    
+/**
+ * Converts a record with the ordinal fields {@code #1@} through {@code #7@} into a 7-tuple.
+ * 
+ * @arg r the record to be converted.
+ * @return the corresponding 7-tuple.
+ */
+toTuple7 :: (r\#1, r\#2, r\#3, r\#4, r\#5, r\#6, r\#7) => {r | #1 :: a, #2 :: b, #3 :: c, #4 :: d, #5 :: e, #6 :: f, #7 :: g} -> (a, b, c, d, e, f, g);
+public toTuple7 !r =
+    case r of {_ | #1 = f1, #2 = f2, #3 = f3, #4 = f4, #5 = f5, #6 = f6, #7 = f7} -> (f1, f2, f3, f4, f5, f6, f7);
+    ;
+
+/**
+ * This function takes a record dictionary and a tuple containing either
+ * records and lists and creates a list with one element for each field in the
+ * record dictionary. Each element in the output list is crated by applying
+ * the dictionary function using arguments taken from the values tuple. The
+ * values tuple must contain records or lists which have at leasts as many
+ * elements or fields as the record dictionary. The i{@sup th@} element/field of
+ * values.#j is used as the j{@sup th@} argument for the i{@sup th@} appplication of the
+ * dictionary function to create the i{@sup th@} element in the output list.
+ * 
+ * This is an unsafe function because it circumvents the type system and can result in 
+ * a runtime type mismatch if the dictionary is not appropriate. 
+ * Use with extreme caution.
+ *
+ * @arg dict a record dictionary
+ * @arg values a tuple containing the arguments used to apply the dictionary functions
+ * 
+ * @return a new list with one element for each field in the record dictionary.
+ */
+unsafeBuildList :: Dictionary {r} -> {b} -> [a];
+public unsafeBuildList !dict !values =
+    unsafeCoerce
+        (
+            (
+                fromJCollection
+                $ buildListPrimitive
+                    dict.Dictionary.dictionary
+                    dict.Dictionary.method
+                    values
+            )
+                :: [CalValue]
+        )
+    ;
+
+/**
+ * This function takes a record dictionary and applies it to convert a record
+ * to a homogeneous list with one element for each record field. The dictionary
+ * must be for a function of type {@code r -> a@} or a runtime error will occur.
+ *
+ * This is an unsafe function because it circumvents the type system and can result in 
+ * a runtime type mismatch if the dictionary function is not appropriate. 
+ * Use with extreme caution.
+ *
+ * @arg dict the record dictionary
+ * @arg record the to record to convert to a list
+ * 
+ * @return a new list with one element for each field in the input record.
+ */
+unsafeBuildListFromRecord :: Dictionary {r} -> {r} -> [a];
+public unsafeBuildListFromRecord !dict !record = unsafeBuildList dict {#1 = record};
+
+/**
+ * This function takes a record dictionary and a homogenous list and creates a
+ * hetergenous record. The dictionary must be for a method of type b -> r or a
+ * runtime error will occur. Each element in the output record is created by
+ * applying the dictionary function to the ith element in the values list.
+ *
+ * This is an unsafe function because it circumvents the type system and can result in 
+ * a runtime type mismatch if the dictionary function is not appropriate. 
+ * Use with extreme caution.
+
+ * @arg dict the record dictionary. The dictionary function must be of type 
+ *  {@code b -> r;@}
+ *  
+ * @arg values a list of values that must be at least as long as there are
+ *   fields in the record. A non-existient element runtime error will occur if
+ *   this is not so.
+ *   
+ * @return a new record created from the dictionary and list of values.
+ */
+unsafeBuildRecordFromList :: Dictionary {r} -> [b] -> {r};
+public unsafeBuildRecordFromList !dict !values = unsafeBuildRecord dict {#1 = values};
+
+/**
+ * This functions creates a record using a record dictionary. Each element i in
+ * the output record is crated by applying the dictionary function using
+ * arguments taken from the values tuple. The values tuple must contain records
+ * or lists, which have at leasts as many elements or fields as the output
+ * record. The i{@sup th@} element/field of values.#j is used as the j{@sup th@} argument for
+ * the i{@sup th@} appplication of the dictionary function to create the i{@sup th@} record
+ * field.
+ * 
+ * This is an unsafe function because it circumvents the type system and can result in 
+ * a runtime type mismatch if the dictionary function is not appropriate. 
+ * Use with extreme caution.
+ *
+ * @arg dict the record dictionary containing the function to apply to create
+ *   the record values. The dictionary function must be compatabile with the
+ *   arguments in the values tuple.
+ *
+ * @arg values This must be a tuple of records/lists which contain the values
+ *   used to create the output record. All records and lists must have at least as
+ *   many elements/fields as the output record.
+ *
+ * @return a new record created by applying the record dictionary function.
+ */
+unsafeBuildRecord :: Dictionary {r} -> {b} -> {r};
+public unsafeBuildRecord !dict !values =
+    buildRecordPrimitive
+                dict.Dictionary.dictionary
+                dict.Dictionary.method
+                values
+            ;
+    
+/**
+ * This data type is used to represent a record dictionary function. A record
+ * dictionary contains specilized versions of a class method for each
+ * field in a record.
+ *
+ * A Dictionary can only be obtained using the {@link dictionary@} function.
+ */
+data public Dictionary a =
+    private Dictionary
+        dictionary :: Prelude.CalValue
+        method :: !Prelude.Int
+    ;
+
+/**
+ * This function is used to obtain the hidden dictionary argument from the enclosing
+ * function. It may only be used from directly within a function that has a single
+ * record dictionary
+ * argument - ie a function which has a single type class constraint on a
+ * single record type variable. The example below shows how to write a function that
+ * obtains the show dictionary. This function can then be used to get the show
+ * dictionary for any record. The functionName argument must always be a string
+ * literal - it is checked and bound at compile time.
+ *
+ * {@code
+ * showDict :: Show r => {r} -> {@link typeConstructor = Dictionary@} {r};
+ * showDict r = Prelude.dictionary r "show";
+ * @}
+ *
+ * @arg record the record for which the dictionary is obtained.
+ * @arg functionName the name of the function in the type class that the
+ *   dictionary can be used to apply. This must be a literal string. A compile 
+ *   time error will thrown if this string does not match an instance function
+ *   in the dictionary.
+ *   
+ * @return the hidden record dictionary parameter from the enclosing function 
+ */
+dictionary :: {a} -> String -> Dictionary {a};
+public dictionary record !functionName =
+    Dictionary (Prelude.toCalValue record) (unsafeCoerce functionName);
+
+/**
+ * This function extracts the field names from a record dictionary.
+ *
+ * @arg dict the record dictionary to get the field names from.
+ * @return a list of field names from the record dictionary
+ */
+dictionaryFieldNames :: Dictionary {r} -> [Prelude.String];
+public dictionaryFieldNames !dict =
+    Record.fieldNames (unsafeCoerce dict.Dictionary.dictionary);
+
+/** primitive function supporting list to record 
+ * it expects a record dictionary, the index of the method to use in the dictonary
+ * and a tuple containing arguments for invoking the instance function
+ * 
+ * @arg dict internal record dictionary
+ * @arg index the index of the instance function to use from the record dictionary
+ * @arg args a tuple containing values used to invoke the instance functions
+ * @return a record 
+ */
+primitive private buildRecordPrimitive ::
+Prelude.CalValue -> Prelude.Int -> {a} -> {b}
+    ;
+
+/** primitive function supporting record to list
+ * it expects a record dictionary, the index of the method to use in the dictonary
+ * and a tuple containing arguments for invoking the instance function
+ * 
+ * @arg dict internal record dictionary
+ * @arg index the index of the instance function to use from the record dictionary
+ * @arg args a tuple containing values used to invoke the instance functions
+ * @return a JList of unevaluated applications of the instance functions. 
+ */
+primitive private buildListPrimitive ::
+Prelude.CalValue -> Prelude.Int -> {r} -> Prelude.JCollection
+    ;

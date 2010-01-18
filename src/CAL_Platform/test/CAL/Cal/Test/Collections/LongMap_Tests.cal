@@ -1,0 +1,453 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * LongMap_Tests.cal
+ * Creation date: May 4, 2006.
+ * By: Raymond Cypher
+ */
+
+/**
+ * This module contains test cases for the {@link module = LongMap@} module.
+ *
+ * Note that *examples functions can and should still go into the Debug module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Peter Cardwell
+ */
+module Cal.Test.Collections.LongMap_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, Long, String;
+    function = assert, downFrom, equals, fst, lessThan, not, seq, snd, upFromTo, add, const;
+    ;
+import Cal.Collections.List using
+    function = foldLeftStrict, take;
+    ;
+import Cal.Collections.LongMap using
+    typeConstructor = LongMap;
+    function = 
+        delete, difference, empty, filter, find, fromAscList, fromDistinctAscList, fromList, insert, insertWith, 
+        intersection, isSubmapBy, partition, toList, union, unionWith,
+        single, keys, member, fromListWith, update;
+    ;
+
+import Cal.Utilities.QuickCheck using 
+    typeConstructor = Gen, GenParams, Property;
+    function = arbitrary, coarbitrary, getBoundedInt, getNthBoundedInt, generate, implies, makeGen, quickCheck;
+    typeClass = Arbitrary;
+    ; 
+
+
+testTree :: [Long] -> LongMap Long;
+private testTree xs = fromList (List.map (\x -> (x, x*2)) xs);
+
+test1 :: LongMap Long;
+private test1 = testTree (upFromTo 1 20);
+
+test2 :: LongMap Long;
+private test2 = testTree (take 21 (downFrom 30));
+
+test3 :: LongMap Long;
+private test3 = testTree [1,4,6,89,2323,53,43,234,5,79,12,9,24,9,8,423,8,42,4,8,9,3];
+
+test4 :: LongMap Long;
+private test4 = testTree (upFromTo 1 10000);
+
+sampleMap0To9 :: LongMap String;
+sampleMap0To9 = fromList [(0, "zero"), (1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five"), (6, "six"), (7, "seven"), (8, "eight"), (9, "nine")];
+
+sampleMap10To19 :: LongMap String;
+sampleMap10To19 = fromList [(10, "ten"), (11, "eleven"), (12, "twelve"), (13, "thirteen"), (14, "fourteen"), (15, "fifteen"), (16, "sixteen"), (17, "seventeen"), (18, "eighteen"), (19, "nineteen")];
+
+sampleMap4To13 :: LongMap String;
+sampleMap4To13 = fromList [(4, "four"), (5, "five"), (6, "six"), (7, "seven"), (8, "eight"), (9, "nine"), (10, "ten"), (11, "eleven"), (12, "twelve"), (13, "thirteen")];
+
+//makes the map from an Int value to the name of its last digit e.g. (25, "five") where the keys range from 1 to mapSize.
+makeLastDigitMap :: Long -> LongMap String;
+makeLastDigitMap !mapSize =
+  let
+      keys :: [Long];
+      keys = upFromTo 1 mapSize;
+      
+      values :: [String];
+      values = List.map (\n -> find (n % 10 :: Long) sampleMap0To9) keys;
+  in
+      fromList (List.zip keys values);
+
+//Build a map of successive multiples of three in ascending order
+multsOfThreeMap :: Long -> LongMap Long;
+multsOfThreeMap !size =
+  let
+      nums :: [Long];
+      nums = upFromTo 1 size;
+      
+      mults :: [Long];
+      mults = List.map (\n -> n*3) nums;
+  in
+      fromDistinctAscList (List.zip mults mults);
+  
+//Build a map of random multiples of three in no particular order
+randMultsOfThreeMap :: Long -> LongMap Long;
+randMultsOfThreeMap !size =
+  let
+      nums :: [Long];
+      nums = upFromTo 1 size;
+      
+      mults :: [Long];
+      mults = List.map (\n -> ((n*n*30696) % 65521) * 3) nums;
+  in
+      fromList (List.zip mults mults);
+  
+//Build of a map of successive multiples of two in ascending order
+multsOfTwoMap :: Long -> LongMap Long;
+multsOfTwoMap !size =
+  let
+      nums :: [Long];
+      nums = upFromTo 1 size;
+      
+      mults :: [Long];
+      mults = List.map (\n -> n*2) nums;
+  in
+      fromDistinctAscList (List.zip mults mults);
+  
+//Build a map of random multiples of two in no particular order
+randMultsOfTwoMap :: Long -> LongMap Long;
+randMultsOfTwoMap !size =
+  let
+      nums :: [Long];
+      nums = upFromTo 1 size;
+      
+      mults :: [Long];
+      mults = List.map (\n -> ((n*n*30696) % 65521) * 2) nums;
+  in
+      fromList (List.zip mults mults);
+
+//CAFs for benchmarking
+multsOfTwo400000 :: [Long];
+multsOfTwo400000 = List.map (\n -> n*2) (upFromTo 1 400000);
+
+multsOfThree400000 :: [Long];
+multsOfThree400000 = List.map (\n -> n*3) (upFromTo 1 400000);                                              
+
+multsOfTwoMap50000 :: LongMap Long;
+multsOfTwoMap50000 = multsOfTwoMap 50000;
+
+multsOfTwoMap400000 :: LongMap Long;
+multsOfTwoMap400000 = multsOfTwoMap 400000;
+
+multsOfThreeMap50000 :: LongMap Long;
+multsOfThreeMap50000 = multsOfThreeMap 50000;
+
+multsOfThreeMap400000 :: LongMap Long;
+multsOfThreeMap400000 = multsOfThreeMap 400000;
+
+randMultsOfTwoMap50000 :: LongMap Long;
+randMultsOfTwoMap50000 = randMultsOfTwoMap 50000;
+
+randMultsOfTwoMap400000 :: LongMap Long;
+randMultsOfTwoMap400000 = randMultsOfTwoMap 400000;
+
+randMultsOfThreeMap50000 :: LongMap Long;
+randMultsOfThreeMap50000 = randMultsOfThreeMap 50000;
+
+randMultsOfThreeMap400000 :: LongMap Long;
+randMultsOfThreeMap400000 = randMultsOfThreeMap 400000;
+
+//A benchmark to test the performance of the union operation.
+unionBenchmark :: Long -> LongMap Long;
+unionBenchmark uselessParam = union (multsOfTwoMap400000) (multsOfThreeMap400000);
+
+//A benchmark to test the performance of the intersection operation.
+intersectionBenchmark :: Long -> LongMap Long;
+intersectionBenchmark uselessParam = intersection (multsOfTwoMap400000) (multsOfThreeMap400000);
+
+//A CAF used by the lookupBenchmark function. Stored separately rather than as a let definition
+//so that its result can be cached and used between successive calls of lookupBenchmark.
+lookupBenchmarkHelper :: LongMap Long;
+lookupBenchmarkHelper =
+  let
+      nums :: [Long];
+      nums = upFromTo (-25000) 25000 :: [Long];
+      
+      mults :: [Long];
+      mults = List.map (\n -> Prelude.abs(n*2)) nums;
+  in
+      fromDistinctAscList (List.zip nums mults);
+
+//A benchmark to test the performance of the lookup operation
+lookupBenchmark :: Long -> Long;
+lookupBenchmark uselessParam =
+  List.foldLeft1Strict Prelude.add (List.map (\y -> find y lookupBenchmarkHelper) (upFromTo (-25000) (25000::Long)));
+
+//A benchmark to test the performance of the filter operation
+filterBenchmark :: Long -> LongMap Long;
+filterBenchmark uselessParam =
+  filter (\a -> (a % 3) == 0) (multsOfTwoMap400000);
+
+//A benchmark to test the performance of the partition operation
+partitionBenchmark :: Long -> LongMap Long;
+partitionBenchmark uselessParam =
+  let
+      part :: (LongMap Long, LongMap Long);
+      part = (partition (\a -> (a % 3) == 0) (multsOfTwoMap400000));
+  in
+      seq (fst part) (snd part);
+
+//A benchmark to test the performance of the delete operation    
+deleteBenchmark :: Long -> LongMap Long;
+deleteBenchmark uselessParam =
+  let
+      del :: LongMap Long -> Long -> LongMap Long;
+      del m k = delete k m;
+  in
+      foldLeftStrict del multsOfTwoMap400000 multsOfThree400000;
+  
+//A benchmark to test the performance of the fromList operation
+fromListBenchmark :: Long -> LongMap Long;
+fromListBenchmark uselessParam = fromList (mapList 400000);
+
+//A benchmark to test the performance of the fromAscList operation
+//Note: For IntMap, this should be roughly equivalent in speed to fromListBenchmark
+fromAscListBenchmark :: Long -> LongMap Long;
+fromAscListBenchmark uselessParam = fromAscList (mapList 400000);
+
+//A benchmark to test the performance of the fromDistinctAscList operation
+//Note: For IntMap, this should be roughly equivalent in speed to fromListBenchmark
+fromDistinctAscListBenchmark :: Long -> LongMap Long;
+fromDistinctAscListBenchmark uselessParam = fromDistinctAscList (mapList 400000);
+
+//Used to run a benchmark function by evaluating it without printing the result.
+runBench :: a -> Int;
+runBench !benchmark = 0;
+
+//a list generator used to build a map from an Int value to the Int value mod 10.
+//mainly for testing purposes.
+modList :: Long -> [(Long, Long)];
+private modList !n =
+  let
+      keys :: [Long];
+      keys = upFromTo 1 n;
+      
+      values :: [Long];
+      values = List.map (\!n -> n % 10) keys;
+  in
+      List.zip keys values;
+
+//a list generator used to build a map from an Int value to itself.
+//mainly for testing purposes.      
+mapList :: Long -> [(Long, Long)];
+private mapList !n =
+  let
+      keys :: [Long];
+      keys = upFromTo 1 n;    
+  in
+      List.zip keys keys;
+
+
+insertTests :: Boolean;
+private insertTests =
+    //insert into an empty map   
+    assert (insert 1 "January" empty == fromList [((1 :: Long), "January")])
+    && assert (insert 2 "February" (fromList [(1, "January")]) == fromList [((1 :: Long), "January"), (2, "February")])
+    && assert (insert 1 "January" (fromList [(2, "February")]) == fromList [((1 :: Long), "January"), (2, "February")])
+    //insert into a map where the key already exists overwrites with the new value
+    && assert (insert 1 "Aardvark" (fromList [((1 :: Long), "January"), (2, "February")]) == fromList [((1 :: Long), "Aardvark"), (2, "February")])
+    && assert (insert 10 "ten" sampleMap0To9 == fromList ((10 :: Long, "ten") : toList sampleMap0To9))                        
+    && assert (insert (-1) "negative one" sampleMap0To9 == fromList (((-1 :: Long), "negative one") : toList sampleMap0To9))  
+    ;
+
+insertWithTests :: Boolean;
+private insertWithTests = 
+    assert (find 5 (insertWith Prelude.append 5 "Canada" sampleMap0To9) == "Canadafive")
+    && assert (find 10 (insertWith Prelude.append 10 "France" sampleMap0To9) == "France")
+    ;
+
+unionTests :: Boolean;
+unionTests =
+    assert (union sampleMap0To9 sampleMap10To19 == fromList ((toList sampleMap0To9) ++ (toList sampleMap10To19)))
+    && assert (union sampleMap0To9 sampleMap10To19 ==  union sampleMap10To19 sampleMap0To9)
+    && assert (union sampleMap0To9 sampleMap0To9 == sampleMap0To9)
+    && assert (union sampleMap0To9 (fromList [(3, "zebra")]) == sampleMap0To9)
+    && assert (union (fromList [(3, "zebra")]) sampleMap0To9 == insert 3 "zebra" sampleMap0To9)
+    ;
+
+/**
+ * Test that unionWith generates expected results.
+ */
+unionWithTests :: Boolean;
+unionWithTests = 
+    assert (unionWith Prelude.append sampleMap0To9 sampleMap0To9 ==  fromList [(0, "zerozero"), (1, "oneone"), (2, "twotwo"), (3, "threethree"), (4, "fourfour"), (5, "fivefive"), (6, "sixsix"), (7, "sevenseven"), (8, "eighteight"), (9, "ninenine")])
+    && assert (unionWith Prelude.append sampleMap0To9 sampleMap10To19 == union sampleMap0To9 sampleMap10To19)
+    && assert (unionWith Prelude.append sampleMap0To9 sampleMap4To13 == unionWith Prelude.append sampleMap4To13 sampleMap0To9)
+    && assert (unionWith Prelude.append (fromList[(3, "zebra")]) sampleMap0To9 == insertWith Prelude.append 3 "zebra" sampleMap0To9)
+    && assert (unionWith Prelude.append sampleMap0To9 (fromList[(3, "zebra")]) != insertWith Prelude.append 3 "zebra" sampleMap0To9)
+    ;
+
+isSubmapByTests :: Boolean;
+isSubmapByTests =
+    let
+        m :: LongMap Long;
+        m = fromList [(1, 101), (2, 202)];
+    in
+        assert (isSubmapBy equals (fromList [(1, 101)]) m)
+        && assert (isSubmapBy Prelude.lessThanEquals (fromList [(1, 101)]) m)   
+        && assert (isSubmapBy equals m m)
+        && assert (not (isSubmapBy equals (fromList [(1, 202)]) m))
+        && assert (not (isSubmapBy lessThan (fromList [(1, 101)]) m))
+        && assert (not (isSubmapBy equals m (fromList [(1, 101)])))
+        ;
+        
+differenceTests :: Boolean;
+differenceTests =
+    let
+        e :: LongMap String;
+        e = empty;
+    in
+        assert (difference sampleMap0To9 sampleMap0To9 == empty)
+        && assert (difference sampleMap0To9 empty == sampleMap0To9)
+        && assert (difference e sampleMap0To9 == e)
+        //&& difference sampleMap0To9 (filterWithKey (\k v -> Prelude.isEven k) sampleMap0To9)
+        //    == fromList [(1, "one"), (3, "three"), (5, "five"), (7, "seven"), (9, "nine")]
+        ;
+
+generalBoundaryTests :: Boolean;
+private generalBoundaryTests = 
+  let 
+      boundaryList :: [Long];
+      boundaryList = [-123456, Prelude.minBound, 0, 12345, -123, Prelude.maxBound, -50000] :: [Long];
+      
+      boundaryMap :: LongMap Long;
+      boundaryMap = fromList (List.map (\n -> (n,n)) boundaryList);
+  in
+      find Prelude.minBound boundaryMap == Prelude.minBound &&
+      find (-123456) boundaryMap == (-123456) &&
+      find 0 boundaryMap == 0 &&
+      find 12345 boundaryMap == 12345 &&
+      find (-123) boundaryMap  == (-123) &&
+      find Prelude.maxBound boundaryMap == Prelude.maxBound &&
+      find (-50000) boundaryMap == (-50000);
+   
+/**
+ * Make sure that single is the same as inserting element into an empty map
+ */
+prop_Single :: Long -> Long -> Boolean;
+prop_Single key value =
+    (insert key value empty == LongMap.single key value);
+
+/**
+ * Make sure that inserting and deleting an element leaves a map unchanged (provided the element is not already in the map)
+ */
+prop_InsertDelete :: Long -> Long -> LongMap Long -> Property;
+prop_InsertDelete key value map =
+    (not (member key map)) `implies` (delete key (insert key value map) == map);
+
+/**
+ * verify that updating an element to nothing is the same as deleting
+ */
+prop_UpdateDelete :: Long -> LongMap Long -> Boolean;  
+prop_UpdateDelete key map =
+    update (const Prelude.Nothing) key map == delete key map;
+
+/**
+ * Check that union with a map containging a single element is the same as inserting the element
+ */
+prop_UnionInsert :: Long -> Long -> LongMap Long -> Boolean;
+prop_UnionInsert key value map =
+    union (single key value) map == insert key value map;
+
+/**
+ * verify that union is associative
+ */
+prop_UnionAssoc :: LongMap Long -> LongMap Long -> LongMap Long -> Boolean;
+prop_UnionAssoc map1 map2 map3 =
+    union map1 (union map2 map3) == union (union map1 map2) map3;
+
+/**
+ * verify union is commutative 
+ */
+prop_UnionComm :: LongMap Long -> LongMap Long -> Boolean;
+prop_UnionComm map1 map2 =
+    (union map1 map2 == unionWith (\x y -> y) map2 map1);
+
+
+/**
+ * verify listToMap is independent of the list of the map 
+ */
+prop_Order :: [(Long, ())] -> Boolean;
+prop_Order xs =
+    fromList xs == fromList (List.reverse xs);
+
+prop_Long :: [(Long,Long)] -> [(Long,Long)] -> Boolean;
+prop_Long xs ys =
+    List.sort (keys (intersection (fromListWith add xs) (fromListWith add ys))) 
+    == List.sort (List.removeDuplicates ((List.intersect) (List.map fst xs)  (List.map fst ys)));
+
+
+/**
+ * explict union test
+ */
+isUnionAssoc :: Boolean;
+isUnionAssoc =           
+    (union (fromList [(-17, 11::Int),(-1, -9::Int)]) 
+     (union (fromList [ (5, 12::Int),(-13, 5::Int)]) 
+      (fromList [ (-5, 4::Int)]))) == 
+          (union (union (fromList [(-17, 11::Int), (-1 , -9::Int)]) 
+                  (fromList [ (5 ,12::Int), (-13 ,5::Int)])) 
+           (fromList [ (-5 ,4::Int)]));
+
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+testModule :: Boolean;
+public testModule =
+  assert (insertTests) 
+  && assert (insertWithTests)
+  && assert (unionTests)
+  && assert (unionWithTests)
+  && assert (isSubmapByTests)
+  && assert (differenceTests)
+  && assert (generalBoundaryTests)
+  && assert (quickCheck prop_Single)
+  && assert (quickCheck prop_InsertDelete)
+  && assert (quickCheck prop_UpdateDelete)
+  && assert (quickCheck prop_UnionInsert)
+  && assert (quickCheck prop_UnionAssoc)
+  && assert (quickCheck prop_UnionComm)
+  && assert (quickCheck prop_Order)
+  && assert (quickCheck prop_Long)
+  && assert isUnionAssoc
+  ;
+//please leave testModule last! 
+
+

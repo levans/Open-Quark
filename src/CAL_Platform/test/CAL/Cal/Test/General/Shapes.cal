@@ -1,0 +1,412 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Shapes.cal
+ * Creation date: July 11, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+This module contains an approach in CAL to solving the challenge of Jim Weirich to write a small
+example of a program in OO style in non-OO languages.
+
+http://onestepback.org/articles/poly/
+http://www.angelfire.com/tx4/cus/shapes/index.html
+
+See Shape.cal for a more detailed comment.
+
+Note: the implementations below do not separate out Shape, Rectange and Circle into separate files.
+This is purely out of convenience since this is just experimental code.
+
+discussion of approach 4:
+-this approach shows the use of "implementation inheritence" where moveTo and relativeMoveTo are implemented as functions
+depending only on the Shape type class. Other than that, it is pretty much equivalent to approach #3.
+
+@author Bo Ilic
+*/
+module Cal.Test.General.Shapes;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    typeConstructor = CalValue, TypeRep;
+    typeClass = Typeable;
+    function = unsafeCoerce, typeOf, asTypeOf;
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    ;      
+import Cal.Core.String using  
+    function = toList;
+    ;        
+
+
+/////////////////////////////////////////////
+//Shape    
+    
+public class Typeable a => Shape a where    
+    public draw :: a -> String;  
+    public getX :: a -> Int;
+    public getY :: a -> Int;
+    public setX :: a -> Int -> a;
+    public setY :: a -> Int -> a;
+    ;
+    
+moveTo :: Shape a => a -> Int -> Int -> a;
+public moveTo shape newX newY = setY (setX shape newX) newY;
+
+relativeMoveTo :: Shape a => a -> Int -> Int -> a; 
+public relativeMoveTo shape dX dY = 
+    let
+        oldX = getX shape;
+        oldY = getY shape;
+        newX = oldX + dX;
+        newY = oldY + dY;
+    in
+        moveTo shape newX newY;
+    
+    
+//GenericShape captures the value (stripped of type information), a run-time representation of the type, and the instance methods
+//used for the particular value.        
+data public GenericShape =
+    private MakeGenericShape    
+        value           :: CalValue
+        typeRep         :: TypeRep
+        draw            :: (CalValue -> String)
+        getX            :: (CalValue -> Int)
+        getY            :: (CalValue -> Int)
+        setX            :: (CalValue -> Int -> CalValue)
+        setY            :: (CalValue -> Int -> CalValue)
+        ;
+
+makeGenericShape :: (Shape a) => a -> GenericShape;
+public makeGenericShape shape =
+    let
+        //the 3 let functions below are never actually run (and so their definition is just Prelude.undefined.
+        //they are used to give the correct type arguments when calling MakeGenericShape3
+        drawType :: Shape a => a -> (a -> String);
+        drawType = Prelude.undefined;
+        
+        //this is also getYType
+        getXType :: Shape a => a -> (a -> Int);
+        getXType = Prelude.undefined;
+        
+        //this is also setYType
+        setXType :: Shape a => a -> (a -> Int -> a);
+        setXType = Prelude.undefined;             
+        
+    in
+        MakeGenericShape
+            (unsafeCoerce shape)
+            (typeOf shape)            
+            (unsafeCoerce (asTypeOf draw (drawType shape)))
+            (unsafeCoerce (asTypeOf getX (getXType shape)))
+            (unsafeCoerce (asTypeOf getY (getXType shape)))
+            (unsafeCoerce (asTypeOf setX (setXType shape)))
+            (unsafeCoerce (asTypeOf setY (setXType shape)));           
+    
+//modelled on the implementation of Prelude.fromDynamic.
+//this function lets a person "downcast" from a GenericShape to a Rectangle, Circle etc
+//provided that they guess right.
+fromGenericShape :: (Shape a) => GenericShape -> Maybe a;
+public fromGenericShape !genericShape =
+    case genericShape of
+    MakeGenericShape value typeRep draw getX getY setX setY ->
+        let
+            fromUnderlyingValue value =
+                if (typeRep == typeOf value) then
+                    Just value
+                else
+                    Nothing;
+        in
+            fromUnderlyingValue (unsafeCoerce value); 
+    ;
+    
+    
+instance Shape GenericShape where   
+    draw = drawGenericShape;
+    getX = getXGenericShape;
+    getY = getYGenericShape;
+    setX = setXGenericShape;
+    setY = setYGenericShape;   
+    ;
+        
+drawGenericShape :: GenericShape -> String;
+private drawGenericShape !genericShape =
+    case genericShape of
+    MakeGenericShape value typeRep draw getX getY setX setY ->
+        draw value;
+    ; 
+    
+getXGenericShape :: GenericShape -> Int;
+getXGenericShape !genericShape =
+    case genericShape of
+    MakeGenericShape value typeRep draw getX getY setX setY ->
+        getX value;
+    ; 
+   
+getYGenericShape :: GenericShape -> Int;
+getYGenericShape !genericShape =
+    case genericShape of
+    MakeGenericShape value typeRep draw getX getY setX setY ->
+        getY value;
+    ; 
+    
+setXGenericShape :: GenericShape -> Int -> GenericShape;
+setXGenericShape !genericShape newX =
+    case genericShape of
+    MakeGenericShape value typeRep draw getX getY setX setY ->
+        MakeGenericShape (setX value newX) typeRep draw getX getY setX setY;
+    ; 
+    
+setYGenericShape :: GenericShape -> Int -> GenericShape;
+setYGenericShape !genericShape newY =
+    case genericShape of
+    MakeGenericShape value typeRep draw getX getY setX setY ->
+        MakeGenericShape (setY value newY) typeRep draw getX getY setX setY;
+    ; 
+
+
+/////////////////////////////////////////////
+//Circle
+
+data public Circle = 
+    public MakeCircle 
+        props           :: !{x :: Int, y :: Int, radius :: Int};
+
+instance Shape Circle where
+    draw = drawCircle;
+    getX = getXCircle;
+    getY = getYCircle;
+    setX = setXCircle;
+    setY = setYCircle;
+    ;
+
+drawCircle :: Circle -> String;
+drawCircle !circle =
+    case circle of
+    MakeCircle r ->    
+        case r of
+        {x, y, radius} ->
+            concat ["Drawing a Circle at (", intToString x, ", ", intToString y, "), radius ", intToString radius];
+        ;
+    ;
+
+getXCircle :: Circle -> Int;
+getXCircle !circle =
+    case circle of
+    MakeCircle r -> r.x;
+    ;
+   
+getYCircle :: Circle -> Int;
+getYCircle !circle =
+    case circle of
+    MakeCircle r -> r.y;
+    ;
+    
+setXCircle :: Circle -> Int -> Circle;
+setXCircle !circle newX =
+    case circle of
+    MakeCircle r -> 
+        case r of
+        {s | x} -> MakeCircle {s | x = newX}; 
+        ;
+    ;
+    
+setYCircle :: Circle -> Int -> Circle;
+setYCircle !circle newY =
+    case circle of
+    MakeCircle r -> 
+        case r of
+        {s | y} -> MakeCircle {s | y = newY}; 
+        ;
+    ;  
+    
+
+setRadius :: Circle -> Int -> Circle;
+public setRadius !circle newRadius =
+    case circle of
+    MakeCircle r ->    
+        case r of
+        {s | radius} -> MakeCircle {s | radius = newRadius};
+        ;
+    ;
+    
+/////////////////////////////////////////////
+//Rectangle
+
+data public Rectangle = 
+    public MakeRectangle 
+        props           :: !{x :: Int, y :: Int, width :: Int, height :: Int};
+
+instance Shape Rectangle where
+    draw = drawRectangle;
+    getX = getXRectangle;
+    getY = getYRectangle;
+    setX = setXRectangle;
+    setY = setYRectangle;
+    ;
+
+drawRectangle :: Rectangle -> String;
+drawRectangle !rect =
+    case rect of
+    MakeRectangle r ->    
+        case r of
+        {x, y, width, height} ->
+            concat ["Drawing a Rectangle at (", intToString x, ", ", intToString y, "), width ", intToString width, ", height ", intToString height];
+        ;
+    ;
+    
+getXRectangle :: Rectangle -> Int;
+getXRectangle !rectangle =
+    case rectangle of
+    MakeRectangle r -> r.x;
+    ;
+   
+getYRectangle :: Rectangle -> Int;
+getYRectangle !rectangle =
+    case rectangle of
+    MakeRectangle r -> r.y;
+    ;
+    
+setXRectangle :: Rectangle -> Int -> Rectangle;
+setXRectangle !rectangle newX =
+    case rectangle of
+    MakeRectangle r -> 
+        case r of
+        {s | x} -> MakeRectangle {s | x = newX}; 
+        ;
+    ;
+    
+setYRectangle :: Rectangle -> Int -> Rectangle;
+setYRectangle !rectangle newY =
+    case rectangle of
+    MakeRectangle r -> 
+        case r of
+        {s | y} -> MakeRectangle {s | y = newY}; 
+        ;
+    ;
+
+setWidth :: Rectangle -> Int -> Rectangle;
+public setWidth !rect newWidth =
+    case rect of
+    MakeRectangle r ->    
+        case r of
+        {s | width} -> MakeRectangle {s | width = newWidth};
+        ;
+    ;
+//under proposed syntax changes this could be...    
+//setWidth !rect newWidth = MakeRectangle {rect.MakeRectangle.value | width := newWidth}; 
+    
+setHeight :: Rectangle -> Int -> Rectangle;
+public setHeight !rect newHeight =
+    case rect of
+    MakeRectangle r ->    
+        case r of
+        {s | height} -> MakeRectangle {s | height = newHeight};
+        ;
+    ; 
+    
+    
+//////////////////////////////////////
+//approach #4   
+    
+doSomethingWithShape :: Shape a => a -> a;
+doSomethingWithShape s = relativeMoveTo s 100 100;    
+    
+//the test function for the challenge...
+main_approach4 :: String;
+public main_approach4 =
+    let
+        r1 = MakeRectangle {x = 10, y = 20, width = 5, height = 6};
+        r2 = doSomethingWithShape r1;
+        
+        c1 = MakeCircle {x = 15, y = 25, radius = 8};
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape];
+        genericList = [makeGenericShape r1, makeGenericShape r2, makeGenericShape c1, makeGenericShape c2, makeGenericShape r4];             
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw genericList));  
+    
+//tests filtering a GenericShape list to get just the Circles.    
+main2_approach4 :: String;
+public main2_approach4 =
+    let
+        r1 = MakeRectangle {x = 10, y = 20, width = 5, height = 6};
+        r2 = doSomethingWithShape r1;
+        
+        c1 = MakeCircle {x = 15, y = 25, radius = 8};
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape];
+        genericList = [makeGenericShape r1, makeGenericShape r2, makeGenericShape c1, makeGenericShape c2, makeGenericShape r4];
+         
+        filteredCircleList :: [Circle];
+        filteredCircleList = List.mapJust fromGenericShape genericList;       
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw filteredCircleList));    
+    
+//the test function for the challenge...
+//however, apply transforms *after* generifying    
+main3_approach4 :: String;
+public main3_approach4 =
+    let
+        r1 = makeGenericShape (MakeRectangle {x = 10, y = 20, width = 5, height = 6});
+        r2 = doSomethingWithShape r1;
+        
+        c1 = makeGenericShape (MakeCircle {x = 15, y = 25, radius = 8});
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape];
+        genericList = [r1, r2, c1, c2, makeGenericShape r4];             
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw genericList));      

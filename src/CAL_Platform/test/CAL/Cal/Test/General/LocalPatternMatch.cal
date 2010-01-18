@@ -1,0 +1,453 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * LocalPatternMatch.cal
+ * Creation date: Feb 23, 2007.
+ * By: Joseph Wong
+ */
+
+/**
+ * This module contains various local pattern match declarations for the
+ * purpose of testing the compiler's handling of them.
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Test.General.LocalPatternMatch;
+
+import Cal.Core.Prelude using
+    function = assert, eager, seq, undefined;
+    dataConstructor = True, Cons, Nothing, Just;
+    typeConstructor = Char, Int, String;
+    ;
+
+import Cal.Core.String;
+
+import Cal.Collections.List;
+
+/////=======================================================================================
+//// The following are a set of syntax tests for the parser and the compiler, making sure
+///  that these local pattern match declarations can be parsed and processed okay.
+//
+
+/*
+ * The functions that are commented out below should all generate compile time errors when uncommented.
+ * These functions are captured as JUnit test cases in the LocalPatternMatch_Test test class.
+ */
+
+private foo = let {_ | a} = {a = "foo", b = "bar"}; in a;
+//private foo1 = let {r | a} = {a = "foo", b = "bar"}; in a;
+//private foo2 = let a:b = [Prelude.fromJust b]; in a;
+
+/** Testing the use of type declarations for pattern bound variables. */
+private foo3 =
+    let
+        /** CALDoc!! */
+        a :: Prelude.Int;
+        /** More CALDoc!! */
+        b :: [Prelude.Int];
+        a:b = [3];
+    in a;
+    
+private foo4 = let Prelude.Cons a b = ["foo"]; in a;
+private foo5 = let (a, b, c) = (b, c, 1 :: Prelude.Int); in a+b+c;
+private foo5a = let (a, b, c) = (b, e, 1 :: Prelude.Int); d = a; e = c; in a+b+c;
+//private foo6 = let {a} = {a = "foo", b = "bar"}; in a;
+//private foo6a = let {x} = {a = "foo", b = "bar"}; in x;
+//private foo6b = let {_|y} = {a = "foo", b = "bar"}; in y;
+//private foo6x = let {_|#1,a} = {a = "foo"}; in a;
+
+//private foo7 = let (a, b) = ('a', 'b', 'c'); in a;
+//private foo7a = let {#1 = a, #2 = b} = ('a', 'b', 'c'); in a;
+//private foo7b = let {#1 = a} = ('a', 'b', 'c'); in a;
+//private foo7c = let (a, b, c, d) = ('a', 'b', 'c'); in a;
+
+// The following generates type errors, and should contain source positions
+//private foo8 = let (x, y) = (1, 2); in x::Prelude.Int;
+//private foo8_desugared = let t = (1, 2); x = t.#1; y = t.#2; in x::Prelude.Int;
+//private foo8_case = case (1, 2) of (x, y) -> x::Prelude.Int;;
+//private foo8alpha = let (x, _) = (1, 2); in x::Prelude.Int;
+//private foo8alpha_desugared = let t = (1, 2); x = t.#1; in x::Prelude.Int;
+//private foo8alpha_inline = let x = (1, 2).#1; in x::Prelude.Int;
+private foo8_base = let t = (1, 2); in 'c'; // this is okay... so it's really an issue of having an ambiguous type when using field selection or case expr
+
+// The following succeed in compilation - x is really a polymorphic 0-arity function...
+private foo8beta = let (x,_)=(1,'a'); in (x::Prelude.Double, x::Prelude.Int);
+private foo8beta_desugared = let t=(1,'a'); x=t.#1; in (x::Prelude.Double, x::Prelude.Int);
+
+private foo8a = let x:y = [1]; in (x + 10.0, x + 20 :: Prelude.Int);
+private foo8a_alternate = let Prelude.Cons x y = [1]; in (x + 10.0, x + 20 :: Prelude.Int);
+private foo8a_desugared = let t = [1]; x = t.Prelude.Cons.head; y = t.Prelude.Cons.tail; in (x + 10.0, x + 20 :: Prelude.Int);
+
+private foo8b = let x:_ = [1]; in (x::Prelude.Double, x::Prelude.Int);
+private foo8b_alternate = let Prelude.Cons x _ = [1]; in (x::Prelude.Double, x::Prelude.Int);
+private foo8b_alternate2 = let Prelude.Cons {head=x} = [1]; in (x::Prelude.Double, x::Prelude.Int);
+private foo8b_desugared = let t = [1]; x = t.Prelude.Cons.head; in (x::Prelude.Double, x::Prelude.Int);
+
+// These patterns are not allowed
+//private foo9 = let _=('a', 'b'); in 3;
+//private foo10 = let ()=('a', 'b'); in 3;
+//private foo11 = let []=['a', 'b']; in 3;
+
+// These are obvious errors that are reported nicely
+//private foo12 = let 'c'='b'; in 3;
+//private foo13 = let -1=1; in 3;
+//private foo14 = let 1=0; in 3;
+//private foo15 = let (1|2|3)=1+2; in 3;
+//private foo16 = let (Prelude.Left|Prelude.Right) x = Prelude.undefined; in 3;
+//private foo17 = let 'c' 1 = 4; in 3;
+
+// This is a data cons field name error
+//private foo18 = let Prelude.Cons {foo} = [1]; in foo;
+
+// This should cause an error with message kind TypeOfDesugaredDefnOfLocalPatternMatchDeclNotCompatibleWithPatternBoundVars
+//    The type of the defining expression of the local pattern match declaration is not compatible with the type(s) of the corresponding pattern-bound variable(s). Caused by: the record type (a, b) is missing the fields [ax] from the record type a\ax => {a | ax :: b}.
+//private foo19 = let {ax, b2} = (b2, ax); in (ax, b2);
+
+/**
+ * This function is designed to test that the compiler is okay with all the various kinds
+ * of local pattern match syntax, and with running type inference on the desugared definitions.
+ * 
+ * Also, this function is useful for testing the type declaration inserter in inserting the right
+ * type declarations for the pattern-bound variables.
+ */
+private testLocalPatternMatchSyntaxAndTypeInference =
+    let
+        (a, b) = (b, 1 :: Prelude.Int);
+        {#1, #2=c} = (c, a);
+        {_|d} = {d=e, e=c};
+        {_|x=e} = {x=c};
+        f:g = [e];
+        h:_ = [f, f];
+        _:i = f:g;
+        Prelude.Cons {head=j} = [h];
+        Prelude.Cons _ k = [h, h];
+        Prelude.Cons {tail} = [h];
+    in
+        (a, b, c, d, e, f, g, h, i, j, k, tail);
+
+/*
+ * The tests below test the compiler's behaviour on corner cases where the name it generates
+ * for the synthetic local function (for hosting the defining expression) may potentially
+ * collide with other names.
+ */
+private testSyntheticVarName =
+    let
+        (a, b) = (1.0, 2.0);
+        pattern_a_b = ["foo"];
+        letVar_pattern_a_b = ["bar"];
+    in
+        (a, b, pattern_a_b, letVar_pattern_a_b);
+
+/** This function is based on {@link List.unzip@}. */
+testSyntheticVarName2 :: [(a, b)] -> ([a], [b]);
+private testSyntheticVarName2 !list =
+    case list of
+    [] -> ([], []);
+    pattern_tail1_tail2 : letVar_pattern_tail1_tail2 ->
+        let 
+            (tail1, tail2) = testSyntheticVarName2 letVar_pattern_tail1_tail2;           
+        in
+            case pattern_tail1_tail2 of
+            (x1, x2) ->
+                (x1 : tail1, x2 : tail2);
+            ;
+    ;
+
+/////==================================================================================
+////
+/// Below are predicated tests that are hooked up to testModule
+//
+
+/**
+ * Tests the laziness of the semantics of the local pattern match declaration.
+ * 
+ * This function is taken from the {@link module="Cal.Test.Collections.List_Tests"@} module, and adapted for {@link testSyntheticVarName2@}.
+ */
+testLazinessOfUnzipInfinite =
+    assert
+    (
+        let
+            (from0, from1) = testSyntheticVarName2 $ List.zip (Prelude.upFrom (0 :: Int)) (Prelude.upFrom (1 :: Int));
+        in
+            (List.take 10 from0) == (Prelude.upFromTo 0 9)
+            && (List.take 10 from1) == (Prelude.upFromTo 1 10)
+    )
+    ;
+
+/**
+ * Tests a data cons pattern with positional args.
+ */
+testDataConsPositionalPattern =
+    let
+        Just x = Just 1.0;
+        Prelude.Just y = Just 2.0;
+    in
+        assert (x + y == 3.0);
+
+/**
+ * Tests a data cons pattern with field-pattern pairs.
+ */
+testDataConsFieldPatternPairs =
+    let
+        Just {value} = Just 1.0;
+        Just {value=y} = Just 2.0;
+    in
+        assert(value + y == 3.0);
+
+/**
+ * Tests different variations of the colon pattern.
+ */
+testColonPattern =
+    let
+        x:y = [1.0];
+        a:_ = [2.0];
+        _:b = ['f'];
+    in
+        assert (x + a == 3.0)
+        && assert (y == [])
+        && assert (b == []);
+
+/**
+ * Tests the unpacking of a long list via the colon pattern.
+ */
+testLongListUnpackingViaColonPattern =
+    let
+        t0 = Prelude.upFromTo 1 (10 :: Int);
+        x1:t1 = t0;
+        x2:t2 = t1;
+        x3:t3 = t2;
+        x4:t4 = t3;
+        x5:t5 = t4;
+        x6:t6 = t5;
+        x7:t7 = t6;
+        x8:t8 = t7;
+        x9:t9 = t8;
+        x10:t10 = t9;
+    in
+        assert (x1:x2:x3:x4:x5:x6:x7:x8:x9:x10:t10 == t0)
+        && assert (t10 == []);
+
+/**
+ * Tests the unpacking of a long list via the colon pattern with some declarations "eagered".
+ */
+testLongListUnpackingViaColonPatternWithEagers =
+    let
+        t0 = Prelude.upFromTo 1 (10 :: Int);
+        x1:t1 = t0;
+        x2:t2 = t1;
+        x3:t3 = eager t2;
+        x4:t4 = t3;
+        x5:t5 = t4;
+        x6:t6 = eager t5;
+        x7:t7 = t6;
+        x8:t8 = t7;
+        x9:t9 = eager t8;
+        x10:t10 = eager t9;
+    in
+        assert (x1:x2:x3:x4:x5:x6:x7:x8:x9:x10:t10 == t0)
+        && assert (t10 == []);
+
+/**
+ * Tests the unpacking of a long list via data cons patterns. This tests name resolution in data cons patterns.
+ */
+testLongListUnpackingViaDataConsPatterns =
+    let
+        t0 = Prelude.upFromTo 1 (10 :: Int);
+        Cons x1 t1 = t0;
+        Prelude.Cons x2 t2 = t1;
+        Cons x3 t3 = t2;
+        Prelude.Cons x4 t4 = t3;
+        Cons x5 t5 = t4;
+        Prelude.Cons x6 t6 = t5;
+        Core.Prelude.Cons x7 t7 = t6;
+        Cal.Core.Prelude.Cons x8 t8 = t7;
+        Cons x9 t9 = t8;
+        Cons x10 t10 = t9;
+    in
+        assert (x1:x2:x3:x4:x5:x6:x7:x8:x9:x10:t10 == t0)
+        && assert (t10 == []);
+
+/*
+ * The following sets up and tests that unpacking a field of a data cons with strict args cause evaluation of the strict args.
+ */
+data TestType =
+    Alpha 
+        x :: !()
+        y :: !() |
+    
+    Left
+        value :: String
+    ;
+
+data foreign unsafe import jvm "java.lang.StringBuilder" 
+    private JStringBuilder;
+
+foreign unsafe import jvm "constructor"
+    private stringBuilder_new0 :: JStringBuilder;
+
+foreign unsafe import jvm "method append"
+    private stringBuilder_appendChar :: JStringBuilder -> Char -> JStringBuilder;  
+
+foreign unsafe import jvm "method toString"
+    private stringBuilder_toString :: JStringBuilder -> String; 
+
+appendChar buffer char = stringBuilder_appendChar buffer char `seq` ();
+
+/**
+ * Tests that unpacking a field of a data cons with strict args cause evaluation of the strict args.
+ */
+testUnpackFieldOfDataConsWithStrictArgs =
+    let
+        buffer = stringBuilder_new0;
+        foo = appendChar buffer 'a';
+        bar = appendChar buffer 'b';
+        alpha = Alpha foo bar;
+        Alpha {y} = alpha;
+    in
+        assert (stringBuilder_toString buffer == "")
+        && assert (y == ())
+        && assert (stringBuilder_toString buffer == "ab");
+
+/**
+ * Tests name shadowing of data constructors in data cons patterns.
+ */
+testNameShadowingOfDataCons =
+    let
+        Prelude.Left {value} = Prelude.Left 1.0;
+        Left {value=x} = Left "foo";
+    in
+        assert (value == 1.0)
+        && (x == "foo");
+
+/**
+ * Tests different variations of the tuple pattern.
+ */
+testTuplePattern =
+    let
+        (a, _) = ('a', 'b');
+        (_, b) = ("a", String.subscript "ab" 1);
+        (_, x, _, z) = ((1.0, 1.1), 2.0, Just "three", 4.0);
+    in
+        assert (a == 'a')
+        && assert (b == 'b')
+        && assert (x + z == 6.0);
+
+/**
+ * Tests different variations of the non-polymorphic record pattern.
+ */
+testNonPolymorphicRecordPattern =
+    let
+        // a tuple record
+        {#1, #2=x, #3} = ("Hello", "x", "World");
+        // ordinal (non-tuple) records
+        {#1, #3=y} = {#1=Nothing, #3="y"};
+        {#2=z, #3} = {#2="z", #3=()};
+        // textual records
+        {name} = {name="Nigel"};
+        {name=_, addr=address} = {name="Zack", addr="123 Some St."};
+        // a mixed tuple record
+        {#1, #2, name=newName} = {{(1.0, 2.0) | name="old name"} | name:="new name" };
+        // a mixed (non-tuple) record
+        {#2, #3=three, a, b, c} = {a='a', #2=2.0, b='b', c='c', #3=3.0};
+    in
+        assert (x == "x")
+        && assert (y == "y")
+        && assert (z == "z")
+        && assert (name == "Nigel")
+        && assert (address == "123 Some St.")
+        && assert (newName == "new name")
+        && assert (three == 3.0)
+        && assert (a == 'a')
+        && assert (b == 'b')
+        && assert (c == 'c');
+
+/**
+ * Tests different variations of the polymorphic record pattern.
+ */
+testPolymorphicRecordPattern =
+    let
+        // a tuple record
+        {_ | #2=x} = ("Hello", "x", "World");
+        // ordinal (non-tuple) records
+        {_ | #3=y} = {#1=Nothing, #3="y"};
+        {_ | #2=z} = {#2="z", #3=()};
+        // a textual record
+        {_ | addr=address} = {name="Zack", addr="123 Some St."};
+        // a mixed tuple record
+        {_ | #2, name=newName} = {{(1.0, 2.0) | name="old name"} | name:="new name" };
+        // a mixed (non-tuple) record
+        {_ | #3=three, a, c} = {a='a', #2=2.0, b='b', c='c', #3=3.0};
+    in
+        assert (x == "x")
+        && assert (y == "y")
+        && assert (z == "z")
+        && assert (address == "123 Some St.")
+        && assert (newName == "new name")
+        && assert (three == 3.0)
+        && assert (a == 'a')
+        && assert (c == 'c');
+
+tuple123 buffer char = stringBuilder_appendChar buffer char `seq` (1.0, 2.0, 3.0);
+
+/**
+ * Tests the use of {@link eager@} with the local pattern match syntax.
+ */
+testLocalPatternMatchWithEager =
+    let
+        buffer = stringBuilder_new0;
+        (x, _, z) = eager $ tuple123 buffer 'x';
+        
+        (a, b) = eager (undefined, undefined);
+    in
+        assert (stringBuilder_toString buffer == "x")
+        && assert (x == 1.0)
+        && assert (z == 3.0)
+        && assert ((a, b, 2.0).#3 == 2.0); // this should not trigger the undefined above
+
+/**
+ * @return {@link True@} if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    assert testLazinessOfUnzipInfinite
+    && assert testDataConsPositionalPattern
+    && assert testDataConsFieldPatternPairs
+    && assert testColonPattern
+    && assert testLongListUnpackingViaColonPattern
+    && assert testLongListUnpackingViaColonPatternWithEagers
+    && assert testLongListUnpackingViaDataConsPatterns
+    && assert testUnpackFieldOfDataConsWithStrictArgs
+    && assert testNameShadowingOfDataCons
+    && assert testTuplePattern
+    && assert testNonPolymorphicRecordPattern
+    && assert testPolymorphicRecordPattern
+    && assert testLocalPatternMatchWithEager
+    ;

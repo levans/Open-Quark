@@ -1,0 +1,3399 @@
+<html>
+
+<head>
+<meta http-equiv=Content-Type content="text/html; charset=windows-1252">
+<meta name=Generator content="Microsoft Word 11 (filtered)">
+<title>CalIntro.cal</title>
+<style>
+<!--
+ /* Style Definitions */
+ p.MsoNormal, li.MsoNormal, div.MsoNormal
+	{margin:0in;
+	margin-bottom:.0001pt;
+}
+span.msoIns
+	{text-decoration:underline;
+	color:teal;}
+span.msoDel
+	{text-decoration:line-through;
+	color:red;}
+@page Section1
+	{size:8.5in 11.0in;
+	margin:1.0in 1.25in 1.0in 1.25in;}
+div.Section1
+	{page:Section1;}
+-->
+</style>
+<style>body { font-family:"Lucida Sans Typewriter","Courier New",Courier,monospace; font-size:10pt }</style>
+
+</head>
+
+<body lang=EN-US>
+
+<div class=Section1>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>/*</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * Copyright (c) 2007 BUSINESS OBJECTS
+SOFTWARE LIMITED</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * All rights reserved.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * Redistribution and use in source and
+binary forms, with or without</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * modification, are permitted provided
+that the following conditions are met:</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *     * Redistributions of source code
+must retain the above copyright notice,</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *       this list of conditions and the
+following disclaimer.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *  </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *     * Redistributions in binary form
+must reproduce the above copyright</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *       notice, this list of conditions
+and the following disclaimer in the</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *       documentation and/or other
+materials provided with the distribution.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *  </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *     * Neither the name of Business
+Objects nor the names of its contributors</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *       may be used to endorse or promote
+products derived from this software</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *       without specific prior written
+permission.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> *  </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * THIS SOFTWARE IS PROVIDED BY THE
+COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * AND ANY EXPRESS OR IMPLIED WARRANTIES,
+INCLUDING, BUT NOT LIMITED TO, THE</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT OWNER OR CONTRIBUTORS BE</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * SUBSTITUTE GOODS OR SERVICES; LOSS OF
+USE, DATA, OR PROFITS; OR BUSINESS</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE)</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * POSSIBILITY OF SUCH DAMAGE.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> */</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//Comments in CAL follow the format from
+Java. Namely, there are multi-line</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//comments of the form /* .. */, such as
+with the copyright statement above</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//and single line comments starting with
+//. </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//Comments delimited by /** .. */ are
+CALDoc comments. These are used by the </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//documentation generator to generate HTML
+based documentation for the module.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>module</span><span> </span><span style='color:#3F5FBF'>contains</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>basic</span><span> </span><span style='color:#3F5FBF'>tutorial</span><span> </span><span style='color:#3F5FBF'>on</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>language.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>structured</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>be</span><span> </span><span style='color:#3F5FBF'>read</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>sequential</span><span> </span><span style='color:#3F5FBF'>fashion</span><span> </span><span style='color:#3F5FBF'>but</span><span> </span><span style='color:#3F5FBF'>you</span><span> </span><span style='color:#3F5FBF'>can</span><span> </span><span style='color:#3F5FBF'>also</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>skip</span><span> </span><span style='color:#3F5FBF'>around</span><span> </span><span style='color:#3F5FBF'>if</span><span> </span><span style='color:#3F5FBF'>you</span><span> </span><span style='color:#3F5FBF'>prefer.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>strongly</span><span> </span><span style='color:#3F5FBF'>typed</span><span> </span><span style='color:#3F5FBF'>lazy</span><span> </span><span style='color:#3F5FBF'>functional</span><span> </span><span style='color:#3F5FBF'>language</span><span> </span><span style='color:#3F5FBF'>supporting</span><span> </span><span style='color:#3F5FBF'>close</span><span> </span><span style='color:#3F5FBF'>interaction</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>Java.</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>tutorial</span><span> </span><span style='color:#3F5FBF'>does</span><span> </span><span style='color:#3F5FBF'>not</span><span> </span><span style='color:#3F5FBF'>assume</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>you</span><span> </span><span style='color:#3F5FBF'>know</span><span> </span><span style='color:#3F5FBF'>what</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>strongly</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>typed</span><span> </span><span style='color:#3F5FBF'>lazy</span><span> </span><span style='color:#3F5FBF'>functional</span><span> </span><span style='color:#3F5FBF'>language</span><span> </span><span style='color:#3F5FBF'>is.</span><span> </span><span style='color:#3F5FBF'>If</span><span> </span><span style='color:#3F5FBF'>you</span><span> </span><span style='color:#3F5FBF'>do,</span><span> </span><span style='color:#3F5FBF'>then</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#7F7F9F'>{@em</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>Haskell</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>programmers</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>document</span><span> </span><span style='color:#3F5FBF'>may</span><span> </span><span style='color:#3F5FBF'>be</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>faster</span><span> </span><span style='color:#3F5FBF'>route</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>an</span><span> </span><span style='color:#3F5FBF'>overview</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span style='color:#3F5FBF'>'s</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>features.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>For</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>more</span><span> </span><span style='color:#3F5FBF'>in-depth</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>complete</span><span> </span><span style='color:#3F5FBF'>treatment</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span style='color:#3F5FBF'>'s</span><span> </span><span style='color:#3F5FBF'>features</span><span> </span><span style='color:#3F5FBF'>please</span><span> </span><span style='color:#3F5FBF'>see</span><span> </span><span style='color:#3F5FBF'>the</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>{@em</span><span> </span><span style='color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>User's</span><span> </span><span style='color:#3F5FBF'>Guide</span><span style='color:#7F7F9F'>@}</span><span style='color:#3F5FBF'>.</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>more</span><span> </span><span style='color:#3F5FBF'>intended</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>quick</span><span> </span><span style='color:#3F5FBF'>taster,</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>many</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>topics</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>features</span><span> </span><span style='color:#3F5FBF'>are</span><span> </span><span style='color:#3F5FBF'>not</span><span> </span><span style='color:#3F5FBF'>mentioned.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@author</span><span> </span><span style='color:#3F5FBF'>Bo</span><span> </span><span style='color:#3F5FBF'>Ilic</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//the module declaration is the first
+non-comment statement in the module</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>module</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Tutorials</span><span>.</span><span style='color:#646464'>CalIntro</span><span>; </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//all modules must import the Prelude
+module (except the Prelude itself).</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//The Prelude module contains the
+definitions of some core types and functions</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//essential to the basic operation of CAL.</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>import</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Core</span><span>.</span><span style='color:#646464'>Prelude</span><span> </span><b><span style='color:#7F0055'>using</span></b></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>typeClass</span></b><span> = </span><span style='color:#646464'>Eq</span><span>, </span><span style='color:#646464'>Inputable</span><span>, </span><span style='color:#646464'>Num</span><span>, </span><span style='color:#646464'>Ord</span><span>, </span><span style='color:#646464'>Outputable</span><span>;</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>typeConstructor</span></b><span
+> =</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>Boolean</span><span>, </span><span style='color:#646464'>Char</span><span>, </span><span style='color:#646464'>Double</span><span>, </span><span style='color:#646464'>Int</span><span>, </span><span style='color:#646464'>Integer</span><span>, </span><span style='color:#646464'>JObject</span><span>, </span><span style='color:#646464'>Long</span><span>, </span><span style='color:#646464'>Maybe</span><span>, </span><span style='color:#646464'>String</span><span>;</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>dataConstructor</span></b><span
+> = </span><span
+style='color:#646464'>False</span><span
+>, </span><span
+style='color:#646464'>True</span><span
+>, </span><span
+style='color:#646464'>Nil</span><span
+>, </span><span
+style='color:#646464'>Cons</span><span
+>, </span><span
+style='color:#646464'>Nothing</span><span
+>, </span><span
+style='color:#646464'>Just</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>function</span></b><span> =</span></p>
+
+<p class=MsoNormal><span>        add, </span><span style='color:#646464'>assert</span><span>, field1, input, isEmpty,
+isNotANumber, not, output, </span><span style='font-family:
+Consolas;color:#646464'>seq</span><span style='font-family:
+Consolas;color:black'>, </span></p>
+
+<p class=MsoNormal><span>        upFromTo;</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//using clauses indicate the entities that
+can be used unqualified within a</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//module. For example, the function length
+means List.length within this module</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//and not String.length. To use
+String.length, you need to explicitly</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//qualify it.</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>import</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Collections</span><span>.</span><span style='color:#646464'>List</span><span> </span><b><span style='color:#7F0055'>using</span></b></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>function</span></b><span> =</span></p>
+
+<p class=MsoNormal><span>        concatMap, filter, length, map,
+reverse, subscript, sum, tail, take, </span></p>
+
+<p class=MsoNormal><span>        zip, zipWith;</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//the String module import does not have a
+using clause so all entities</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//used from it must be fully qualified.</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>import</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Core</span><span>.</span><span style='color:#646464'>String</span><span>;</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>import</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Utilities</span><span>.</span><span style='color:#646464'>Math</span><span> </span><b><span style='color:#7F0055'>using</span></b></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>function</span></b><span> = cos, sin, sqrt, tan;</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>import</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Graphics</span><span>.</span><span style='color:#646464'>Color</span><span> </span><b><span style='color:#7F0055'>using</span></b></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>typeConstructor</span></b><span
+> = </span><span
+style='color:#646464'>Color</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>function</span></b><span> = aqua, black, blue, green, red,
+yellow;</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>import</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Core</span><span>.</span><span style='color:#646464'>Debug</span><span> </span><b><span style='color:#7F0055'>using</span></b></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>typeClass</span></b><span> = </span><span style='color:#646464'>Show</span><span>;</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>function</span></b><span> = show;</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>import</span></b><span> </span><span style='color:#646464'>Cal</span><span>.</span><span style='color:#646464'>Core</span><span>.</span><span style='color:#646464'>Record</span><span>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//CAL supports various kinds of literal
+values:</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>typeConstructor</span><span
+> </span><span
+style='color:#3F5FBF'>=</span><span
+> </span><span
+style='color:#3F5FBF'>String@}s</span><span
+> </span><span
+style='color:#3F5FBF'>correspond</span><span
+> </span><span
+style='color:#3F5FBF'>to</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>Java</span><span
+> </span><span
+style='color:#3F5FBF'>object</span><span
+> </span><span
+style='color:#3F5FBF'>type</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>java.lang.String</span><span
+> </span><span
+style='color:#3F5FBF'>and</span><span
+> </span><span
+style='color:#3F5FBF'>are</span><span
+> </span><span
+style='color:#3F5FBF'>not</span><span
+> </span><span
+style='color:#3F5FBF'>lists</span><span
+> </span><span
+style='color:#3F5FBF'>of</span><span
+> </span><span
+style='color:#3F5FBF'>characters</span><span
+> </span><span
+style='color:#3F5FBF'>(although</span><span
+> </span><span
+style='color:#3F5FBF'>they</span><span
+> </span><span
+style='color:#3F5FBF'>can</span><span
+> </span><span
+style='color:#3F5FBF'>be</span><span
+> </span><span
+style='color:#3F5FBF'>easily</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>converted</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>from</span><span> </span><span style='color:#3F5FBF'>lists</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>characters).</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>usual</span><span> </span><span style='color:#3F5FBF'>escape</span><span> </span><span style='color:#3F5FBF'>sequences</span><span> </span><span style='color:#3F5FBF'>apply</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>such</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>\n</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>newline</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>\u0020</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Unicode</span><span> </span><span style='color:#3F5FBF'>character</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>hex</span><span> </span><span style='color:#3F5FBF'>value</span><span> </span><span style='color:#3F5FBF'>20</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>i.e.</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>space</span><span> </span><span style='color:#3F5FBF'>character.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>quickBrownFox = </span><span
+style='color:#2A00FF'>&quot;The quick
+brown fox jumps over the lazy dog&quot;</span><span>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>stringExamples :: </span><span
+style='color:#646464'>Boolean</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>stringExamples =   </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the length of the String
+&quot;apple&quot; is 5</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (</span><span style='color:#646464'>String</span><span>.length </span><span style='color:#2A00FF'>&quot;apple&quot;</span><span
+> == </span><span
+style='color:#2A00FF'>5</span><span
+>) </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;       </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//using the String.toUpperCase function</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (</span><span style='color:#646464'>String</span><span>.toUpperCase </span><span style='color:#2A00FF'>&quot;Mt. Fuji&quot;</span><span
+> == </span><span
+style='color:#2A00FF'>&quot;MT. FUJI&quot;</span><span>)</span></p>
+
+<p class=MsoNormal><span>        </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//reversing quickBrownFox, which is defined
+above as </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//&quot;The quick brown fox jumps over the
+lazy dog&quot;</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>String</span><span>.reverse quickBrownFox </span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;god yzal eht revo spmuj xof
+nworb kciuq ehT&quot;</span></p>
+
+<p class=MsoNormal><span>    )  </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Strings are not themselves lists, but can
+easily be converted to</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//lists using the String.toList function</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>String</span><span>.toList </span><span style='color:#2A00FF'>&quot;Sarabande&quot;</span></p>
+
+<p class=MsoNormal><span>        == [</span><span style='color:#2A00FF'>'S'</span><span>, </span><span style='color:#2A00FF'>'a'</span><span>, </span><span style='color:#2A00FF'>'r'</span><span>, </span><span style='color:#2A00FF'>'a'</span><span>, </span><span style='color:#2A00FF'>'b'</span><span>, </span><span style='color:#2A00FF'>'a'</span><span>, </span><span style='color:#2A00FF'>'n'</span><span>, </span><span style='color:#2A00FF'>'d'</span><span>, </span><span style='color:#2A00FF'>'e'</span><span>]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Strings can be created from lists of
+characters using String.fromList</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>String</span><span>.fromList [</span><span style='color:#2A00FF'>'Z'</span><span>, </span><span style='color:#2A00FF'>'a'</span><span>, </span><span style='color:#2A00FF'>'p'</span><span>, </span><span style='color:#2A00FF'>'h'</span><span>, </span><span style='color:#2A00FF'>'o'</span><span>, </span><span style='color:#2A00FF'>'d'</span><span>]</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;Zaphod&quot;</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//breaking up quickBrownFox into individual
+words.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//The result is a list of String values.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>String</span><span>.words quickBrownFox </span></p>
+
+<p class=MsoNormal><span>        == </span></p>
+
+<p class=MsoNormal><span>        [</span><span style='color:#2A00FF'>&quot;The&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;quick&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;brown&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;fox&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;jumps&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;over&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;the&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;lazy&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;dog&quot;</span><span
+>]</span></p>
+
+<p class=MsoNormal><span>    ) </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the ++ operator can be used to
+concatenate Strings</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#2A00FF'>&quot;cinnamon&quot;</span><span
+> ++ </span><span
+style='color:#2A00FF'>&quot; &quot;</span><span
+> ++ </span><span
+style='color:#2A00FF'>&quot;raisin&quot;</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;cinnamon raisin&quot;</span></p>
+
+<p class=MsoNormal><span>    )    </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//any function can be surrounded by
+backquotes and then used as an infix </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//operator. In this example, we use
+String.subscript in infix form.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#2A00FF'>&quot;alphabet&quot;</span><span
+> </span><span
+style='color:#646464'>`String.subscript`</span><span
+> </span><span
+style='color:#2A00FF'>5</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>'b'</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>        </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//filtering out the vowels from
+quickBrownFox. Note that the first argument</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//of String.filter is a function from Char
+to Boolean indicating what </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//characters to keep. The expression:</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//(\c -&gt; String.indexOf c
+&quot;aeiou&quot; &lt; 0) </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//is a lambda expression defining an
+anonymous function of a single formal</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//parameter c. String.filter is an example
+of a higher-order function.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//This is simply a function that has an
+argument that is itself a function.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>String</span><span>.filter (\c -&gt; </span><span
+style='color:#646464'>String</span><span
+>.indexOf c </span><span
+style='color:#2A00FF'>&quot;aeiou&quot;</span><span
+> &lt; </span><span
+style='color:#2A00FF'>0</span><span
+>) quickBrownFox</span></p>
+
+<p class=MsoNormal><span>         == </span><span style='color:#2A00FF'>&quot;Th qck brwn fx jmps vr th lzy
+dg&quot;</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>typeConstructor</span><span
+> </span><span
+style='color:#3F5FBF'>=</span><span
+> </span><span
+style='color:#3F5FBF'>Char@}s</span><span
+> </span><span
+style='color:#3F5FBF'>correspond</span><span
+> </span><span
+style='color:#3F5FBF'>to</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>primitive</span><span
+> </span><span
+style='color:#3F5FBF'>Java</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>character</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>&quot;char&quot;.</span><span
+> </span><span
+style='color:#3F5FBF'>The</span><span
+> </span><span
+style='color:#3F5FBF'>usual</span><span
+> </span><span
+style='color:#3F5FBF'>escape</span><span
+> </span><span
+style='color:#3F5FBF'>sequences</span><span
+> </span><span
+style='color:#3F5FBF'>apply</span><span
+> </span><span
+style='color:#3F5FBF'>such</span><span
+> </span><span
+style='color:#3F5FBF'>as</span><span
+> </span><span
+style='color:#3F5FBF'>\n</span><span
+> </span><span
+style='color:#3F5FBF'>for</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>newline</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>\u0020</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Unicode</span><span> </span><span style='color:#3F5FBF'>character</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>hex</span><span> </span><span style='color:#3F5FBF'>value</span><span> </span><span style='color:#3F5FBF'>20</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>i.e.</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>space</span><span> </span><span style='color:#3F5FBF'>character.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>charLiteral = </span><span style='color:#2A00FF'>'a'</span><span>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Numbers</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>decimal</span><span> </span><span style='color:#3F5FBF'>point</span><span> </span><span style='color:#3F5FBF'>are</span><span> </span><span style='color:#3F5FBF'>used</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>represent</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Double</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>values</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span style='color:#3F5FBF'>.</span><span> </span><span style='color:#3F5FBF'>These</span><span> </span><span style='color:#3F5FBF'>correspond</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>primitive</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>&quot;double&quot;.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>doubleLiteral = </span><span
+style='color:#2A00FF'>123.123</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Int</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>corresponds</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>primitive</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>&quot;int&quot;</span><span
+> </span><span
+style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>intLiteral = </span><span style='color:#2A00FF'>123</span><span> :: </span><span style='color:#646464'>Int</span><span>; </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Long</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>corresponds</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>primitive</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>&quot;long&quot;</span><span
+> </span><span
+style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>longLiteral = </span><span style='color:#2A00FF'>3210000</span><span
+> :: </span><span
+style='color:#646464'>Long</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Integer</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>corresponds</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>object</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>java.lang.BigInteger</span><span
+> </span><span
+style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>integerLiteral = </span><span
+style='color:#2A00FF'>1230000000000000000000000000000000</span><span
+> :: </span><span
+style='color:#646464'>Integer</span><span
+>; </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Numbers</span><span> </span><span style='color:#3F5FBF'>without</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>decimal</span><span> </span><span style='color:#3F5FBF'>point</span><span> </span><span style='color:#3F5FBF'>can</span><span> </span><span style='color:#3F5FBF'>represent</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>value</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>any</span><span> </span><span style='color:#3F5FBF'>numeric</span><span> </span><span style='color:#3F5FBF'>type.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>actual</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>resolved</span><span> </span><span style='color:#3F5FBF'>polymorphically</span><span
+> </span><span
+style='color:#3F5FBF'>depending</span><span
+> </span><span
+style='color:#3F5FBF'>upon</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>context</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>which</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>literal</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>used.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>numLiteral :: </span><span style='color:#646464'>Num</span><span> a =&gt; a;</span></p>
+
+<p class=MsoNormal><span>numLiteral = </span><span style='color:#2A00FF'>999</span><span>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Boolean</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>values</span><span> </span><span style='color:#3F5FBF'>are</span><span> </span><span style='color:#3F5FBF'>either</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>True</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>or</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>False</span><span style='color:#7F7F9F'>@}</span><span style='color:#3F5FBF'>.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>booleanLiteral = </span><span
+style='color:#646464'>True</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//Here are some examples of List literals.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//Lists in CAL are immutable singly linked
+lists of values of a single type.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>4</span><span> </span><span style='color:#3F5FBF'>Color</span><span> </span><span style='color:#3F5FBF'>values.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>colors :: [</span><span style='color:#646464'>Color</span><span>];</span></p>
+
+<p class=MsoNormal><span>colors = [red, green, yellow, blue];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>colorsExamples =</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//colors is a list of length 4. length here
+is List.length since length</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//appears in the list of &quot;using&quot;
+functions for the import of the</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Length module. We could also have
+explicitly written List.length</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (length colors == </span><span
+style='color:#2A00FF'>4</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//reversing colors</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (reverse colors == [blue, yellow, green,
+red])</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//taking the first 2 elements of the list
+of colors</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (take </span><span style='color:#2A00FF'>2</span><span> colors == [red, green])</span></p>
+
+<p class=MsoNormal><span>       </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//subscripting the list of colors using the
+infix form of the</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//List.subscript function</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (colors </span><span style='color:#646464'>`subscript`</span><span> </span><span style='color:#2A00FF'>2</span><span> == yellow)</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span></p>
+
+<p class=MsoNormal><span>        </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//colorToRGB is a function that take a
+Color value and returns a triple</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//of Int values. In CAL notation,</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//colorToRGB :: Color -&gt; (Int, Int,
+Int).</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//map applies its function first argument
+to each element of the list</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//supplied as the second argument.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        map </span><span style='color:#646464'>Color</span><span>.colorToRGB colors </span></p>
+
+<p class=MsoNormal><span>        == [(</span><span style='color:#2A00FF'>255</span><span>, </span><span style='color:#2A00FF'>0</span><span>, </span><span style='color:#2A00FF'>0</span><span>), (</span><span style='color:#2A00FF'>0</span><span>, </span><span style='color:#2A00FF'>128</span><span>, </span><span style='color:#2A00FF'>0</span><span>), (</span><span style='color:#2A00FF'>255</span><span>, </span><span style='color:#2A00FF'>255</span><span>, </span><span style='color:#2A00FF'>0</span><span>), (</span><span style='color:#2A00FF'>0</span><span>, </span><span style='color:#2A00FF'>0</span><span>, </span><span style='color:#2A00FF'>255</span><span>)]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the ++ operator also works for list
+concatenation</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        [red, green] ++ [aqua, yellow, black]</span></p>
+
+<p class=MsoNormal><span>        == [red, green, aqua, yellow, black]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    ;                </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>5</span><span> </span><span style='color:#3F5FBF'>String</span><span> </span><span style='color:#3F5FBF'>values.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>fruits :: [</span><span style='color:#646464'>String</span><span>];</span></p>
+
+<p class=MsoNormal><span>fruits = [</span><span style='color:#2A00FF'>&quot;apple&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;pear&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;banana&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;mango&quot;</span><span
+>];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>fruitsExamples =</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//lists can also be built up using the :
+and [] data constructors.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the : data constructor appends an element
+to a list,</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//and the [] data constructor represents
+the empty list.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        fruits</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;apple&quot;</span><span
+> : </span><span
+style='color:#2A00FF'>&quot;pear&quot;</span><span
+> : </span><span
+style='color:#2A00FF'>&quot;banana&quot;</span><span
+> : </span><span
+style='color:#2A00FF'>&quot;mango&quot;</span><span
+> : []</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the : data constructor has the textual
+form Prelude.Cons</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the [] data constructor has the textual
+form Prelude.Nil </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//whereas operators have specially defined
+precedence and associativity</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//(essentially the natural and typical ones
+common to Java and other</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//languages), backquoted textual operators always
+are left associative,</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//so the parentheses below are needed.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        fruits</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;apple&quot;</span><span
+> </span><span
+style='color:#646464'>`Cons`</span><span
+> (</span><span
+style='color:#2A00FF'>&quot;pear&quot;</span><span
+> </span><span
+style='color:#646464'>`Cons`</span><span
+> (</span><span
+style='color:#2A00FF'>&quot;banana&quot;</span><span
+> </span><span
+style='color:#646464'>`Cons`</span><span
+>(</span><span
+style='color:#2A00FF'>&quot;mango&quot;</span><span
+> </span><span
+style='color:#646464'>`Cons`</span><span
+> </span><span
+style='color:#646464'>Nil</span><span
+>)))</span></p>
+
+<p class=MsoNormal><span>    )    </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the Cons data constructor has 2 fields:
+head and tail.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//this is an example of data constructor
+field selection</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (fruits.</span><span style='color:#646464'>Cons</span><span>.head == </span><span style='color:#2A00FF'>&quot;apple&quot;</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//using data constructor field selection to
+traverse fruits to its</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//third element.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (fruits.</span><span style='color:#646464'>Cons</span><span>.tail.</span><span style='color:#646464'>Cons</span><span>.tail.</span><span style='color:#646464'>Cons</span><span>.head == </span><span style='color:#2A00FF'>&quot;banana&quot;</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//using a case expression to extract the
+first element of fruits</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        (</span></p>
+
+<p class=MsoNormal><span>            </span><b><span style='color:#7F0055'>case</span></b><span
+> fruits </span><b><span
+style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>            fruitsHead : _ -&gt; fruitsHead;</span></p>
+
+<p class=MsoNormal><span>        )</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;apple&quot;</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//using a field-name based case expression
+to extract the first element</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//of fruits. The &quot;head =
+fruitsHead&quot; part binds the head field of the</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Cons data constructor to the fruitHead
+variable.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        (</span></p>
+
+<p class=MsoNormal><span>            </span><b><span style='color:#7F0055'>case</span></b><span
+> fruits </span><b><span
+style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>            </span><span style='color:#646464'>Cons</span><span> {head = fruitsHead} -&gt; fruitsHead;</span></p>
+
+<p class=MsoNormal><span>        )</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;apple&quot;</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//using a field-name based case expression
+to extract the first element</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//of fruits. This uses &quot;punning&quot;
+which is a shorthand notation where the</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//field-name is used as the name of the
+introduced local variable </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//i.e. it is equivalent to writing Cons
+{head = head} below.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        (</span></p>
+
+<p class=MsoNormal><span>            </span><b><span style='color:#7F0055'>case</span></b><span
+> fruits </span><b><span
+style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>            </span><span style='color:#646464'>Cons</span><span> {head} -&gt; head;</span></p>
+
+<p class=MsoNormal><span>        )</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;apple&quot;</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>       </span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>3</span><span> </span><span style='color:#3F5FBF'>trigonometric</span><span> </span><span style='color:#3F5FBF'>functions.</span><span> </span><span style='color:#3F5FBF'>Each</span><span> </span><span style='color:#3F5FBF'>element</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>function</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>Double</span><span> </span><span style='color:#3F5FBF'>-&gt;</span><span> </span><span style='color:#3F5FBF'>Double.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>trigs :: [</span><span style='color:#646464'>Double</span><span> -&gt; </span><span style='color:#646464'>Double</span><span>];</span></p>
+
+<p class=MsoNormal><span>trigs = [sin, cos, tan];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>3</span><span> </span><span style='color:#3F5FBF'>lists</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>Color</span><span> </span><span style='color:#3F5FBF'>values.</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>first</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>1</span><span> </span><span style='color:#3F5FBF'>Color.</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>second</span><span> </span><span style='color:#3F5FBF'>3</span><span> </span><span style='color:#3F5FBF'>Color</span><span> </span><span style='color:#3F5FBF'>values.</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>third</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>an</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>empty</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>(with</span><span> </span><span style='color:#3F5FBF'>no</span><span> </span><span style='color:#3F5FBF'>Color</span><span> </span><span style='color:#3F5FBF'>values).</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Note</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>[]</span><span> </span><span style='color:#3F5FBF'>denotes</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>empty</span><span> </span><span style='color:#3F5FBF'>list.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>colors2 :: [[</span><span style='color:#646464'>Color</span><span>]];</span></p>
+
+<p class=MsoNormal><span>colors2 = [[red], [green, yellow, blue], []];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>maybeColors</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>6</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Maybe</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>values.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Values</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Maybe</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>are</span><span> </span><span style='color:#3F5FBF'>used</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>extend</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>an</span><span> </span><span style='color:#3F5FBF'>additional</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Nothing</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>value.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>maybeTrigs :: [</span><span style='color:#646464'>Maybe</span><span> (</span><span style='color:#646464'>Double</span><span> -&gt; </span><span style='color:#646464'>Double</span><span>)];</span></p>
+
+<p class=MsoNormal><span>maybeTrigs = [</span><span style='color:#646464'>Just</span><span> sin, </span><span style='color:#646464'>Nothing</span><span
+>, </span><span
+style='color:#646464'>Just</span><span
+> cos, </span><span
+style='color:#646464'>Nothing</span><span
+>, </span><span
+style='color:#646464'>Nothing</span><span
+>, </span><span
+style='color:#646464'>Just</span><span
+> tan];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>moreListExamples =</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//sum up the values in a list</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (sum [</span><span style='color:#2A00FF'>3</span><span> :: </span><span style='color:#646464'>Int</span><span>, </span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>4</span><span>, </span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>5</span><span>] == </span><span style='color:#2A00FF'>14</span><span>)</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//zip combines 2 lists into a list of pairs</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        zip [</span><span style='color:#2A00FF'>&quot;apple&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;pear&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;cherry&quot;</span><span
+>] [green, yellow,
+red, aqua] </span></p>
+
+<p class=MsoNormal><span>        == [(</span><span style='color:#2A00FF'>&quot;apple&quot;</span><span
+>, green), (</span><span
+style='color:#2A00FF'>&quot;pear&quot;</span><span
+>, yellow), (</span><span
+style='color:#2A00FF'>&quot;cherry&quot;</span><span
+>, red)]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//verification of a fact know to the five
+year old Gauss:</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//1 + 2 + 3 + ... + 1000</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//== (1 + 1000) + (2 + 999) +  (3 + 998) +
+... + (500 + 501) == 1001 * 500</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        sum (upFromTo (</span><span
+style='color:#2A00FF'>1</span><span
+> :: </span><span
+style='color:#646464'>Long</span><span
+>) </span><span
+style='color:#2A00FF'>1000</span><span
+>) </span></p>
+
+<p class=MsoNormal><span>        == (</span><span style='color:#2A00FF'>1000</span><span> + </span><span style='color:#2A00FF'>1</span><span>) * </span><span style='color:#2A00FF'>1000</span><span> / </span><span style='color:#2A00FF'>2</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//mapping the String.words function to
+produce a list of list of strings.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//In CAL notation this has type [[String]].</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        map</span></p>
+
+<p class=MsoNormal><span>            </span><span style='color:#646464'>String</span><span>.words</span></p>
+
+<p class=MsoNormal><span>            [</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;vine
+maple&quot;</span><span>,</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;lily of the
+valley&quot;</span><span>,</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;golden false
+acacia&quot;</span><span>,</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;huckleberry&quot;</span></p>
+
+<p class=MsoNormal><span>            ]</span></p>
+
+<p class=MsoNormal><span>        ==</span></p>
+
+<p class=MsoNormal><span>        [</span></p>
+
+<p class=MsoNormal><span>            [</span><span style='color:#2A00FF'>&quot;vine&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;maple&quot;</span><span
+>],</span></p>
+
+<p class=MsoNormal><span>            [</span><span style='color:#2A00FF'>&quot;lily&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;of&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;the&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;valley&quot;</span><span
+>],</span></p>
+
+<p class=MsoNormal><span>            [</span><span style='color:#2A00FF'>&quot;golden&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;false&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;acacia&quot;</span><span
+>],</span></p>
+
+<p class=MsoNormal><span>            [</span><span style='color:#2A00FF'>&quot;huckleberry&quot;</span><span
+>]</span></p>
+
+<p class=MsoNormal><span>        ]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//# is the composition operator.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//$ is the low-precedence application
+operator.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Essentially this example is computing the
+length of each of the plant</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//name tokens of the previous example
+however preserving the list of list</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//structure of the tokenization e.g.
+&quot;vine&quot; is a String of length 4.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        (</span></p>
+
+<p class=MsoNormal><span>            (map $ map </span><span
+style='color:#646464'>String</span><span
+>.length) </span><span
+style='color:#646464'>#</span><span
+> (map </span><span
+style='color:#646464'>String</span><span
+>.words)</span></p>
+
+<p class=MsoNormal><span>            $</span></p>
+
+<p class=MsoNormal><span>            [</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;vine
+maple&quot;</span><span>,</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;lily of the
+valley&quot;</span><span>,</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;golden false
+acacia&quot;</span><span>,</span></p>
+
+<p class=MsoNormal><span>                </span><span
+style='color:#2A00FF'>&quot;huckleberry&quot;</span></p>
+
+<p class=MsoNormal><span>            ]</span></p>
+
+<p class=MsoNormal><span>        )</span></p>
+
+<p class=MsoNormal><span>        == [[</span><span style='color:#2A00FF'>4</span><span>, </span><span style='color:#2A00FF'>5</span><span>], [</span><span style='color:#2A00FF'>4</span><span>, </span><span style='color:#2A00FF'>2</span><span>, </span><span style='color:#2A00FF'>3</span><span>, </span><span style='color:#2A00FF'>6</span><span>], [</span><span style='color:#2A00FF'>6</span><span>, </span><span style='color:#2A00FF'>5</span><span>, </span><span style='color:#2A00FF'>6</span><span>], [</span><span style='color:#2A00FF'>11</span><span>]]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>An</span><span> </span><span style='color:#3F5FBF'>infinite</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>ones.</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>lazy</span><span> </span><span style='color:#3F5FBF'>language</span><span> </span><span style='color:#3F5FBF'>so</span><span> </span><span style='color:#3F5FBF'>this</span><span> </span><span style='color:#3F5FBF'>sort</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>thing</span><span> </span><span style='color:#3F5FBF'>works.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>ones :: [</span><span style='color:#646464'>Int</span><span>];</span></p>
+
+<p class=MsoNormal><span>ones = </span><span style='color:#2A00FF'>1</span><span> : ones;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>Fibonacci</span><span> </span><span style='color:#3F5FBF'>numbers.</span><span> </span><span style='color:#3F5FBF'>Another</span><span> </span><span style='color:#3F5FBF'>infinite</span><span> </span><span style='color:#3F5FBF'>list.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>fibs :: [</span><span style='color:#646464'>Integer</span><span>];</span></p>
+
+<p class=MsoNormal><span>fibs = </span><span style='color:#2A00FF'>1</span><span> : </span><span style='color:#2A00FF'>1</span><span> : zipWith add fibs (tail fibs);</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>lazyListExamples =</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//can evaluate the first 4 elements of ones
+without hanging due to laziness</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (take </span><span style='color:#2A00FF'>4</span><span> ones == [</span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>1</span><span>])</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//can evaluate the first 17 elements of
+fibs without hanging due to laziness</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        take </span><span style='color:#2A00FF'>17</span><span> fibs</span></p>
+
+<p class=MsoNormal><span>        == </span></p>
+
+<p class=MsoNormal><span>        [</span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>2</span><span>, </span><span style='color:#2A00FF'>3</span><span>, </span><span style='color:#2A00FF'>5</span><span>, </span><span style='color:#2A00FF'>8</span><span>, </span><span style='color:#2A00FF'>13</span><span>, </span><span style='color:#2A00FF'>21</span><span>, </span><span style='color:#2A00FF'>34</span><span>, </span><span style='color:#2A00FF'>55</span><span>, </span><span style='color:#2A00FF'>89</span><span>, </span><span style='color:#2A00FF'>144</span><span>, </span><span style='color:#2A00FF'>233</span><span>, </span><span style='color:#2A00FF'>377</span><span>, </span><span style='color:#2A00FF'>610</span><span>, </span><span style='color:#2A00FF'>987</span><span>, </span><span style='color:#2A00FF'>1597</span><span>]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//CAL supports records. Records are
+basically sets of name value pairs.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//They differ from lists in that each field
+value of a record may have</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//a different type.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>A</span><span> </span><span style='color:#3F5FBF'>record</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>3</span><span> </span><span style='color:#3F5FBF'>fields:</span><span> </span><span style='color:#3F5FBF'>field</span><span> </span><span style='color:#3F5FBF'>#1</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>String,</span><span> </span><span style='color:#3F5FBF'>field</span><span> </span><span style='color:#3F5FBF'>#2</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Maybe</span><span> </span><span style='color:#3F5FBF'>Boolean</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>field</span><span> </span><span style='color:#3F5FBF'>#3</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>[Double].</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>expressed</span><span> </span><span style='color:#3F5FBF'>using</span><span> </span><span style='color:#3F5FBF'>tuple</span><span> </span><span style='color:#3F5FBF'>notation.</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>tupleRecord1 :: (</span><span
+style='color:#646464'>String</span><span
+>, </span><span
+style='color:#646464'>Maybe</span><span
+> </span><span
+style='color:#646464'>Boolean</span><span
+>, [</span><span
+style='color:#646464'>Double</span><span
+>]);</span></p>
+
+<p class=MsoNormal><span>tupleRecord1 = (</span><span
+style='color:#2A00FF'>&quot;apple&quot;</span><span
+>, </span><span
+style='color:#646464'>Just</span><span
+> </span><span
+style='color:#646464'>True</span><span
+>, [</span><span
+style='color:#2A00FF'>2.0</span><span
+>, </span><span
+style='color:#2A00FF'>3.0</span><span
+>, -</span><span
+style='color:#2A00FF'>5</span><span
+>]);</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>record</span><span> </span><span style='color:#3F5FBF'>actually</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>same</span><span> </span><span style='color:#3F5FBF'>value</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>tupleRecord1,</span><span> </span><span style='color:#3F5FBF'>but</span><span> </span><span style='color:#3F5FBF'>it</span><span> </span><span style='color:#3F5FBF'>includes</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>field</span><span> </span><span style='color:#3F5FBF'>names</span><span> </span><span style='color:#3F5FBF'>explicitly,</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>thus</span><span> </span><span style='color:#3F5FBF'>uses</span><span> </span><span style='color:#3F5FBF'>braces</span><span> </span><span style='color:#3F5FBF'>rather</span><span> </span><span style='color:#3F5FBF'>than</span><span> </span><span style='color:#3F5FBF'>parentheses.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>When</span><span> </span><span style='color:#3F5FBF'>using</span><span> </span><span style='color:#3F5FBF'>explicit</span><span> </span><span style='color:#3F5FBF'>field</span><span> </span><span style='color:#3F5FBF'>names,</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>ordering</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>fields</span><span> </span><span style='color:#3F5FBF'>does</span><span> </span><span style='color:#3F5FBF'>not</span><span> </span><span style='color:#3F5FBF'>matter.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>tupleRecord2 :: {</span><span
+style='color:#646464'>#1</span><span
+> :: </span><span
+style='color:#646464'>String</span><span
+>, </span><span
+style='color:#646464'>#3</span><span
+> :: [</span><span
+style='color:#646464'>Double</span><span
+>], </span><span
+style='color:#646464'>#2</span><span
+> :: </span><span
+style='color:#646464'>Maybe</span><span
+> </span><span
+style='color:#646464'>Boolean</span><span
+>};</span></p>
+
+<p class=MsoNormal><span>tupleRecord2 = {</span><span
+style='color:#646464'>#3</span><span
+> = [</span><span
+style='color:#2A00FF'>2.0</span><span
+>, </span><span
+style='color:#2A00FF'>3.0</span><span
+>, -</span><span
+style='color:#2A00FF'>5</span><span
+>], </span><span
+style='color:#646464'>#1</span><span
+> = </span><span
+style='color:#2A00FF'>&quot;apple&quot;</span><span
+>, </span><span
+style='color:#646464'>#2</span><span
+> = </span><span
+style='color:#646464'>Just</span><span
+> </span><span
+style='color:#646464'>True</span><span
+>};</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Here</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>record</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>both</span><span> </span><span style='color:#3F5FBF'>textual</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>ordinal</span><span> </span><span style='color:#3F5FBF'>fields.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>mixedRecord1 ::</span></p>
+
+<p class=MsoNormal><span>    {</span><span style='color:#646464'>#1</span><span> :: </span><span style='color:#646464'>Maybe</span><span> [</span><span style='color:#646464'>Int</span><span>], </span><span style='color:#646464'>#2</span><span> :: </span><span style='color:#646464'>Boolean</span><span>, age :: </span><span style='color:#646464'>Double</span><span>, name :: </span><span style='color:#646464'>String</span><span>};</span></p>
+
+<p class=MsoNormal><span>mixedRecord1 =</span></p>
+
+<p class=MsoNormal><span>    {name = </span><span style='color:#2A00FF'>&quot;Anton&quot;</span><span
+>, age = </span><span
+style='color:#2A00FF'>3.0</span><span
+>, </span><span
+style='color:#646464'>#1</span><span
+> = </span><span
+style='color:#646464'>Just</span><span
+> [</span><span
+style='color:#2A00FF'>10</span><span
+> :: </span><span
+style='color:#646464'>Int</span><span
+>, </span><span
+style='color:#2A00FF'>20</span><span
+>], </span><span
+style='color:#646464'>#2</span><span
+> = </span><span
+style='color:#646464'>False</span><span
+>};</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>recordExamples =</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the 2 tuples have the same value even
+though one was expressed in </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//tuple notation and one was expressed
+using record notation</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (tupleRecord1 == tupleRecord2)</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the field1 function extracts the #1 field
+of a record. It works with all</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//records having a #1 field and not just
+pairs or even tuples.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//This is technically called
+&quot;structural polymorphism&quot;.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        field1 tupleRecord1 == </span><span
+style='color:#2A00FF'>&quot;apple&quot;</span></p>
+
+<p class=MsoNormal><span>        &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>        field1 mixedRecord1 == </span><span
+style='color:#646464'>Just</span><span
+> [</span><span
+style='color:#2A00FF'>10</span><span
+>, </span><span
+style='color:#2A00FF'>20</span><span
+>]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the . operator can also be used to
+extract fields from records.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        mixedRecord1.name == </span><span
+style='color:#2A00FF'>&quot;Anton&quot;</span></p>
+
+<p class=MsoNormal><span>        &amp;&amp; mixedRecord1.</span><span
+style='color:#646464'>#2</span><span
+> == </span><span
+style='color:#646464'>False</span></p>
+
+<p class=MsoNormal><span>        &amp;&amp; tupleRecord2.</span><span
+style='color:#646464'>#3</span><span
+> == [</span><span
+style='color:#2A00FF'>2</span><span
+>, </span><span
+style='color:#2A00FF'>3</span><span
+>, -</span><span
+style='color:#2A00FF'>5</span><span
+>]     </span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the fieldNames function gives the field
+names in a record in field-name</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//order, namely ordinal fields first in
+ordinal order</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//followed by textual fields in
+alphabetical order</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>Record</span><span>.fieldNames mixedRecord1 == [</span><span
+style='color:#2A00FF'>&quot;#1&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;#2&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;age&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;name&quot;</span><span
+>]    </span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//records can be updated (:=) and extended
+(=). Note that in the original</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//mixedRecord1 the age field has type
+Double, but in the updated record</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the age field has type Maybe Double.
+Also, note that this is a</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//non-destructive update- the original
+mixedRecord1 is not modified.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        {mixedRecord1 | age := </span><span
+style='color:#646464'>Just</span><span
+> </span><span
+style='color:#2A00FF'>3.5</span><span
+>, favoriteFood = </span><span
+style='color:#2A00FF'>&quot;chocolate&quot;</span><span
+>}</span></p>
+
+<p class=MsoNormal><span>        ==</span></p>
+
+<p class=MsoNormal><span>        {</span></p>
+
+<p class=MsoNormal><span>            name = </span><span
+style='color:#2A00FF'>&quot;Anton&quot;</span><span
+>,</span></p>
+
+<p class=MsoNormal><span>            age = </span><span
+style='color:#646464'>Just</span><span
+> </span><span
+style='color:#2A00FF'>3.5</span><span
+>,</span></p>
+
+<p class=MsoNormal><span>            </span><span style='color:#646464'>#1</span><span> = </span><span style='color:#646464'>Just</span><span> [</span><span style='color:#2A00FF'>10</span><span> :: </span><span style='color:#646464'>Int</span><span>, </span><span style='color:#2A00FF'>20</span><span>],</span></p>
+
+<p class=MsoNormal><span>            </span><span style='color:#646464'>#2</span><span> = </span><span style='color:#646464'>False</span><span>,</span></p>
+
+<p class=MsoNormal><span>            favoriteFood = </span><span
+style='color:#2A00FF'>&quot;chocolate&quot;</span></p>
+
+<p class=MsoNormal><span>        }</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>   </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//records can be unpacked using case
+expressions as well. For example, </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//here we extract the name and age field
+from mixedRecord1, and construct</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the tuple (age, name).</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        (</span></p>
+
+<p class=MsoNormal><span>            </span><b><span style='color:#7F0055'>case</span></b><span
+> mixedRecord1 </span><b><span
+style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>            {_ |  name, age} -&gt; (age,
+name);</span></p>
+
+<p class=MsoNormal><span>        )</span></p>
+
+<p class=MsoNormal><span>        == (</span><span style='color:#2A00FF'>3.0</span><span>, </span><span style='color:#2A00FF'>&quot;Anton&quot;</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>                           </span></p>
+
+<p class=MsoNormal><span>     </span></p>
+
+<p class=MsoNormal><span>          </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>totalPrice</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>function</span><span> </span><span style='color:#3F5FBF'>taking</span><span> </span><span style='color:#3F5FBF'>two</span><span> </span><span style='color:#3F5FBF'>arguments,</span><span> </span><span style='color:#3F5FBF'>price</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>shipping.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>calculates</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>totalPrice</span><span> </span><span style='color:#3F5FBF'>by</span><span> </span><span style='color:#3F5FBF'>multiplying</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>price</span><span> </span><span style='color:#3F5FBF'>by</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>tax</span><span> </span><span style='color:#3F5FBF'>rate</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>(in</span><span> </span><span style='color:#3F5FBF'>this</span><span> </span><span style='color:#3F5FBF'>example,</span><span> </span><span style='color:#3F5FBF'>14%)</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>then</span><span> </span><span style='color:#3F5FBF'>adding</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>shipping</span><span> </span><span style='color:#3F5FBF'>costs.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Of</span><span> </span><span style='color:#3F5FBF'>note</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>this</span><span> </span><span style='color:#3F5FBF'>example</span><span> </span><span style='color:#3F5FBF'>are</span><span> </span><span style='color:#3F5FBF'>that:</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>{@unorderedList</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>   </span><span style='color:#7F7F9F'>{@item</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>formal</span><span> </span><span style='color:#3F5FBF'>parameters</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>function</span><span> </span><span style='color:#3F5FBF'>are</span><span> </span><span style='color:#3F5FBF'>simply</span><span> </span><span style='color:#3F5FBF'>separated</span><span> </span><span style='color:#3F5FBF'>by</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>          </span><span style='color:#3F5FBF'>spaces</span><span> </span><span style='color:#3F5FBF'>i.e.</span><span> </span><span style='color:#3F5FBF'>it</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>not</span><span> </span><span style='color:#3F5FBF'>written</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>totalPrice</span><span> </span><span style='color:#3F5FBF'>(price,</span><span> </span><span style='color:#3F5FBF'>shipping)</span><span> </span><span style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>   </span><span style='color:#7F7F9F'>{@item</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>follows</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>typical</span><span> </span><span style='color:#3F5FBF'>rules</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>operator</span><span> </span><span style='color:#3F5FBF'>precedence</span><span> </span><span style='color:#3F5FBF'>so</span><span> </span><span style='color:#3F5FBF'>that</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>          </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>multiplication</span><span
+> </span><span
+style='color:#3F5FBF'>is</span><span
+> </span><span
+style='color:#3F5FBF'>done</span><span
+> </span><span
+style='color:#3F5FBF'>first</span><span
+> </span><span
+style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>   </span><span style='color:#7F7F9F'>{@item</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>totalPrice</span><span> </span><span style='color:#3F5FBF'>function</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>inferred</span><span> </span><span style='color:#3F5FBF'>by</span><span> </span><span style='color:#3F5FBF'>the</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>          </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>compiler</span><span> </span><span style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//this type declaration is not necessary,
+the type is inferred </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//totalPrice :: Double -&gt; Double -&gt;
+Double;</span></p>
+
+<p class=MsoNormal><span>totalPrice price shipping = </span><span
+style='color:#2A00FF'>1.14</span><span
+> * price + shipping; </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>/*</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>what follows is a short Interactice CAL
+Environment (ICE) session making use</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>of the totalPrice function. First, we set
+the module in which to evaluate</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>expressions to be this module
+(Tutorial_CalIntro). Then we type &quot;totalPrice 5 3&quot;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>on the command prompt and hit return. ICE
+outputs the result of &quot;8.7&quot;,</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>and then waits for the next command.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>////////////////////////////////////////////////////////////////////////////////</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>GemCutterSaveModule&gt;:sm
+Tutorial_CalIntro</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Tutorial_CalIntro&gt;totalPrice 5 3</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>running: totalPrice 5 3</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Run Time:        0 ms</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Output:</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>8.7</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Tutorial_CalIntro&gt;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>*/</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>quadraticEquationSolver</span><span
+> </span><span
+style='color:#3F5FBF'>finds</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>roots</span><span
+> </span><span
+style='color:#3F5FBF'>of</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>quadratic</span><span
+> </span><span
+style='color:#3F5FBF'>equation</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>a*x*x</span><span> </span><span style='color:#3F5FBF'>+</span><span> </span><span style='color:#3F5FBF'>b*x</span><span> </span><span style='color:#3F5FBF'>+</span><span> </span><span style='color:#3F5FBF'>c</span><span> </span><span style='color:#3F5FBF'>==</span><span> </span><span style='color:#3F5FBF'>0</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>using</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>quadratic</span><span> </span><span style='color:#3F5FBF'>formula.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Some</span><span> </span><span style='color:#3F5FBF'>points</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>note:</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>{@unorderedList</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>    </span><span style='color:#7F7F9F'>{@item</span><span> </span><span style='color:#3F5FBF'>this</span><span> </span><span style='color:#3F5FBF'>function</span><span> </span><span style='color:#3F5FBF'>takes</span><span> </span><span style='color:#3F5FBF'>3</span><span> </span><span style='color:#3F5FBF'>arguments,</span><span> </span><span style='color:#3F5FBF'>each</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>Double,</span><span> </span><span style='color:#3F5FBF'>representing</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>           </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>coefficients</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>quadratic</span><span> </span><span style='color:#3F5FBF'>equation,</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>returns</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>pair</span><span> </span><span style='color:#3F5FBF'>of</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>           </span><span style='color:#3F5FBF'>Double</span><span> </span><span style='color:#3F5FBF'>values,</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>2</span><span> </span><span style='color:#3F5FBF'>roots.</span><span style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>    </span><span style='color:#7F7F9F'>{@item</span><span> </span><span style='color:#3F5FBF'>it</span><span> </span><span style='color:#3F5FBF'>uses</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>&quot;let</span><span> </span><span style='color:#3F5FBF'>expression&quot;</span><span
+> </span><span
+style='color:#3F5FBF'>to</span><span
+> </span><span
+style='color:#3F5FBF'>declare</span><span
+> </span><span
+style='color:#3F5FBF'>a</span><span
+> </span><span
+style='color:#3F5FBF'>local</span><span
+> </span><span
+style='color:#3F5FBF'>variable</span><span
+> </span><span
+style='color:#3F5FBF'>to</span><span
+> </span><span
+style='color:#3F5FBF'>compute</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>           </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>discriminant</span><span> </span><span style='color:#3F5FBF'>which</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>then</span><span> </span><span style='color:#3F5FBF'>used</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>&quot;in&quot;</span><span
+> </span><span
+style='color:#3F5FBF'>part</span><span
+> </span><span
+style='color:#3F5FBF'>of</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>let</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>           </span><span style='color:#3F5FBF'>expression.</span><span
+style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>    </span><span style='color:#7F7F9F'>{@item</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>declaration</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>given</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>this</span><span> </span><span style='color:#3F5FBF'>case</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>clarity.</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>not</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>           </span><span style='color:#3F5FBF'>required,</span><span
+> </span><span
+style='color:#3F5FBF'>but</span><span
+> </span><span
+style='color:#3F5FBF'>can</span><span
+> </span><span
+style='color:#3F5FBF'>be</span><span
+> </span><span
+style='color:#3F5FBF'>handy</span><span
+> </span><span
+style='color:#3F5FBF'>as</span><span
+> </span><span
+style='color:#3F5FBF'>a</span><span
+> </span><span
+style='color:#3F5FBF'>method</span><span
+> </span><span
+style='color:#3F5FBF'>of</span><span
+> </span><span
+style='color:#3F5FBF'>asserting</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>           </span><span style='color:#3F5FBF'>programmer's</span><span
+> </span><span
+style='color:#3F5FBF'>intent</span><span
+> </span><span
+style='color:#3F5FBF'>and</span><span
+> </span><span
+style='color:#3F5FBF'>documenting</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>code.</span><span
+style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@}</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>quadraticEquationSolver :: </span><span
+style='color:#646464'>Double</span><span
+> -&gt; </span><span
+style='color:#646464'>Double</span><span
+> -&gt; </span><span
+style='color:#646464'>Double</span><span
+> -&gt; (</span><span
+style='color:#646464'>Double</span><span
+>, </span><span
+style='color:#646464'>Double</span><span
+>); </span></p>
+
+<p class=MsoNormal><span>quadraticEquationSolver a b c =</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>let</span></b></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//the local variable disc computes the
+discriminant. It can then be</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//used in the &quot;in&quot; part of the
+let expression to avoid needing to</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//recompute the value for the 2 roots of
+the quadratic equation.</span></p>
+
+<p class=MsoNormal><span>        disc = sqrt (b*b - </span><span
+style='color:#2A00FF'>4</span><span
+>*a*c);</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>in</span></b></p>
+
+<p class=MsoNormal><span>        (</span></p>
+
+<p class=MsoNormal><span>            (-b + disc) / (</span><span
+style='color:#2A00FF'>2</span><span
+>*a), </span><span
+style='color:#3F7F5F'>//the expression
+defining the first component</span></p>
+
+<p class=MsoNormal><span>                                 </span><span
+style='color:#3F7F5F'>//of the pair,
+followed by a comma</span></p>
+
+<p class=MsoNormal><span>            (-b - disc) / (</span><span
+style='color:#2A00FF'>2</span><span
+>*a)  </span><span
+style='color:#3F7F5F'>//the expression
+defining the second component of the pair</span></p>
+
+<p class=MsoNormal><span>        );</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>/*</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Here is an ICE session running
+quadraticEquationSolver for 3 different inputs.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Even though the result is a tuple of Double
+values, the output displays as a</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>list of Double values (using square
+brackets). The reason for this is that every</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>expression typed into ICE is run by
+converting it to a value of a Java type. </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>In this case, the Java type is
+java.lang.List. The output displayed is then </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>the result of calling the
+java.util.List.toString() method. The technical</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>reason for this is that expressions run in
+ICE are automatically composed with</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>the Prelude.output function. In the case of
+the (Double, Double) type, this will</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>produce a Java object that is a
+java.util.List where each element of the</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>list is a java.lang.Double object.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>In order to see more of the underlying CAL types, one way is to compose the </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>expression with the Debug.show function as
+in the last example in the ICE</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>session below. This will display the tuple
+value using parentheses notation.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Another interesting point is that when
+typing in -15 it was necessary to use</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>parentheses. This is because the function
+application operator</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>(i.e. whitespace), is very high in
+precedence so that</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>quadraticEquation 1 2 -15</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>parses as</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>(quadraticEquation 1 2) - 15</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>i.e. the - would end up being parsed as the
+subtract operator, and we would get</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>a type-checking error since the first
+argument, which is of type</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Double -&gt; (Double, Double) is not
+something that can be subtracted.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>As a final point, notice that in the case when
+the quadratic equation has</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>complex roots, that an exception is not
+thrown, but we just default to Java's </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>behavior for floating point e.g. in this
+case not-a-number values are returned.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Note that CAL can handle such results
+specially if desired, but this is</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>not done here.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>////////////////////////////////////////////////////////////////////////////////</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Tutorial_CalIntro&gt;quadraticEquationSolver
+3 9 6</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>running: quadraticEquationSolver 3 9 6</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Run Time:        31 ms</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Output:</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>[-1.0, -2.0]</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Tutorial_CalIntro&gt;quadraticEquationSolver
+1 2 (-15)</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>running: quadraticEquationSolver 1 2 (-15)</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Run Time:        31 ms</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Output:</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>[3.0, -5.0]</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Tutorial_CalIntro&gt;quadraticEquationSolver
+1 0 9</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>running: quadraticEquationSolver 1 0 9</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Run Time:        31 ms</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Output:</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>[NaN, NaN]</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Tutorial_CalIntro&gt;show
+(quadraticEquationSolver 3 9 6)</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>running: Debug.show
+(quadraticEquationSolver 3 9 6)</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Run Time:        0 ms</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>Output:</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>(-1.0, -2.0)</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>*/</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>quadraticEquationSolverExamples =</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (quadraticEquationSolver </span><span
+style='color:#2A00FF'>3</span><span
+> </span><span
+style='color:#2A00FF'>9</span><span
+> </span><span
+style='color:#2A00FF'>6</span><span
+> == (-</span><span
+style='color:#2A00FF'>1</span><span
+>, -</span><span
+style='color:#2A00FF'>2</span><span
+>))</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (quadraticEquationSolver </span><span
+style='color:#2A00FF'>1</span><span
+> </span><span
+style='color:#2A00FF'>2</span><span
+> (-</span><span
+style='color:#2A00FF'>15</span><span
+>) == (</span><span
+style='color:#2A00FF'>3</span><span
+>, -</span><span
+style='color:#2A00FF'>5</span><span
+>))</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//verifies that both roots of x*x + 9 == 0
+are NaN i.e. not Double values</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><b><span style='color:#7F0055'>let</span></b><span
+> </span></p>
+
+<p class=MsoNormal><span>            roots = quadraticEquationSolver </span><span
+style='color:#2A00FF'>1</span><span
+> </span><span
+style='color:#2A00FF'>0</span><span
+> </span><span
+style='color:#2A00FF'>9</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>        </span><b><span style='color:#7F0055'>in</span></b></p>
+
+<p class=MsoNormal><span>            isNotANumber roots.</span><span
+style='color:#646464'>#1</span></p>
+
+<p class=MsoNormal><span>            &amp;&amp; isNotANumber roots.</span><span
+style='color:#646464'>#2</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Here</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>simple</span><span> </span><span style='color:#3F5FBF'>implementation</span><span
+> </span><span
+style='color:#3F5FBF'>of</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>quicksort</span><span
+> </span><span
+style='color:#3F5FBF'>algorithm</span><span
+> </span><span
+style='color:#3F5FBF'>for</span><span
+> </span><span
+style='color:#3F5FBF'>lists</span><span
+> </span><span
+style='color:#3F5FBF'>in</span><span
+> </span><span style='color:#3F5FBF'>CAL</span><span
+style='color:#3F5FBF'>.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Note:</span><span> </span><span style='color:#3F5FBF'>it</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>not</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>most</span><span> </span><span style='color:#3F5FBF'>efficient</span><span> </span><span style='color:#3F5FBF'>implementation,</span><span
+> </span><span
+style='color:#3F5FBF'>since</span><span
+> </span><span
+style='color:#3F5FBF'>it</span><span
+> </span><span
+style='color:#3F5FBF'>filters</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>list</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>twice</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>partition.</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>used</span><span> </span><span style='color:#3F5FBF'>here</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>an</span><span> </span><span style='color:#3F5FBF'>illustration.</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>production</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>implementation</span><span
+> </span><span
+style='color:#3F5FBF'>of</span><span
+> </span><span
+style='color:#3F5FBF'>sorting</span><span
+> </span><span
+style='color:#3F5FBF'>on</span><span
+> </span><span
+style='color:#3F5FBF'>lists</span><span
+> </span><span
+style='color:#3F5FBF'>is</span><span
+> </span><span
+style='color:#7F7F9F'>{@link</span><span
+> </span><span
+style='color:#3F5FBF'>List.sort</span><span
+style='color:#7F7F9F'>@}</span><span
+style='color:#3F5FBF'>.</span><span
+> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>quicksort</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>constrained</span><span> </span><span style='color:#3F5FBF'>by</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>Ord</span><span style='color:#7F7F9F'>@}</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>class.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>means</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>quicksort</span><span> </span><span style='color:#3F5FBF'>can</span><span> </span><span style='color:#3F5FBF'>sort</span><span> </span><span style='color:#3F5FBF'>lists</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>any</span><span> </span><span style='color:#3F5FBF'>orderable</span><span> </span><span style='color:#3F5FBF'>type.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>quicksort :: </span><span style='color:#646464'>Ord</span><span> a =&gt; [a] -&gt; [a];</span></p>
+
+<p class=MsoNormal><span>quicksort list =</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>let</span></b><span>  </span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//partition_min is a local function of 1
+argument        </span></p>
+
+<p class=MsoNormal><span>        partition_min pivot = filter (\x
+-&gt; x &lt; pivot); </span></p>
+
+<p class=MsoNormal><span>        partition_max pivot = filter (\x
+-&gt; x &gt;= pivot);</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>in</span></b></p>
+
+<p class=MsoNormal><span>        </span><b><span style='color:#7F0055'>case</span></b><span
+> list </span><b><span
+style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>        [] -&gt; [];</span></p>
+
+<p class=MsoNormal><span>        pivot : tail -&gt;</span></p>
+
+<p class=MsoNormal><span>            quicksort (partition_min pivot
+tail)                       </span></p>
+
+<p class=MsoNormal><span>            ++ (pivot : (quicksort
+(partition_max pivot tail)));</span></p>
+
+<p class=MsoNormal><span>        ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Here</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>sorting</span><span> </span><span style='color:#3F5FBF'>implementation</span><span
+> </span><span
+style='color:#3F5FBF'>that</span><span
+> </span><span
+style='color:#3F5FBF'>makes</span><span
+> </span><span
+style='color:#3F5FBF'>use</span><span
+> </span><span
+style='color:#3F5FBF'>of</span><span
+> </span><span
+style='color:#3F5FBF'>a</span><span
+> </span><span
+style='color:#3F5FBF'>Java</span><span
+> </span><span
+style='color:#3F5FBF'>destructive</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>in-place</span><span> </span><span style='color:#3F5FBF'>sort</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>actually</span><span> </span><span style='color:#3F5FBF'>do</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>sorting.</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>algorithm</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>simply</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='
+ color:#3F5FBF'>marshall</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>list,</span><span> </span><span style='color:#3F5FBF'>sort</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>in-place,</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>then</span><span> </span><span style='
+ color:#3F5FBF'>marshall</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>back</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>list.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>kind</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>strategy</span><span> </span><span style='color:#3F5FBF'>can</span><span> </span><span style='color:#3F5FBF'>be</span><span> </span><span style='color:#3F5FBF'>done</span><span> </span><span style='color:#3F5FBF'>more</span><span> </span><span style='color:#3F5FBF'>generally</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>work</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span><span style='color:#3F5FBF'>arbitrary</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>orderable</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>lists.</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>done</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#7F7F9F'>{@link</span><span> </span><span style='color:#3F5FBF'>List.sortExternal</span><span
+style='color:#7F7F9F'>@}</span><span
+> </span><span
+style='color:#3F5FBF'>function.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>main</span><span> </span><span style='color:#3F5FBF'>point</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>this</span><span> </span><span style='color:#3F5FBF'>example</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>show</span><span> </span><span style='color:#3F5FBF'>how</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>can</span><span> </span><span style='color:#3F5FBF'>conveniently</span><span> </span><span style='color:#3F5FBF'>make</span><span> </span><span style='color:#3F5FBF'>use</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>logic</span><span> </span><span style='color:#3F5FBF'>implemented</span><span> </span><span style='color:#3F5FBF'>within</span><span> </span><span style='color:#3F5FBF'>Java,</span><span> </span><span style='color:#3F5FBF'>even</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>case</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>destructively</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>updating</span><span> </span><span style='color:#3F5FBF'>functions</span><span> </span><span style='color:#3F5FBF'>such</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>java.util.Collections.sort.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>sortExternal :: [</span><span
+style='color:#646464'>Int</span><span
+>] -&gt; [</span><span
+style='color:#646464'>Int</span><span
+>];</span></p>
+
+<p class=MsoNormal><span>sortExternal list =    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//input the java.util.List to get a CAL
+[Int]</span></p>
+
+<p class=MsoNormal><span>    (input :: </span><span style='color:#646464'>JObject</span><span
+> -&gt; [</span><span
+style='color:#646464'>Int</span><span
+>])            </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>#</span><span> </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//upcast to a JObject </span></p>
+
+<p class=MsoNormal><span>    (output :: </span><span style='color:#646464'>JavaList</span><span
+> -&gt; </span><span
+style='color:#646464'>JObject</span><span
+>)      </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>#</span><span> </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//sort the java.util.List in-place using
+the java.util.Collections.sort </span></p>
+
+<p class=MsoNormal><span>    (\list -&gt; javaSort list </span><span
+style='color:#646464'>`seq`</span><span
+> list)      </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>#</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//downcast the JObject to a JavaList</span></p>
+
+<p class=MsoNormal><span>    (input :: </span><span style='color:#646464'>JObject</span><span
+> -&gt; </span><span
+style='color:#646464'>JavaList</span><span
+>)       </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>#</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//output the [Int] to a JObject, which is a
+java.util.List</span></p>
+
+<p class=MsoNormal><span>    (output :: [</span><span
+style='color:#646464'>Int</span><span
+>] -&gt; </span><span
+style='color:#646464'>JObject</span><span
+>)         </span></p>
+
+<p class=MsoNormal><span>    $</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the original argument [Int]</span></p>
+
+<p class=MsoNormal><span>    list                                 </span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>foreign</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>declaration</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>makes</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Java</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>java.util.List</span><span
+> </span><span
+style='color:#3F5FBF'>useable</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='
+ color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>JavaList.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>data</span></b><span> </span><b><span style='color:#7F0055'>foreign</span></b><span> </span><b><span style='color:#7F0055'>unsafe</span></b><span
+> </span><b><span
+style='color:#7F0055'>import</span></b><span
+> </span><b><span
+style='color:#7F0055'>jvm</span></b><span
+> </span><span
+style='color:#2A00FF'>&quot;java.util.List&quot;</span><span
+> </span><span
+style='color:#646464'>JavaList</span><span
+> </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the deriving clause provides default
+definitions of Prelude.output and</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Prelude.input for the JavaList type.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//In the case of Prelude.input :: JObject
+-&gt; JavaList, </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//this is a Java downcast</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//In the case of Prelude.output :: JavaList
+-&gt; JObject,</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//this is a Java upcast</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>deriving</span></b><span> </span><span style='color:#646464'>Inputable</span><span>, </span><span style='color:#646464'>Outputable</span><span>;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>foreign</span><span> </span><span style='color:#3F5FBF'>function</span><span> </span><span style='color:#3F5FBF'>declaration</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>makes</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>java.util.Collections.sort</span><span
+> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>method</span><span> </span><span style='color:#3F5FBF'>accessible</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='
+ color:#3F5FBF'>CAL</span><span>  </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>function</span><span> </span><span style='color:#3F5FBF'>javaSort.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>foreign</span></b><span> </span><b><span style='color:#7F0055'>unsafe</span></b><span
+> </span><b><span
+style='color:#7F0055'>import</span></b><span
+> </span><b><span
+style='color:#7F0055'>jvm</span></b><span
+> </span><span
+style='color:#2A00FF'>&quot;static method
+java.util.Collections.sort&quot;</span></p>
+
+<p class=MsoNormal><span>    javaSort :: </span><span
+style='color:#646464'>JavaList</span><span
+> -&gt; ();</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>sortingExamples =</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//applying quicksort to a list of type
+[Long].</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        quicksort [</span><span
+style='color:#2A00FF'>3</span><span
+> :: </span><span
+style='color:#646464'>Long</span><span
+>, </span><span
+style='color:#2A00FF'>1</span><span
+>, </span><span
+style='color:#2A00FF'>4</span><span
+>, </span><span
+style='color:#2A00FF'>1</span><span
+>, </span><span
+style='color:#2A00FF'>5</span><span
+>, </span><span
+style='color:#2A00FF'>9</span><span
+>, </span><span
+style='color:#2A00FF'>2</span><span
+>, </span><span
+style='color:#2A00FF'>6</span><span
+>]</span></p>
+
+<p class=MsoNormal><span>        == [</span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>2</span><span>, </span><span style='color:#2A00FF'>3</span><span>, </span><span style='color:#2A00FF'>4</span><span>, </span><span style='color:#2A00FF'>5</span><span>, </span><span style='color:#2A00FF'>6</span><span>, </span><span style='color:#2A00FF'>9</span><span>]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//applying quicksort to a list of type
+[(Char, Double)].</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        quicksort [(</span><span
+style='color:#2A00FF'>'b'</span><span
+>, </span><span
+style='color:#2A00FF'>2.0</span><span
+>), (</span><span
+style='color:#2A00FF'>'a'</span><span
+>, </span><span
+style='color:#2A00FF'>3.0</span><span
+>), (</span><span
+style='color:#2A00FF'>'b'</span><span
+>, </span><span
+style='color:#2A00FF'>1.0</span><span
+>), (</span><span
+style='color:#2A00FF'>'a'</span><span
+>, -</span><span
+style='color:#2A00FF'>1</span><span
+>)]</span></p>
+
+<p class=MsoNormal><span>        == [(</span><span style='color:#2A00FF'>'a'</span><span>, -</span><span style='color:#2A00FF'>1.0</span><span>), (</span><span style='color:#2A00FF'>'a'</span><span>, </span><span style='color:#2A00FF'>3.0</span><span>), (</span><span style='color:#2A00FF'>'b'</span><span>, </span><span style='color:#2A00FF'>1.0</span><span>), (</span><span style='color:#2A00FF'>'b'</span><span>, </span><span style='color:#2A00FF'>2.0</span><span>)]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//using the external sort also works</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        sortExternal [</span><span
+style='color:#2A00FF'>3</span><span
+>, </span><span
+style='color:#2A00FF'>1</span><span
+>, </span><span
+style='color:#2A00FF'>4</span><span
+>, </span><span
+style='color:#2A00FF'>1</span><span
+>, </span><span
+style='color:#2A00FF'>5</span><span
+>, </span><span
+style='color:#2A00FF'>9</span><span
+>, </span><span
+style='color:#2A00FF'>2</span><span
+>, </span><span
+style='color:#2A00FF'>6</span><span
+>]</span></p>
+
+<p class=MsoNormal><span>        == [</span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>1</span><span>, </span><span style='color:#2A00FF'>2</span><span>, </span><span style='color:#2A00FF'>3</span><span>, </span><span style='color:#2A00FF'>4</span><span>, </span><span style='color:#2A00FF'>5</span><span>, </span><span style='color:#2A00FF'>6</span><span>, </span><span style='color:#2A00FF'>9</span><span>]</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>                                          </span></p>
+
+<p class=MsoNormal><span>                                          </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//CAL provides the ability to create new
+types using data declarations. </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//There are 2 types of data declarations:
+algebraic data declarations and </span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//foreign data declarations. We saw an
+example of a foreign data declaration</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//above with the JavaList type. Here is an
+illustrative algebraic</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//data declaration.</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>Employee</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>an</span><span> </span><span style='color:#3F5FBF'>example</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>algebraic</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>type.</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>one</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>constructor,</span><span> </span><span style='color:#3F5FBF'>RegularEmployee.</span><span
+> </span><span
+style='color:#3F5FBF'>The</span><span
+> </span><span
+style='color:#3F5FBF'>RegularEmployee</span><span
+> </span><span
+style='color:#3F5FBF'>data</span><span
+> </span><span
+style='color:#3F5FBF'>constructor</span><span
+> </span><span
+style='color:#3F5FBF'>has</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>3</span><span> </span><span style='color:#3F5FBF'>fields:</span><span> </span><span style='color:#3F5FBF'>name,</span><span> </span><span style='color:#3F5FBF'>manager</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>directReports.</span><span
+> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>firstName</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>lastName</span><span> </span><span style='color:#3F5FBF'>fields</span><span> </span><span style='color:#3F5FBF'>have</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>String.</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>manager</span><span> </span><span style='color:#3F5FBF'>field</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>Maybe</span><span> </span><span style='color:#3F5FBF'>Employee.</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>reflects</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>fact</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>an</span><span> </span><span style='color:#3F5FBF'>employee</span><span> </span><span style='color:#3F5FBF'>may</span><span> </span><span style='color:#3F5FBF'>have</span><span> </span><span style='color:#3F5FBF'>one</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>manager</span><span> </span><span style='color:#3F5FBF'>or</span><span> </span><span style='color:#3F5FBF'>no</span><span> </span><span style='color:#3F5FBF'>managers</span><span> </span><span style='color:#3F5FBF'>(in</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>case</span><span> </span><span style='color:#3F5FBF'>fo</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>CEO),</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>manager</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>also</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>an</span><span> </span><span style='color:#3F5FBF'>Employee.</span><span> </span><span style='color:#3F5FBF'>directReports</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>[Employee]</span><span> </span><span style='color:#3F5FBF'>i.e.</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>0</span><span> </span><span style='color:#3F5FBF'>or</span><span> </span><span style='color:#3F5FBF'>more</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>employees.</span><span> </span><span style='color:#3F5FBF'>Note</span><span> </span><span style='color:#3F5FBF'>that</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>manager</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>directReports</span><span> </span><span style='color:#3F5FBF'>fields</span><span> </span><span style='color:#3F5FBF'>have</span><span> </span><span style='color:#3F5FBF'>types</span><span> </span><span style='color:#3F5FBF'>that</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>recursively</span><span> </span><span style='color:#3F5FBF'>refer</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Employee</span><span> </span><span style='color:#3F5FBF'>type.</span><span> </span><span style='color:#3F5FBF'>In</span><span> </span><span style='color:#3F5FBF'>other</span><span> </span><span style='color:#3F5FBF'>words,</span><span> </span><span style='color:#3F5FBF'>Employee</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>recursive</span><span> </span><span style='color:#3F5FBF'>algebraic</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>type.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>data</span></b><span> </span><span style='color:#646464'>Employee</span><span> =</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>RegularEmployee</span><span
+>  </span></p>
+
+<p class=MsoNormal><span>        name          :: </span><span
+style='color:#646464'>String</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//the employeeID field is a potential
+future addition to the Employee </span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//data type. notice below that case
+expressions using field-name based</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//extraction would not need to be updated
+due to this change, but case</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//expressions using positional based
+extraction would need updating.</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#3F7F5F'>//employeeID    :: Int</span></p>
+
+<p class=MsoNormal><span>        manager       :: (</span><span
+style='color:#646464'>Maybe</span><span
+> </span><span
+style='color:#646464'>Employee</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>        directReports :: [</span><span
+style='color:#646464'>Employee</span><span
+>]</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//below is a simple company org chart with
+7 employees:</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//alice</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//     bart</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//         darlene</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//         evan</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//         frank</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//     christine</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>//         gina</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span><span> </span><span style='
+  color:#3F5FBF'>alice</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>CEO</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>direct</span><span> </span><span style='color:#3F5FBF'>reports</span><span> </span><span style='color:#3F5FBF'>bart</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>christine</span><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span style='
+  color:black'>alice</span><span> :: </span><span style='color:#646464'>Employee</span><span>; </span><span style='color:#3F7F5F'>//an optional type declaration</span></p>
+
+<p class=MsoNormal><span style='
+  color:black'>alice</span><span> = </span><span style='color:#646464'>RegularEmployee</span><span
+> </span><span
+style='color:#2A00FF'>&quot;Alice&quot;</span><span
+> </span><span
+style='color:#646464'>Nothing</span><span
+> [bart, christine];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>bart</span><span> </span><span style='color:#3F5FBF'>reports</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='
+  color:#3F5FBF'>alice</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>darlene,</span><span> </span><span style='color:#3F5FBF'>evan</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>frank</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>his</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>direct</span><span> </span><span style='color:#3F5FBF'>reports</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>bart = </span><span style='color:#646464'>RegularEmployee</span><span
+> </span><span
+style='color:#2A00FF'>&quot;Bart&quot;</span><span
+> (</span><span
+style='color:#646464'>Just</span><span
+> alice) [darlene,
+evan, frank];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>darlene = </span><span style='color:#646464'>RegularEmployee</span><span
+> </span><span
+style='color:#2A00FF'>&quot;Darlene&quot;</span><span
+> (</span><span
+style='color:#646464'>Just</span><span
+> bart) [];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>evan = </span><span style='color:#646464'>RegularEmployee</span><span
+> </span><span
+style='color:#2A00FF'>&quot;Evan&quot;</span><span
+> (</span><span
+style='color:#646464'>Just</span><span
+> bart) [];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>frank = </span><span style='color:#646464'>RegularEmployee</span><span
+> </span><span
+style='color:#2A00FF'>&quot;Frank&quot;</span><span
+> (</span><span
+style='color:#646464'>Just</span><span
+> bart) [];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>christine = </span><span style='color:#646464'>RegularEmployee</span><span
+> </span><span
+style='color:#2A00FF'>&quot;Christine&quot;</span><span
+> (</span><span
+style='color:#646464'>Just</span><span
+> alice) [gina];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>gina = </span><span style='color:#646464'>RegularEmployee</span><span
+> </span><span
+style='color:#2A00FF'>&quot;Gina&quot;</span><span
+> (</span><span
+style='color:#646464'>Just</span><span
+> christine) [];</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@arg</span><span> </span><span style='color:#3F5FBF'>employee</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@return</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>employee's</span><span> </span><span style='color:#3F5FBF'>name</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>employeeName :: </span><span
+style='color:#646464'>Employee</span><span
+> -&gt; </span><span
+style='color:#646464'>String</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>employeeName employee = </span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>case</span></b><span> employee </span><b><span style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//illustrates field-name based case
+expression extraction of the</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//&quot;name&quot; field of the
+RegularEmployee data constructor  </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>RegularEmployee</span><span
+> {name} -&gt; name;  
+</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@arg</span><span> </span><span style='color:#3F5FBF'>employee</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@return</span><span> </span><span style='color:#3F5FBF'>True</span><span> </span><span style='color:#3F5FBF'>if</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>employee</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>manager.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>isManager :: </span><span style='color:#646464'>Employee</span><span
+> -&gt; </span><span
+style='color:#646464'>Boolean</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>isManager employee =</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//illustrates data constructor field
+selection of the directReports field</span></p>
+
+<p class=MsoNormal><span>    not (isEmpty employee.</span><span
+style='color:#646464'>RegularEmployee</span><span
+>.directReports); </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@arg</span><span> </span><span style='color:#3F5FBF'>employee</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@return</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>all</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>managers</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>given</span><span> </span><span style='color:#3F5FBF'>employee,</span><span> </span><span style='color:#3F5FBF'>from</span><span> </span><span style='color:#3F5FBF'>closest</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>         </span><span style='color:#3F5FBF'>farthest</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>org-chart.</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>managementChain :: </span><span
+style='color:#646464'>Employee</span><span
+> -&gt; [</span><span
+style='color:#646464'>Employee</span><span
+>];</span></p>
+
+<p class=MsoNormal><span>managementChain employee = </span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>case</span></b><span> employee </span><b><span style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//illustrates positional based case
+extraction of the manager field.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//The manager field is bound to the
+maybeManager variable.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//The _ variables indicates that the values
+of the name and directReports</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//fields are not needed. We could have used
+actual names instead of the</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//placeholder values e.g. RegularEmployee
+name maybeManager reports.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>RegularEmployee</span><span
+> _ maybeManager _ -&gt;
+</span></p>
+
+<p class=MsoNormal><span>        </span><b><span style='color:#7F0055'>case</span></b><span
+> maybeManager </span><b><span
+style='color:#7F0055'>of</span></b></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>Nothing</span><span> -&gt; [];</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>Just</span><span> {value = manager} -&gt;</span></p>
+
+<p class=MsoNormal><span>            manager : managementChain
+manager;</span></p>
+
+<p class=MsoNormal><span>        ;</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@arg</span><span> </span><span style='color:#3F5FBF'>employee</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@return</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>employee,</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>well</span><span> </span><span style='color:#3F5FBF'>as</span><span> </span><span style='color:#3F5FBF'>all</span><span> </span><span style='color:#3F5FBF'>direct</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>indirect</span><span> </span><span style='color:#3F5FBF'>reports.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>entireTeam :: </span><span style='color:#646464'>Employee</span><span
+> -&gt; [</span><span
+style='color:#646464'>Employee</span><span
+>];</span></p>
+
+<p class=MsoNormal><span>entireTeam employee =</span></p>
+
+<p class=MsoNormal><span>    employee : (concatMap entireTeam
+employee.</span><span style='color:#646464'>RegularEmployee</span><span
+>.directReports);    </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@arg</span><span> </span><span style='color:#3F5FBF'>employee</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@return</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>total</span><span> </span><span style='color:#3F5FBF'>number</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>people</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>employee's</span><span> </span><span style='color:#3F5FBF'>team,</span><span> </span><span style='color:#3F5FBF'>including</span><span> </span><span style='color:#3F5FBF'>the</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span>         </span><span style='color:#3F5FBF'>employee</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>direct</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>indirect</span><span> </span><span style='color:#3F5FBF'>reports.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>teamSize :: </span><span style='color:#646464'>Employee</span><span
+> -&gt; </span><span
+style='color:#646464'>Int</span><span
+>;</span></p>
+
+<p class=MsoNormal><span>teamSize employee = length (entireTeam
+employee);</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>Checks</span><span> </span><span style='color:#3F5FBF'>if</span><span> </span><span style='color:#3F5FBF'>2</span><span> </span><span style='color:#3F5FBF'>employees</span><span> </span><span style='color:#3F5FBF'>are</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>fact</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>same</span><span> </span><span style='color:#3F5FBF'>employee.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>equalsEmployee employee1 employee2 =</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>/* There is a shortcoming to the
+implementation of this function in that</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>     * 2 employees are considered the same
+if they have the same name!</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>     * Typically, this could be fixed by
+changing the Employee data type to</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>     * have an employeeID field as well and
+then making use of it in this</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>     * function instead of the employee's
+name.</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>     */</span></p>
+
+<p class=MsoNormal><span>    employeeName employee1 == employeeName
+employee2;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>This</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>Eq</span><span> </span><span style='color:#3F5FBF'>class</span><span> </span><span style='color:#3F5FBF'>instance</span><span> </span><span style='color:#3F5FBF'>declaration</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Employee</span><span> </span><span style='color:#3F5FBF'>type.</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>defines</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>what</span><span> </span><span style='color:#3F5FBF'>it</span><span> </span><span style='color:#3F5FBF'>means</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>use</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Prelude.equals</span><span
+> </span><span
+style='color:#3F5FBF'>function,</span><span
+> </span><span
+style='color:#3F5FBF'>and</span><span
+> </span><span
+style='color:#3F5FBF'>the</span><span
+> </span><span
+style='color:#3F5FBF'>==</span><span
+> </span><span
+style='color:#3F5FBF'>operator,</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>on</span><span> </span><span style='color:#3F5FBF'>values</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Employee</span><span> </span><span style='color:#3F5FBF'>type.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>instance</span></b><span> </span><span style='color:#646464'>Eq</span><span> </span><span style='color:#646464'>Employee</span><span> </span><b><span style='color:#7F0055'>where</span></b></p>
+
+<p class=MsoNormal><span>    equals = equalsEmployee;</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>employeeExamples =</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Alice's team has 7 people (including
+herself)</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (teamSize alice == </span><span
+style='color:#2A00FF'>7</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>       </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Alice's entire team consists of the whole
+company.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Note that the fact that we can compare
+list of Employee values </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//(i.e. [Employee]) is due to the Eq
+Employee instance defined above.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        entireTeam alice</span></p>
+
+<p class=MsoNormal><span>        == [alice, bart, darlene, evan,
+frank, christine, gina]</span></p>
+
+<p class=MsoNormal><span>    )   </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;    </span></p>
+
+<p class=MsoNormal><span>       </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Bart's team consists of himself and his
+direct reports </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Darlene, Evan and Frank.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (entireTeam bart == [bart, darlene, evan,
+frank])</span></p>
+
+<p class=MsoNormal><span>     </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>     </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Gina's manager is Christine whose manager
+is Alice</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (managementChain gina == [christine, alice])</span></p>
+
+<p class=MsoNormal><span>           </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the managers in the company are Alice,
+Bart and Christine</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (filter isManager (entireTeam alice) == [alice, bart, christine])</span></p>
+
+<p class=MsoNormal><span>               </span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>        </span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>Feeling</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>allows</span><span> </span><span style='color:#3F5FBF'>you</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>express</span><span> </span><span style='color:#3F5FBF'>how</span><span> </span><span style='color:#3F5FBF'>you're</span><span> </span><span style='color:#3F5FBF'>feeling</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>wonderfully</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>shaded</span><span> </span><span style='color:#3F5FBF'>way.</span><span> </span><span style='color:#3F5FBF'>It</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>an</span><span> </span><span style='color:#3F5FBF'>example</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>recursive</span><span> </span><span style='
+  color:#3F5FBF'>CAL</span><span> </span><span style='color:#3F5FBF'>algebraic</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>with</span><span> </span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>multiple</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>constructors.</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>Feeling</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>6</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>constructors,</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>namely</span><span> </span><span style='color:#3F5FBF'>Vaguely,</span><span> </span><span style='color:#3F5FBF'>Mixed,</span><span> </span><span style='color:#3F5FBF'>Love,</span><span> </span><span style='color:#3F5FBF'>Hate,</span><span> </span><span style='color:#3F5FBF'>Happy</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>Depressed.</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>Mixed</span><span> </span><span style='color:#3F5FBF'>data</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>constructor</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>2</span><span> </span><span style='color:#3F5FBF'>fields,</span><span> </span><span style='color:#3F5FBF'>feeling1</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>feeling2,</span><span> </span><span style='color:#3F5FBF'>each</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>Feeling.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>The</span><span> </span><span style='color:#3F5FBF'>Happy</span><span> </span><span style='color:#3F5FBF'>data</span><span> </span><span style='color:#3F5FBF'>constructor</span><span> </span><span style='color:#3F5FBF'>has</span><span> </span><span style='color:#3F5FBF'>no</span><span> </span><span style='color:#3F5FBF'>fields.</span><span> </span><span style='color:#3F5FBF'>Feeling</span><span> </span><span style='color:#3F5FBF'>is</span><span> </span><span style='color:#3F5FBF'>a</span><span> </span><span style='color:#3F5FBF'>recursive</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>since</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>field</span><span> </span><span style='color:#3F5FBF'>types</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>Vaguely</span><span> </span><span style='color:#3F5FBF'>and</span><span> </span><span style='color:#3F5FBF'>Mixed</span><span> </span><span style='color:#3F5FBF'>involve</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>Feeling</span><span> </span><span style='color:#3F5FBF'>type</span><span> </span><span style='color:#3F5FBF'>itself.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span><span>                 </span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>data</span></b><span> </span><span style='color:#646464'>Feeling</span><span> =</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Vaguely</span><span> </span></p>
+
+<p class=MsoNormal><span>        feeling   :: </span><span
+style='color:#646464'>Feeling</span><span
+> |</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Mixed</span><span> </span></p>
+
+<p class=MsoNormal><span>        feeling1  :: </span><span
+style='color:#646464'>Feeling</span><span
+> </span></p>
+
+<p class=MsoNormal><span>        feeling2  :: </span><span
+style='color:#646464'>Feeling</span><span
+> |   </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Love</span><span> </span></p>
+
+<p class=MsoNormal><span>        object    :: </span><span
+style='color:#646464'>String</span><span
+> |</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Hate</span><span> </span></p>
+
+<p class=MsoNormal><span>        object    :: </span><span
+style='color:#646464'>String</span><span
+> |</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Happy</span><span> |</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Depressed</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//This deriving clause provides a default
+instance implemenation for the</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Show type class for the Feeling type.
+Essentially what this means is that</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//the Debug.show function will work with
+Feeling values to display a String      </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//representation of the value suitable for
+debugging purposes.</span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>deriving</span></b><span> </span><span style='color:#646464'>Show</span><span>; </span></p>
+
+<p class=MsoNormal><span>        </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>pragmaticFeeling = </span><span
+style='color:#646464'>Vaguely</span><span
+> (</span><span
+style='color:#646464'>Mixed</span><span
+> (</span><span
+style='color:#646464'>Love</span><span
+> </span><span
+style='color:#2A00FF'>&quot;pleasure&quot;</span><span
+>) (</span><span
+style='color:#646464'>Hate</span><span
+> </span><span
+style='color:#2A00FF'>&quot;pain&quot;</span><span
+>));</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>foodFeeling =   </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Mixed</span><span> </span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>Mixed</span></p>
+
+<p class=MsoNormal><span>            (</span><span style='color:#646464'>Love</span><span> </span><span style='color:#2A00FF'>&quot;pickles&quot;</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>            (</span><span style='color:#646464'>Vaguely</span><span
+> (</span><span
+style='color:#646464'>Love</span><span
+> </span><span
+style='color:#2A00FF'>&quot;olives&quot;</span><span
+>))</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        </span><span style='color:#646464'>Mixed</span><span>        </span></p>
+
+<p class=MsoNormal><span>            (</span><span style='color:#646464'>Love</span><span> </span><span style='color:#2A00FF'>&quot;chocolate&quot;</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>            (</span><span style='color:#646464'>Hate</span><span> </span><span style='color:#2A00FF'>&quot;mayonnaise&quot;</span><span
+>)</span></p>
+
+<p class=MsoNormal><span>    )</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>                                                                      
+</span></p>
+
+<p class=MsoNormal><span>sensitiveFeeling = </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Mixed</span><span> (</span><span style='color:#646464'>Vaguely</span><span> (</span><span style='color:#646464'>Vaguely</span><span> </span><span style='color:#646464'>Happy</span><span>)) (</span><span style='color:#646464'>Vaguely</span><span> (</span><span style='color:#646464'>Vaguely</span><span> </span><span style='color:#646464'>Depressed</span><span>));  </span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@arg</span><span> </span><span style='color:#3F5FBF'>feeling</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#7F7F9F'>@return</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>list</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>aspects</span><span> </span><span style='color:#3F5FBF'>of</span><span> </span><span style='color:#3F5FBF'>feeling</span><span> </span><span style='color:#3F5FBF'>related</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>love.</span><span> </span><span style='color:#3F5FBF'>May</span><span> </span><span style='color:#3F5FBF'>have</span><span> </span><span style='color:#3F5FBF'>duplicates.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><span>loves :: </span><span style='color:#646464'>Feeling</span><span> -&gt; [</span><span style='color:#646464'>String</span><span>];</span></p>
+
+<p class=MsoNormal><span>loves feeling = </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><b><span style='color:#7F0055'>case</span></b><span> feeling </span><b><span style='color:#7F0055'>of</span></b><span>    </span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Vaguely</span><span> {feeling = vagueFeeling} -&gt; </span></p>
+
+<p class=MsoNormal><span>        loves vagueFeeling;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Mixed</span><span> {feeling1, feeling2} -&gt;</span></p>
+
+<p class=MsoNormal><span>        loves feeling1 ++ loves feeling2;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>Love</span><span> {object} -&gt; </span></p>
+
+<p class=MsoNormal><span>        [object];</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//multiple data constructors can be grouped</span></p>
+
+<p class=MsoNormal><span>    (</span><span style='color:#646464'>Happy</span><span> | </span><span style='color:#646464'>Depressed</span><span> | </span><span style='color:#646464'>Hate</span><span>) {} -&gt;</span></p>
+
+<p class=MsoNormal><span>        []; </span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>feelingExamples =</span></p>
+
+<p class=MsoNormal><span>       </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//some examples of the use of loves</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (loves pragmaticFeeling == [</span><span
+style='color:#2A00FF'>&quot;pleasure&quot;</span><span
+>])    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;     </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (loves foodFeeling == [</span><span
+style='color:#2A00FF'>&quot;pickles&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;olives&quot;</span><span
+>, </span><span
+style='color:#2A00FF'>&quot;chocolate&quot;</span><span
+>])                                  
+</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> (loves sensitiveFeeling == [])</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    &amp;&amp;</span></p>
+
+<p class=MsoNormal><span>    </span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//use of Debug.show to display values of
+the Feeling type.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#3F7F5F'>//Handy for debugging purposes.</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span></p>
+
+<p class=MsoNormal><span>    (</span></p>
+
+<p class=MsoNormal><span>        show pragmaticFeeling</span></p>
+
+<p class=MsoNormal><span>        == </span><span style='color:#2A00FF'>&quot;(Cal.Tutorials.CalIntro.Vaguely
+(Cal.Tutorials.CalIntro.Mixed (Cal.Tutorials.CalIntro.Love \&quot;pleasure\&quot;)
+(Cal.Tutorials.CalIntro.Hate \&quot;pain\&quot;)))&quot;</span></p>
+
+<p class=MsoNormal><span>   
+)                                                                                           
+</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>                              </span></p>
+
+<p class=MsoNormal><span style='color:#3F5FBF'>/**</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>test</span><span> </span><span style='color:#3F5FBF'>function</span><span> </span><span style='color:#3F5FBF'>for</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>module.</span><span> </span><span style='color:#3F5FBF'>If</span><span> </span><span style='color:#3F5FBF'>it</span><span> </span><span style='color:#3F5FBF'>evaluates</span><span> </span><span style='color:#3F5FBF'>to</span><span> </span><span style='color:#3F5FBF'>True,</span><span> </span><span style='color:#3F5FBF'>then</span><span> </span><span style='color:#3F5FBF'>all</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>examples</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*</span><span> </span><span style='color:#3F5FBF'>in</span><span> </span><span style='color:#3F5FBF'>the</span><span> </span><span style='color:#3F5FBF'>module</span><span> </span><span style='color:#3F5FBF'>work.</span></p>
+
+<p class=MsoNormal><span> </span><span style='color:#3F5FBF'>*/</span></p>
+
+<p class=MsoNormal><b><span style='color:#7F0055'>public</span></b><span> testModule =</span></p>
+
+<p class=MsoNormal><span>    </span><span style='color:#646464'>assert</span><span> stringExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> colorsExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> fruitsExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> lazyListExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> moreListExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> sortingExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> quadraticEquationSolverExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> recordExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> employeeExamples</span></p>
+
+<p class=MsoNormal><span>    &amp;&amp; </span><span style='color:#646464'>assert</span><span> feelingExamples</span></p>
+
+<p class=MsoNormal><span>    ;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'>/*</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> * Congratulations- you have reached the
+end of the CAL Intro tutorial!</span></p>
+
+<p class=MsoNormal><span style='color:#3F7F5F'> */</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal><span>&nbsp;</span></p>
+
+<p class=MsoNormal>&nbsp;</p>
+
+</div>
+
+</body>
+
+</html>

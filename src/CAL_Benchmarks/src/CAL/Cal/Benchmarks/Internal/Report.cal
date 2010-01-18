@@ -1,0 +1,910 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * This module contains various functions for comparing and reporting
+ * benchmarking results.
+ * @author Raymond Cypher
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Internal.Report;
+
+import Cal.Core.Prelude using
+    function =
+        fromInt, fromLong, mod, id, seq, error, add, upFromTo, or, not, and,
+        equals, greaterThan, snd, compose, fst, upFrom, isEven, field3,
+        compare, minBound, maxBound, input, output;
+    typeConstructor =
+        Int, Double, String, Boolean, Maybe, Ordering, Char, Long, JObject,
+        JList;
+    dataConstructor = Cons, True, False, Nothing, Just, LT, EQ, GT;
+    typeClass = Eq, Ord, Num, Bounded, Typeable;
+    function = abs, toDouble, typeOf, unsafeCoerce;
+    function = fromJust;
+    typeClass = Outputable, Inputable;
+    ;
+import Cal.Utilities.Math;
+import Cal.Core.Dynamic using
+    typeConstructor = Dynamic;
+    function = fromDynamic, toDynamic;
+    ;
+import Cal.Collections.List using
+    function =
+        head, join, last, map, filter, replicate, sortBy, foldLeftStrict,
+        foldRight, repeat, length, isElemBy, drop, take, partition, foldLeft,
+        unzip3, groupBy, zip, unzip, inputList, outputList, sum, zipWith;
+    ;
+import Cal.Core.String using
+    function = substring;
+    ;
+import Cal.Collections.Map using
+    typeConstructor = Map;
+    ;
+
+import Cal.Collections.Set;
+import Cal.Utilities.Summary;
+import Cal.Test.General.GemScopeTestModule;
+import Cal.Test.General.M1;
+import Cal.Utilities.RelativeTime;
+import Cal.Data.DataGems;
+import Cal.Test.Data.DataGems_Tests;
+import Cal.IO.File;
+import Cal.Core.Debug using
+    function = show;
+    ;
+import Cal.Collections.Array;
+import Cal.IO.Console;
+
+import Cal.Utilities.MessageFormat using
+    function = formatWithPattern;
+    ;
+
+import Cal.Utilities.Locale using
+    function = invariantLocale;
+    ;
+
+import Cal.Core.Char using
+    function = isDigit;
+    ;
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+/** A data structure for holding benchmark results. */
+data BenchmarkResults =
+    private BenchmarkResults
+        benchmark :: !String // The benchmark
+        results :: [BenchmarkResult] // A list of label/run-time pairs
+        // A list of differences between results expressed as a percentage.
+        differences :: [Double]
+    ;
+
+data private BenchmarkResult =
+    private BenchmarkResult
+        label :: !String
+        avgTime :: !Long
+        medianTime :: !Long
+        stdDev :: !Double
+        nRuns :: !Int
+        minTime :: !Long
+        times :: [Long]
+    ;
+
+/** returns all the unqiue build names in a list of benchmakr results*/
+getLabels :: [BenchmarkResults] -> [String];
+getLabels benchmarkResults = 
+    Set.toList
+    $ Set.fromList 
+    $ Prelude.concat 
+    $ List.map (\y -> map (\x -> trimName x.BenchmarkResult.label) y.BenchmarkResults.results) benchmarkResults;
+
+makeBenchmarkResults :: String -> [BenchmarkResult] -> BenchmarkResults;
+makeBenchmarkResults benchmark results =
+    let
+        percentageChanges :: [Long] -> [Double];
+        percentageChanges values =
+            let
+                vlength :: Int;
+                vlength = List.length values;
+                helper :: [Long] -> [Double];
+                helper values =
+                    case values of
+                    [] -> [];
+                    a : a_s ->
+                        case a_s of
+                        [] -> [];
+                        b : bs ->
+                            let
+                                ad :: Double;
+                                ad = toDouble a;
+                                
+                                bd :: Double;
+                                bd = toDouble b;
+                            in
+                                (Math.roundToNPlaces
+                                    (((ad - bd) / ad) * 100.0)
+                                    2
+                                )
+                                : (helper a_s)
+                            ;
+                        ;
+                    ;
+            in
+
+                if (vlength == 0) then
+                    (error "BenchmarkResults with no results.")
+                else if (vlength == 1) then
+                    [0.0]
+                else
+                    (helper values)
+            ;
+    in
+
+        BenchmarkResults
+            benchmark
+            results
+            (percentageChanges
+                (List.map
+                    (
+                        \x ->
+                            case x of
+                            BenchmarkResult {avgTime} -> avgTime;
+                    )
+                    results
+                )
+            )
+    ;
+
+instance Prelude.Outputable BenchmarkResults where
+    output = outputBenchmarkResults;
+    ;
+
+outputBenchmarkResults :: BenchmarkResults -> JObject;
+outputBenchmarkResults r = output (formatBenchmarkResults Map.empty r);
+
+/** Convert a String to an Integer. */
+foreign unsafe import jvm "static method java.lang.Integer.parseInt"
+    stringToInt :: String -> Prelude.Int;
+/** Convert a String to a Long. */
+foreign unsafe import jvm "static method java.lang.Long.parseLong"
+    stringToLong :: String -> Prelude.Long;
+/** Convert a String to a Double. */
+foreign unsafe import jvm "static method java.lang.Double.parseDouble"
+    stringToDouble :: String -> Prelude.Double;
+/** Convert a Long to a String. */
+foreign unsafe import jvm "static method java.lang.String.valueOf"
+    longToString :: Prelude.Long -> String;
+/** Convert a Double to a String. */
+foreign unsafe import jvm "static method java.lang.String.valueOf"
+    doubleToString :: Prelude.Double -> String;
+/** Convert a Int to a String. */
+foreign unsafe import jvm "static method java.lang.String.valueOf"
+    intToString :: Prelude.Int -> String;
+
+/**
+ * Read a benchmark results file and generate a Map of String to Benchmark
+ * results. The map is keyed by the benchmark text.
+ */
+benchmarkResultsFromFile :: String -> (Map.Map String BenchmarkResults);
+benchmarkResultsFromFile fileName =
+    let
+        /** Read the content of the file into a String. */
+        fileContent :: String;
+        fileContent =
+            case (File.readFile (File.makeFileName fileName)) of
+            Prelude.Left ioerror -> error (Debug.show ioerror);
+            Prelude.Right content -> content;
+            ;
+        /** Break the file content into a list of strings based on line-breaks. */
+        fileStringsList :: [String];
+        fileStringsList = (String.lines fileContent);
+
+        /** Convert the list of String into an Array of String. */
+        fileStrings :: Array.Array String;
+        fileStrings =
+            (Array.fromList (List.map String.trim fileStringsList));
+
+        /**
+         * Use the Array of String to create BenchmarkResults instances and add
+         * them to a map.
+         */
+        stringsToBenchmarkResults :: Map.Map String BenchmarkResults;
+        stringsToBenchmarkResults =
+            let
+                getTimesAndLabels ::
+                    Int -> Int -> [(String, BenchmarkResults)];
+                getTimesAndLabels !index !endIndex =
+                    if (index >= endIndex - 7) then
+                        []
+                    else
+                        let
+                            name :: String;
+                            name = (Array.subscript fileStrings index);
+
+                            timeCount :: Int;
+                            timeCount =
+                                stringToInt
+                                    (Array.subscript
+                                        fileStrings
+                                        (index + 1)
+                                    )
+                                ;
+
+                            avgTime :: Long;
+                            avgTime =
+                                stringToLong
+                                    (Array.subscript
+                                        fileStrings
+                                        (index + 2)
+                                    )
+                                ;
+                            
+                            medianTime :: Long;
+                            medianTime =
+                                stringToLong
+                                    (Array.subscript
+                                        fileStrings
+                                        (index + 3)
+                                    )
+                                ;
+                            
+                            stdDev :: Double;
+                            stdDev =
+                                stringToDouble
+                                    (Array.subscript
+                                        fileStrings
+                                        (index + 4)
+                                    )
+                                ;
+                            
+                            nRuns :: Int;
+                            nRuns =
+                                stringToInt
+                                    (Array.subscript
+                                        fileStrings
+                                        (index + 5)
+                                    )
+                                ;
+
+                            /*
+                             * this reads the rest of the record which must contain a label and
+                             * may contain a min and a number of samples (both ms)
+                             */
+                            read :: Int -> Long -> [Long] -> (Int, Long, [Long], String);
+                            read !offset !min !samples =
+                                let
+                                    line :: String;
+                                    line =
+                                        Array.subscript
+                                            fileStrings
+                                            (index + offset)
+                                        ;
+                                in
+                                    (
+                                        if
+                                            (
+                                                (index + 1 + offset)
+                                                    < endIndex
+                                                && String.startsWith
+                                                    "<min>"
+                                                    line
+                                            )
+                                        then
+                                            read
+                                                (offset + 1)
+                                                (stringToLong
+                                                    (String.filter
+                                                        isDigit
+                                                        line
+                                                    )
+                                                )
+                                                samples
+                                        else if
+                                            (
+                                                (index + 1 + offset)
+                                                    < endIndex
+                                                && String.startsWith
+                                                    "<sample>"
+                                                    line
+                                            )
+                                        then
+                                            read
+                                                (offset + 1)
+                                                min
+                                                (
+                                                    (stringToLong
+                                                        (String.filter
+                                                            Char.isDigit
+                                                            line
+                                                        )
+                                                    )
+                                                    : samples
+                                                )
+                                        else
+                                            (offset + 1, min, samples, line)
+                                    )
+                                ;
+
+                            rem :: (Int, Long, [Long], String);
+                            rem = read 6 avgTime [];
+
+                            label :: String;
+                            label = rem.#4;
+                        in
+                            (
+                                name,
+                                BenchmarkResults
+                                    name
+                                    [
+                                        (BenchmarkResult
+                                            label
+                                            avgTime
+                                            medianTime
+                                            stdDev
+                                            nRuns
+                                            rem.#2
+                                            rem.#3
+                                        )
+                                    ]
+                                    []
+                            )
+                            : (getTimesAndLabels (index + rem.#1) endIndex)
+                    ;
+            in
+                Map.fromList (getTimesAndLabels 0 (Array.length fileStrings))
+            ;
+    in
+        stringsToBenchmarkResults
+    ;
+
+/**
+ * Merge two maps of BenchmarkResults. BenchmarkResults instances for the same
+ * benchmark are merged into a single BenchmarkResutls with the results lists
+ * concatenated.
+ */
+mergeBenchmarks ::
+    Map.Map String BenchmarkResults
+    -> Map.Map String BenchmarkResults
+    -> Map.Map String BenchmarkResults;
+mergeBenchmarks map1 map2 =
+    let
+        /**
+         * Merge two BenchmarkResults instances by concatenating the results
+         * lists.
+         */
+        mergeBenchmark ::
+            BenchmarkResults -> BenchmarkResults -> BenchmarkResults;
+        mergeBenchmark b1 b2 =
+            makeBenchmarkResults
+                b1.BenchmarkResults.benchmark
+                (
+                    b1.BenchmarkResults.results
+                    ++ b2.BenchmarkResults.results
+                )
+            ;
+    in
+        Map.unionWith mergeBenchmark map1 map2
+    ;
+
+/**
+ * Format a BenchmarkResults instance with the run-time percentage change
+ * values into a display string.
+ */
+formatBenchmarkResultsList :: Map String String -> [BenchmarkResults] -> String;
+formatBenchmarkResultsList nameMap results =
+    String.unwords (List.map (formatBenchmarkResults nameMap) results);
+
+/**
+ * Compute the geometric mean of a list of doubles
+ */
+geometricMean :: [Double] -> Double;
+geometricMean l =
+    let 
+        list :: [Double];
+        list = List.filter (\x -> x > 0.0) l;
+    in
+    Console.printLine (show list) `seq`
+    Math.power (List.product list) (1.0 / (fromInt $ length list));
+
+
+/** 
+ * build  a map of names to build labels
+ */
+buildBuildLabelMap :: [String] -> Map String String;
+buildBuildLabelMap names =
+        Map.fromList $
+            List.zip names (List.zipWith Prelude.append (List.repeat "build_") (List.map Debug.show (upFrom (1::Int))));
+
+
+/** this is used to trip the run id from a name */
+trimName :: String -> String;
+trimName name =
+    String.substring name 0 (String.length name -2);
+
+/**
+ * 
+ */
+toDisplayName :: Map String String -> String -> String;
+toDisplayName map name = 
+    Map.lookupWithDefault (trimName name) map name; 
+
+/**
+ * Combine indidiual benchmark summaries.
+ */
+summarizeBenchmarkResultsList :: Map String String -> [BenchmarkResults] -> String;
+summarizeBenchmarkResultsList nameMap results =
+    let 
+        width :: Num a => a;
+        width =10;
+        
+        mapName :: String -> String;
+        mapName name = 
+            toDisplayName nameMap name; 
+    in
+    "#Benchmarks " ++ (show $ length results) ++ "\n" 
+    ++ (pad width "Label")
+    ++ (padRight width "#Better")
+    ++ (padRight width "#Worse")
+    ++ (padRight width "Geo-Mean")
+    ++ "\n"
+    ++
+    (
+        List.join "\n"
+        $ List.map
+            (
+                \b ->
+                    (pad width (mapName (head b).name))
+                    ++ (padRight width $ show $ sum (map (\x -> x.better) b))
+                    ++ (padRight width $ show $ sum (map (\x -> x.worse) b))
+                    ++
+                    (
+                        padRight width
+                        $ formatDouble
+                        $ geometricMean (map (\x -> x.relative) b)
+                    )
+            )
+
+        $ List.transpose $ List.map summarizeBenchmarkResults results
+    )
+    ;
+
+percentageOf :: Double -> Double -> Double;
+percentageOf whole part = Math.roundToNPlaces (100.0 * (part / whole)) 2;
+
+/** default formatting for precentages - two decimal places with % suffix */
+formatPercentage :: Double -> String;
+formatPercentage d =
+    formatWithPattern "{0,number,#0.00}" invariantLocale {#1 = d} ++ "%";
+
+/** default formatting for doubles - two decimal places */
+formatDouble :: Double -> String;
+formatDouble d =
+    formatWithPattern "{0,number,#0.00}" invariantLocale {#1 = d};
+
+/** pads a string to a fixed width by prefixing with spaces */
+padRight :: Int -> String -> String;
+padRight !width !str =
+    if (String.length str < width) then
+        (String.replicate (width - String.length str) ' ' ++ str)
+    else
+        str
+    ;
+
+/**
+ * pads a string to a fixed width by postfixing spaces if the string is to long
+ * it is truncated, and the last char is replaced with a -
+ */
+pad :: Int -> String -> String;
+pad !width !str =
+    if (String.length str < width) then
+        str ++ (String.replicate (width - String.length str) ' ')
+    else
+        (substring str 0 (width - 1)) ++ "-"
+    ;
+
+/**
+ * This computes the T-score based on the results' mean and standard deviation.
+ * The T-score is used for testing the hypothesis that two samples are drawn
+ * from the sample population - we assume that if the t-score is signicant the
+ * poulations of benchmarks results are not drawn from the same population -
+ * i.e. the performance characteristics of the builds used to generate the
+ * performance samples must be different.
+ */
+computeTScore :: BenchmarkResult -> BenchmarkResult -> Double;
+computeTScore result1 result2 =
+    let
+        sqr :: Num a => a -> a;
+        sqr x = x * x;
+        n :: Double;
+        n = fromInt result1.BenchmarkResult.nRuns;
+        a :: Double;
+        a =
+            fromLong
+                (
+                    result1.BenchmarkResult.avgTime
+                    - result2.BenchmarkResult.avgTime
+                )
+            ;
+        
+        b :: Double;
+        b =
+            (
+                ((sqr result1.BenchmarkResult.stdDev) * (n - 1.0))
+                + ((sqr result2.BenchmarkResult.stdDev) * (n - 1.0))
+            )
+            / (2.0 * n - 2.0)
+            ;
+        
+        c :: Double;
+        c = 2.0 / n;
+    in
+        a / (Math.sqrt (b * c))
+    ;
+
+isBetter ::
+    (Num a, Num b) =>
+    BenchmarkResult
+    -> BenchmarkResult
+    -> {better :: a, name :: String, relative :: Double, worse :: b};
+isBetter baseResult result =
+    let
+        //this is a constant for the T-distribution this is set at 90% confidence
+        //level
+        sigValue :: Double;
+        sigValue = 1.75;
+        
+        tScore :: Double;
+        tScore = computeTScore baseResult result;
+        
+        relative :: Double;
+        relative =
+            toDouble (baseResult.BenchmarkResult.avgTime)
+            / toDouble (result.BenchmarkResult.avgTime)
+            ;
+        
+        name :: String;
+        name = result.BenchmarkResult.label;
+    in
+        if tScore > sigValue then
+            {name = name, better = 1, worse = 0, relative = relative}
+        else if tScore < -sigValue then
+            {name = name, better = 0, worse = 1, relative = relative}
+        else
+            {name = name, better = 0, worse = 0, relative = relative}
+    ;
+
+/**
+ * this creates a label for a result by comparing it against a baseResult The
+ * label includes the percentage change, the t-Score and a label - (blank,
+ * Better, or WORSE)
+ *
+ * The labeling is based on the t-Score.
+ */
+labelResult :: BenchmarkResult -> BenchmarkResult -> String;
+labelResult baseResult result =
+    let
+        //this is a constant for the T-distribution this is set at 90% confidence
+        //level
+        sigValue :: Double;
+        sigValue = 1.75;
+        
+        tScore :: Double;
+        tScore = computeTScore baseResult result;
+    in
+        padRight
+            8
+            (formatPercentage
+
+                (
+                    (
+                        (fromLong
+                            (
+                                baseResult.BenchmarkResult.avgTime
+                                - result.BenchmarkResult.avgTime
+                            )
+                        )
+                        / (fromLong baseResult.BenchmarkResult.avgTime)
+                    )
+                    * 100.0
+                )
+            )
+        ++ padRight 8 (formatDouble tScore)
+        ++ padRight
+            8
+            (
+
+                if tScore > sigValue then
+                    "Better"
+                else if tScore < -sigValue then
+                    "WORSE"
+                else
+                    ""
+            )
+    ;
+
+
+/**
+ * create the summary data for a particular single benchmark
+ */
+summarizeBenchmarkResults ::
+    BenchmarkResults
+    -> [{name :: String, better :: Long, worse :: Long, relative :: Double}];
+summarizeBenchmarkResults results =
+    let
+        firstResult :: BenchmarkResult;
+        firstResult = List.head (results.BenchmarkResults.results);
+    in
+        List.map
+            (\y -> isBetter firstResult y)
+            (results.BenchmarkResults.results)
+    ;
+
+/*
+ * Takes a BenchmarkResults instance and produces a display string.
+ */
+formatBenchmarkResults :: Map String String -> BenchmarkResults -> String;
+formatBenchmarkResults nameMap results =
+    let
+
+        showTitles :: String;
+        showTitles =
+            pad 10 "Build"
+            ++ padRight 8 "Average"
+            ++ padRight 8 "StdErr"
+            ++ padRight 8 "Change"
+            ++ padRight 8 "t-Test"
+            ;
+
+        //creates a string containing the standard benchmark fields
+        baseResultString :: BenchmarkResult -> String;
+        baseResultString result =
+            let
+                label :: String;
+                label = toDisplayName nameMap result.BenchmarkResult.label;
+                
+                avgTime :: Long;
+                avgTime = result.BenchmarkResult.avgTime;
+                
+                medianTime :: Long;
+                medianTime = result.BenchmarkResult.medianTime;
+                
+                stdDev :: Double;
+                stdDev = result.BenchmarkResult.stdDev;
+                
+                nRuns :: Int;
+                nRuns = result.BenchmarkResult.nRuns;
+                
+                stdError :: Double;
+                stdError =
+                    (Math.roundToNPlaces
+                        (stdDev / (Math.sqrt (Prelude.fromInt nRuns)))
+                        2
+                    )
+                    ;
+            in
+                (pad 10 label)
+                ++ (padRight 8 $ longToString avgTime)
+                ++
+                (
+                    padRight 8
+                    $
+                    (formatPercentage
+                        (percentageOf (Prelude.toDouble avgTime) stdError)
+                    )
+                )
+            ;
+
+        //the first result (ie the oldest build) is used as the base line
+        firstResult :: BenchmarkResult;
+        firstResult = List.head (results.BenchmarkResults.results);
+
+        //results string containing the other results
+        resultsString :: [String];
+        resultsString =
+            List.map
+                (\y -> baseResultString y ++ (labelResult firstResult y))
+                (List.tail results.BenchmarkResults.results)
+            ;
+    in
+
+        join
+            "\n    "
+            (
+                results.BenchmarkResults.benchmark
+                : showTitles
+                : (baseResultString firstResult)
+                : resultsString
+            )
+        ++ "\n\n"
+    ;
+
+/**
+ * Compare a list of benchmark result files and filter and sort the results
+ * using the provided filter and sort functions.
+ */
+compareBenchmarkFilesWithFilterAndSort ::
+    Map String String
+    -> (BenchmarkResults -> Prelude.Boolean)
+    -> (BenchmarkResults -> BenchmarkResults -> Ordering)
+    -> [String]
+    -> String;
+compareBenchmarkFilesWithFilterAndSort nameMap filter sorter fileNames =
+    let
+        benchmarkResultsList :: [BenchmarkResults];
+        benchmarkResultsList = mergeBenchmarkFiles fileNames;
+        
+        filteredBenchmarkResultsList :: [BenchmarkResults];
+        filteredBenchmarkResultsList =
+            List.filter filter benchmarkResultsList;
+        
+        sortedBenchmarkResultsList :: [BenchmarkResults];
+        sortedBenchmarkResultsList =
+            List.sortBy sorter filteredBenchmarkResultsList;
+    in
+        formatBenchmarkResultsList nameMap sortedBenchmarkResultsList
+    ;
+
+
+/**
+ * Load the results from a list of benchmarks files and merge the timings for
+ * the different benchmarks into a single BenchmarkResults object per benchmark.
+ */
+mergeBenchmarkFiles :: [String] -> [BenchmarkResults];
+mergeBenchmarkFiles fileNames =
+    let
+        loadedResults :: [Map String BenchmarkResults];
+        loadedResults = List.map benchmarkResultsFromFile fileNames;
+        
+        collapsedResults :: Map String BenchmarkResults;
+        collapsedResults =
+            List.foldLeftStrict mergeBenchmarks Map.empty loadedResults;
+        
+        benchmarkResultsList :: [BenchmarkResults];
+        benchmarkResultsList =
+            List.map
+                (
+                    \x ->
+                        case x of
+                        (k, v) -> v;
+                )
+                (Map.toList collapsedResults)
+            ;
+    in
+        benchmarkResultsList
+    ;
+
+/**
+ * Compare benchmark results across builds. Essentially we take a list of
+ * benchmark files for each build and take the best run for each benchmark.
+ * We then compare the builds as normal.
+ */
+compareBenchmarkBuilds :: [[String]] -> String;
+public compareBenchmarkBuilds buildFileNameList =
+    let
+        loadedResults :: [[(Map.Map String BenchmarkResults)]];
+        loadedResults =
+            List.map
+                (\x -> List.map benchmarkResultsFromFile x)
+                buildFileNameList
+            ;
+
+        collapsedResults1 :: [(Map.Map String BenchmarkResults)];
+        collapsedResults1 =
+            List.map
+                (\x -> List.foldLeftStrict mergeBenchmarks Map.empty x)
+                loadedResults
+            ;
+
+//        getBuildNames :: [BenchmarkResults] -> [String];
+  //      getBuildNames b = 
+    //        map (\r -> r.BenchmarkResults.)
+        
+        //picks the result with the smallest average time.
+        getMin :: BenchmarkResults -> BenchmarkResults;
+        getMin x =
+            let
+                getMinHelper :: [BenchmarkResult] -> [BenchmarkResult];
+                getMinHelper x =
+                    let
+                        min :: [BenchmarkResult] -> BenchmarkResult;
+                        min x =
+                            List.foldLeft1Strict
+                                (
+                                    \a b ->
+                                        if
+                                            (
+                                                a.BenchmarkResult.avgTime
+                                                < b.BenchmarkResult.avgTime
+                                            )
+                                        then
+                                            a
+                                        else
+                                            b
+                                )
+                                x
+                            ;
+                    in
+                        [min x]
+                    ;
+            in
+                makeBenchmarkResults
+                    x.BenchmarkResults.benchmark
+                    (getMinHelper x.BenchmarkResults.results)
+            ;
+
+        collapsedResults2 :: [(Map.Map String BenchmarkResults)];
+        collapsedResults2 =
+            List.map (\x -> Map.map getMin x) collapsedResults1;
+
+        collapsedResults3 :: (Map.Map String BenchmarkResults);
+        collapsedResults3 =
+            List.foldLeftStrict mergeBenchmarks Map.empty collapsedResults2;
+
+        benchmarkResultsList :: [BenchmarkResults];
+        benchmarkResultsList =
+            List.map
+                (
+                    \x ->
+                        case x of
+                        (k, v) -> v;
+                )
+                (Map.toList collapsedResults3)
+            ;
+
+        sortedBenchmarkResultsList :: [BenchmarkResults];
+        sortedBenchmarkResultsList =
+            List.sortBy
+                (
+                    \a b ->
+                        compare
+                            a.BenchmarkResults.benchmark
+                            b.BenchmarkResults.benchmark
+                )
+                benchmarkResultsList
+            ;
+        
+        nameMap :: Map String String;
+        nameMap = buildBuildLabelMap (getLabels $ Map.elems collapsedResults3);
+        
+        showNameMap :: Map String String -> String;
+        showNameMap nameMap = 
+            List.foldLeft (\str p -> str ++ p.#1 ++ ": " ++ p.#2 ++ "\n") "" (Map.toAscList nameMap);
+            
+    in
+        showNameMap nameMap ++ "\n"
+        ++ "Summary:\n"
+        ++ (summarizeBenchmarkResultsList nameMap sortedBenchmarkResultsList)
+        ++ "\nDetails:\n"
+        ++(formatBenchmarkResultsList nameMap sortedBenchmarkResultsList)
+        ++ "\nSummary:\n"
+        ++ (summarizeBenchmarkResultsList nameMap sortedBenchmarkResultsList)
+        ++ "\n" ++ "\n" ++ showNameMap nameMap
+
+    ;

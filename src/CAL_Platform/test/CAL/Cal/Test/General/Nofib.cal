@@ -1,0 +1,982 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Nofib.cal
+ * Creation date: Dec 3, 2003.
+ * By: Edward Lam
+ */
+
+/**
+ * This module implements many of the benchmarks in the nofib Haskell benchmark suite.
+ * 
+ * Based on the NoFib benchmark suite: {@url http://www.dcs.gla.ac.uk/fp/software/ghc/nofib.html@}.
+ * 
+ * The NoFib suite and the ideas behind it are presented in the following paper:
+ * 
+ * The nofib Benchmark Suite of Haskell Programs - Will Partain
+ *
+ * In Functional Programming, Glasgow 1992,
+ * J Launchbury and PM Sansom, eds.,
+ * Workshops in Computing, Springer Verlag, 195-202. 
+ * 
+ * @author Edward Lam
+ */
+module Cal.Test.General.Nofib;
+
+import Cal.Core.Prelude using
+    dataConstructor = LT, EQ, GT;
+    typeConstructor = Int, Ordering;
+    function = undefined;
+    ;
+    
+import Cal.Collections.List;    
+import Cal.Core.String;
+import Cal.Core.Char;
+import Cal.Utilities.Math;
+
+/**************************************************************************************************************
+ * Benchmarks from the imaginary subset of the nofib benchmark suite.
+ */
+
+public testBenchmarks = 
+    testDigitsOfe1 &&
+    testDigitsOfe2 &&
+    testExp3 &&
+    testGenRegexps &&
+    testIntegrate &&
+    testNQueens &&
+    testPrimes &&
+    testRFib &&
+    testTak &&
+    testWheelSieve1 &&
+    testWheelSieve2 &&
+    testx2n1 
+    || Prelude.error "Benchmarks.testBenchmarks failed.";
+
+
+
+/**************************************************************************************************************
+ * bernoulli
+ * Calculates Bernoulli numbers.
+ * Not currently implemented, as it requires the Ratio data type.
+ */
+powers :: [[Prelude.Integer]];
+powers = (Prelude.upFrom 2) : List.map (List.zipWith Prelude.multiply (List.head powers)) powers;
+
+neg_powers :: [[Prelude.Integer]];
+neg_powers = List.map (List.zipWith (\n x -> if n then x else -x) (List.iterate Prelude.not Prelude.True)) powers;
+
+pascal:: [[Prelude.Integer]];
+pascal = [1, 2, 1] : List.map (\line -> List.zipWith Prelude.add (line ++ [0]) (0 : line)) pascal;
+
+/*
+public bernoulli n =
+    if n == 0 then
+        1
+    else if n == 1 then
+        -(1%2)
+    else if (isOdd n) then
+        0
+    else
+        let
+            powers = (neg_powers!!(n-1));
+        in
+            (-1)%2 
+                + sum [ fromIntegral ((sum $ zipWith (*) powers (tail $ tail combs)) - 
+                                         fromIntegral k) %
+                          fromIntegral (k+1)
+                | (k,combs)<- zip [2..n] pascal]
+    ;
+*/
+
+
+/**************************************************************************************************************
+ * digits-of-e1
+ * Compute the digits of "e" using continued fractions.
+ * Result: digits_of_e1 :: [Integer]
+ * Test: testDigitsOfe1
+ */
+digits_of_e1 :: [Prelude.Integer];
+public digits_of_e1 = toDigits eContFrac;
+
+digits_of_e1_Main :: Prelude.Int -> [Prelude.Integer];
+public digits_of_e1_Main n = List.take n digits_of_e1;
+
+testDigitsOfe1 :: Prelude.Boolean;
+public testDigitsOfe1 = List.take 10 digits_of_e1 == [2,7,1,8,2,8,1,8,2,8];
+
+
+eContFrac :: [Prelude.Integer];
+eContFrac = 
+    let
+        aux n = 1 : n : 1 : aux (n+2);
+    in
+        2:aux 2 
+    ;
+
+
+ratTrans :: (Prelude.Integer, Prelude.Integer, Prelude.Integer, Prelude.Integer) -> [Prelude.Integer] -> [Prelude.Integer];
+ratTrans abcd xss = 
+    case abcd of (a, b, c, d) ->
+        let
+            q = b / d;
+        in
+            if (((Prelude.signum c == Prelude.signum d) || (Prelude.abs c < Prelude.abs d)) && ((c+d)*q <= a+b) && ((c+d)*q + (c+d) > a+b)) then
+                (q : ratTrans (c,d,a-q*c,b-q*d) xss)
+            else
+                case xss of x:xs -> 
+                    ratTrans (b,a+x*b,d,c+x*d) xs
+                ;
+    ;;
+
+
+toDigits :: [Prelude.Integer] -> [Prelude.Integer];
+toDigits xs = (List.head xs) :toDigits (ratTrans (10, 0, 0, 1) (List.tail xs));
+
+
+/**************************************************************************************************************
+ * digits-of-e2
+ * Compute the digits of "e" using e = 2 + 1/2! + 1/3! + 1/4! + ...
+ * Result: digits_of_e2 :: [Char]
+ * Test: testDigitsOfe2
+ */
+
+testDigitsOfe2 :: Prelude.Boolean;
+public testDigitsOfe2 = List.take 11 digits_of_e2 == String.toList "2.718281828";
+
+digits_of_e2_Main :: Prelude.Int -> [Prelude.Char];
+public digits_of_e2_Main n = List.take n digits_of_e2;
+
+digits_of_e2 :: [Prelude.Char];
+public digits_of_e2 = 
+    '2' : '.' : 
+    (Prelude.compose List.tail Prelude.concat) (
+        (List.map (Prelude.compose (Prelude.compose String.toList Prelude.intToString) List.head)) (
+            (List.iterate (Prelude.compose (carryPropagate 2) (Prelude.compose (List.map (Prelude.multiply 10)) List.tail)))
+            (2:(Prelude.upFromThen 1 1))
+        )
+    );
+
+carryPropagate :: Prelude.Int -> [Prelude.Int] -> [Prelude.Int];
+carryPropagate base dss =
+    case dss of d:ds ->
+        let
+            carryguess = d / base :: Int;
+            remainder = Prelude.remainder d base;
+            nextProp = carryPropagate (base+1) ds;
+            nextcarry = List.head nextProp;
+            fraction = List.tail nextProp;
+            dCorrected = d + nextcarry;
+        in
+            if (carryguess == Prelude.divide (d+9) base) then
+                (carryguess : (remainder+nextcarry) : fraction)
+            else
+                ((dCorrected / base) : (Prelude.remainder dCorrected base) : fraction)
+    ;;
+
+
+/**************************************************************************************************************
+ * exp3_8
+ * Calculates 3^x in a really inefficient way using an abstract data type.
+ * Entry point: exp3 :: Int -> Int;
+ * Test: testExp3.
+ */
+
+exp3 :: Prelude.Int -> Prelude.Int;
+public exp3 x = natToInt (powNat 3 (Prelude.fromInt x));
+
+exp3_Main :: Prelude.Int -> Prelude.Int;
+public exp3_Main = exp3;
+
+testExp3 :: Prelude.Boolean;
+public testExp3 = exp3 2 == 9;
+
+
+data Nat = 
+    Z | 
+    S 
+        rest    :: Nat;
+
+instance Prelude.Eq Nat where
+    equals = equalsNat;
+    notEquals = notEqualsNat;
+;
+
+equalsNat :: Nat -> Nat -> Prelude.Boolean;
+equalsNat x y = (natToInt x) == (natToInt y);
+
+notEqualsNat :: Nat -> Nat -> Prelude.Boolean;
+notEqualsNat x y = Prelude.not (equalsNat x y);
+
+instance Prelude.Ord Nat where
+    lessThan = lessThanNat;
+    lessThanEquals = lessThanEqualsNat;
+    greaterThan = greaterThanNat;
+    greaterThanEquals = greaterThanEqualsNat;
+    compare = compareNat;
+    max = maxNat;
+    min = minNat;
+    ;
+
+lessThanNat :: Nat -> Nat -> Prelude.Boolean;
+lessThanNat x y = (natToInt x) < (natToInt y);
+
+lessThanEqualsNat :: Nat -> Nat -> Prelude.Boolean;
+lessThanEqualsNat x y = lessThanNat x y || equalsNat x y;
+
+greaterThanNat :: Nat -> Nat -> Prelude.Boolean;
+greaterThanNat x y = (natToInt x) > (natToInt y);
+
+greaterThanEqualsNat :: Nat -> Nat -> Prelude.Boolean;
+greaterThanEqualsNat x y = greaterThanNat x y || equalsNat x y;
+
+compareNat :: Nat -> Nat -> Ordering;
+private compareNat !x !y =
+    if x < y then LT
+    else if x == y then EQ
+    else GT;
+
+maxNat :: Nat -> Nat -> Nat;
+private maxNat !x !y = if x <= y then y else x;
+
+minNat :: Nat -> Nat -> Nat;
+private minNat !x !y = if x <= y then x else y; 
+
+
+instance Prelude.Num Nat where   
+    negate = negateNat;
+    abs = absNat;
+    signum = signumNat;
+    add = addNat;
+    subtract = subtractNat;
+    multiply = multiplyNat;
+    divide = divideNat;
+    remainder = remainderNat;
+    //most of the conversion class methods are not implemented. Not needed by this tester class.
+    fromByte = undefined;
+    fromShort = undefined;
+    fromInt = intToNat;
+    fromLong = undefined;
+    fromFloat = undefined;
+    fromDouble = undefined;
+    fromInteger = integerToNat; 
+    fromDecimal = undefined;
+    toByte = undefined;
+    toShort = undefined;
+    toInt = undefined;
+    toLong = undefined;
+    toFloat = undefined;
+    toDouble = natToDouble;
+    toInteger = undefined;
+    toDecimal = undefined;           
+    ;
+
+integerToNat :: Prelude.Integer -> Nat;
+integerToNat !integerValue = intToNat (Prelude.toInt integerValue);
+
+natToDouble :: Nat -> Prelude.Double;
+natToDouble x = Prelude.toDouble (natToInt x);
+
+intToNat :: Prelude.Int -> Nat;
+intToNat x = 
+    if x < 1 
+        then Z 
+        else S (Prelude.fromInt (x-1))
+    ;
+
+natToInt :: Nat -> Prelude.Int;
+natToInt x = 
+    case x of
+        Z -> 0;
+        S x -> 1 + natToInt x;
+    ;
+    
+
+absNat :: Nat -> Nat;
+absNat !x = if x >= 0 then x else -x;
+
+signumNat :: Nat -> Nat;
+signumNat !x = 
+    if x == 0 then 0
+    else if x > 0 then 1
+    else -1;
+    
+
+addNat :: Nat -> Nat -> Nat;
+addNat x y =
+    case x of 
+        Z -> y;
+        S x -> S (x + y);
+    ;
+
+subtractNat :: Nat -> Nat -> Nat;
+subtractNat x y = x + negateNat y;
+
+multiplyNat :: Nat -> Nat -> Nat;
+multiplyNat x y =
+    case y of
+        Z -> Z;
+        S y -> x * y + x;
+    ;
+
+divideNat :: Nat -> Nat -> Nat;
+divideNat x y = (intToNat ((natToInt x) / (natToInt y)));
+
+negateNat :: Nat -> Nat;
+negateNat x = intToNat (- (natToInt x));
+
+powNat :: Nat -> Nat -> Nat;
+powNat x y =
+    case y of
+        Z -> S Z;
+        S y -> (x * (powNat x y));
+    ;
+    
+remainderNat :: Nat -> Nat -> Nat;
+remainderNat x y = (intToNat ((natToInt x) `Prelude.remainder` (natToInt y)));
+
+
+/**************************************************************************************************************
+ * gen_regexps
+ * Entry points: expand :: [Char] -> [[Char]];
+ *               numExpandChars :: [Char] -> Int;
+ * Test: testGenRegexps
+ * Generate all the expansions of a generalized regular expression.
+ * Also outputs the number of chars in the output.
+ * Note: this does a lot of String<->Char conversions.
+ */
+
+testGenRegexps :: Prelude.Boolean;
+public testGenRegexps = (expand (String.toList "[a-b]<3->cde") == 
+                           List.map String.toList ["a3cde", "a2cde", "a1cde", "a0cde", "b3cde", "b2cde", "b1cde", "b0cde"]) && 
+                        (numExpandChars (String.toList "[a-d]<2->cdef") == 72);
+
+genRegexpsMain :: [Prelude.Char] -> Prelude.Int;
+public genRegexpsMain = numExpandChars;
+
+// The number of expansions.
+numExpandChars :: [Prelude.Char] -> Prelude.Int;
+public numExpandChars = Prelude.compose numchars expand;
+
+numchars :: [[Prelude.Char]] -> Prelude.Int;
+numchars l = List.sum (List.map List.length l);
+
+expand :: [Prelude.Char] -> [[Prelude.Char]];
+public expand xs = 
+    if xs == [] then
+        (List.map String.toList [""])
+    else
+        case xs of headX:tailX ->
+            if headX == '<' then
+                (numericRule tailX)
+            else if headX == '[' then
+                (alphabeticRule tailX)
+            else
+                (constantRule xs)
+        ;
+    ;
+
+constantRule :: [Prelude.Char] -> [[Prelude.Char]];
+constantRule cs = List.map (Prelude.Cons (List.head cs)) (expand (List.tail cs));
+
+alphabeticRule :: [Prelude.Char] -> [[Prelude.Char]];
+alphabeticRule rule =
+    case rule of a:x1 ->
+        case x1 of dash:x2 ->
+            if (dash != '-') then
+                (Prelude.error "pattern match error for '-'.")
+            else
+                case x2 of b:x3 ->
+                    case x3 of closeBracket:rest ->
+                        if (closeBracket != ']') then
+                            (Prelude.error "pattern match error for ']'.")
+                        else
+                            let ok c = 
+                                let ok z = 
+                                    [c:z];
+                                in List.concatMap ok (expand rest);
+                            in List.concatMap ok (List.map Char.fromInt (if (a <= b) then (Prelude.upFromTo (Char.toInt a) (Char.toInt b)) else (List.reverse (Prelude.upFromTo (Char.toInt b) (Char.toInt a)))))
+                    ;
+                ;
+        ;
+    ;;
+
+numericRule :: [Prelude.Char] -> [[Prelude.Char]];
+numericRule x =
+    let
+        spanX = List.span (Prelude.notEquals '-') x;
+        p = Prelude.fst spanX;
+        q = List.tail (Prelude.snd spanX);
+        spanQ = List.span (Prelude.notEquals '>') q;
+        r = Prelude.fst spanQ;
+        s = List.tail (Prelude.snd spanQ);
+        u = mknum p;
+        v = mknum r;
+        mknum s = List.foldLeft (\ u c -> u * 10 + (Char.toInt c - Char.toInt '0')) 0 s;
+        pad s     = List.take (width-(List.length s)) (List.repeat '0') ++ s;
+        width     = Prelude.max (String.length (Prelude.intToString u)) (String.length (Prelude.intToString v));
+    in
+        let ok i =
+            let ok z = 
+                [String.toList (Prelude.intToString i) ++ z]; 
+            in List.concatMap ok (expand s);
+        in List.concatMap ok (if u < v then (Prelude.upFromTo u v) else (Prelude.upFromThenTo u (u-1) v))
+    ;
+  
+
+/**************************************************************************************************************
+ * integrate
+ * An adaptive algorithm for numeric integration.
+ * Does adaptive integration of single variable functions..
+ * Entry point: etotal :: Int -> Double;
+ * Test: testIntegrate
+ * See: CACM 39(3), March 1996.
+ * URL: http://www-2.cs.cmu.edu/~scandal/nesl/alg-numerical.html
+ */
+
+testIntegrate :: Prelude.Boolean;
+public testIntegrate = etotal 3 == 0.0;
+
+integrateMain :: Prelude.Int -> Prelude.Double;
+public integrateMain = etotal;
+
+integrate1D :: Prelude.Double -> Prelude.Double -> (Prelude.Double -> Prelude.Double) -> Prelude.Double;
+integrate1D l u f =
+    let
+        d = (u-l)/8.0;
+    in
+        d * List.sum 
+            [ (f l) * 0.5,
+                f (l+d),
+                f (l+(2.0*d)),
+                f (l+(3.0*d)),
+                f (l+(4.0*d)),
+                f (u-(3.0*d)),
+                f (u-(2.0*d)),
+                f (u-d),
+                (f u)*0.5]
+    ;
+
+integrate2D :: Prelude.Double -> Prelude.Double -> Prelude.Double -> Prelude.Double -> (Prelude.Double -> Prelude.Double -> Prelude.Double) -> Prelude.Double;
+integrate2D l1 u1 l2 u2 f = integrate1D l2 u2 (\y->integrate1D l1 u1 (\x->f x y));
+
+zark :: Prelude.Double -> Prelude.Double -> Prelude.Double;
+zark u v = integrate2D 0.0 u 0.0 v (\x->(\y->x*y));
+
+ints :: [Prelude.Double];
+ints = Prelude.upFrom 1.0;
+
+zarks :: [Prelude.Double];
+zarks = List.zipWith zark ints (List.map (Prelude.multiply 2.0) ints);
+
+rtotals :: [Prelude.Double];
+rtotals = List.head zarks : List.zipWith Prelude.add (List.tail zarks) rtotals;
+
+//rtotal :: Int -> Double;
+//rtotal n = subscript rtotals n;
+
+is :: [Prelude.Double];
+is = List.map (\x -> Math.power x 4) ints;
+
+itotals :: [Prelude.Double];
+itotals = List.head is : List.zipWith Prelude.add (List.tail is) itotals;
+
+//itotal :: Int -> Double;
+//itotal n = subscript itotals n;
+
+es :: [Prelude.Double];
+es = List.map (\x -> Math.power x 2) (List.zipWith Prelude.subtract rtotals itotals);
+
+etotal :: Prelude.Int -> Prelude.Double;
+public etotal n = List.sum (List.take n es);
+
+
+/**************************************************************************************************************
+ * paraffins
+ * Entry point: expand.
+ * Salishan Paraffins Problem:
+ * Given an integer n, output the chemical structure of all paraffin molecules for i<=n, without repetition and in 
+ * order of increasing size. Include all isomers, but no duplicates. The chemical formula for paraffin molecules is
+ * C(i)H(2i+2). Any representation for the molecules could be chosen, as long as it clearly distinguishes among
+ * isomers.
+ *
+ * This benchmark cannot be implemented, as it requires the Array type.
+ */
+
+// Generation of radicals
+
+// data Radical = H | C Radical Radical Radical;
+
+three_partitions :: Prelude.Int -> [(Prelude.Int, Prelude.Int, Prelude.Int)];
+three_partitions m =
+    let ok i =
+        let ok j =
+            let ok k = 
+                [(i, j, k)];
+            in List.concatMap ok [m - (i + j)];
+        in List.concatMap ok (Prelude.upFromTo i (Prelude.divide (m - i) (2 :: Int)));
+    in List.concatMap ok (Prelude.upFromTo 0 (Prelude.divide m (3 :: Int)))
+    ;
+
+remainders :: [Prelude.Int] -> [[Prelude.Int]];        // is this right?
+remainders rss = 
+    if (rss == []) then 
+        []
+    else
+        case rss of r:rs -> (r:rs) : (remainders rs);
+    ;
+
+/*
+radical_generator :: Int -> Array Int [Radical]
+radical_generator n =
+  radicals
+ where 
+  radicals =
+    array (0,n) ((0,[H]) : [(j,rads_of_size_n radicals j) | j <- [1..n]])
+
+rads_of_size_n :: Array Int [Radical] -> Int -> [Radical]
+rads_of_size_n radicals n =
+  [ (C ri rj rk)
+  | (i,j,k)  <- (three_partitions (n-1)),
+    (ri:ris) <- (remainders (radicals!i)),
+    (rj:rjs) <- (remainders (if (i==j) then (ri:ris) else radicals!j)),
+    rk       <- (if (j==k) then (rj:rjs) else radicals!k)]
+
+-- Generation of paraffins.
+
+data Paraffin = BCP Radical Radical | CCP Radical Radical Radical Radical
+
+bcp_generator :: Array Int [Radical] -> Int -> [Paraffin]
+bcp_generator radicals n =
+  if (odd n) then []
+  else
+    [ (BCP r1 r2) | (r1:r1s) <- (remainders (radicals!(div n 2))),
+                    r2       <- (r1:r1s) ]
+    
+four_partitions :: Int -> [(Int,Int,Int,Int)]
+four_partitions m =
+  [ (i,j,k,l)
+  | i <- [0..(div m 4)],
+    j <- [i..(div (m-i) 3)],
+    k <- [(max j (ceiling ((fromIntegral m)/(fromInteger 2)) - i - j))..(div (m-i-j) 2)],
+    l <- [(m - (i+j+k))]]
+
+ccp_generator :: Array Int [Radical] -> Int -> [Paraffin]
+ccp_generator radicals n =
+  [ (CCP ri rj rk rl)
+  | (i,j,k,l) <- (four_partitions (n-1)),
+    (ri:ris)  <- (remainders (radicals!i)),
+    (rj:rjs)  <- (remainders (if (i==j) then (ri:ris) else radicals!j)),
+    (rk:rks)  <- (remainders (if (j==k) then (rj:rjs) else radicals!k)),
+    rl        <- (if (k==l) then (rk:rks) else radicals!l)]
+
+bcp_until :: Int -> [Int]
+bcp_until n =
+  [length(bcp_generator radicals j) | j <- [1..n]]
+ where
+  radicals = radical_generator (div n 2)
+
+ccp_until :: Int -> [Int]
+ccp_until n =
+  [length(ccp_generator radicals j) | j <- [1..n]]
+ where
+  radicals = radical_generator (div n 2)
+
+paraffins_until :: Int -> [Int]
+paraffins_until n =
+  [length (bcp_generator radicals j) + length (ccp_generator radicals j)
+   | j <- [1..n]]
+ where
+  radicals = radical_generator (div n 2)
+
+main = do
+  [arg] <- getArgs
+  let num = read arg
+  print [length (rads!i) | rads <- [(radical_generator num)], i <- [0..num]]
+  print (bcp_until num)
+  print (ccp_until num)
+  print (paraffins_until num)
+
+*/
+
+
+/**************************************************************************************************************
+ * primes
+ * Result: primes :: [Int]
+ * Test: testPrimes
+ * Gets the n'th prime number.
+ * Seems to be slower than getNthPrime.
+ */
+
+suCC :: Prelude.Int -> Prelude.Int;
+suCC x = x + 1;
+
+isdivs :: Prelude.Int  -> Prelude.Int -> Prelude.Boolean;
+isdivs n x = Prelude.remainder x n != 0;
+
+the_filter :: [Prelude.Int] -> [Prelude.Int];
+the_filter nss = List.filter (isdivs (List.head nss)) (List.tail nss);
+
+primes :: [Prelude.Int];
+public primes = List.map List.head (List.iterate the_filter (List.iterate suCC 2));
+
+testPrimes :: Prelude.Boolean;
+public testPrimes = List.subscript primes 100 == 547;
+
+primesMain :: Prelude.Int -> Prelude.Int;
+public primesMain n = List.subscript primes n;
+
+
+
+/**************************************************************************************************************
+ * queens
+ * Entry point: nsoln :: Int -> Int;
+ * Test: testNQueens
+ * Finds the number of solutions to the n-queens problem.
+ */
+
+testNQueens :: Prelude.Boolean;
+public testNQueens = nsoln 5 == 10;
+
+nQueensMain :: Prelude.Int -> Prelude.Int;
+public nQueensMain = nsoln;
+
+nsoln :: Prelude.Int -> Prelude.Int;
+nsoln nq = 
+    let
+        safe :: Prelude.Int -> Prelude.Int -> [Prelude.Int] -> Prelude.Boolean;
+        safe x d ql = 
+            if ql == [] then
+                Prelude.True
+            else
+                case ql of q:l ->
+                    x != q && x != q+d && x != q-d && safe x (d+1) l;
+            ;
+
+        gen :: Prelude.Int -> [[Prelude.Int]];
+        gen n = 
+            if n == 0 then 
+                [[]]
+            else
+                let ok b =
+                    let ok q = 
+                        if (safe q 1 b) then [q:b] else [];
+                    in List.concatMap ok (Prelude.upFromTo 1 nq);
+                in List.concatMap ok (gen (n - 1));
+    in
+        List.length (gen nq)
+    ;
+
+
+/**************************************************************************************************************
+ * rfib
+ * Entry point: nfib :: Double -> Double.
+ * Test: testRFib
+ * Gets the nth fibonacci number in a recursive fashion.
+ */
+
+testRFib :: Prelude.Boolean;
+public testRFib = nfib 6 == 25;
+
+rfibMain :: Prelude.Double -> Prelude.Double;
+public rfibMain = nfib;
+
+nfib :: Prelude.Double -> Prelude.Double;
+nfib n = if n <= 1 then 1 else nfib (n-1) + nfib (n-2) + 1;
+
+
+
+/**************************************************************************************************************
+ * tak
+ * Entry point: tak :: Int -> Int -> Int -> Int
+ * Test: testTak;
+ * Calculates the Takeuchi function.
+ * tak 18 12 6 = 7.
+ */
+
+testTak :: Prelude.Boolean;
+public testTak = tak 5 4 3 == 4;
+
+takMain :: Prelude.Int -> Prelude.Int -> Prelude.Int -> Prelude.Int;
+public takMain = tak;
+
+tak :: Prelude.Int -> Prelude.Int -> Prelude.Int -> Prelude.Int;
+public tak x y z = 
+    if Prelude.not (y < x) then 
+        z
+    else 
+        tak (tak (x-1) y z)
+            (tak (y-1) z x)
+            (tak (z-1) x y)
+    ;
+
+
+/**************************************************************************************************************
+ * wheel-sieve1
+ * Result: wheelPrimes1 :: [Int]
+ * Test: testWheelSieve1
+ * Calculates prime numbers using a "lazy wheel-sieve".
+ * Faster than getNthPrime.
+ */
+
+testWheelSieve1 :: Prelude.Boolean;
+public testWheelSieve1 = List.subscript wheelPrimes1 100 == 547;
+
+wheelSieve1Main :: Prelude.Int -> Prelude.Int;
+public wheelSieve1Main n = List.subscript wheelPrimes1 n;
+
+
+data Wheel = 
+    Wheel 
+        s       :: Prelude.Int 
+        ns      :: [Prelude.Int];
+
+wheelPrimes1 :: [Prelude.Int];
+public wheelPrimes1 = sieve wheels wheelPrimes1 squares;
+
+sieve :: [Wheel] -> [Prelude.Int] -> [Prelude.Int] -> [Prelude.Int];
+sieve wheelArgList ps qs =
+    case wheelArgList of wheelArg:ws ->
+        case wheelArg of Wheel s ns ->
+            let
+                noFactor = if s<=2 then Prelude.const Prelude.True else notDivBy ps qs;
+            in (
+                let ok o =
+                    let ok n =
+                        let ok nPrime =
+                            if (noFactor nPrime) then [nPrime] else [];
+                        in List.concatMap ok [n + o];
+                    in List.concatMap ok ns;
+                in List.concatMap ok (s: (Prelude.upFromThenTo (s * 2) (s * 3) ((List.head ps - 1) * s)))
+                ) ++ sieve ws (List.tail ps) (List.tail qs)
+        ;
+    ;;
+
+notDivBy :: [Prelude.Int] -> [Prelude.Int] -> Prelude.Int -> Prelude.Boolean;
+notDivBy pss qss n = 
+    case pss of p:ps ->
+        case qss of q:qs ->
+            q > n || Prelude.remainder n p > 0 && notDivBy ps qs n
+        ;
+    ;;
+
+squares :: [Prelude.Int];
+squares = List.map (\x -> x * x) wheelPrimes1;
+
+wheels :: [Wheel];
+wheels = Wheel 1 [1] : List.zipWith nextSize wheels wheelPrimes1;
+
+nextSize :: Wheel -> Prelude.Int -> Wheel;
+nextSize wheelArg p =
+    case wheelArg of Wheel s ns ->
+        let nsPrime =
+            let ok o =
+                let ok n =
+                    let ok nPrime = 
+                        if ((Prelude.remainder nPrime p) > 0) then [nPrime] else [];
+                    in List.concatMap ok [n+o];
+                in List.concatMap ok ns;
+            in List.concatMap ok (Prelude.upFromThenTo 0 s ((p-1)*s));
+        in Wheel (s*p) nsPrime;
+    ;
+
+
+
+/**************************************************************************************************************
+ * wheel-sieve2
+ * Result: wheelPrimes2 :: [Int]
+ * Test: testWheelSieve2
+ * Calculates prime numbers using a "lazy wheel-sieve".
+ * Even faster than wheel-sieve1
+ */
+
+testWheelSieve2 :: Prelude.Boolean;
+public testWheelSieve2 = List.subscript wheelPrimes2 100 == 547;
+
+wheelSieve2Main :: Prelude.Int -> Prelude.Int;
+public wheelSieve2Main n = List.subscript wheelPrimes2 n;
+
+wheelPrimes2 :: [Prelude.Int];
+public wheelPrimes2 = spiral wheels2 wheelPrimes2 squares2;
+
+spiral :: [Wheel2] -> [Prelude.Int] -> [Prelude.Int] -> [Prelude.Int];
+spiral wheelArgList ps qs =
+    case wheelArgList of wheelArg:ws ->
+        case wheelArg of Wheel2 s ms ns ->
+            let
+                roll o = List.foldRight (turn o) (List.foldRight (turn o) (roll (o+s)) ns) ms;
+                turn0 n rs =
+                    if n<q then n:rs else sp;
+                turn o n rs =
+                    let nPrime = o+n;
+                    in  if nPrime==2 || nPrime<q then nPrime:rs else List.dropWhile (\x -> Prelude.lessThan x nPrime) sp;
+                sp = spiral ws (List.tail ps) (List.tail qs);
+                q = List.head qs;
+            in
+                List.foldRight turn0 (roll s) ns
+        ;
+    ;;
+
+squares2 :: [Prelude.Int];
+squares2 = List.map (\x -> x * x) wheelPrimes2;
+
+
+data Wheel2 = 
+    Wheel2 
+        s       :: Prelude.Int 
+        ms      :: [Prelude.Int] 
+        ns      :: [Prelude.Int];
+
+wheels2 :: [Wheel2];
+wheels2 = Wheel2 1 [1] [] :
+          List.zipWith3 nextSize2 wheels2 wheelPrimes2 squares2;
+
+nextSize2 :: Wheel2 -> Prelude.Int -> Prelude.Int -> Wheel2;
+nextSize2 wheelArg p q =
+    case wheelArg of Wheel2 s ms ns ->
+        let
+            xsns = List.span (\x -> Prelude.lessThanEquals x q) (List.foldRight turn0 (roll (p-1) s) ns);
+            xs = Prelude.fst xsns;
+            nsPrime = Prelude.snd xsns;
+            msPrime = List.foldRight turn0 xs ms;
+            roll t o = 
+                if t == 0 then [] else List.foldRight (turn o) (List.foldRight (turn o) (roll (t-1) (o+s)) ns) ms;
+            turn0 n rs = 
+                if (Prelude.remainder n p) > 0 then n:rs else rs;
+            turn o n rs =
+                let nPrime = o+n;
+                in  if (Prelude.remainder nPrime p) > 0 then nPrime:rs else rs;
+        in
+            Wheel2 (s*p) msPrime nsPrime
+        ;
+    ;
+
+
+/**************************************************************************************************************
+ * x2n1
+ * x2n1Main :: Int
+ * Test: testx2n1
+ * "It computes a root to the equation x^n = 1 (i.e. mkPolar 1 (2*pi/fromInt n)),
+ * and raises it to the n:th power to get 1, sums a few of these.."
+ * Does some math using complex numbers.
+ * 
+ */
+
+/*
+main = do
+    [arg] <- getArgs
+    print (round (realPart (sum [f n | n <- [1 .. (read arg)]])))
+
+f :: Int -> Complex Double
+f n = mkPolar 1 ((2*pi)/fromIntegral n) ^ n
+*/
+
+
+x2n1Main :: Prelude.Int -> Prelude.Int;
+public x2n1Main arg = (Prelude.round (realPart (sumComplex (List.map f (Prelude.upFromTo 1 arg)))));
+
+testx2n1 :: Prelude.Boolean;
+public testx2n1 = x2n1Main 10 == 10;
+
+f :: Prelude.Int -> Complex;
+f n = powerComplex (mkPolar 1 ((2*Math.pi)/(Prelude.fromInt n))) n;
+
+// Partial definition of the complex data type (as much as is required by this benchmark..)
+// This is somewhat more painful that it would be if it were an instance of the Num type class.
+data Complex = 
+    Complex 
+        real    :: Prelude.Double 
+        imag    :: Prelude.Double;
+
+realPart :: Complex -> Prelude.Double;
+realPart c = case c of Complex x y -> x;;
+
+imagPart :: Complex -> Prelude.Double;
+imagPart c = case c of Complex x y -> y;;
+
+mkPolar  :: Prelude.Double -> Prelude.Double -> Complex;
+mkPolar r theta  =  Complex (r * Math.cos theta) (r * Math.sin theta);
+
+sumComplex :: [Complex] -> Complex;
+public sumComplex = List.foldLeftStrict addComplex (Complex 0 0);
+
+addComplex :: Complex -> Complex -> Complex;
+addComplex c1 c2 = 
+    case c1 of Complex x1 y1 ->
+        case c2 of Complex x2 y2 ->
+            Complex (x1+x2) (y1+y2)
+    ;;;
+
+multiplyComplex :: Complex -> Complex -> Complex;
+multiplyComplex c1 c2 = 
+    case c1 of Complex x1 y1 ->
+        case c2 of Complex x2 y2 ->
+            Complex (x1*x2 - y1*y2) (x1*y2 + y1*x2)
+    ;;;
+
+
+/*
+The definition of (^) from GHC:
+(^)            :: (Num a, Integral b) => a -> b -> a
+_ ^ 0          =  1
+x ^ n | n > 0  =  f x (n-1) x
+                  where f _ 0 y = y
+                        f a d y = g a d  where
+                                  g b i | even i  = g (b*b) (i `quot` 2)
+                                        | otherwise = f b (i-1) (b*y)
+_ ^ _          = error "Prelude.^: negative exponent"
+*/
+
+powerComplex :: Complex -> Prelude.Int -> Complex;
+powerComplex x n =
+    if n == 0 then
+        Complex 1 0
+    else if n > 0 then
+        let
+            f a d y =
+                if d == 0 then
+                    y
+                else
+                    let
+                        g b i = 
+                            if (Prelude.isEven i) then
+                                g (multiplyComplex b b) (i / 2)
+                            else
+                                f b (i-1) (multiplyComplex b y);
+                    in
+                        g a d;
+        in
+            f x (n-1) x
+    else
+        Prelude.error "Nofib.powerComplex: negative exponent";
+    

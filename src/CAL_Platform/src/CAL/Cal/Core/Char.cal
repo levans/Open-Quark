@@ -1,0 +1,810 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Char.cal
+ * Created: Nov 16, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines many useful functions for the {@link Prelude.Char@} type. Note that the {@link typeConstructor = Char@}
+ * type itself is defined in the {@link Prelude@} module due to the fact that it is supported via built-in notation
+ * for {@link typeConstructor = Char@} literals.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Core.Char;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Boolean, Byte, Char, Int, JObject;
+    dataConstructor = False, True;
+    function = assert, error, input, output;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+    
+//we want to maintain the generality and functional independence of the Char module.
+//Please do not add more imports.    
+    
+/**
+ * Converts a {@link typeConstructor = Char@} value to an {@link Int@} value.
+ * 
+ * @arg charValue the value to be converted.
+ * @return the corresponding {@code Int@} value.
+ */
+foreign unsafe import jvm "cast" public toInt :: Char -> Int;
+
+/**
+ * Converts an {@link Int@} value to a {@link typeConstructor = Char@} value.
+ * 
+ * @arg intValue the value to be converted.
+ * @return the corresponding {@code Char@} value.
+ */
+foreign unsafe import jvm "cast" public fromInt :: Int -> Char;
+
+/**
+ * Determines if the specified character is a space character according to the Unicode Standard.
+ * 
+ * A character {@code c@} is a space character if {@code {@link type@} c@} is equal to one of:
+ * 
+ * {@unorderedList
+ * {@item {@link TYPE_SPACE_SEPARATOR@}@}
+ * {@item {@link TYPE_LINE_SEPARATOR@}@}
+ * {@item {@link TYPE_PARAGRAPH_SEPARATOR@}@}
+ * @}
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to check.
+ * @return {@link True@} if the character is a space character; {@link False@} otherwise.
+ * @see isWhitespace
+ */
+foreign unsafe import jvm "static method java.lang.Character.isSpaceChar"
+    public isSpaceChar :: Char -> Boolean;
+
+/**
+ * Determines if the specified character is white space according to Java. The characters named below
+ * are considered as white space:
+ * 
+ * {@unorderedList
+ * {@item A Unicode space character
+ *        (i.e. {@code {@link type@} charValue@} is one of {@link TYPE_SPACE_SEPARATOR@}, {@link TYPE_LINE_SEPARATOR@},
+ *        or {@link TYPE_PARAGRAPH_SEPARATOR@})
+ *        that is not a non-breaking space ({@code '\u00A0'@}, {@code '\u2007'@}, {@code '\u202F'@}).@}
+ * {@item {@code '\u0009'@}, HORIZONTAL TABULATION.@}
+ * {@item {@code '\u000A'@}, LINE FEED.@}
+ * {@item {@code '\u000B'@}, VERTICAL TABULATION.@}
+ * {@item {@code '\u000C'@}, FORM FEED.@}
+ * {@item {@code '\u000D'@}, CARRIAGE RETURN.@}
+ * {@item {@code '\u001C'@}, FILE SEPARATOR.@}
+ * {@item {@code '\u001D'@}, GROUP SEPARATOR.@}
+ * {@item {@code '\u001E'@}, RECORD SEPARATOR.@}
+ * {@item {@code '\u001F'@}, UNIT SEPARATOR.@}
+ * @}
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to check.
+ * @return {@link True@} if the character is a Java whitespace character; {@link False@} otherwise.
+ * @see isSpaceChar
+ */
+foreign unsafe import jvm "static method java.lang.Character.isWhitespace"
+    public isWhitespace :: Char -> Boolean;
+
+/**
+ * Determines if the specified character is an uppercase character according to the Unicode Standard.
+ * 
+ * A character {@code c@} is in uppercase if {@code {@link type@} c == {@link TYPE_UPPERCASE_LETTER@}@}.
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to check.
+ * @return {@link True@} if the character is uppercase; {@link False@} otherwise.
+ * @see isLowerCase, toUpperCase
+ */
+foreign unsafe import jvm "static method java.lang.Character.isUpperCase"
+    public isUpperCase :: Char -> Boolean;
+
+/**
+ * Determines if the specified character is a lowercase character according to the Unicode Standard.
+ * 
+ * A character {@code c@} is in lowercase if {@code {@link type@} c == {@link TYPE_LOWERCASE_LETTER@}@}.
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to check.
+ * @return {@link True@} if the character is lowercase; {@link False@} otherwise.
+ * @see isUpperCase, toLowerCase
+ */
+foreign unsafe import jvm "static method java.lang.Character.isLowerCase"
+    public isLowerCase :: Char -> Boolean;
+
+/**
+ * Determines if the specified character is a letter according to the Unicode Standard.
+ *
+ * A character {@code c@} is a letter if {@code {@link type@} c@} is equal to one of:
+ * 
+ * {@unorderedList
+ * {@item {@link TYPE_UPPERCASE_LETTER@}@}
+ * {@item {@link TYPE_LOWERCASE_LETTER@}@}
+ * {@item {@link TYPE_TITLECASE_LETTER@}@}
+ * {@item {@link TYPE_MODIFIER_LETTER@}@}
+ * {@item {@link TYPE_OTHER_LETTER@}@}
+ * @} 
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to check.
+ * @return {@link True@} if the character is a letter; {@link False@} otherwise.
+ * @see isUpperCase, isLowerCase, isDigit, isLetterOrDigit
+ */
+foreign unsafe import jvm "static method java.lang.Character.isLetter"
+    public isLetter :: Char -> Boolean;
+
+/**
+ * Determines if the specified character is a digit according to the Unicode Standard.
+ * 
+ * A character {@code c@} is a digit if {@code {@link type@} c == {@link TYPE_DECIMAL_DIGIT_NUMBER@}@}.
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to check.
+ * @return {@link True@} if the character is a digit; {@link False@} otherwise.
+ * @see isLetter, isLetterOrDigit
+ */
+foreign unsafe import jvm "static method java.lang.Character.isDigit"
+    public isDigit :: Char -> Boolean;
+
+/**
+ * Determines if the specified character is a letter or digit according to the Unicode Standard.
+ * 
+ * For any character {@code c@}, {@code isLetterOrDigit c == {@link isLetter@} c || {@link isDigit@} c@}.
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to check.
+ * @return {@link True@} if the character is a letter or digit; {@link False@} otherwise.
+ * @see isLetter, isDigit
+ */
+foreign unsafe import jvm "static method java.lang.Character.isLetterOrDigit"
+    public isLetterOrDigit :: Char -> Boolean;
+
+/**
+ * Converts a {@link typeConstructor = Char@} representing a hexadecimal digit to an {@link Int@}.
+ * 
+ * e.g.
+ * {@unorderedList
+ * {@item {@code digitToInt '8' = 8@}@}
+ * {@item {@code digitToInt 'a' = 10@}@}
+ * @}
+ * 
+ * @arg c the character containing the hexadecimal digit to be converted.
+ * @return the {@code Int@} value that is represented by the hexadecimal digit.
+ */
+digitToInt :: Char -> Int;
+public digitToInt !c =
+    case c of
+    '0' -> 0;
+    '1' -> 1;
+    '2' -> 2;
+    '3' -> 3;
+    '4' -> 4;
+    '5' -> 5;
+    '6' -> 6;
+    '7' -> 7;
+    '8' -> 8;
+    '9' -> 9;
+    ('a' | 'A') -> 10;
+    ('b' | 'B') -> 11;
+    ('c' | 'C') -> 12;
+    ('d' | 'D') -> 13;
+    ('e' | 'E') -> 14;
+    ('f' | 'F') -> 15;
+    _ -> error "Not a digit.";
+    ;
+
+/**
+ * Converts an {@link Int@} to a {@link typeConstructor = Char@} representing that {@code Int@} as a hexadecimal digit.
+ * 
+ * e.g.
+ * {@unorderedList
+ * {@item {@code intToDigit 5 = '5'@}@}
+ * {@item {@code intToDigit 10 = 'a'@}@}
+ * @}
+ *
+ * @arg i the {@code Int@} value to be converted.
+ * @return the {@code Char@} representing {@code i@} as a hexadecimal digit.
+ */
+intToDigit :: Int -> Char;
+public intToDigit !i =
+    case i of
+    0 -> '0';
+    1 -> '1';
+    2 -> '2';
+    3 -> '3';
+    4 -> '4';
+    5 -> '5';
+    6 -> '6';
+    7 -> '7';
+    8 -> '8';
+    9 -> '9';
+    10 -> 'a';
+    11 -> 'b';
+    12 -> 'c';
+    13 -> 'd';
+    14 -> 'e';
+    15 -> 'f';
+    _ -> error "Not a digit.";
+    ;
+
+/**
+ * Converts the character argument to uppercase using case mapping information
+ * from the Unicode Standard.
+ * 
+ * Note that {@code ({@link isUpperCase@} (toUpperCase ch))@} is not true for many characters (e.g. symbols, Han characters).
+ * 
+ * In general, {@link "Cal.Core.String.toUpperCase"@} should be used to map characters to uppercase.
+ * String case mapping functions have several benefits over character case mapping
+ * functions. String case mapping functions can perform locale-sensitive mappings,
+ * context-sensitive mappings, and 1:M character mappings, whereas the character case
+ * mapping functions cannot.
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to be converted.
+ * @return the uppercase equivalent of the character, if any; otherwise, the character itself.
+ * @see isUpperCase, "Cal.Core.String.toUpperCase"
+ */
+foreign unsafe import jvm "static method java.lang.Character.toUpperCase"
+    public toUpperCase :: Char -> Char;
+
+/**
+ * Converts the character argument to lowercase using case mapping information
+ * from the Unicode Standard.
+ * 
+ * Note that {@code ({@link isLowerCase@} (toLowerCase ch))@} is not true for many characters (e.g. symbols, Han characters).
+ * 
+ * In general, {@link "Cal.Core.String.toLowerCase"@} should be used to map characters to lowercase.
+ * String case mapping functions have several benefits over character case mapping
+ * functions. String case mapping functions can perform locale-sensitive mappings,
+ * context-sensitive mappings, and 1:M character mappings, whereas the character case
+ * mapping functions cannot.
+ * 
+ * Note: This function cannot handle supplementary Unicode characters, whose code points are above U+FFFF.
+ * 
+ * @arg charValue the character to be converted.
+ * @return the lowercase equivalent of the character, if any; otherwise, the character itself.
+ * @see isLowerCase, "Cal.Core.String.toLowerCase"
+ */
+foreign unsafe import jvm "static method java.lang.Character.toLowerCase"
+    public toLowerCase :: Char -> Char;   
+
+// Java constants that will be represented by Char.Type
+foreign unsafe import jvm "static field java.lang.Character.UNASSIGNED"
+    private jTYPE_UNASSIGNED :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.UPPERCASE_LETTER"
+    private jTYPE_UPPERCASE_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.LOWERCASE_LETTER"
+    private jTYPE_LOWERCASE_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.TITLECASE_LETTER"
+    private jTYPE_TITLECASE_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.MODIFIER_LETTER"
+    private jTYPE_MODIFIER_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_LETTER"
+    private jTYPE_OTHER_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.NON_SPACING_MARK"
+    private jTYPE_NON_SPACING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.ENCLOSING_MARK"
+    private jTYPE_ENCLOSING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.COMBINING_SPACING_MARK"
+    private jTYPE_COMBINING_SPACING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DECIMAL_DIGIT_NUMBER"
+    private jTYPE_DECIMAL_DIGIT_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.LETTER_NUMBER"
+    private jTYPE_LETTER_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_NUMBER"
+    private jTYPE_OTHER_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.SPACE_SEPARATOR"
+    private jTYPE_SPACE_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.LINE_SEPARATOR"
+    private jTYPE_LINE_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.PARAGRAPH_SEPARATOR"
+    private jTYPE_PARAGRAPH_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.CONTROL"
+    private jTYPE_CONTROL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.FORMAT"
+    private jTYPE_FORMAT :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.PRIVATE_USE"
+    private jTYPE_PRIVATE_USE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.SURROGATE"
+    private jTYPE_SURROGATE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DASH_PUNCTUATION"
+    private jTYPE_DASH_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.START_PUNCTUATION"
+    private jTYPE_START_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.END_PUNCTUATION"
+    private jTYPE_END_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.CONNECTOR_PUNCTUATION"
+    private jTYPE_CONNECTOR_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_PUNCTUATION"
+    private jTYPE_OTHER_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.MATH_SYMBOL"
+    private jTYPE_MATH_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.CURRENCY_SYMBOL"
+    private jTYPE_CURRENCY_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.MODIFIER_SYMBOL"
+    private jTYPE_MODIFIER_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_SYMBOL"
+    private jTYPE_OTHER_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.INITIAL_QUOTE_PUNCTUATION"
+    private jTYPE_INITIAL_QUOTE_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.FINAL_QUOTE_PUNCTUATION"
+    private jTYPE_FINAL_QUOTE_PUNCTUATION :: Byte;
+
+/**
+ * The {@code Char.Type@} enumeration provides symbolic constants that represent the
+ * Unicode category of a specified character.
+ */
+/*
+ * @implementation The order of the DCs is important.  In Java 1.5, these constants
+ * will be represented by an actual enumeration, and at that time we may want to 
+ * switch to using the enumeration values, which will be more convenient if we don't
+ * have to worry about ordering issues.
+ */   
+data public Type = 
+    /** General category "Cn" in the Unicode specification. */
+    public TYPE_UNASSIGNED |
+    
+    /** General category "Lu" in the Unicode specification. */ 
+    public TYPE_UPPERCASE_LETTER |
+    
+    /** General category "Ll" in the Unicode specification. */
+    public TYPE_LOWERCASE_LETTER |
+    
+    /** General category "Lt" in the Unicode specification. */
+    public TYPE_TITLECASE_LETTER |
+    
+    /** General category "Lm" in the Unicode specification. */
+    public TYPE_MODIFIER_LETTER |
+    
+    /** General category "Lo" in the Unicode specification. */
+    public TYPE_OTHER_LETTER |
+    
+    /** General category "Mn" in the Unicode specification. */
+    public TYPE_NON_SPACING_MARK |
+    
+    /** General category "Me" in the Unicode specification. */
+    public TYPE_ENCLOSING_MARK |
+    
+    /** General category "Mc" in the Unicode specification. */
+    public TYPE_COMBINING_SPACING_MARK |
+    
+    /** General category "Nd" in the Unicode specification. */
+    public TYPE_DECIMAL_DIGIT_NUMBER |
+    
+    /** General category "Nl" in the Unicode specification. */
+    public TYPE_LETTER_NUMBER |
+    
+    /** General category "No" in the Unicode specification. */
+    public TYPE_OTHER_NUMBER |
+    
+    /** General category "Zs" in the Unicode specification. */
+    public TYPE_SPACE_SEPARATOR |
+    
+    /** General category "Zl" in the Unicode specification. */
+    public TYPE_LINE_SEPARATOR |
+    
+    /** General category "Zp" in the Unicode specification. */
+    public TYPE_PARAGRAPH_SEPARATOR |
+    
+    /** General category "Cc" in the Unicode specification. */
+    public TYPE_CONTROL |
+    
+    /** General category "Cf" in the Unicode specification. */
+    public TYPE_FORMAT |
+    
+    /** General category "Co" in the Unicode specification. */
+    public TYPE_PRIVATE_USE |
+    
+    /** General category "Cs" in the Unicode specification. */
+    public TYPE_SURROGATE |
+    
+    /** General category "Pd" in the Unicode specification. */
+    public TYPE_DASH_PUNCTUATION |
+    
+    /** General category "Ps" in the Unicode specification. */
+    public TYPE_START_PUNCTUATION |
+    
+    /** General category "Pe" in the Unicode specification. */
+    public TYPE_END_PUNCTUATION |
+    
+    /** General category "Pc" in the Unicode specification. */
+    public TYPE_CONNECTOR_PUNCTUATION |
+    
+    /** General category "Po" in the Unicode specification. */
+    public TYPE_OTHER_PUNCTUATION |
+    
+    /** General category "Sm" in the Unicode specification. */
+    public TYPE_MATH_SYMBOL |
+    
+    /** General category "Sc" in the Unicode specification. */
+    public TYPE_CURRENCY_SYMBOL |
+    
+    /** General category "Sk" in the Unicode specification. */
+    public TYPE_MODIFIER_SYMBOL |
+    
+    /** General category "So" in the Unicode specification. */
+    public TYPE_OTHER_SYMBOL |
+    
+    /** General category "Pi" in the Unicode specification. */
+    public TYPE_INITIAL_QUOTE_PUNCTUATION |
+    
+    /** General category "Pf" in the Unicode specification. */
+    public TYPE_FINAL_QUOTE_PUNCTUATION
+    deriving Eq, Show;
+
+/**
+ * Inputs from a java.lang.Byte value and returns the corresponding {@code Type@} constant.
+ * The java.lang.Byte value must contain a byte that has the same value as one of
+ * the charType constants of the java.lang.Character class. 
+ */
+instance Inputable Type where
+    input = inputType;
+    ;
+
+/**
+ * Converts a {@code Type@} constant to a java.lang.Byte value containing a byte having the
+ * same value as the corresponding charType constant of the java.lang.Character class. 
+ */    
+instance Outputable Type where
+    output = outputType;
+    ;
+    
+inputType :: JObject -> Type;
+private inputType !objectValue =
+    intToType (Prelude.fromByte (input objectValue));
+    
+intToType :: Int -> Type;
+private intToType !intValue =
+    // 0 is the value of java.lang.Character.UNASSIGNED, 
+    // 1 is the value of java.lang.Character.UPPERCASE_LETTER, etc.
+    case intValue of
+    0 -> TYPE_UNASSIGNED;
+    1 -> TYPE_UPPERCASE_LETTER;
+    2 -> TYPE_LOWERCASE_LETTER;
+    3 -> TYPE_TITLECASE_LETTER;
+    4 -> TYPE_MODIFIER_LETTER;
+    5 -> TYPE_OTHER_LETTER;
+    6 -> TYPE_NON_SPACING_MARK;
+    7 -> TYPE_ENCLOSING_MARK;
+    8 -> TYPE_COMBINING_SPACING_MARK;
+    9 -> TYPE_DECIMAL_DIGIT_NUMBER;
+    10 -> TYPE_LETTER_NUMBER;
+    11 -> TYPE_OTHER_NUMBER;
+    12 -> TYPE_SPACE_SEPARATOR;
+    13 -> TYPE_LINE_SEPARATOR;
+    14 -> TYPE_PARAGRAPH_SEPARATOR;
+    15 -> TYPE_CONTROL;
+    16 -> TYPE_FORMAT;
+    18 -> TYPE_PRIVATE_USE;
+    19 -> TYPE_SURROGATE;
+    20 -> TYPE_DASH_PUNCTUATION;
+    21 -> TYPE_START_PUNCTUATION;
+    22 -> TYPE_END_PUNCTUATION;
+    23 -> TYPE_CONNECTOR_PUNCTUATION;
+    24 -> TYPE_OTHER_PUNCTUATION;
+    25 -> TYPE_MATH_SYMBOL;
+    26 -> TYPE_CURRENCY_SYMBOL;
+    27 -> TYPE_MODIFIER_SYMBOL;
+    28 -> TYPE_OTHER_SYMBOL;
+    29 -> TYPE_INITIAL_QUOTE_PUNCTUATION;
+    30 -> TYPE_FINAL_QUOTE_PUNCTUATION;
+    _ -> error "invalid Char.Type value";
+    ;
+    
+outputType :: Type -> JObject;
+private outputType !typeValue =
+    case typeValue of
+    TYPE_UNASSIGNED -> output jTYPE_UNASSIGNED;
+    TYPE_UPPERCASE_LETTER -> output jTYPE_UPPERCASE_LETTER;
+    TYPE_LOWERCASE_LETTER -> output jTYPE_LOWERCASE_LETTER;
+    TYPE_TITLECASE_LETTER -> output jTYPE_TITLECASE_LETTER;
+    TYPE_MODIFIER_LETTER -> output jTYPE_MODIFIER_LETTER;
+    TYPE_OTHER_LETTER -> output jTYPE_OTHER_LETTER;
+    TYPE_NON_SPACING_MARK -> output jTYPE_NON_SPACING_MARK;
+    TYPE_ENCLOSING_MARK -> output jTYPE_ENCLOSING_MARK;
+    TYPE_COMBINING_SPACING_MARK -> output jTYPE_COMBINING_SPACING_MARK;
+    TYPE_DECIMAL_DIGIT_NUMBER -> output jTYPE_DECIMAL_DIGIT_NUMBER;
+    TYPE_LETTER_NUMBER -> output jTYPE_LETTER_NUMBER;
+    TYPE_OTHER_NUMBER -> output jTYPE_OTHER_NUMBER;
+    TYPE_SPACE_SEPARATOR -> output jTYPE_SPACE_SEPARATOR;
+    TYPE_LINE_SEPARATOR -> output jTYPE_LINE_SEPARATOR;
+    TYPE_PARAGRAPH_SEPARATOR -> output jTYPE_PARAGRAPH_SEPARATOR;
+    TYPE_CONTROL -> output jTYPE_CONTROL;
+    TYPE_FORMAT -> output jTYPE_FORMAT;
+    TYPE_PRIVATE_USE -> output jTYPE_PRIVATE_USE;
+    TYPE_SURROGATE -> output jTYPE_SURROGATE;
+    TYPE_DASH_PUNCTUATION -> output jTYPE_DASH_PUNCTUATION;
+    TYPE_START_PUNCTUATION -> output jTYPE_START_PUNCTUATION;
+    TYPE_END_PUNCTUATION -> output jTYPE_END_PUNCTUATION;
+    TYPE_CONNECTOR_PUNCTUATION -> output jTYPE_CONNECTOR_PUNCTUATION;
+    TYPE_OTHER_PUNCTUATION -> output jTYPE_OTHER_PUNCTUATION;
+    TYPE_MATH_SYMBOL -> output jTYPE_MATH_SYMBOL;
+    TYPE_CURRENCY_SYMBOL -> output jTYPE_CURRENCY_SYMBOL;
+    TYPE_MODIFIER_SYMBOL -> output jTYPE_MODIFIER_SYMBOL;
+    TYPE_OTHER_SYMBOL -> output jTYPE_OTHER_SYMBOL;
+    TYPE_INITIAL_QUOTE_PUNCTUATION -> output jTYPE_INITIAL_QUOTE_PUNCTUATION;
+    TYPE_FINAL_QUOTE_PUNCTUATION -> output jTYPE_FINAL_QUOTE_PUNCTUATION;
+    ;
+    
+/**
+ * @arg charValue {@link typeConstructor = Char@} to classify
+ * @return an Int value that can be translated to a Type value by {@link intToType @}
+ */
+foreign unsafe import jvm "static method java.lang.Character.getType"
+    jType :: Char -> Int;
+
+/**
+ * @arg charValue {@link typeConstructor = Char@} to classify
+ * @return a {@link Type @} value representing the type of the provided {@link typeConstructor = Char@}
+ */
+type :: Char -> Type;
+public type !charValue =
+    intToType (jType charValue);
+
+/* @example */
+typeExamples :: Boolean;
+typeExamples =
+    assert (type 'l' == TYPE_LOWERCASE_LETTER) &&
+    assert (type 'L' == TYPE_UPPERCASE_LETTER) &&
+    assert (type '0' == TYPE_DECIMAL_DIGIT_NUMBER) &&
+    assert (type ' ' == TYPE_SPACE_SEPARATOR) &&
+    assert (type '$' == TYPE_CURRENCY_SYMBOL);
+
+// Java constants that will be represented by Char.Directionality
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_UNDEFINED" 
+    private jDIRECTIONALITY_UNDEFINED :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_LEFT_TO_RIGHT" 
+    private jDIRECTIONALITY_LEFT_TO_RIGHT :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT_ARABIC :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_EUROPEAN_NUMBER" 
+    private jDIRECTIONALITY_EUROPEAN_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR" 
+    private jDIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR" 
+    private jDIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_ARABIC_NUMBER" 
+    private jDIRECTIONALITY_ARABIC_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_COMMON_NUMBER_SEPARATOR" 
+    private jDIRECTIONALITY_COMMON_NUMBER_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_NONSPACING_MARK" 
+    private jDIRECTIONALITY_NONSPACING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_BOUNDARY_NEUTRAL" 
+    private jDIRECTIONALITY_BOUNDARY_NEUTRAL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_PARAGRAPH_SEPARATOR" 
+    private jDIRECTIONALITY_PARAGRAPH_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_SEGMENT_SEPARATOR" 
+    private jDIRECTIONALITY_SEGMENT_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_WHITESPACE" 
+    private jDIRECTIONALITY_WHITESPACE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_OTHER_NEUTRALS" 
+    private jDIRECTIONALITY_OTHER_NEUTRALS :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING" 
+    private jDIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE" 
+    private jDIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_POP_DIRECTIONAL_FORMAT" 
+    private jDIRECTIONALITY_POP_DIRECTIONAL_FORMAT :: Byte;
+
+/**
+ * Symbolic constants that represent the java.lang.Character Unicode directionality
+ * constants. 
+ */
+/*
+ * @implementation The order of the DCs is important.  In Java 1.5, these constants
+ * will be represented by an actual enumeration, and at that time we may want to 
+ * switch to using the enumeration values, which will be more convenient if we don't
+ * have to worry about ordering issues.
+ */   
+data public Directionality =
+    /** Undefined bidirectional character type. */
+    public DIRECTIONALITY_UNDEFINED |
+    
+    /** Strong bidirectional character type "L" in the Unicode specification. */
+    public DIRECTIONALITY_LEFT_TO_RIGHT |
+    
+    /** Strong bidirectional character type "R" in the Unicode specification. */
+    public DIRECTIONALITY_RIGHT_TO_LEFT |
+    
+    /** Strong bidirectional character type "AL" in the Unicode specification. */
+    public DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC |
+    
+    /** Weak bidirectional character type "EN" in the Unicode specification. */
+    public DIRECTIONALITY_EUROPEAN_NUMBER |
+    
+    /** Weak bidirectional character type "ES" in the Unicode specification. */
+    public DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR |
+    
+    /** Weak bidirectional character type "ET" in the Unicode specification. */ 
+    public DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR |
+    
+    /** Weak bidirectional character type "AN" in the Unicode specification. */
+    public DIRECTIONALITY_ARABIC_NUMBER |
+    
+    /** Weak bidirectional character type "CS" in the Unicode specification. */
+    public DIRECTIONALITY_COMMON_NUMBER_SEPARATOR |
+    
+    /** Weak bidirectional character type "NSM" in the Unicode specification. */
+    public DIRECTIONALITY_NONSPACING_MARK |
+    
+    /** Weak bidirectional character type "BN" in the Unicode specification. */
+    public DIRECTIONALITY_BOUNDARY_NEUTRAL |
+    
+    /** Neutral bidirectional character type "B" in the Unicode specification. */
+    public DIRECTIONALITY_PARAGRAPH_SEPARATOR |
+    
+    /** Neutral bidirectional character type "S" in the Unicode specification. */
+    public DIRECTIONALITY_SEGMENT_SEPARATOR |
+    
+    /** Neutral bidirectional character type "WS" in the Unicode specification. */
+    public DIRECTIONALITY_WHITESPACE |
+    
+    /** Neutral bidirectional character type "ON" in the Unicode specification. */
+    public DIRECTIONALITY_OTHER_NEUTRALS |
+    
+    /** Strong bidirectional character type "LRE" in the Unicode specification. */
+    public DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING |
+    
+    /** Strong bidirectional character type "LRO" in the Unicode specification. */
+    public DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE |
+    
+    /** Strong bidirectional character type "RLE" in the Unicode specification. */
+    public DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING |
+    
+    /** Strong bidirectional character type "RLO" in the Unicode specification. */
+    public DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE |
+    
+    /** Weak bidirectional character type "PDF" in the Unicode specification. */
+    public DIRECTIONALITY_POP_DIRECTIONAL_FORMAT
+    deriving Eq, Show;
+    
+/**
+ * Inputs from a java.lang.Byte value and returns the corresponding {@code Directionality@} constant.
+ * The java.lang.Byte value must contain a byte that has the same value as one of
+ * the directionality constants of the java.lang.Character class. 
+ */
+instance Inputable Directionality where
+    input = inputDirectionality;
+    ;
+    
+/**
+ * Converts a {@code Directionality@} constant to a java.lang.Byte value containing a byte having the
+ * same value as the corresponding directionality constant of the java.lang.Character class. 
+ */    
+instance Outputable Directionality where
+    output = outputDirectionality;
+    ;
+
+inputDirectionality :: JObject -> Directionality;
+private inputDirectionality !objectValue =
+    byteToDirectionality (input objectValue);
+
+byteToDirectionality :: Byte -> Directionality;
+private byteToDirectionality !byteValue =
+    // -1 is the value of java.lang.Character.DIRECTIONALITY_UNDEFINED, 
+    // 0 is the value of java.lang.Character.DIRECTIONALITY_LEFT_TO_RIGHT, etc.
+    case Prelude.toInt byteValue of
+    -1 -> DIRECTIONALITY_UNDEFINED;
+    0 -> DIRECTIONALITY_LEFT_TO_RIGHT;
+    1 -> DIRECTIONALITY_RIGHT_TO_LEFT;
+    2 -> DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC;
+    3 -> DIRECTIONALITY_EUROPEAN_NUMBER;
+    4 -> DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR;
+    5 -> DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR;
+    6 -> DIRECTIONALITY_ARABIC_NUMBER;
+    7 -> DIRECTIONALITY_COMMON_NUMBER_SEPARATOR;
+    8 -> DIRECTIONALITY_NONSPACING_MARK;
+    9 -> DIRECTIONALITY_BOUNDARY_NEUTRAL;
+    10 -> DIRECTIONALITY_PARAGRAPH_SEPARATOR;
+    11 -> DIRECTIONALITY_SEGMENT_SEPARATOR;
+    12 -> DIRECTIONALITY_WHITESPACE;
+    13 -> DIRECTIONALITY_OTHER_NEUTRALS;
+    14 -> DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING;
+    15 -> DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE;
+    16 -> DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING;
+    17 -> DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE;
+    18 -> DIRECTIONALITY_POP_DIRECTIONAL_FORMAT;
+    _ -> error "invalid Directionality value";
+    ;
+    
+outputDirectionality :: Directionality -> JObject;
+private outputDirectionality !directionalityValue =
+    case directionalityValue of
+    DIRECTIONALITY_UNDEFINED -> output jDIRECTIONALITY_UNDEFINED;
+    DIRECTIONALITY_LEFT_TO_RIGHT -> output jDIRECTIONALITY_LEFT_TO_RIGHT;
+    DIRECTIONALITY_RIGHT_TO_LEFT -> output jDIRECTIONALITY_RIGHT_TO_LEFT;
+    DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC -> output jDIRECTIONALITY_RIGHT_TO_LEFT_ARABIC;
+    DIRECTIONALITY_EUROPEAN_NUMBER -> output jDIRECTIONALITY_EUROPEAN_NUMBER;
+    DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR -> output jDIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR;
+    DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR -> output jDIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR;
+    DIRECTIONALITY_ARABIC_NUMBER -> output jDIRECTIONALITY_ARABIC_NUMBER;
+    DIRECTIONALITY_COMMON_NUMBER_SEPARATOR -> output jDIRECTIONALITY_COMMON_NUMBER_SEPARATOR;
+    DIRECTIONALITY_NONSPACING_MARK -> output jDIRECTIONALITY_NONSPACING_MARK;
+    DIRECTIONALITY_BOUNDARY_NEUTRAL -> output jDIRECTIONALITY_BOUNDARY_NEUTRAL;
+    DIRECTIONALITY_PARAGRAPH_SEPARATOR -> output jDIRECTIONALITY_PARAGRAPH_SEPARATOR;
+    DIRECTIONALITY_SEGMENT_SEPARATOR -> output jDIRECTIONALITY_SEGMENT_SEPARATOR;
+    DIRECTIONALITY_WHITESPACE -> output jDIRECTIONALITY_WHITESPACE;
+    DIRECTIONALITY_OTHER_NEUTRALS -> output jDIRECTIONALITY_OTHER_NEUTRALS;
+    DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING -> output jDIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING;
+    DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE -> output jDIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE;
+    DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING -> output jDIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING;
+    DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE -> output jDIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE;
+    DIRECTIONALITY_POP_DIRECTIONAL_FORMAT -> output jDIRECTIONALITY_POP_DIRECTIONAL_FORMAT;
+    ;
+
+/**
+ * @return a {@link Byte @} value that can be translated to a {@link Directionality @} value
+ *          using {@link byteToDirectionality @}.
+ * @arg charValue the {@link typeConstructor = Char@} to classify 
+ */
+foreign unsafe import jvm "static method java.lang.Character.getDirectionality"
+    private jDirectionality :: Char -> Byte;
+
+/**
+ * @return a {@link Directionality @} value that represents the directionality of charValue.
+ * @arg charValue the {@link typeConstructor = Char@} to classify 
+ */
+directionality :: Char -> Directionality;
+public directionality !charValue =
+    byteToDirectionality (jDirectionality charValue);
+
+/* @example */
+directionalityExamples :: Boolean;
+directionalityExamples =
+    assert (directionality 'c' == DIRECTIONALITY_LEFT_TO_RIGHT) &&
+    assert (directionality ' ' == DIRECTIONALITY_WHITESPACE) &&
+    assert (directionality '\n' == DIRECTIONALITY_PARAGRAPH_SEPARATOR);
+            
+/* @test */
+testModule :: Boolean;
+public testModule =
+    assert directionalityExamples &&
+    assert typeExamples;

@@ -1,0 +1,541 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Record_Tests.cal
+ * Creation date: January 11, 2007.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for the {@link module = Record@} module. Some
+ * other tests for general record functionality are in the {@link module =
+ * "Cal.Test.General.RecordTests"@} module.
+ *
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Record_Tests;
+import Cal.Core.Prelude using
+    typeClass =
+        Enum, Eq, Inputable, IntEnum, Num, Ord, Outputable, Typeable, Bounded,
+        Appendable;
+    typeConstructor =
+        Boolean, Byte, CalFunction, CalValue, Char, Decimal, Double, Either,
+        Float, Int, Integer, JList, JObject, Long, Maybe, Ordering, Short,
+        String, Unit;
+    dataConstructor = False, True, Left, Right, Nothing, Just, LT, EQ, GT;
+    function =
+        abs, add, asTypeOf, assert, compare, eager, equals, error,
+        evaluateCalFunction, fromByte, fromDecimal, fromDouble, fromFloat,
+        fromInt, fromInteger, fromLong, fromShort, fst, input, integerToString,
+        makeCalFunction, max, min, negate, not, notANumber, output,
+        powerInteger, seq, signum, stringToDecimal, stringToInteger, toByte,
+        toDouble, toFloat, toInt, toLong, toShort, typeOf, undefined,
+        unsafeCoerce, upFromTo, field2, minBound, maxBound, append;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Collections.List using
+    function = fromJCollection, join;
+    ;
+
+import Cal.Core.Record using
+    typeConstructor = Dictionary;
+    function =
+        unsafeBuildList, unsafeBuildRecord, fieldNames, strictRecord, toTuple2,
+        unsafeBuildRecordFromList, unsafeBuildListFromRecord;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Gen, Property, Result;
+    function =
+        arbitrary, classify, coarbitrary, forAll, generate, implies,
+        makeChooseOneOfGen, makeDefaultGenParams, makeGen, mapGen, quickCheck,
+        summarize, testResults, defaultConfig;
+    ;
+
+//tests the functionality of converting a CAL record to a Java map (of FieldName
+//to Object) and vice-versa
+testRecordToMap =
+    let
+        //do a round trip through Java maps
+        rt :: (Outputable r, Inputable r) => {r} -> {r};
+        rt !r =
+            Record.fromJMap
+                (Record.jRecordValueToJMap (Record.toJRecordValue r))
+            ;
+
+        empty = {};
+        tuple = (2.0, Just "abc", True);
+        ordinal = {#2 = "Hello", #100 = 3.0, #99 = Just ()};
+        tupleMixed =
+            {
+                #1 = 10 :: Int,
+                #2 = [20.0, 4.0],
+                name = "Cora",
+                around = False
+            }
+            ;
+        mixed =
+            {
+                #2 = "Hello",
+                #100 = 3.0,
+                #99 = Just (),
+                name = "apple",
+                fruit = True,
+                cost = 10.0
+            }
+            ;
+        textual = {name = "apple", fruit = True, cost = [10.0]};
+    in
+        assert (rt empty == empty)
+        && assert (rt tuple == tuple)
+        && assert (rt ordinal == ordinal)
+        && assert (rt tupleMixed == tupleMixed)
+        && assert (rt mixed == mixed)
+        && assert (rt textual == textual)
+    ;
+
+testRecordFunctions :: Boolean;
+private testRecordFunctions =
+    assert (toTuple2 ("abc", 2.0, 'a', False, Just 10.0) == ("abc", 2.0))
+    && assert (toTuple2 (Just "foo", LT, 200.0) == (Just "foo", LT))
+    && assert (field2 ("abc", 2.0, 'a', False, Just 10.0) == 2.0)
+    && assert (field2 (Just "foo", Just GT, 200.0) == Just GT)
+    ;
+
+////////////////////////////////////////////////////////////////////////////////////
+
+data foreign unsafe import jvm "java.util.ArrayList"
+    JArrayList deriving Inputable, Outputable;
+foreign unsafe import jvm "constructor" arrayList_new :: JArrayList;
+foreign unsafe import jvm "method add"
+    arrayList_add :: JArrayList -> JObject -> Boolean;
+foreign unsafe import jvm "method size" arrayList_size :: JArrayList -> Int;
+
+testStrictRecord =
+    let
+        list = arrayList_new;
+
+        markValue :: Outputable a => a -> a;
+        markValue val =
+            arrayList_add list (output val)
+            `seq`
+            val
+            ;
+
+        strictTextualRecord =
+            strictRecord
+                {
+                    name = markValue "apple",
+                    fruit = markValue True,
+                    cost = markValue [10.0]
+                }
+            ;
+
+        textualRecord =
+            {
+                name = markValue "pear",
+                fruit = markValue False,
+                cost = markValue [20.0, 5]
+            }
+            ;
+    in
+        //force the fields of strictTextualRecord in reverse field-name order
+        strictTextualRecord.name
+        `seq`
+        strictTextualRecord.fruit
+        `seq`
+        strictTextualRecord.cost
+        `seq`
+        //force the fields of textualRecord in reverse field-name order
+        textualRecord.name
+        `seq`
+        textualRecord.fruit
+        `seq`
+        textualRecord.cost
+        `seq`
+        //the strictTextualRecord will have the fields evaluated to WHNF in field-name
+        //order,
+        //the textualRecord will have the fields evaluated to WHNF in the order in
+        //which they were explored.
+        assert
+            (
+                input (output list)
+                == ([10.0], True, "apple", "pear", False, [20.0, 5])
+            )
+    ;
+
+testStrictRecord2 =
+    let
+        list1 = arrayList_new;
+        list2 = arrayList_new;
+
+        markValue :: JArrayList -> a -> a;
+        markValue list val =
+            arrayList_add list (output 100.0)
+            `seq`
+            val
+            ;
+
+        strictOrdinalRecord =
+            strictRecord
+                {
+                    #2 = markValue list1 "Hello",
+                    #100 = markValue list1 [error "eek", 10.0],
+                    #99 = markValue list1 (Just ())
+                }
+            ;
+
+        ordinalRecord =
+            {
+                #2 = markValue list2 "Hello",
+                #100 = markValue list2 [error "eek", 10.0],
+                #99 = markValue list2 (Just ())
+            }
+            ;
+    in
+
+        strictOrdinalRecord.#100
+            `seq`
+            ordinalRecord.#100
+            `seq`
+            //all fields of strictOrdinalRecord are evaluated to WHNF when one is.
+            //Note however, we do not evaluate past WHNF since error "eek" is not called.
+            assert (arrayList_size list1 == 3)
+        //only field #100 is evaluated in ordinalRecord
+        && assert (arrayList_size list2 == 1)
+    ;
+
+/**
+ * This function demonstrates how to get the dictionary for the
+ * Debug.Show show class method.
+ */
+showDict :: Show r => {r} -> Dictionary {r};
+showDict r = Record.dictionary r "show";
+
+/**
+ * This function demonstrates how to get the dictionary for the
+ * Prelude.Num toInt class method.
+ */
+numDict :: Num r => {r} -> Dictionary {r};
+numDict r = Record.dictionary r "toInt";
+
+/**
+ * This record is in some of the following tests
+ */
+rec :: {x :: Double, y :: Int, z :: String};
+rec = {x = 1.0, y = 2 :: Prelude.Int, z = "cat"};
+
+numRec :: {x :: Double, y :: Int, z :: Double};
+numRec = {x = 1.0, y = 1 :: Prelude.Int, z = 1.5};
+
+/**
+ * here we define a method using a typeclass of which record is not an
+ * instance. This method will accept any record that contains only number
+ * fields, convert them to integers and sum them.
+ */
+sumR :: Num a => {a} -> Int;
+sumR r = List.sum (unsafeBuildListFromRecord (Record.dictionary r "toInt") r);
+
+//here we show how to implement the Debug.Show instance
+public class Show a => Display a where
+    public display :: a -> String
+        default  displayDefault;
+    ;
+
+displayDefault :: Display a => a -> String;
+displayDefault a = show a;
+
+instance Display String where
+    ;
+instance Display Int where
+    ;
+instance Display Double where
+    ;
+
+instance Display r => Display {r} where
+    display = displayRecord;
+    ;
+
+/**
+ * This method prints a record to a string in the same format used by the
+ * Debug.show. The difference is that this implementation does not use special
+ * primitive functions.
+ */
+displayRecord :: Display a => {a} -> String;
+displayRecord r =
+    "{"
+    ++
+    (List.join
+        ", "
+        (List.zipWith
+            (\name value -> name ++ " = " ++ value)
+            (fieldNames r)
+            (unsafeBuildList (Record.dictionary r "display") {#1 = r})
+        )
+    )
+    ++ "}"
+    ;
+
+/** Test that the record display and show are equivalent */
+testDisplay :: {x :: Int, xs :: String, adsf :: Double, nested :: {x::Int} } -> Boolean;
+testDisplay r = (display r) == (show r);
+
+
+/**
+ * Test implmentation of Eq.equals for record
+ */
+equalsRecord :: Prelude.Eq r => {r} -> {r} -> Boolean;
+equalsRecord r1 r2 =
+    List.andList
+        (unsafeBuildList (Record.dictionary r1 "equals") (r1, r2))
+    ;
+
+/**
+ * Test  implmentation of minBound for records
+ */
+minRecord :: Bounded r => {r}; 
+minRecord =
+    let
+        r = undefined;
+    in
+        unsafeBuildRecord (Record.dictionary r "minBound") {}
+    ;
+
+/**
+ * This function duplicates the primitive record input function for list of
+ * objects
+ */
+inputRecord :: Inputable r => JObject -> {r};
+inputRecord record =
+    let
+        r = undefined;
+    in
+        if isJList record then
+            unsafeBuildRecord
+                (Record.dictionary r "input")
+                {#1 = ((input record) :: [JObject])}
+        else
+            error
+                "This only supports java.util.List."
+    ;
+
+foreign unsafe import jvm "instanceof java.util.List"
+    private isJList :: JObject -> Boolean;
+
+
+
+/** test adding the fields in two records
+ * the extra ord constraint on r is just to check multiple constraints
+ */
+addRecords :: (Num r, Ord r) => {r} -> {r} -> {r};
+addRecords r1 r2 = 
+    let
+        /** get the Num.add dictionary for a record */
+        addDict :: Num r => {r} -> Dictionary {r};
+        addDict r = Record.dictionary r "add";
+    in
+        unsafeBuildRecord (addDict r1) (r1, r2);
+
+/** This function duplicated the output record function */
+outputRecord :: Outputable r => {r} -> JObject;
+outputRecord r =
+    output ((unsafeBuildListFromRecord (Record.dictionary r "output") r) :: [JObject])
+    ;
+
+/** this appends the pairs of record fields to create a new record */
+appendRecords :: Appendable r => {r} -> {r} -> {r};
+appendRecords r1 r2 =
+    unsafeBuildRecord (Record.dictionary r1 "append") (r1, r2);
+
+/** Test implmenting the Ord.compare for records */
+compareRecords :: Ord r => {r} -> {r} -> Ordering;
+compareRecords r1 r2 = 
+    let
+        fold comp = 
+            case comp of
+                a : b ->
+                    if (a == EQ) then
+                        fold b
+                    else
+                        a;
+                [] ->
+                    EQ;
+            ;
+    in
+        fold (unsafeBuildList (Record.dictionary r1 "compare") (r1, r2))
+    ;
+
+
+/**
+ * here we implement a method that can construct a num record from a list of
+ * integers:
+ */
+makeNumRecord :: Num r => [Int] -> {r};
+makeNumRecord values =
+    let
+        //we don't have an actual record but the type is what we need
+        r = undefined;
+    in
+        (unsafeBuildRecordFromList (Record.dictionary r "fromInt") (values))
+    ;
+
+
+/** implement QuickCheck coarbitrary method without using primitive methods */
+coArbitraryRecord :: Arbitrary r => {r} -> Gen a -> Gen a;
+coArbitraryRecord r gen =
+    let
+        dict :: Arbitrary r => {r} -> Dictionary {r};
+        dict r = Record.dictionary r "coarbitrary";
+
+        //convert the record to a list of partially applied coArbitrary functions
+        recList :: [Gen a -> Gen a];
+        recList = unsafeBuildList (dict r) r;
+    in
+        //fold a generator through the list of partially applied coArb functions
+        List.foldLeft (\a b -> b a) gen recList
+    ;
+
+
+/** implement QuickCheck arbitrary method. */
+arbitraryRecord :: Arbitrary r => QuickCheck.GenParams -> {r};
+arbitraryRecord gen =
+    let
+        //we don't have an actual record but the type is what we need
+        r = undefined;
+
+        //this replicates the procedure used by the primitive arbitrary record
+        //function
+        //to make different gen params for each of the record fields.
+        makeGenList !gen !i =
+            let
+                this = QuickCheck.nthGenParams i gen;
+            in
+                this : makeGenList this (i + (1 :: Int))
+            ;
+    in
+
+        (unsafeBuildRecordFromList
+            (Record.dictionary r "generateInstance")
+            (makeGenList gen 0)
+        )
+    ;
+
+/** performance test for creating n arbitrary records using primitive 
+ * implmentation*/
+makeRecordsPrim :: Int -> ();
+makeRecordsPrim n =
+    if (n == 0) then
+        ()
+    else
+        (
+            QuickCheck.arbitraryRecordPrimitive
+                makeDefaultGenParams
+                QuickCheck.nthGenParams
+                ::
+                {
+                    x :: Int,
+                    y :: Prelude.Boolean,
+                    xs :: String,
+                    adsf :: [Int]
+                }
+        )
+        `Prelude.seq`
+        makeRecordsPrim (n - 1)
+    ;
+
+/** This is the same test, but the non-primitive version is used instead. */
+makeRecordsNonPrim :: Int -> ();
+makeRecordsNonPrim n =
+    if (n == 0) then
+        ()
+    else
+        (
+            arbitraryRecord makeDefaultGenParams
+                ::
+                {
+                    x :: Int,
+                    y :: Prelude.Boolean,
+                    xs :: String,
+                    adsf :: [Int]
+                }
+        )
+        `Prelude.seq`
+        makeRecordsNonPrim (n - 1)
+    ;
+
+////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    assert testRecordToMap
+    && assert testRecordFunctions
+    && assert testStrictRecord
+    && assert testStrictRecord2
+    && assert (quickCheck testDisplay)
+    && assert (sumR {a = 1.0, b = 2 :: Int, c = 3 :: Prelude.Byte} == 6)
+    &&
+    (
+        (
+            QuickCheck.generate makeDefaultGenParams arbitrary
+                ::
+                {
+                    x :: Int,
+                    y :: Prelude.Boolean,
+                    xs :: String,
+                    adsf :: [Int]
+                }
+        )
+        == arbitraryRecord makeDefaultGenParams
+    )
+    && inputRecord (output rec) == rec
+    && input (outputRecord rec) == rec
+    && appendRecords
+        {s = "cat", t = ["batman"]}
+        {s = "fish", t = ["robin"]}
+        == {s = "catfish", t = ["batman", "robin"]}
+    && addRecords {a = 1.0, b = 2.0} {a = 3.0, b = 1.0}
+        == {a = 4.0, b = 3.0}
+    && compareRecords (5.0, 5.0) (5.0,5.1) == LT
+    && compareRecords (5.0, 5.0) (5.0,5.0) == EQ
+    && compareRecords (5.1, undefined) (5.0,5.0) == GT
+    && compareRecords (5.1, 5.0) (5.0, undefined) == GT
+    && equalsRecord (5.1, 5.0) (5.0, undefined) == False
+    && equalsRecord (5.0, "cat") (5.0, "cat") == True                                                   
+    ;
+//please leave testModule last!
+

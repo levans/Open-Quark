@@ -1,0 +1,127 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CAL_Platform_bindings.script
+ * Created: Oct. 25, 2006 
+ * By: rcypher
+ */
+
+// This ICE script can be used to generate Java binding classes for the public
+// and non-public members of the non-test modules in the CAL_Platform project.
+// NOTE:  This script should be updated when non-test CAL modules are added to
+// or removed from the project.
+
+// Load the workspace containing all the non-test modules in CAL_Platform
+:ldw cal.platform.bindings.cws
+
+
+// Generate the binding files for public and non-public entities.
+// The public entity binding files are placed in the package
+// org.openquark.cal.module and the non-public entity
+// binding files are placed in org.openquark.cal.internal.module.
+// The exceptions to this are the Optimizer... modules.  For these both
+// the public and non-public entity binding files are placed in the 
+// org.openquark.cal.internal.module package.
+
+// Generate binding files for the public entities.
+:javaBinding Cal.Collections.Array org.openquark.cal.module
+:javaBinding Cal.Collections.ArrayPrimitives org.openquark.cal.module
+:javaBinding Cal.Core.Bits org.openquark.cal.module
+:javaBinding Cal.Core.Record org.openquark.cal.module
+:javaBinding Cal.Core.Char org.openquark.cal.module
+:javaBinding Cal.Core.Debug org.openquark.cal.module
+:javaBinding Cal.Utilities.Decimal org.openquark.cal.module
+:javaBinding Cal.Core.Dynamic org.openquark.cal.module
+:javaBinding Cal.Core.Exception org.openquark.cal.module
+:javaBinding Cal.Collections.IntMap org.openquark.cal.module
+:javaBinding Cal.Collections.List org.openquark.cal.module
+:javaBinding Cal.Utilities.Locale org.openquark.cal.module
+:javaBinding Cal.Collections.LongMap org.openquark.cal.module
+:javaBinding Cal.Collections.Map org.openquark.cal.module
+:javaBinding Cal.Utilities.Math org.openquark.cal.module
+:javaBinding Cal.Core.Memoize org.openquark.cal.module
+:javaBinding Cal.Utilities.MessageFormat org.openquark.cal.module
+:javaBinding Cal.Internal.Optimizer_Expression org.openquark.cal.internal.module
+:javaBinding Cal.Internal.Optimizer_State org.openquark.cal.internal.module
+:javaBinding Cal.Internal.Optimizer_Transformations org.openquark.cal.internal.module
+:javaBinding Cal.Internal.Optimizer_Traversers org.openquark.cal.internal.module
+:javaBinding Cal.Internal.Optimizer_Type org.openquark.cal.internal.module
+:javaBinding Cal.Internal.Optimizer org.openquark.cal.internal.module
+:javaBinding Cal.Core.Prelude org.openquark.cal.module
+:javaBinding Cal.Utilities.QuickCheck org.openquark.cal.module
+:javaBinding Cal.Utilities.Random org.openquark.cal.module
+:javaBinding Cal.Core.Resource org.openquark.cal.module
+:javaBinding Cal.Collections.Set org.openquark.cal.module
+:javaBinding Cal.Core.String org.openquark.cal.module
+:javaBinding Cal.Utilities.StringNoCase org.openquark.cal.module
+:javaBinding Cal.Utilities.StringProperties org.openquark.cal.module
+:javaBinding Cal.Core.System org.openquark.cal.module
+:javaBinding Cal.Utilities.TimeZone org.openquark.cal.module
+:javaBinding Cal.Utilities.QuickCheck org.openquark.cal.module
+
+// Generate binding files for the non-public entities.
+:javaBinding Cal.Collections.Array org.openquark.cal.internal.module internal
+:javaBinding Cal.Collections.ArrayPrimitives org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Bits org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Record org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Char org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Debug org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.Decimal org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Dynamic org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Exception org.openquark.cal.internal.module internal
+:javaBinding Cal.Collections.IntMap org.openquark.cal.internal.module internal
+:javaBinding Cal.Collections.List org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.Locale org.openquark.cal.internal.module internal
+:javaBinding Cal.Collections.LongMap org.openquark.cal.internal.module internal
+:javaBinding Cal.Collections.Map org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.Math org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Memoize org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.MessageFormat org.openquark.cal.internal.module internal
+:javaBinding Cal.Internal.Optimizer_Expression org.openquark.cal.internal.module internal
+:javaBinding Cal.Internal.Optimizer_State org.openquark.cal.internal.module internal
+:javaBinding Cal.Internal.Optimizer_Transformations org.openquark.cal.internal.module internal
+:javaBinding Cal.Internal.Optimizer_Traversers org.openquark.cal.internal.module internal
+:javaBinding Cal.Internal.Optimizer_Type org.openquark.cal.internal.module internal
+:javaBinding Cal.Internal.Optimizer org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Prelude org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.QuickCheck org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.Random org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.Resource org.openquark.cal.internal.module internal
+:javaBinding Cal.Collections.Set org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.String org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.StringNoCase org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.StringProperties org.openquark.cal.internal.module internal
+:javaBinding Cal.Core.System org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.TimeZone org.openquark.cal.internal.module internal
+:javaBinding Cal.Utilities.QuickCheck org.openquark.cal.internal.module internal
+

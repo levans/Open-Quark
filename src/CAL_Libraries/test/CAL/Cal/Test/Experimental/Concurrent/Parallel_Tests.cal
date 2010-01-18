@@ -1,0 +1,412 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Parallel_Tests.cal
+ * Creation date: July 10, 2007
+ */
+
+/**
+ * Tests for the parallel evaluation primitives.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Experimental.Concurrent.Parallel_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor =
+        Boolean, CalValue, Int, JObject, CalFunction, Long, String;
+    typeClass = Outputable;
+    function =
+        abs, assert, error, negate, seq, strictTuple2, unsafeCoerce, output, input;
+    ;
+import Cal.Experimental.Concurrent.Parallel using
+    function = parallelTuple2, parallelMap, par;
+    ;
+import Cal.Experimental.Concurrent.BoundedParallel using
+    function = cpuBoundParallelMap;
+    ;
+import Cal.Core.Debug using
+    function = show;
+    ;
+import Cal.Collections.List using
+    function = last, subscript, sum;
+    ;
+import Cal.Utilities.Math;
+import Cal.Test.CAL_Platform_TestSuite;
+import Cal.Core.System;
+
+/////////////////////////////////////////////////
+/*
+On my single-processor, dual-core machine, test1 10000 is a bit faster (20% or so) than test2 10000, even though test2 is using
+100% of the processor (according to the Windows Task Manager) while test1 is using 50%. 
+*/
+
+test1 :: Int -> (Int, Int);
+test1 !n = (getNthPrime n, getNthPrime n);
+    
+ptest1 :: Int -> (Int, Int);
+ptest1 !n = parallelTuple2 (getNthPrime n, getNthPrime n);
+
+pmaptest1 :: ((Int -> Int) -> [Int] -> [Int]) -> Int -> Int -> [Int];
+pmaptest1 mapFn n numThreads = mapFn getNthPrime (List.replicate numThreads n);
+
+//the getNthPrime benchmark. This function (along with its dependees) was mostly written in the GemCutter and is a direct
+//translation of a simple imperative program to calculate prime numbers. 
+//Note that getNthPrime 0 = 2, getNthPrime 1 = 3, ...
+
+nonMultiple :: Int -> Int -> Boolean;
+private nonMultiple arg arg_1 = (Prelude.remainder arg arg_1) != (0 :: Int);
+
+isPrime :: Int -> Boolean;
+isPrime arg =
+    let
+          nToTest = arg;
+    in
+          List.andList (List.map (nonMultiple nToTest) (Prelude.upFromTo (2 :: Int) (Prelude.round (Math.sqrt (Prelude.fromInt nToTest)))));
+
+getNthPrime :: Int -> Int ;
+public getNthPrime n =
+    if n == 0 then
+        2
+    else if n < 0 then
+        Prelude.error "getNthPrime: n must be >= 0."
+    else
+        List.subscript (List.filter isPrime (Prelude.upFromThen (3 :: Int) (5 :: Int))) (n - 1);
+
+/////////////////////////////////////////////////
+
+//a basic test that concurrency is happening. Note the interleaving of thread dumps on the console (when n = 10000)
+
+countDownTrace :: String -> Int -> ();
+countDownTrace message n =
+    if n % 1000 == 0 then
+        Debug.trace (message ++ " n = " ++ show n ++ "\n")
+        (
+            if n == 0 then 
+                ()
+            else
+               countDownTrace message (n - 1) 
+        )
+    else
+        countDownTrace message (n - 1);
+
+test2 n = (countDownTrace "thread1" n, countDownTrace "thread2" n);
+
+ptest2 n = parallelTuple2 (countDownTrace "thread1" n, countDownTrace "thread2" n);
+
+pmaptest2 :: ((Int -> ()) -> [Int] -> [()]) -> Int -> Int -> [()];
+pmaptest2 mapFn n numThreads =
+    mapFn (\i -> countDownTrace ("thread" ++ Debug.show i) n) (Prelude.upFromTo 1 numThreads);
+
+/////////////////////////////////////////////////
+//Indeed it is the case that parallelizing sleeping works (test3 2000 takes 4 seconds, ptest3 2000 takes 2 seconds).
+
+test3 n = (Debug.sleep n "fst", Debug.sleep n "snd");
+
+ptest3 n = parallelTuple2 (Debug.sleep n "fst", Debug.sleep n "snd");
+
+/////////////////////////////////////////////////
+
+sumTo :: Long -> Long;
+sumTo n = List.sum (Prelude.upFromTo 1 n);
+
+//both the left and right hand computations are independent, but take the same amount of time roughly (2.5 seconds each)
+test4 ignored = (getNthPrime 10000, sumTo 4000000);
+
+ptest4 ignored = parallelTuple2 (getNthPrime 10000, sumTo 4000000);
+
+/////////////////////////////////////////////////////
+
+listCaf :: Int;
+listCaf = 10;
+
+ptest5 = parallelTuple2 (sum [listCaf, listCaf, listCaf, listCaf], sum [listCaf, listCaf, listCaf, listCaf]);
+
+/////////////////////////////////////////////////////
+
+//test concurrent evaluation of a list
+//ptest6 100000 used to fail with a concurrency exception.
+
+test6 n = 
+    let
+        list1 :: Int -> [Int];
+        list1 i = i : list2 (i + 1);
+        
+        list2 :: Int -> [Int];
+        list2 i = (-i) : list1 (i + 1);
+        
+        //1, -2, 3, -4, 5, -6, ...        
+        altList = list1 1; 
+        
+        sumN n = List.sum (List.take n altList);
+    in
+        (sumN n, sumN n);
+
+ptest6 n = 
+    let
+        list1 :: Int -> [Int];
+        list1 i = i : list2 (i + 1);
+        
+        list2 :: Int -> [Int];
+        list2 i = (-i) : list1 (i + 1);
+        
+        //1, -2, 3, -4, 5, -6, ...        
+        altList = list1 1; 
+        
+        sumN n = List.sum (List.take n altList);
+    in
+        parallelTuple2 (sumN n, sumN n);
+        
+
+/////////////////////////////////////////////////////
+
+//concurrent evaluation of a list
+
+test7 n =  
+    let   
+        list = Prelude.upFromTo 1 n :: [Int];
+    in
+        (sum list, sum list);
+
+ptest7 n =  
+    let
+        list = Prelude.upFromTo 1 n :: [Int];
+    in
+        parallelTuple2 (sum list, sum list);
+
+/////////////////////////////////////////////////////
+
+//concurrent evaluation of a list
+//ptest8 1000000 used to fail with a concurrency exception
+
+test8 n = 
+    let
+        list1 :: Int -> [Int];
+        list1 i = i : list1 (i + 1);
+              
+        //1, 2, 3, 4, 5, 6, ...        
+        list = list1 1; 
+        
+        sumN n = List.sum (List.take n list);
+    in
+        (sumN n, sumN n);
+
+ptest8 n = 
+    let
+        list1 :: Int -> [Int];
+        list1 i = i : list1 (i + 1);
+              
+        //1, 2, 3, 4, 5, 6, ...        
+        list = list1 1; 
+        
+        sumN n = List.sum (List.take n list);
+    in
+        parallelTuple2 (sumN n, sumN n);
+
+maptest8 :: Int -> Int -> [Int];
+maptest8 n numThreads = 
+    let
+        list1 :: Int -> [Int];
+        list1 i = i : list1 (i + 1);
+              
+        //1, 2, 3, 4, 5, 6, ...        
+        list = list1 1; 
+        
+        sumN n = List.sum (List.take n list);
+    in
+        List.map sumN (List.replicate numThreads n);
+
+pmaptest8 :: ((Int -> Int) -> [Int] -> [Int]) -> Int -> Int -> [Int];
+pmaptest8 mapFn n numThreads = 
+    let
+        list1 :: Int -> [Int];
+        list1 i = i : list1 (i + 1);
+              
+        //1, 2, 3, 4, 5, 6, ...        
+        list = list1 1; 
+        
+        sumN n = List.sum (List.take n list);
+    in
+        mapFn sumN (List.replicate numThreads n);
+
+/////////////////////////////////////////////////////
+
+//another test of concurrent list evaluation of a shared list
+
+test9 n = 
+    let
+        fibs :: [Int];
+        fibs = 1 : 1 : List.zipWith Prelude.add fibs (List.tail fibs); 
+                        
+        fib_n   = (List.subscript fibs n);
+        fib_n_1 = (List.subscript fibs (n+1));        
+    in
+        (fib_n, fib_n_1);
+
+ptest9 n = 
+    let
+        fibs :: [Int];
+        fibs = 1 : 1 : List.zipWith Prelude.add fibs (List.tail fibs); 
+                        
+        fib_n   = (List.subscript fibs n);
+        fib_n_1 = (List.subscript fibs (n+1));        
+    in
+        parallelTuple2 (fib_n, fib_n_1);
+
+/////////////////////////////////////////////////////
+
+//ptest10 50000000 == (3, 2)
+
+test10 n =
+    let
+        //a strongly connected component of of size 3
+        oneTwoThrees = 1.0 : twoThreeOnes;
+        twoThreeOnes = 2.0 : threeOneTwos;
+        threeOneTwos = 3.0 : oneTwoThrees;
+    in
+        (subscript oneTwoThrees n, subscript threeOneTwos n);
+
+ptest10 n =
+    let
+        //a strongly connected component of of size 3
+        oneTwoThrees = 1.0 : twoThreeOnes;
+        twoThreeOnes = 2.0 : threeOneTwos;
+        threeOneTwos = 3.0 : oneTwoThrees;
+    in
+        parallelTuple2 (subscript oneTwoThrees n, subscript threeOneTwos n);
+
+/////////////////////////////////////////////////////
+
+//a strongly connected component of of size 3
+oneTwoThrees = 1.0 : twoThreeOnes;
+twoThreeOnes = 2.0 : threeOneTwos;
+threeOneTwos = 3.0 : oneTwoThrees;
+
+//ptest11 50000000 == (3, 2)
+
+ptest11 n =  
+    parallelTuple2 (subscript oneTwoThrees n, subscript threeOneTwos n);
+
+/////////////////////////////////////////////////////
+
+//this actually isn't a very interesting test since the CAF, although big, blocks until it is reduced.
+ptest12 = 
+    parallelTuple2 (CAL_Platform_TestSuite.testModule, CAL_Platform_TestSuite.testModule);
+
+/////////////////////////////////////////////////////
+
+test13 n = 
+    let
+        fibs :: [Int];
+        fibs = 1 : 1 : List.zipWith Prelude.add fibs (List.tail fibs); 
+        
+        evenIndexFibs = List.sample 2 fibs;
+        oddIndexFibs = List.sample 2 (List.tail fibs);        
+    in
+        (List.sum (List.take n evenIndexFibs), List.sum (List.take n oddIndexFibs));          
+
+ptest13 n = 
+    let
+        fibs :: [Int];
+        fibs = 1 : 1 : List.zipWith Prelude.add fibs (List.tail fibs); 
+        
+        evenIndexFibs = List.sample 2 fibs;
+        oddIndexFibs = List.sample 2 (List.tail fibs);        
+    in
+        parallelTuple2 (List.sum (List.take n evenIndexFibs), List.sum (List.take n oddIndexFibs));          
+
+/////////////////////////////////////////////////////
+
+
+ptest14 n = 
+    let
+        ints :: [Int];
+        ints = Prelude.upFrom 1; 
+        
+        primes = List.map getNthPrime ints;               
+    in
+        parallelTuple2 (List.maximum (List.take n primes), List.maximum (List.take n primes)); 
+
+/////////////////////////////////////////////////////
+
+
+altParallelTuple2 !pair =
+    case pair of
+    (x, y) ->
+        x
+        `par`
+        y
+        `par`
+        Prelude.strictTuple2 x y
+        ;
+    ;
+
+altptest2 n = altParallelTuple2 (countDownTrace "thread1" n, countDownTrace "thread2" n);
+
+/////////////////////////////////////////////////////
+
+testModule =
+    if System.concurrentRuntime then    
+        assert (ptest1 20000 == (224743, 224743))
+        && assert (ptest4 () == (104743, 8000002000000))
+        && assert (ptest5 == (40, 40))
+        && assert (ptest6 1000000 == (-500000, -500000))
+        && assert (ptest7 1000000 == (1784293664, 1784293664))
+        && assert (ptest8 1000000 == (1784293664, 1784293664))
+        && assert (ptest9 1100 == (-1942700926, -2082498657))
+        && assert (ptest10 50000000 == (3, 2))
+        && assert (ptest11 50000000 == (3, 2))
+        && assert (ptest13 200000 == (-382602437, -679844324))
+        && assert (ptest14 400 == (2749, 2749))
+        
+        && assert (pmaptest1 parallelMap 2000 10 == List.replicate 10 17393)
+        && assert (pmaptest8 parallelMap 1000000 3 == [1784293664, 1784293664, 1784293664])
+        && assert (pmaptest8 parallelMap 100000 20 == List.replicate 20 705082704)
+        
+        && assert (pmaptest1 cpuBoundParallelMap 2000 10 == List.replicate 10 17393)
+        && assert (pmaptest8 cpuBoundParallelMap 1000000 3 == [1784293664, 1784293664, 1784293664])
+        && assert (pmaptest8 cpuBoundParallelMap 100000 20 == List.replicate 20 705082704)
+    else
+        error "Parallel tests need to be run with the org.openquark.cal.machine.lecc.concurrent_runtime system property set."
+    ;
+
+        
+
+
+
+        
+        
+
+
+
+    

@@ -1,0 +1,2218 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * This is a module to hold the various benchmarks used to test performance of the CAL runtime.
+ * Often the functions in this module will simply reference functions in other modules.
+ * @author Raymond Cypher
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Internal.Benchmarks;
+
+import Cal.Core.Prelude using
+    function =
+        fromInt, fromLong, mod, id, seq, error, add, upFromTo, or, not, and, 
+        equals, greaterThan, snd, compose, fst, upFrom, isEven, field3, 
+        compare, minBound, maxBound, input, output;
+    typeConstructor =
+        Int, Double, String, Boolean, Maybe, Ordering, Char, Long, JObject, 
+        JList;
+    dataConstructor = Cons, True, False, Nothing, Just, LT, EQ, GT;
+    typeClass = Eq, Ord, Num, Bounded, Typeable;
+    function = abs, toDouble, typeOf, unsafeCoerce;
+    function = fromJust;
+    typeClass = Outputable, Inputable;
+    ;
+import Cal.Utilities.Math;
+import Cal.Core.Dynamic using
+    typeConstructor = Dynamic;
+    function = fromDynamic, toDynamic;
+    ;
+import Cal.Collections.List using
+    function =
+        head, join, last, map, filter, replicate, sortBy, foldLeftStrict, 
+        foldRight, repeat, length, isElemBy, drop, take, partition, foldLeft, 
+        unzip3, groupBy, zip, unzip, inputList, outputList, sum;
+    ;
+import Cal.Core.String using
+    function = substring;
+    ;
+
+import Cal.Utilities.Summary;
+//import BusinessObjects.Benchmarks.Test.BonusRatings;
+import Cal.Test.General.GemScopeTestModule;
+import Cal.Test.General.M1;
+import Cal.Utilities.RelativeTime;
+import Cal.Data.DataGems;
+import Cal.Test.Data.DataGems_Tests;
+import Cal.Collections.Map;
+import Cal.IO.File;
+import Cal.Core.Debug;
+import Cal.Collections.Array;
+
+import Cal.Utilities.MessageFormat using
+    function = formatWithPattern;
+    ;
+
+import Cal.Utilities.Locale using
+    function = invariantLocale;
+    ;
+
+import Cal.Core.Char using
+    function = isDigit;
+    ;
+
+
+/*
+ * Benchmarks based on the bonus ratings gems.
+ */
+
+/*
+// This benchmark takes a list of thirty name/rating tuples and separates the names
+// into five ranging bands based on percentile rankings.
+testBonusRating30 :: [[(Prelude.String, Prelude.Double)]];
+public testBonusRating30 =
+    BonusRatings.bonusRatedPeople BonusRatings.peopleScores;
+
+// The same as the previous benchmark but with a list of 200 tuples.
+testBonusRating200 :: [[(Prelude.String, Prelude.Double)]];
+public testBonusRating200 =
+    BonusRatings.bonusRatedPeople BonusRatings.peopleScores200;
+
+public testBonusRating600 =
+    BonusRatings.bonusRatedPeople (BonusRatings.peopleScoresN 600);
+
+// The same as the previous benchmark, but using an eta reduced version of BonusRatings.categoriseByBonusRating
+testBonusRating200Eta :: [[(Prelude.String, Prelude.Double)]];
+public testBonusRating200Eta =
+    BonusRatings.bonusRatedPeople2 BonusRatings.peopleScores200;
+
+testBonusRating x =
+    BonusRatings.bonusRatedPeople (BonusRatings.peopleScoresN x);
+*/
+listToIndices :: [Prelude.Double] -> [Prelude.Double];
+listToIndices !x = List.take (List.length x) (Prelude.upFrom (0.0));
+
+gradient :: [Prelude.Double] -> Prelude.Double;
+gradient !y =
+    Prelude.divide
+        (Prelude.subtract
+            (Prelude.multiply
+                (List.sum
+                    (List.map
+                        ((\t -> Prelude.fst (t) * Prelude.snd (t)))
+                        (List.zip (listToIndices y) y)
+                    )
+                )
+                (Prelude.toDouble (List.length y))
+            )
+            (Prelude.multiply (List.sum (listToIndices y)) (List.sum y))
+        )
+        (Prelude.subtract
+            (Prelude.multiply
+                (List.sum
+                    (List.map
+                        ((\t -> Prelude.fst (t) * Prelude.snd (t)))
+                        (List.zip (listToIndices y) (listToIndices y))
+                    )
+                )
+                (Prelude.toDouble (List.length y))
+            )
+            (Prelude.multiply
+                (List.sum (listToIndices y))
+                (List.sum (listToIndices y))
+            )
+        )
+    ;
+
+offset :: [Prelude.Double] -> Prelude.Double;
+offset !y =
+    Prelude.divide
+        (Prelude.subtract
+            (List.sum y)
+            (Prelude.multiply (gradient y) (List.sum (listToIndices y)))
+        )
+        (Prelude.toDouble (List.length y))
+    ;
+
+regression :: [Prelude.Double] -> (Prelude.Double, Prelude.Double);
+regression !y = Prelude.pair (gradient y) (offset y);
+
+predictAt ::
+    (Prelude.Double, Prelude.Double) -> Prelude.Double -> Prelude.Double;
+predictAt !inputPair !input =
+    Prelude.add
+        (Prelude.multiply (Prelude.fst (inputPair)) input)
+        (Prelude.snd (inputPair))
+    ;
+
+regressionLine :: Prelude.Int -> [Prelude.Double];
+regressionLine !n = List.take n (Prelude.upFrom 0.0);
+
+badgem ::
+    Prelude.Int -> [Prelude.Double] -> Prelude.Double -> [Prelude.Double];
+badgem !x0 !x1 !x3 =
+    List.take
+        x0
+        (List.map
+            (\x2 -> predictAt (regression x1) x2)
+            (Prelude.upFrom x3)
+        )
+    ;
+
+/*
+ * Benchmarks based on predictAt and regression.
+ */
+badRegressionGemTest200_200 :: Prelude.Double;
+public badRegressionGemTest200_200 =
+    List.sum (badgem 200 (regressionLine 200) 200.0);
+
+badRegressionGemTest :: Prelude.Int -> Prelude.Double;
+badRegressionGemTest x =
+    List.sum (badgem x (regressionLine x) (Prelude.toDouble x));
+
+badRegressionGemTest500_500 =
+    List.sum (badgem 500 (regressionLine 500) 500.0);
+
+/*
+ * Calculating prime numbers.
+ */
+prime3000 :: Prelude.Int;
+public prime3000 = List.subscript M1.allPrimes 3000;
+
+nonMultiple :: Prelude.Int -> Prelude.Int -> Prelude.Boolean;
+nonMultiple !arg !arg_1 = (arg % arg_1) != (0 :: Prelude.Int);
+
+isPrime :: Prelude.Int -> Prelude.Boolean;
+isPrime !arg =
+    let
+        nToTest = arg;
+    in
+        List.andList
+            (List.map
+                (nonMultiple nToTest)
+                (Prelude.upFromTo
+                    ((2 :: Prelude.Int))
+                    (Prelude.round (Math.sqrt (Prelude.fromInt nToTest)))
+                )
+            )
+    ;
+
+getNthPrime :: Prelude.Int -> Prelude.Int;
+public getNthPrime !x =
+    List.subscript
+        (List.filter
+            isPrime
+            (Prelude.upFromThen
+                ((3 :: Prelude.Int))
+                ((5 :: Prelude.Int))
+            )
+        )
+        x
+    ;
+
+getNthPrime5000 :: Prelude.Int;
+public getNthPrime5000 = getNthPrime 5000;
+
+getNthPrime10000 = getNthPrime 10000;
+
+/*
+ * Recursive functions.
+ */
+foo1000000 :: Prelude.Double;
+public foo1000000 = List.last (List.take 1000000 (Prelude.upFrom 1.0));
+
+public fooTest x = List.last (List.take x (Prelude.upFrom 1.0));
+
+/*
+ * Foreign Functions.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.benchmarks.internal.BenchmarkSupport.subtract1"
+    jSubtract1 :: Prelude.Int -> Prelude.Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.benchmarks.internal.BenchmarkSupport.subtract"
+    jSubtract :: Prelude.Int -> Prelude.Int -> Prelude.Int;
+
+foreignFunctionTester :: Prelude.Int -> Prelude.Int;
+foreignFunctionTester !x =
+    if (x == 0) then
+        0
+    else
+        (foreignFunctionTester (jSubtract x 1))
+    ;
+
+// This function is good for testing the overhead of calls to a foreign function.
+foreignFunctionOverhead1000000 :: Prelude.Int;
+public foreignFunctionOverhead1000000 = foreignFunctionTester 1000000;
+
+foreignFunctionOverhead10000000 :: Prelude.Int;
+public foreignFunctionOverhead10000000 = foreignFunctionTester 10000000;
+
+/*
+ * Benchmarks to exercise primitive operations.
+ */
+primitiveOpTester :: Prelude.Int -> Prelude.Int;
+public primitiveOpTester !x =
+    if (x == 0) then
+        0
+    else
+        (primitiveOpTester (x - 1))
+    ;
+
+public primitiveOpOverhead1000000 = primitiveOpTester 1000000;
+
+public primitiveOpOverhead10000000 = primitiveOpTester 10000000;
+
+primitiveOpTester3 :: Prelude.Int -> Prelude.Int;
+public primitiveOpTester3 !x = primopHelper 0 x;
+
+primopHelper :: Prelude.Int -> Prelude.Int -> Prelude.Int;
+primopHelper !current !limit =
+    if (current == limit) then
+        limit
+    else
+        (primopHelper (current + 1) limit)
+    ;
+
+listTraversalLast :: Prelude.Double;
+listTraversalLast =
+    let
+        list = List.take 3000000 (Prelude.upFrom 1.0);
+    in
+        (List.last list) - (List.last list) + (List.last list)
+        - (List.last list)
+        + (List.last list)
+    ;
+
+listTraversalSubscript :: Prelude.Double;
+listTraversalSubscript =
+    let
+        list = List.take 3000000 (Prelude.upFrom 1.0);
+    in
+        (List.subscript list 2999999) - (List.subscript list 2999999)
+        + (List.subscript list 2999999)
+        - (List.subscript list 2999999)
+        + (List.subscript list 2999999)
+    ;
+
+/*
+ * String manipulation.
+ */
+
+private largeString =
+    "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
+    ;
+
+//public stringManipulation1 = (jStringToString (stringToJString largeString)) ++ (jStringToString (stringToJString largeString));
+
+data public Box =
+    private BoxesBox boxes :: [Box] |
+    private IntBox int :: [Prelude.Int] |
+    private StringBox string :: [Prelude.Char]
+    ;
+
+foreign unsafe import jvm "static method org.openquark.cal.benchmarks.internal.Box.makeIntBox"
+    private jMakeIntBox :: Prelude.JList -> Prelude.JObject;
+
+foreign unsafe import jvm "static method org.openquark.cal.benchmarks.internal.Box.makeStringBox"
+    private jMakeStringBox :: Prelude.String -> Prelude.JObject;
+
+foreign unsafe import jvm "static method org.openquark.cal.benchmarks.internal.Box.makeBoxesBox"
+    private jMakeBoxesBox :: Prelude.JList -> Prelude.JObject;
+
+outputBox :: Box -> Prelude.JObject;
+outputBox !box =
+    case box of
+    IntBox i -> jMakeIntBox (List.outputListWith i Prelude.output);
+    StringBox s -> jMakeStringBox (String.fromList s);
+    BoxesBox children ->
+        jMakeBoxesBox (List.outputListWith children outputBox);
+    ;
+
+instance Prelude.Outputable Box where
+    output = outputBox;
+    ;
+
+makeBoxesBox :: [Box] -> Box;
+makeBoxesBox !x = BoxesBox x;
+
+makeIntBox :: [Prelude.Int] -> Box;
+makeIntBox !x = IntBox x;
+
+makeStringBox :: [Prelude.Char] -> Box;
+makeStringBox !x = StringBox x;
+
+buildIntBoxes :: Prelude.Int -> [Box];
+buildIntBoxes !x =
+    if (x == 0) then
+        []
+    else
+        (
+            (
+                makeIntBox
+                    (List.take x (Prelude.upFrom ((1 :: Prelude.Int))))
+                : (buildIntBoxes (x - 1))
+            )
+        )
+    ;
+
+buildIntBoxTree :: Prelude.Int -> Box;
+buildIntBoxTree !x =
+    if (x == 0) then
+        (makeBoxesBox (buildIntBoxes 20))
+    else
+        (
+            let
+                left = buildIntBoxTree (x - 1);
+                right = buildIntBoxTree (x - 1);
+            in
+                makeBoxesBox (left : (right : []))
+        )
+    ;
+
+incrementIntBoxes :: Box -> Box;
+incrementIntBoxes !box =
+    case box of
+    IntBox ints ->
+        makeIntBox
+            (List.take
+                (List.length ints)
+                (Prelude.upFrom
+                    (((List.subscript ints 0) + 1) :: Prelude.Int)
+                )
+            )
+        ;
+    BoxesBox boxes -> makeBoxesBox (List.map incrementIntBoxes boxes);
+    ;
+
+sumIntBoxes :: Box -> Prelude.Int;
+sumIntBoxes !box =
+    case box of
+    IntBox ints -> List.sum ints;
+    BoxesBox boxes -> List.sum (List.map sumIntBoxes boxes);
+    ;
+
+boxManipulation :: Prelude.Int;
+public boxManipulation =
+    sumIntBoxes (incrementIntBoxes (buildIntBoxTree 11));
+
+boxManipulation2 :: Box;
+public boxManipulation2 = buildIntBoxTree 10;
+
+boxManipulation3 :: Prelude.Int;
+public boxManipulation3 =
+    sumIntBoxes (incrementIntBoxes (buildIntBoxTree 9));
+
+boxTest1 x = sumIntBoxes (incrementIntBoxes (buildIntBoxTree x));
+
+boxTest1_10 = sumIntBoxes (incrementIntBoxes (buildIntBoxTree 10));
+
+boxTest1_4 = sumIntBoxes (incrementIntBoxes (buildIntBoxTree 4));
+
+letTestHelper :: Prelude.Double -> Prelude.Double;
+letTestHelper !counter =
+    let
+        x = 3.0 + 2.0;
+        y = 4.0 / 2.0;
+        z = 1.0 + 3.0;
+        //        f :: Prelude.Double -> Prelude.Double -> Prelude.Double;
+        //        f !j !k = j + k;
+        f j k = j + k;
+    in
+        if (counter + x + y + z + (f x y) <= 9.0) then
+            9.0
+        else
+            (letTestHelper (counter - 1.0))
+    ;
+
+public letTest1000000 = letTestHelper 1000000.0;
+
+primitiveOpOverhead2Helper :: Prelude.Int -> Prelude.Int;
+primitiveOpOverhead2Helper !x =
+    if (x + 1 + 3 + 5 <= 9) then
+        1
+    else
+        (primitiveOpOverhead2Helper (x - 1))
+    ;
+
+public primitiveOpOverhead2_1000000 = primitiveOpOverhead2Helper 1000000;
+
+public primitiveOpOverhead2_10000000 = primitiveOpOverhead2Helper 10000000;
+
+applyTest ::
+    Prelude.Double -> Prelude.Double -> Prelude.Double -> Prelude.Double;
+applyTest !x !y !z =
+    if ((x + y + z) > (x + y)) then
+        (applyTest2 x y (z - 1.0))
+    else
+        0.0
+    ;
+
+applyTest2 ::
+    Prelude.Double -> Prelude.Double -> Prelude.Double -> Prelude.Double;
+applyTest2 !x !y !z =
+    if ((x + y + z) > (x + y)) then
+        (applyTest x y (z - 1.0))
+    else
+        0.0
+    ;
+
+applyTest4000000 :: Prelude.Double;
+public applyTest4000000 = applyTest 1.0 2.0 4000000.0;
+
+data Animal =
+    public Cat |
+    public Dog |
+    public Elephant |
+    public Lion |
+    public Tiger |
+    public Giraffe |
+    public Emu |
+    public Bear |
+    public Leopard |
+    public Moose
+    ;
+
+zaCaseTest :: Prelude.Double -> Animal -> Animal;
+zaCaseTest x animal =
+    case animal of
+    Leopard ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Cat)
+        else
+            Leopard
+        ;
+    Cat ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Bear)
+        else
+            Cat
+        ;
+    Bear ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Giraffe)
+        else
+            Bear
+        ;
+    Giraffe ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Dog)
+        else
+            Giraffe
+        ;
+    Dog ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Moose)
+        else
+            Dog
+        ;
+    Moose ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Elephant)
+        else
+            Moose
+        ;
+    Elephant ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Emu)
+        else
+            Elephant
+        ;
+    Emu ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Lion)
+        else
+            Emu
+        ;
+    Lion ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Tiger)
+        else
+            Lion
+        ;
+    Tiger ->
+        if (x > 0.0) then
+            (zaCaseTest (x - 1.0) Leopard)
+        else
+            Tiger
+        ;
+    ;
+
+zaCaseTest2 :: Prelude.Double -> Animal -> Animal;
+zaCaseTest2 x animal =
+    case animal of
+    Dog ->
+        if (x > 0.0) then
+            (zaCaseTest2 (x - 1.0) Dog)
+        else
+            Dog
+        ;
+    ;
+
+booleanCase :: Prelude.Double -> Prelude.String;
+booleanCase x =
+    let
+        b = (x > 0.0);
+    in
+        case b of
+        Prelude.True -> booleanCase (x - 1.0);
+        Prelude.False -> "finished";
+    ;
+
+data Structure =
+    IntStructure
+        #1 :: Prelude.Int
+        #2 :: Prelude.Int
+        #3 :: Prelude.Int
+        #4 :: Prelude.Int
+        #5 :: Prelude.Int
+        #6 :: Prelude.Int
+        #7 :: Prelude.Int
+        #8 :: Prelude.Int
+        #9 :: Prelude.Int
+        #10 :: Prelude.Int |
+    DoubleStructure
+        #1 :: Prelude.Double
+        #2 :: Prelude.Double
+        #3 :: Prelude.Double
+        #4 :: Prelude.Double
+        #5 :: Prelude.Double
+        #6 :: Prelude.Double
+        #7 :: Prelude.Double
+        #8 :: Prelude.Double
+        #9 :: Prelude.Double
+        #10 :: Prelude.Double |
+    StringStructure
+        #1 :: Prelude.String
+        #2 :: Prelude.String
+        #3 :: Prelude.String
+        #4 :: Prelude.String
+        #5 :: Prelude.String
+        #6 :: Prelude.String
+        #7 :: Prelude.String
+        #8 :: Prelude.String
+        #9 :: Prelude.String
+        #10 :: Prelude.String
+    ;
+
+structurcase =
+    let
+        x = DoubleStructure 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0;
+    in
+        case x of
+        DoubleStructure a b c d e f g h i j -> "double structure";
+        _ -> "other";
+    ;
+
+bcase1 x =
+    case x of
+    Prelude.True -> "True";
+    Prelude.False -> "False";
+    _ -> "Default";
+    ;
+
+bcase2 x =
+    case x of
+    Prelude.True -> "True";
+    _ -> "Default";
+    ;
+
+bcase3 x =
+    case x of
+    Prelude.False -> "False";
+    ;
+
+dcase x =
+    case x of
+    _ -> "true";
+    ;
+
+rtest :: [Prelude.Double];
+public rtest =
+    let
+        iterated_frame =
+            [("David", 1.0), ("Rich", 2.0), ("Trevor", 3.0)];
+    in
+        List.map
+            (
+                \iteratedcollector ->
+                    let
+                        double_field = fn;
+                        fn = Prelude.snd iteratedcollector;
+                    in
+                        double_field
+            )
+            iterated_frame
+    ;
+
+//some benchmarks for client-side unwinding versus compiled unwinding
+
+//note that these need to be run in the GemCutter in order to use the structured 
+//client-side unwinding (ValueNodes) since ICE does not use this.
+
+unwindTest1 :: Prelude.Int -> [Prelude.Maybe Prelude.Double];
+public unwindTest1 n = List.take n (List.repeat (Prelude.Just 2.0));
+
+compiledUnwindTest1 :: Prelude.Int -> Prelude.JObject;
+public compiledUnwindTest1 n = Prelude.output (unwindTest1 n);
+
+//a more complicated unwind test that makes use of refinement running in getting the date value.
+unwindTest2 ::
+    Prelude.Int -> [(RelativeTime.RelativeDate, Prelude.Double)];
+public unwindTest2 n =
+    List.take
+        n
+        (List.repeat ((RelativeTime.makeRelativeDateValue 2003 1 30), 2.0))
+    ;
+
+compiledUnwindTest2 :: Prelude.Int -> Prelude.JObject;
+public compiledUnwindTest2 n = Prelude.output (unwindTest2 n);
+
+////////////////////////////////////////////////////////////////////////////////
+// Some functions to mess with memory and call-stack.
+// The are intended to be used with the default call stack size and 
+// the heap size set to 128 meg via: -Xms128M -Xmx128M
+
+// With the default stack size for the Sun JVM this
+// function will run out of stack space when given an input
+// of about 1740.                  
+callStackUser :: Prelude.Int -> Prelude.Int;
+public callStackUser n = List.subscript (callStackHelper 1) n;
+
+callStackHelper :: Prelude.Int -> [Prelude.Int];
+callStackHelper n = n : callStackHelper (n + 1);
+
+bigTree :: Box;
+bigTree = buildIntBoxTree 13;
+
+// This function will run out of memory due to the size of the 'bigTree' CAF.
+outOfMemory :: Prelude.Int;
+public outOfMemory = sumIntBoxes bigTree;
+
+notSoBigTree :: Box;
+notSoBigTree = buildIntBoxTree 12;
+
+// This function creates (and holds in memory) an int box tree that is one
+// generation smaller than the tree that runs out of memory.  It then increments
+// the integer values twice and sums the resulting values.
+// This is a good test of performance when doing calculations with a large working
+// set in memory.
+largeWorkingSet :: Prelude.Int;
+public largeWorkingSet =
+    Prelude.seq
+        notSoBigTree
+        (sumIntBoxes (incrementIntBoxes (incrementIntBoxes notSoBigTree)))
+    ;
+
+mUpFrom :: Prelude.Int -> [Prelude.Int];
+mUpFrom x = x : (mUpFrom (x + 1));
+
+data public RCTest =
+    RCTest1 |
+    RCTest2 |
+    RCTest3 arg :: !Prelude.Int
+    ;
+
+public testOutput = RCTest3 8;
+
+gtest = (1.0 > 0.0) && (2.0 > 1.0) && (3.0 > 2.0);
+
+ftest :: Prelude.Integer -> Prelude.Integer -> Prelude.Integer;
+ftest !x !y = x + y;
+
+faddTest = ftest 1 2;
+
+data public DCTest =
+    DCTest1 arg :: Prelude.Double
+    ;
+
+testDC = DCTest1 1.0;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+// Some test for comparison to crystal reports.
+
+xtremeJDBCDataSource :: DataGems.ResultSet;
+public xtremeJDBCDataSource =
+    let
+        conn = DataGems_Tests.lukesXtreme;
+        sql =
+            "SELECT Product.\"Product Name\", \"Orders Detail\".\"Unit Price\", \"Orders Detail\".\"Quantity\" FROM   Product, \"Orders Detail\" WHERE Product.\"Product ID\" = \"Orders Detail\".\"Product ID\""
+            ;
+    in
+        DataGems.jdbcQueryToResultSet conn sql
+    ;
+
+xtremeJDBCDataSourceRecords ::
+    [
+        {
+            product_name :: Prelude.String,
+            quantity :: Prelude.Int,
+            unit_price :: Prelude.Double
+        }
+    ];
+public xtremeJDBCDataSourceRecords =
+    let
+        extractFn rs =
+            let
+                val1 = DataGems.extractString 1 rs;
+                val2 = DataGems.extractDouble 2 rs;
+                val3 = DataGems.extractInt 3 rs;
+            in
+                Prelude.seq
+                    val1
+                    (Prelude.seq
+                        val2
+                        (Prelude.seq
+                            val3
+                            {
+                                product_name = val1,
+                                unit_price = val2,
+                                quantity = val3
+                            }
+                        )
+                    )
+            ;
+    in
+        DataGems.dataFromResultSet xtremeJDBCDataSource extractFn
+    ;
+
+rGroup1Comp ::
+    (a\product_name, c\product_name) =>
+    {a | product_name :: Prelude.String}
+    -> {c | product_name :: Prelude.String}
+    -> Prelude.Boolean;
+rGroup1Comp r1 r2 = r1.product_name == r2.product_name;
+
+rSortComp ::
+    (a\product_name, c\product_name) =>
+    {a | product_name :: Prelude.String}
+    -> {c | product_name :: Prelude.String}
+    -> Prelude.Ordering;
+rSortComp r1 r2 = Prelude.compare r1.product_name r2.product_name;
+
+rGrouped ::
+    (r\product_name) =>
+    [{r | product_name :: Prelude.String}]
+    -> [[{r | product_name :: Prelude.String}]];
+rGrouped x = List.groupBy rGroup1Comp (List.sortBy rSortComp x);
+
+rGrouped2 ::
+    (r\product_name) =>
+    [{r | product_name :: Prelude.String}]
+    -> [[{r | product_name :: Prelude.String}]];
+rGrouped2 x = List.groupBy rGroup1Comp x;
+
+rSums ::
+    (a\product_name, a\quantity) =>
+    [{a | product_name :: Prelude.String, quantity :: Prelude.Int}]
+    -> [Prelude.Int];
+rSums x =
+    List.map
+        (Prelude.compose List.sum (List.map (\x -> x.quantity)))
+        (rGrouped x)
+    ;
+
+rGrandTotal ::
+    (a\quantity) =>
+    [{a | quantity :: Prelude.Int}] -> Prelude.Int;
+rGrandTotal x =
+    List.foldLeftStrict
+        Prelude.add
+        (0 :: Prelude.Int)
+        (List.map (\x -> x.quantity) x)
+    ;
+
+rsum2 :: (a\quantity) => [{a | quantity :: Prelude.Int}] -> Prelude.Int;
+rsum2 !values = List.foldLeftStrict (\x y -> x + (y.quantity)) 0 values;
+
+rZipper ::
+    (r\group_quantity) =>
+    {r} -> Prelude.Int -> {r | group_quantity :: Prelude.Int};
+rZipper x y = {x |  group_quantity = y};
+
+rZipper2 ::
+    (r\grand_total_quantity) =>
+    {r} -> Prelude.Int -> {r | grand_total_quantity :: Prelude.Int};
+rZipper2 x y = {x |  grand_total_quantity = y};
+
+rSummed ::
+    (a\group_quantity, a\product_name, a\quantity) =>
+    [{a | product_name :: Prelude.String, quantity :: Prelude.Int}]
+    ->
+    [
+        [
+            {
+                a |
+                group_quantity :: Prelude.Int,
+                product_name :: Prelude.String,
+                quantity :: Prelude.Int
+            }
+        ]
+    ];
+rSummed x =
+    List.zipWith
+        (List.zipWith rZipper)
+        (rGrouped x)
+        (List.map List.repeat (rSums x))
+    ;
+
+rSummed2 ::
+    (a\product_name, a\quantity, a\group_quantity, a\grand_total_quantity) =>
+    [{a | product_name :: Prelude.String, quantity :: Prelude.Int}]
+    ->
+    [
+        [
+            {
+                a |
+                product_name :: Prelude.String,
+                quantity :: Prelude.Int,
+                group_quantity :: Prelude.Int,
+                grand_total_quantity :: Prelude.Int
+            }
+        ]
+    ];
+rSummed2 x =
+    List.map
+        (List.map ((Prelude.flip rZipper2) (rGrandTotal x)))
+        (rSummed x)
+    ;
+
+variance :: [Prelude.Double] -> Prelude.Double;
+variance values =
+    let
+        mean = Summary.average values;
+        accum =
+            List.foldLeftStrict
+                (\x y -> x + (Math.power (y - mean) 2.0))
+                0.0
+                values
+            ;
+        accum2 = List.foldLeftStrict (\x y -> x + (y - mean)) 0.0 values;
+        length = Prelude.toDouble (List.length values);
+        variance =
+            (accum - (Math.power accum2 2) / length) / (length - 1);
+    in
+        variance
+    ;
+
+variance2 :: [Prelude.Double] -> Prelude.Double;
+variance2 values =
+    let
+        mean = Summary.average values;
+        helper x y =
+            (
+                (Prelude.field1 x) + (Math.power (y - mean) 2.0),
+                (Prelude.field2 x) + ((y - mean))
+            )
+            ;
+        accums = List.foldLeftStrict helper (0, 0) values;
+        length = Prelude.toDouble (List.length values);
+        accum = Prelude.field1 accums;
+        accum2 = Prelude.field2 accums;
+        variance =
+            (accum - (Math.power accum2 2) / length) / (length - 1);
+    in
+        variance
+    ;
+
+kurtosis values =
+    let
+        m = Summary.average values;
+        v = variance values;
+        stdDev = Math.sqrt v;
+        accum3helper :: [Prelude.Double] -> Prelude.Double;
+        accum3helper x =
+            case x of
+            [] -> 0;
+            b : bs -> (Math.power (b - m) 4.0) + (accum3helper bs);
+            ;
+        //accum3 = (accum3helper values) / (Math.power stdDev 4.0d);
+        accum3 =
+            (List.foldLeftStrict
+                (\x y -> x + (Math.power (y - m) 4.0))
+                0.0
+                values
+            )
+            / (Math.power stdDev 4.0)
+            ;
+        n0 = Prelude.toDouble (List.length values);
+        coefficientOne =
+            (n0 * (n0 + 1.0))
+            / ((n0 - 1.0) * (n0 - 2.0) * (n0 - 3.0))
+            ;
+        termTwo =
+            (3.0 * (Math.power (n0 - 1) 2.0))
+            / ((n0 - 2) * (n0 - 3))
+            ;
+        kurtosis = (coefficientOne * accum3) - termTwo;
+    in
+        kurtosis
+    ;
+
+skewness values =
+    let
+        m = Summary.average values;
+        v = variance values;
+        stdDev = Math.sqrt v;
+        //accum3helper :: [Prelude.Double] -> Prelude.Double;
+        //accum3helper x = case x of [] -> 0; a: as -> (Math.power (a - m) 3.0d) + (accum3helper as);;
+        //        accum3 = (accum3helper values) / (Math.power stdDev 3.0);
+        accum3 =
+            (List.foldLeftStrict
+                (\x y -> x + (Math.power (y - m) 3.0))
+                0.0
+                values
+            )
+            / (Math.power stdDev 3.0)
+            ;
+        n0 = Prelude.toDouble (List.length values);
+        skew = (n0 / ((n0 - 1) * (n0 - 2))) * accum3;
+    in
+        (skew)
+    ;
+
+kurtosisAndSkew values =
+    let
+        m = Summary.average values;
+        v = variance values;
+        stdDev = Math.sqrt v;
+        accumkhelper :: [Prelude.Double] -> Prelude.Double;
+        accumkhelper x =
+            case x of
+            [] -> 0;
+            b : bs -> (Math.power (b - m) 4.0) + (accumkhelper bs);
+            ;
+        //        accumk = (accumkhelper values) / (Math.power stdDev 4.0d);
+        accumk =
+            (List.foldLeftStrict
+                (\x y -> x + (Math.power (y - m) 4.0))
+                0.0
+                values
+            )
+            / (Math.power stdDev 4.0)
+            ;
+        n0 = Prelude.toDouble (List.length values);
+        coefficientOne =
+            (n0 * (n0 + 1.0))
+            / ((n0 - 1.0) * (n0 - 2.0) * (n0 - 3.0))
+            ;
+        termTwo =
+            (3.0 * (Math.power (n0 - 1) 2.0))
+            / ((n0 - 2) * (n0 - 3))
+            ;
+        kurtosis = (coefficientOne * accumk) - termTwo;
+        accumshelper :: [Prelude.Double] -> Prelude.Double;
+        accumshelper x =
+            case x of
+            [] -> 0;
+            b : bs -> (Math.power (b - m) 3.0) + (accumshelper bs);
+            ;
+        //        accums = (accumshelper values) / (Math.power stdDev 3.0);
+        accums =
+            (List.foldLeftStrict
+                (\x y -> x + (Math.power (y - m) 3.0))
+                0.0
+                values
+            )
+            / (Math.power stdDev 3.0)
+            ;
+        skew = (n0 / ((n0 - 1) * (n0 - 2))) * accums;
+    in
+        (kurtosis, skew)
+    ;
+
+ktest1 =
+    kurtosis
+        [
+            12.5,
+            12,
+            11.8,
+            14.2,
+            14.9,
+            14.5,
+            21,
+            8.2,
+            10.3,
+            11.3,
+            14.1,
+            9.9,
+            12.2,
+            12,
+            12.1,
+            11,
+            19.8,
+            11,
+            10,
+            8.8,
+            9,
+            12.3
+        ]
+    ;
+
+ktest2 =
+    skewness
+        [
+            12.5,
+            12,
+            11.8,
+            14.2,
+            14.9,
+            14.5,
+            21,
+            8.2,
+            10.3,
+            11.3,
+            14.1,
+            9.9,
+            12.2,
+            12,
+            12.1,
+            11,
+            19.8,
+            11,
+            10,
+            8.8,
+            9,
+            12.3
+        ]
+    ;
+
+ktest3 =
+    variance
+        [
+            12.5,
+            12,
+            11.8,
+            14.2,
+            14.9,
+            14.5,
+            21,
+            8.2,
+            10.3,
+            11.3,
+            14.1,
+            9.9,
+            12.2,
+            12,
+            12.1,
+            11,
+            19.8,
+            11,
+            10,
+            8.8,
+            9,
+            12.3
+        ]
+    ;
+
+ktest4 = Math.sqrt (ktest3);
+
+wordFrequency x =
+    let
+        groups = rGrouped x;
+        freqs = List.map List.length groups;
+        word_freq =
+            List.zip
+                (List.map
+                    (Prelude.compose (\x -> x.product_name) List.head)
+                    groups
+                )
+                freqs
+            ;
+        sortComp ::
+            (Prelude.String, Prelude.Int)
+            -> (Prelude.String, Prelude.Int)
+            -> Prelude.Ordering;
+        sortComp x y =
+            Prelude.compare (Prelude.field2 y) (Prelude.field2 x);
+        sorted_word_freq = List.sortBy sortComp word_freq;
+    in
+        sorted_word_freq
+    ;
+
+wordFrequency2 x =
+    let
+        groups = rGrouped2 x;
+        freqs = List.map List.length groups;
+        word_freq =
+            List.zip
+                (List.map
+                    (Prelude.compose (\x -> x.product_name) List.head)
+                    groups
+                )
+                freqs
+            ;
+        sortComp ::
+            (Prelude.String, Prelude.Int)
+            -> (Prelude.String, Prelude.Int)
+            -> Prelude.Ordering;
+        sortComp x y =
+            Prelude.compare (Prelude.field2 y) (Prelude.field2 x);
+        sorted_word_freq = List.sortBy sortComp word_freq;
+    in
+        sorted_word_freq
+    ;
+
+//average computes the average value of a list by first converting all elements of the list to Double
+//values and then averaging them. It return Prelude.notANumber for an empty list.
+//average [x1, x2, ..., xn] == ((toDouble x1) + (toDouble x2)... + (toDouble xn)) / (toDouble n)
+benchmarkAverage :: Prelude.Num a => [a] -> Prelude.Double;
+public benchmarkAverage !xs =
+    let
+        benchmarkAverageHelper ::
+            Prelude.Num a =>
+            [a] -> Prelude.Double -> Prelude.Int -> Prelude.Double;
+        benchmarkAverageHelper !xs !partialSum !partialLength =
+            case xs of
+            [] ->
+                if (partialLength == 0) then
+                    Prelude.notANumber
+                else
+                    partialSum / Prelude.toDouble partialLength
+                ;
+            xsHead : xsTail ->
+                benchmarkAverageHelper
+                    xsTail
+                    (partialSum + Prelude.toDouble xsHead)
+                    (partialLength + 1)
+                ;
+            ;
+    in
+        benchmarkAverageHelper xs 0 0
+    ;
+
+//fully expands the list in memory
+expandedDoubleList :: Prelude.Int -> [Prelude.Double];
+expandedDoubleList n =
+    let
+        list = Prelude.upFromTo (1 :: Prelude.Double) (Prelude.toDouble n);
+    in
+        Prelude.seq (List.last list) list
+    ;
+
+// Test a partial application being folded across a list of values.
+pf2 :: Double -> Double -> Double;
+pf2 a b = a + b;
+
+testpf2_1 n = Summary.average (map (pf2 1) (Prelude.upFromTo 1.0 n));
+
+pf3 :: Double -> Double -> Double -> Double;
+pf3 a b c = a + b + c;
+
+testpf3_1 n = Summary.average (map (pf3 1 2) (Prelude.upFromTo 1.0 n));
+
+testpf3_2 n =
+    let
+        f = pf3 1.0;
+    in
+        Summary.average (map (f 2.0) (Prelude.upFromTo 1.0 n))
+    ;
+
+pf4 :: Double -> Double -> Double -> Double -> Double;
+pf4 a b c d = a + b + c + d;
+
+testpf4_1 n = Summary.average (map (pf4 1 2 3) (Prelude.upFromTo 1.0 n));
+
+testpf4_2 n =
+    let
+        f = pf4 1 2;
+    in
+        Summary.average (map (f 3) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf4_3 n =
+    let
+        f = pf4 1;
+    in
+        Summary.average (map (f 2 3) (Prelude.upFromTo 1.0 n))
+    ;
+
+pf5 :: Double -> Double -> Double -> Double -> Double -> Double;
+pf5 a b c d e = a + b + c + d + e;
+
+testpf5_1 n = Summary.average (map (pf5 1 2 3 4) (Prelude.upFromTo 1.0 n));
+
+testpf5_2 n =
+    let
+        f = pf5 1 2 3;
+    in
+        Summary.average (map (f 4) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf5_3 n =
+    let
+        f = pf5 1 2;
+    in
+        Summary.average (map (f 3 4) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf5_4 n =
+    let
+        f = pf5 1;
+    in
+        Summary.average (map (f 2 3 4) (Prelude.upFromTo 1.0 n))
+    ;
+
+pf6 :: Double -> Double -> Double -> Double -> Double -> Double -> Double;
+pf6 a b c d e f = a + b + c + d + e + f;
+
+testpf6_1 n =
+    Summary.average (map (pf6 1 2 3 4 5) (Prelude.upFromTo 1.0 n));
+
+testpf6_2 n =
+    let
+        f = pf6 1 2 3 4;
+    in
+        Summary.average (map (f 5) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf6_3 n =
+    let
+        f = pf6 1 2 3;
+    in
+        Summary.average (map (f 4 5) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf6_4 n =
+    let
+        f = pf6 1 2;
+    in
+        Summary.average (map (f 3 4 5) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf6_5 n =
+    let
+        f = pf6 1;
+    in
+        Summary.average (map (f 2 3 4 5) (Prelude.upFromTo 1.0 n))
+    ;
+
+pf7 ::
+    Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double;
+pf7 a b c d e f g = a + b + c + d + e + f + g;
+
+testpf7_1 n =
+    Summary.average (map (pf7 1 2 3 4 5 6) (Prelude.upFromTo 1.0 n));
+
+testpf7_2 n =
+    let
+        f = pf7 1 2 3 4 5;
+    in
+        Summary.average (map (f 6) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf7_3 n =
+    let
+        f = pf7 1 2 3 4;
+    in
+        Summary.average (map (f 5 6) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf7_4 n =
+    let
+        f = pf7 1 2 3;
+    in
+        Summary.average (map (f 4 5 6) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf7_5 n =
+    let
+        f = pf7 1 2;
+    in
+        Summary.average (map (f 3 4 5 6) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf7_6 n =
+    let
+        f = pf7 1;
+    in
+        Summary.average (map (f 2 3 4 5 6) (Prelude.upFromTo 1.0 n))
+    ;
+
+pf8 ::
+    Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double;
+pf8 a b c d e f g h = a + b + c + d + e + f + g + h;
+
+testpf8_1 n =
+    Summary.average (map (pf8 1 2 3 4 5 6 7) (Prelude.upFromTo 1.0 n));
+
+testpf8_2 n =
+    let
+        f = pf8 1 2 3 4 5 6;
+    in
+        Summary.average (map (f 7) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf8_3 n =
+    let
+        f = pf8 1 2 3 4 5;
+    in
+        Summary.average (map (f 6 7) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf8_4 n =
+    let
+        f = pf8 1 2 3 4;
+    in
+        Summary.average (map (f 5 6 7) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf8_5 n =
+    let
+        f = pf8 1 2 3;
+    in
+        Summary.average (map (f 4 5 6 7) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf8_6 n =
+    let
+        f = pf8 1 2;
+    in
+        Summary.average (map (f 3 4 5 6 7) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf8_7 n =
+    let
+        f = pf8 1;
+    in
+        Summary.average (map (f 2 3 4 5 6 7) (Prelude.upFromTo 1.0 n))
+    ;
+
+pf9 ::
+    Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double;
+pf9 a b c d e f g h i = a + b + c + d + e + f + g + h + i;
+
+testpf9_1 n =
+    Summary.average (map (pf9 1 2 3 4 5 6 7 8) (Prelude.upFromTo 1.0 n));
+
+testpf9_2 n =
+    let
+        f = pf9 1 2 3 4 5 6 7;
+    in
+        Summary.average (map (f 8) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf9_3 n =
+    let
+        f = pf9 1 2 3 4 5 6;
+    in
+        Summary.average (map (f 7 8) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf9_4 n =
+    let
+        f = pf9 1 2 3 4 5;
+    in
+        Summary.average (map (f 6 7 8) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf9_5 n =
+    let
+        f = pf9 1 2 3 4;
+    in
+        Summary.average (map (f 5 6 7 8) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf9_6 n =
+    let
+        f = pf9 1 2 3;
+    in
+        Summary.average (map (f 4 5 6 7 8) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf9_7 n =
+    let
+        f = pf9 1 2;
+    in
+        Summary.average (map (f 3 4 5 6 7 8) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf9_8 n =
+    let
+        f = pf9 1;
+    in
+        Summary.average (map (f 2 3 4 5 6 7 8) (Prelude.upFromTo 1.0 n))
+    ;
+
+pf10 ::
+    Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double
+    -> Double;
+pf10 a b c d e f g h i j = a + b + c + d + e + f + g + h + i + j;
+
+testpf10_1 n =
+    Summary.average (map (pf10 1 2 3 4 5 6 7 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_2 n =
+    let
+        f = pf10 1 2 3 4 5 6 7 8;
+    in
+        Summary.average (map (f 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_3 n =
+    let
+        f = pf10 1 2 3 4 5 6 7;
+    in
+        Summary.average (map (f 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_4 n =
+    let
+        f = pf10 1 2 3 4 5 6;
+    in
+        Summary.average (map (f 7 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_5 n =
+    let
+        f = pf10 1 2 3 4 5;
+    in
+        Summary.average (map (f 6 7 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_6 n =
+    let
+        f = pf10 1 2 3 4;
+    in
+        Summary.average (map (f 5 6 7 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_7 n =
+    let
+        f = pf10 1 2 3;
+    in
+        Summary.average (map (f 4 5 6 7 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_8 n =
+    let
+        f = pf10 1 2;
+    in
+        Summary.average (map (f 3 4 5 6 7 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+testpf10_9 n =
+    let
+        f = pf10 1;
+    in
+        Summary.average (map (f 2 3 4 5 6 7 8 9) (Prelude.upFromTo 1.0 n))
+    ;
+
+benchmarkPartialApplications n =
+    (testpf2_1 n) + (testpf3_1 n) + (testpf3_2 n) + (testpf4_1 n)
+    + (testpf4_2 n)
+    + (testpf4_3 n)
+    + (testpf5_1 n)
+    + (testpf5_2 n)
+    + (testpf5_3 n)
+    + (testpf5_4 n)
+    + (testpf6_1 n)
+    + (testpf6_2 n)
+    + (testpf6_3 n)
+    + (testpf6_4 n)
+    + (testpf6_5 n)
+    + (testpf7_1 n)
+    + (testpf7_2 n)
+    + (testpf7_3 n)
+    + (testpf7_4 n)
+    + (testpf7_5 n)
+    + (testpf7_6 n)
+    + (testpf8_1 n)
+    + (testpf8_2 n)
+    + (testpf8_3 n)
+    + (testpf8_4 n)
+    + (testpf8_5 n)
+    + (testpf8_6 n)
+    + (testpf8_7 n)
+    + (testpf9_1 n)
+    + (testpf9_2 n)
+    + (testpf9_3 n)
+    + (testpf9_4 n)
+    + (testpf9_5 n)
+    + (testpf9_6 n)
+    + (testpf9_7 n)
+    + (testpf9_8 n)
+    + (testpf10_1 n)
+    + (testpf10_2 n)
+    + (testpf10_3 n)
+    + (testpf10_4 n)
+    + (testpf10_5 n)
+    + (testpf10_6 n)
+    + (testpf10_7 n)
+    + (testpf10_8 n)
+    + (testpf10_9 n)
+    ;
+
+cafOne :: Int;
+cafOne = 1;
+
+addCAFOne :: Int -> Int;
+addCAFOne x = cafOne + x;
+
+testCAFOne :: Int -> Int;
+testCAFOne x = List.sum (List.map addCAFOne (take x (repeat 1)));
+
+/*
+Oct 21/2005
+running: dynamicMapLookupBenchmark 1000000
+Run Time:        39,701 ms
+*/
+dynamicMapLookupBenchmark :: Int -> Int;
+dynamicMapLookupBenchmark !n =
+    let
+        helper :: Int -> Int -> Map.Map String Dynamic -> Int;
+        helper !index !total !lookupTarget =
+            if (index < n) then
+                let
+                    newTerm :: Int;
+                    newTerm =
+                        fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "a" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "b" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "c" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "d" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "e" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "f" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "g" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "h" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "i" lookupTarget))
+                            )
+                        + fromJust
+                            (fromDynamic
+                                (fromJust (Map.lookup "j" lookupTarget))
+                            )
+                        ;
+                in
+                    helper (index + 1) (total + newTerm) lookupTarget
+            else
+                total
+            ;
+
+        pairBasedMap :: Map.Map String Dynamic;
+        pairBasedMap =
+            Map.fromList
+                [
+                    ("a", toDynamic (1 :: Int)),
+                    ("b", toDynamic (2 :: Int)),
+                    ("c", toDynamic (3 :: Int)),
+                    ("d", toDynamic (4 :: Int)),
+                    ("e", toDynamic (5 :: Int)),
+                    ("f", toDynamic (6 :: Int)),
+                    ("g", toDynamic (7 :: Int)),
+                    ("h", toDynamic (8 :: Int)),
+                    ("i", toDynamic (9 :: Int)),
+                    ("j", toDynamic (10 :: Int))
+                ]
+            ;
+    in
+        helper 0 0 pairBasedMap
+    ;
+
+/*
+ * Some benchmarks of let variable use.
+ * The 'a' version is written using lets and the 'b' version is
+ * written with the let variables in-lined.
+ * The purpose is to compare the performance of how we generate let variables
+ * to in-lining.
+ * 
+ * Currently we will always lift the definition of the let variable into its own
+ * function.  If it is a single use let variable we inline the call to the definition
+ * function at the point the variable is referenced.
+ * We try to be smart about compiling the body of the let definition function 
+ * strictly, returning an unboxed value, etc.
+ */
+
+/*
+ * The definition function for x will be compiled strictly
+ * and return an unboxed value.
+ * So the difference between the 'a' and 'b' versions
+ * will reflect the overhead of calling the x definition
+ * function.   
+ */
+letVarBenchmark_1_a :: Int -> Int;
+letVarBenchmark_1_a n =
+    let
+        helper :: Int -> Int;
+        helper i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = 1 + 1 - 1;
+                in
+                    helper (i + x)
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+letVarBenchmark_1_b :: Int -> Int;
+letVarBenchmark_1_b n =
+    let
+        helper :: Int -> Int;
+        helper i =
+            if (i < n) then
+                helper (i + (1 + 1 - 1))
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+/*
+ * This is the same benchmark as letVarBenchmark_1_...
+ * except that the argument to 'helper' is plinged.
+ * This results in (i+x) part being compiled strictly.
+ */
+letVarBenchmark_2_a :: Int -> Int;
+letVarBenchmark_2_a n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = 1 + 1 - 1;
+                in
+                    helper (i + x)
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+letVarBenchmark_2_b :: Int -> Int;
+letVarBenchmark_2_b n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                helper (i + (1 + 1 - 1))
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+simpleIntFunction :: Int -> Int -> Int;
+simpleIntFunction x y = (x + y) / 2;
+
+simpleIntFunctionStrict :: Int -> Int -> Int;
+simpleIntFunctionStrict !x !y = (x + y) / 2;
+
+/*
+ * x is used lazily because the (i+x) part is compiled
+ * lazily.
+ * The difference between 'a' and 'b' will be due to the overhead in
+ * calling the definition function of x.  
+ */
+letVarBenchmark_3_a :: Int -> Int;
+letVarBenchmark_3_a n =
+    let
+        helper :: Int -> Int;
+        helper i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = simpleIntFunction 1 1;
+                in
+                    helper (i + x)
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+letVarBenchmark_3_b :: Int -> Int;
+letVarBenchmark_3_b n =
+    let
+        helper :: Int -> Int;
+        helper i =
+            if (i < n) then
+                helper (i + (simpleIntFunction 1 1))
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+/*
+ * x is used strictly because the 'i + x' part is compiled
+ * strictly due to the plinging of the helper argument.
+ */
+letVarBenchmark_4_a :: Int -> Int;
+letVarBenchmark_4_a n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = simpleIntFunction 1 1;
+                in
+                    helper (i + x)
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+letVarBenchmark_4_b :: Int -> Int;
+letVarBenchmark_4_b n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                helper (i + (simpleIntFunction 1 1))
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+/*
+ * In this case the definition function for x is
+ * compiled strictly because the definition of x is such that
+ * laziness can be ignored.
+ * The body of the f definition function is also compiled strictly
+ * because it is a single use let variable.
+ * The difference between the 'a' and 'b' cases should be
+ * solely due to the overhead in calling the
+ * z definition function.
+ */
+letVarBenchmark_5_a :: Int -> Int;
+letVarBenchmark_5_a n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = 1 + 2;
+                    z :: Int;
+                    z = x + x;
+                in
+                    helper (i + z)
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+letVarBenchmark_5_b :: Int -> Int;
+letVarBenchmark_5_b n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = 1 + 2;
+                in
+                    helper (i + (x + x))
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+/*
+ * In this case x is used strictly/unboxed in the definition of z.
+ * The body of the z definition function is compiled strictly because
+ * z is single use in a strict context.
+ * However we don't currently determine that all code paths in 
+ * the z definition evaluate/unbox x.  As a result the x definition
+ * function is compiled lazily and we pass a boxed value to the
+ * z definition function.
+ */
+letVarBenchmark_6_a :: Int -> Int;
+letVarBenchmark_6_a n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = simpleIntFunctionStrict 1 1;
+                    z :: Int;
+                    z = x + x;
+                in
+                    helper (i + z)
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+letVarBenchmark_6_b :: Int -> Int;
+letVarBenchmark_6_b n =
+    let
+        helper :: Int -> Int;
+        helper !i =
+            if (i < n) then
+                let
+                    x :: Int;
+                    x = simpleIntFunctionStrict 1 1;
+                in
+                    helper (i + (x + x))
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+/*
+ * There is a significant difference in performance between
+ * letVarBenchmark_7_a and letVarBenchmark_7_b.
+ * 
+ * Even though the use of x in z is strict/unboxed we aren't 
+ * currently doing the analysis to determine whether this
+ * usage occurs in all code paths of the definition of z.
+ * As a result we have to generate a lazy graph for x in 
+ * the x definition function and pass this boxed value to
+ * z.
+ */
+letVarBenchmark_7_a :: Int -> Int;
+letVarBenchmark_7_a n =
+    let
+        helper !i =
+            if (i < n) then
+                let
+                    x = simpleIntFunctionStrict 1 1;
+                    z = x + 1;
+                in
+                    helper (i + z)
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+letVarBenchmark_7_b :: Int -> Int;
+letVarBenchmark_7_b n =
+    let
+        helper !i =
+            if (i < n) then
+                helper (i + ((simpleIntFunctionStrict 1 1) + 1))
+            else
+                n
+            ;
+    in
+        helper 0
+    ;
+
+/** 
+ * A benchmark which tests the scoping of let variables in the generated code.
+ * In the helper function a lot of let variables are declared at the top level.
+ * However, the case statement is such that only two of the let variables will
+ * ever be used.  At one point in time the generated code would have declared/
+ * initialized all the let variables as local variables in the top level scope
+ * of the generated code for the helper function.  With current optimizations
+ * all of the initializations of the let variables should be in-lined into
+ * the different case alternates.  This avoids building the lazy graph for
+ * un-used let variables.
+ */
+letVarScopingBenchmark_1 x =
+    let
+        letVarScoping_Benchmark_1_Helper :: Int -> Int;
+        letVarScoping_Benchmark_1_Helper arg =
+            let
+                nineArgDoubleFunction ::
+                    Int
+                    -> Int
+                    -> Int
+                    -> Int
+                    -> Int
+                    -> Int
+                    -> Int
+                    -> Int
+                    -> Int
+                    -> Int;
+                nineArgDoubleFunction a b c d e f g h i =
+                    a + b - c + d + e + f + g + h + i;
+
+                var_1 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_2 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_3 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_4 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_5 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_6 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_7 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_8 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_9 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_10 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_11 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_12 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_13 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_14 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_15 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_16 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_17 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_18 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_19 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_20 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_21 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_22 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_23 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_24 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_25 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_26 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_27 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_28 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_29 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_30 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+                var_31 = nineArgDoubleFunction 1 2 3 4 5 6 7 8;
+            in
+                case arg of
+                1 -> (var_1 arg) + (var_2 arg);
+                2 -> (var_2 arg) + (var_3 arg);
+                3 -> (var_3 arg) + (var_4 arg);
+                4 -> (var_4 arg) + (var_5 arg);
+                5 -> (var_5 arg) + (var_6 arg);
+                6 -> (var_6 arg) + (var_7 arg);
+                7 -> (var_7 arg) + (var_8 arg);
+                8 -> (var_8 arg) + (var_9 arg);
+                9 -> (var_9 arg) + (var_10 arg);
+                10 -> (var_10 arg) + (var_11 arg);
+                11 -> (var_11 arg) + (var_12 arg);
+                12 -> (var_12 arg) + (var_13 arg);
+                13 -> (var_13 arg) + (var_14 arg);
+                14 -> (var_14 arg) + (var_15 arg);
+                15 -> (var_15 arg) + (var_16 arg);
+                16 -> (var_16 arg) + (var_17 arg);
+                17 -> (var_17 arg) + (var_18 arg);
+                18 -> (var_18 arg) + (var_19 arg);
+                19 -> (var_19 arg) + (var_20 arg);
+                20 -> (var_20 arg) + (var_21 arg);
+                21 -> (var_21 arg) + (var_22 arg);
+                22 -> (var_22 arg) + (var_23 arg);
+                23 -> (var_23 arg) + (var_24 arg);
+                24 -> (var_24 arg) + (var_25 arg);
+                25 -> (var_25 arg) + (var_26 arg);
+                26 -> (var_26 arg) + (var_27 arg);
+                27 -> (var_27 arg) + (var_28 arg);
+                28 -> (var_28 arg) + (var_29 arg);
+                29 -> (var_29 arg) + (var_30 arg);
+                30 -> (var_30 arg) + (var_31 arg);
+                31 -> (var_31 arg) + (var_1 arg);
+                32 -> (var_31 arg) + (var_1 arg);
+            ;
+    in
+        if (x > 0.0) then
+            Prelude.seq
+                (letVarScoping_Benchmark_1_Helper 23)
+                (letVarScopingBenchmark_1 (x - 1.0))
+        else
+            0.0
+    ;
+
+/** 
+ * A benchmark which tests the situation where a let variable is only
+ * referenced once in each mutually exclusive code branch in the helper
+ * function.  Both the references are strict.
+ */
+letVarScopingBenchmark_2_a :: Int -> Int;
+letVarScopingBenchmark_2_a arg =
+    let
+        helper :: Int -> Int;
+        helper y =
+            let
+                x = y + 2 * y;
+            in
+                if (y > 0) then
+                    x + 2
+                else
+                    x + 3
+            ;
+    in
+
+        if (arg > 0) then
+            Prelude.seq (helper 1) (letVarScopingBenchmark_2_a (arg - 1))
+        else
+            0
+    ;
+
+/** 
+ * The same as letVarScopingBenchmark_2_a except that the
+ * definition of x is forced to compile strictly by using
+ * Prelude.eager.
+ */
+letVarScopingBenchmark_2_b :: Int -> Int;
+letVarScopingBenchmark_2_b arg =
+    let
+        helper :: Int -> Int;
+        helper y =
+            let
+                x = Prelude.eager (y + 2 * y);
+            in
+                if (y > 0) then
+                    x + 2
+                else
+                    x + 3
+            ;
+    in
+
+        if (arg > 0) then
+            Prelude.seq (helper 1) (letVarScopingBenchmark_2_b (arg - 1))
+        else
+            0
+    ;
+
+/** 
+ * A benchmark which tests the situation where a let variable is only
+ * referenced once in each mutually exclusive code branch in the helper
+ * function.  Both the references are strict.
+ * In addition the let variable z is only referenced in the definition of x.
+ */
+letVarScopingBenchmark_3_a :: Int -> Int;
+letVarScopingBenchmark_3_a arg =
+    let
+        helper :: Int -> Int;
+        helper y =
+            let
+                z = y + y;
+                x = y + 2 * y - z;
+            in
+                if (y > 0) then
+                    x + 2
+                else
+                    x + 3
+            ;
+    in
+
+        if (arg > 0) then
+            Prelude.seq (helper 1) (letVarScopingBenchmark_3_a (arg - 1))
+        else
+            0
+    ;
+
+/** 
+ * The same as letVarScopingBenchmark_3_a except that the let variable z has been 
+ * moved, by hand, into the scope at which it is actually referenced.
+ */
+letVarScopingBenchmark_3_b :: Int -> Int;
+letVarScopingBenchmark_3_b arg =
+    let
+        helper :: Int -> Int;
+        helper y =
+            let
+                x =
+                    let
+                        z = y + y;
+                    in
+                        y + 2 * y - z
+                    ;
+            in
+                if (y > 0) then
+                    x + 2
+                else
+                    x + 3
+            ;
+    in
+
+        if (arg > 0) then
+            Prelude.seq (helper 1) (letVarScopingBenchmark_3_b (arg - 1))
+        else
+            0
+    ;
+

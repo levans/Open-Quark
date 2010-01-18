@@ -1,0 +1,218 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * RegEx.cal
+ * Created: Oct 15, 2007
+ * By: Tom Haggie
+ */
+
+
+module Cal.Experimental.Utilities.RegEx;
+
+import Cal.Core.Prelude using
+    dataConstructor = Nothing, Just;
+    typeConstructor = Boolean, Int, String, Maybe;
+    function = seq, maybeApply, strict;
+    ;
+import Cal.Core.String using
+    function = substring;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    function = makeArrayFromIndices;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+// Import data types from Java
+data foreign unsafe import jvm "java.util.regex.Pattern" public JPattern;
+data foreign unsafe import jvm "java.util.regex.Matcher" public JMatcher;
+data foreign unsafe import jvm "java.lang.CharSequence" public JCharSequence;
+
+// Compiles a regular expression string into a pattern
+foreign unsafe import jvm "static method java.util.regex.Pattern.compile"
+    private jCompilePattern :: String -> JPattern;
+
+// Casts a String the a CharSequence
+foreign unsafe import jvm "cast"
+    stringToJCharSequence :: String -> JCharSequence;
+
+// Creates a new (mutable!!!!) matcher object from a compiled regular expression
+// and a String for it to work with.
+foreign unsafe import jvm "method matcher"
+    private jMatcher :: JPattern -> JCharSequence -> JMatcher;
+
+// Mutates the Matcher finding the next instance of the regular expression
+foreign unsafe import jvm "method find"
+    private jFind :: JMatcher -> Boolean;
+
+// The number of groups the Matcher has matched
+foreign unsafe import jvm "method groupCount"
+    private jGroupCount :: JMatcher -> Int;
+
+// The start index (within the original string) of the nth group
+foreign unsafe import jvm "method start"
+    private jStart :: JMatcher -> Int -> Int;
+
+// The end index (within the original string) of the nth group
+foreign unsafe import jvm "method end"
+    private jEnd :: JMatcher -> Int -> Int;
+
+/**
+ * Type for holding the results of matching a regular expression within a String
+ */
+data public MatchResult = 
+    private MatchResult
+        boundries :: !(Array Int)
+        ;
+
+/**
+ * The number of groups of characters matched by the regular expression
+ */
+matchResultSize :: MatchResult -> Int;
+public matchResultSize !matchResult = 
+    (Array.length matchResult.MatchResult.boundries) / 2;
+
+/**
+ * The group of characters matched
+ */
+matchResultGroup :: String -> Int -> MatchResult -> String;
+public matchResultGroup !string !group !matchResult = 
+    let
+        start = matchResultStart matchResult group;
+        end = matchResultEnd matchResult group;
+    in
+        substring string start end;
+/**
+ * The start index (within the original string) of the nth group
+ */
+public matchResultStart matchResult group = 
+    Array.subscript matchResult.MatchResult.boundries (group/2);
+
+/**
+ * The end index (within the original string) of the nth group
+ */
+public matchResultEnd matchResult group = 
+    Array.subscript matchResult.MatchResult.boundries (group/2+1);
+
+/**
+ * Get the boundries of the match result as a list 
+ */
+public matchResultBoundries matchResult = 
+    Array.toList matchResult.MatchResult.boundries;
+
+/**
+ * Make the MatchResult showable
+ */
+instance Show MatchResult where
+    show = showMatchResult;
+    ;
+
+// function to show a MatchResult used in making implement show 
+showMatchResult !matchResult = 
+    show matchResult.MatchResult.boundries;
+
+/**
+ * A compiled regular expression used for matching the contents with Strings 
+ */
+data public RegEx =
+    private RegEx
+        pattern :: JPattern 
+    ;
+
+/**
+ * Compile a regular expression from a String
+ */
+makeRegEx :: String -> RegEx;
+public makeRegEx !pattern =
+    RegEx $ jCompilePattern pattern;
+
+/**
+ * Test to see if a regular expression matches anything in the provided String
+ */
+matches :: RegEx -> String -> Boolean;
+public matches !regEx !string =
+    let
+        matcher = jMatcher regEx.RegEx.pattern (stringToJCharSequence string);
+    in
+        jFind matcher;
+
+/**
+ * Match the regular expression to the String, resulting in a MatchResult for 
+ * each substring that matches
+ */
+match :: RegEx -> String -> [MatchResult];
+public match !regEx !string =
+    let
+        // create a new matcher from the regular expression and the String we're
+        // processing, care is needed in dealing with this as the matcher is 
+        // mutable
+        matcher = jMatcher regEx.RegEx.pattern (stringToJCharSequence string);
+
+        // Extracts a MatchResult from the current state of the matcher
+        getResult :: JMatcher -> MatchResult;
+        getResult !matcher =
+            let
+                itemFunction :: Int -> Int;
+                itemFunction index = 
+                    if (index % 2 == 0) then
+                        (jStart matcher (index / 2))
+                    else
+                        (jEnd matcher (index / 2));
+                
+                nGroups = jGroupCount matcher;
+                result = strict makeArrayFromIndices ((nGroups+1)*2) itemFunction;  
+            in
+                MatchResult result;
+        
+        // Extract the MatchResults from the Matcher
+        getResults :: JMatcher -> [MatchResult];
+        getResults !matcher =
+            let
+                found = jFind matcher;
+                result = getResult matcher;
+                
+                results = 
+                    result
+                    `seq` // Make sure we always extract the results in order
+                    getResults matcher;
+                
+            in
+                if found then 
+                    result : results
+                else
+                    [];
+    in
+        getResults matcher;

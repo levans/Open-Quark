@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+
+<!-- Comment this out so it doesn't go over the network to check against the dtd. -->
+<!--
+<!DOCTYPE catalog
+   PUBLIC "-//OASIS/DTD Entity Resolution XML Catalog V1.0//EN"
+   "http://www.oasis-open.org/committees/entity/release/1.0/catalog.dtd">
+  -->
+
+
+<!--
+    Catalog file so that uri's can be resolved to file system paths.
+    Change the group xml:base attribute to point to your docbook xsl folder.
+  -->
+<catalog xmlns="urn:oasis:names:tc:entity:xmlns:xml:catalog" prefer="public">
+
+  <!-- DocBook xsl folder. -->
+  <!--group  xml:base="file:///D:/Depots/gendoc/Main/PI/External/SourceForge/DocBook/docbook-xsl/1.71.1/docbook-xsl-1.71.1/" -->
+  <!--group  xml:base="../../../../../../Main/PI/External/SourceForge/DocBook/docbook-xsl/1.72.0/docbook5-xsl-1.72.0/" -->
+
+  <!-- 1.72.0 seems too buggy. 
+       1.71.1 doesn't wrap literallayout elements, but this is better than the bugs in 1.72.0 for now. -->
+  <group  xml:base="../../../../Main/PI/External/SourceForge/DocBook/docbook-xsl/1.71.1/docbook-xsl-1.71.1/">
+
+    <!-- Resolve stylesheet URL to local file -->
+    <rewriteURI uriStartString="http://docbook.sourceforge.net/release/xsl/current2/"
+                rewritePrefix="" />
+
+  </group>
+
+</catalog>

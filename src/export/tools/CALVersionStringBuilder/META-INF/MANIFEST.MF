@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: CALVersionStringBuilder
+Bundle-SymbolicName: com.businessobjects.lang.cal.tools.calVersionStringBuilder
+Bundle-Version: 1.2.0.131v20060927
+Bundle-Localization: plugin
+Bundle-Vendor: Business Objects, Inc.
+Eclipse-BuddyPolicy: registered
+Require-Bundle: 
+ org.openquark.cal.platform
+Export-Package: org.openquark.tools.build

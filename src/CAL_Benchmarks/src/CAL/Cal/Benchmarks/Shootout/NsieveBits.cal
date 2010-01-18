@@ -1,0 +1,195 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * nseivebits benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org/gp4/benchmark.php?test=nsieve&lang=all@}
+ * 
+ * This code is based on and inspired by the entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.NsieveBits;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, String;
+    function = eager, intToString, seq, stringToInt;
+    ;
+import Cal.Core.Bits using
+    function = bitwiseAnd, complement, shiftL, shiftR, shiftRUnsigned;
+    ;
+import Cal.Core.String using
+    function = replicate;
+    ;
+import Cal.Collections.List using
+    function = head;
+    ;
+import Cal.IO.Console using
+    function = printLine;
+    ;
+
+/** A custom bitset implementation as an abstract data type. */
+data foreign unsafe import jvm private "int[]" private BitSet;
+
+foreign unsafe import jvm "newArray" newArray :: Int -> BitSet;
+
+foreign unsafe import jvm "subscriptArray"
+    subscriptArray :: BitSet -> Int -> Int;
+
+foreign unsafe import jvm "updateArray"
+    updateArray :: BitSet -> Int -> Int -> Int;
+
+foreign unsafe import jvm "lengthArray" lengthArray :: BitSet -> Int;
+
+bitsetMask :: Int;
+bitsetMask = 31 :: Int;
+
+bitsetShift :: Int;
+bitsetShift = 5 :: Int;
+
+makeBitSet :: Int -> BitSet;
+makeBitSet !m = eager $ newArray ((m `shiftR` bitsetShift) + 1);
+
+bitsetSetAll :: BitSet -> ();
+bitsetSetAll !bitset =
+    let
+        loopUpperBound :: Int;
+        loopUpperBound = eager $ lengthArray bitset;
+
+        setAllHelper :: Int -> ();
+        setAllHelper !i =
+            if i < loopUpperBound then
+                updateArray bitset i (-1)
+                `seq`
+                setAllHelper (i + 1)
+            else
+                ()
+            ;
+    in
+        setAllHelper 0
+    ;
+
+bitsetClear :: BitSet -> Int -> Int;
+bitsetClear !bitset !i =
+    let
+        pos :: Int;
+        pos = eager $ i `shiftR` bitsetShift;
+    in
+        updateArray
+            bitset
+            pos
+            (
+                (bitset `subscriptArray` pos)
+                `bitwiseAnd`
+                (complement (1 `shiftL` (i `bitwiseAnd` bitsetMask)))
+            )
+    ;
+
+bitsetGet :: BitSet -> Int -> Boolean;
+bitsetGet !bitset !i =
+    (
+        (
+            (bitset `subscriptArray` (i `shiftR` bitsetShift))
+            `shiftRUnsigned`
+            (i `bitwiseAnd` bitsetMask)
+        )
+        `bitwiseAnd`
+        1
+    )
+    != 0
+    ;
+
+/** pad width number returns number padded to width with spaces*/
+pad :: Int -> Int -> String;
+pad !width !number =
+    let
+        str :: String;
+        str = intToString number;
+    in
+        replicate (width - String.length str) ' ' ++ str
+    ;
+
+nsieve :: Int -> BitSet -> Int;
+nsieve !n !isPrime =
+    let
+        nsieve_helper :: Int -> Int -> Int;
+        nsieve_helper !i !numPrimesFound =
+            if i == n then
+                numPrimesFound
+            else if bitsetGet isPrime i then
+                let
+                    update :: Int -> Int -> Int -> ();
+                    update !k !i !n =
+                        if k > n then
+                            ()
+                        else
+                            bitsetClear isPrime k
+                            `seq`
+                            update (k + i) i n
+                        ;
+                in
+                    update (i + i) i n
+                    `seq`
+                    nsieve_helper (i + 1) (numPrimesFound + 1)
+            else
+                nsieve_helper (i + 1) numPrimesFound
+            ;
+    in
+        bitsetSetAll isPrime
+        `seq`
+        nsieve_helper 2 0
+    ;
+
+main :: [String] -> ();
+public main !args =
+    let
+        n :: Int;
+        n = eager $ stringToInt (head args);
+
+        showResult :: Int -> ();
+        showResult !n =
+            printLine
+                ("Primes up to " ++ pad 8 n ++ " " ++ pad 8 (nsieve n bits))
+            ;
+
+        m :: Int;
+        m = shiftL 1 n * 10000;
+
+        bits :: BitSet;
+        bits = makeBitSet (m + 1);
+    in
+        showResult m
+        `seq`
+        showResult (shiftR m 1)
+        `seq`
+        showResult (shiftR m 2)
+    ;
+

@@ -1,0 +1,228 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Color.cal
+ * Created: March 10, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines the CAL {@link typeConstructor = Color@} type, as well as associated functions.
+ *
+ * @author Bo Ilic
+ */
+
+module Cal.Graphics.Color;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Boolean, Int, JObject, String;
+    function = input, intToString, output;
+    ;
+      
+import Cal.Core.String;        
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+
+// Colour type definitions
+
+// The CAL colour type is meant to be immutable. However, it is based on the java.awt.Color type, which is mutable.
+// Hence, we need to be careful not to write any public functions that modify the underlying java.awt.Color object.
+//Notice that the implementation scope of the CAL Colour type is private.
+/**
+ * The CAL type for representing a color.
+ */
+data foreign unsafe import jvm private "java.awt.Color" public Color deriving Eq;
+
+/**
+ * A CAL foreign type corresponding to the Java java.awt.Color type.
+ */
+data foreign unsafe import jvm public "java.awt.Color" public JColor deriving Inputable, Outputable;
+
+foreign unsafe import jvm "constructor" private jColor_new :: Int -> Int -> Int -> Int -> JColor;
+foreign unsafe import jvm "method equals" private jColor_equals :: JColor -> JObject -> Boolean;     
+foreign unsafe import jvm "cast"
+    private jColorToColour :: JColor -> Color;
+foreign unsafe import jvm "cast"
+    private colourToJColor :: Color -> JColor;
+    
+foreign unsafe import jvm "method getRed" private jColor_getRed :: JColor -> Int;
+foreign unsafe import jvm "method getGreen" private jColor_getGreen :: JColor -> Int;
+foreign unsafe import jvm "method getBlue" private jColor_getBlue :: JColor -> Int;
+foreign unsafe import jvm "method getAlpha" private jColor_getAlpha :: JColor -> Int;
+foreign unsafe import jvm "method getRed" private getRedFromColour :: Color -> Int;
+foreign unsafe import jvm "method getGreen" private getGreenFromColour :: Color -> Int;
+foreign unsafe import jvm "method getBlue" private getBlueFromColour :: Color -> Int;
+foreign unsafe import jvm "method getAlpha" private getAlphaFromColour :: Color -> Int;
+
+/**
+ * Constructs a {@link typeConstructor = Color@} value from its constituent RGB values in the range (0 - 255).
+ * @arg red the red component in the range (0 - 255).
+ * @arg green the green component in the range (0 - 255).
+ * @arg blue the blue component in the range (0 - 255).
+ * @return the resulting {@code Color@} value.
+ */
+makeColor :: Int -> Int -> Int -> Color;
+public makeColor !red !green !blue = jColorToColour (jColor_new red green blue 255);
+
+/**
+ * Constructs a {@link typeConstructor = Color@} value representing a translucent color from its constituent RGB and alpha values in the range (0 - 255).
+ * @arg red the red component in the range (0 - 255).
+ * @arg green the green component in the range (0 - 255).
+ * @arg blue the blue component in the range (0 - 255).
+ * @arg alpha the alpha component in the range (0 - 255).
+ * @return the resulting {@code Color@} value.
+ */
+makeTranslucentColor :: Int -> Int -> Int -> Int -> Color;
+public makeTranslucentColor !red !green !blue !alpha = jColorToColour (jColor_new red green blue alpha);
+
+/**
+ * Returns a triple of the constituent RGB values that make up the specified {@link typeConstructor = Color@} value.
+ * @arg colour the {@code Color@} value.
+ * @return a triple of the constituent RGB values that make up the specified {@link typeConstructor = Color@} value.
+ */
+colorToRGB :: Color -> (Int, Int, Int);
+public colorToRGB !colour = (getRedFromColour colour, getGreenFromColour colour, getBlueFromColour colour);
+    
+/**
+ * Returns a 4-tuple of the constituent RGB and alpha values that make up the specified {@link typeConstructor = Color@} value.
+ * @arg colour the {@code Color@} value.
+ * @return a 4-tuple of the constituent RGB and alpha values that make up the specified {@link typeConstructor = Color@} value.
+ */
+colorToRGBA :: Color -> (Int, Int, Int, Int);
+public colorToRGBA !colour = (getRedFromColour colour, getGreenFromColour colour, getBlueFromColour colour, getAlphaFromColour colour);
+    
+/**
+ * Constructs a {@link typeConstructor = Color@} value from its constituent RGB values, as represented as a triple.
+ * @arg rgb the (red, green, blue) components, each in the range (0 - 255).
+ * @return the resulting {@code Color@} value.
+ */
+rgbToColor :: (Int, Int, Int) -> Color;
+public rgbToColor !rgb = 
+    case rgb of 
+    (red, green, blue) -> makeColor red green blue;
+    ;
+    
+/**
+ * Constructs a {@link typeConstructor = Color@} value representing a translucent color from its constituent RGB and alpha values, as represented as a 4-tuple.
+ * @arg rgba the (red, green, blue, alpha) components, each in the range (0 - 255).
+ * @return the resulting {@code Color@} value.
+ */
+rgbaToColor :: (Int, Int, Int, Int) -> Color;
+public rgbaToColor !rgba = 
+    case rgba of 
+    (red, green, blue, alpha) -> makeTranslucentColor red green blue alpha;
+    ;    
+
+instance Show Color where
+    show = showColor;
+    ;
+    
+showColor :: Color -> String;
+public showColor !color =
+    case (Color.colorToRGBA color) of
+    (r, g, b, a) ->
+        let
+            rStr = (intToString r);
+            gStr = (intToString g);
+            bStr = (intToString b);
+            aStr = (intToString a);
+        in
+            "[r=" ++ rStr ++ ",g=" ++ gStr ++ ",b=" ++ bStr ++ ",a=" ++ aStr ++ "]";
+    ;
+    
+instance Inputable Color where
+    input = inputColourFromJObject;
+    ;
+    
+inputColourFromJObject :: JObject -> Color;
+private inputColourFromJObject !object = inputColor (input object);
+
+/**
+ * Converts a {@link JColor@} value to a {@link typeConstructor = Color@} value.
+ * @arg color the {@code JColor@} value to be converted.
+ * @return the corresponding {@code Color@} value.
+ */
+inputColor :: JColor -> Color;
+public inputColor !color = jColorToColour (jColor_copy color);
+        
+instance Outputable Color where
+    output = outputColourToJObject;
+    ;
+
+outputColourToJObject :: Color -> JObject;
+private outputColourToJObject !colour = output (outputColor colour);  
+    
+jColor_copy :: JColor -> JColor;
+private jColor_copy !c = jColor_new (jColor_getRed c) (jColor_getGreen c) (jColor_getBlue c) (jColor_getAlpha c); 
+    
+/**
+ * Converts a {@link typeConstructor = Color@} value to a {@link JColor@} value.
+ * @arg colour the {@code Color@} value to be converted.
+ * @return the corresponding {@code JColor@} value.
+ */
+outputColor :: Color -> JColor;
+public outputColor !colour = jColor_copy (colourToJColor colour);    
+
+/** The {@code Color@} value for the color black. */
+public black   = makeColor 0   0   0;
+/** The {@code Color@} value for the color maroon. */
+public maroon  = makeColor 128 0   0;
+/** The {@code Color@} value for the color green. */
+public green   = makeColor 0   128 0;
+/** The {@code Color@} value for the color olive. */
+public olive   = makeColor 128 128 0;
+/** The {@code Color@} value for the color navy. */
+public navy    = makeColor 0   0   128;
+/** The {@code Color@} value for the color purple. */
+public purple  = makeColor 128 0   128;
+/** The {@code Color@} value for the color teal. */
+public teal    = makeColor 0   128 128;
+/** The {@code Color@} value for the color gray. */
+public gray    = makeColor 128 128 128;
+/** The {@code Color@} value for the color silver. */
+public silver  = makeColor 192 192 192;
+/** The {@code Color@} value for the color red. */
+public red     = makeColor 255 0   0;
+/** The {@code Color@} value for the color lime. */
+public lime    = makeColor 0   255 0;
+/** The {@code Color@} value for the color yellow. */
+public yellow  = makeColor 255 255 0;
+/** The {@code Color@} value for the color blue. */
+public blue    = makeColor 0   0   255;
+/** The {@code Color@} value for the color fuchsia. */
+public fuchsia = makeColor 255 0   255;
+/** The {@code Color@} value for the color aqua. */
+public aqua    = makeColor 0   255 255;
+/** The {@code Color@} value for the color white. */
+public white   = makeColor 255 255 255;

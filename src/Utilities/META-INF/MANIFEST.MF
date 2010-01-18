@@ -1,0 +1,20 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: %pluginName
+Bundle-SymbolicName: org.openquark.util
+Bundle-Version: 1.2.0.131v20060927
+Bundle-Localization: plugin
+Bundle-Vendor: %providerName
+Eclipse-BuddyPolicy: registered
+Import-Package: com.ibm.icu.text; quark_icu="true",
+ com.ibm.icu.util; quark_icu="true"
+Export-Package: org.openquark.util,
+ org.openquark.util.attributes,
+ org.openquark.util.database,
+ org.openquark.util.datadictionary,
+ org.openquark.util.html,
+ org.openquark.util.model,
+ org.openquark.util.time,
+ org.openquark.util.ui,
+ org.openquark.util.xml
+Bundle-RequiredExecutionEnvironment: J2SE-1.5

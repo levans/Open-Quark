@@ -1,0 +1,910 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+ 
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ 
+    * Neither the name of Business Objects nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    CALForHaskellProgrammers.xml
+    Creation date: Feb 21, 2007.
+    By: Edward Lam
+-->
+<!DOCTYPE article [
+<!ENTITY % sgml.features "IGNORE">
+<!ENTITY % xml.features "INCLUDE">
+<!ENTITY euro "&#8364;">
+<!ENTITY % dbcent PUBLIC "-//OASIS//ENTITIES DocBook Character Entities V4.4//EN" "http://www.oasis-open.org/docbook/xml/4.4/dbcentx.mod">
+%dbcent;
+
+<!ENTITY __LegalNotice__ey98qrh1 SYSTEM "LegalNotice.xml">
+]>
+<article class="techreport" version="0.10"
+         xmlns="http://docbook.org/ns/docbook"
+         xmlns:xlink="http://www.w3.org/1999/xlink"
+         xmlns:xi="http://www.w3.org/2001/XInclude"
+         xmlns:svg="http://www.w3.org/2000/svg"
+         xmlns:mml="http://www.w3.org/1998/Math/MathML"
+         xmlns:html="http://www.w3.org/1999/xhtml"
+         xmlns:db="http://docbook.org/ns/docbook">
+  <title>CAL for Haskell Programmers</title>
+
+  <info>
+    <releaseinfo>Last modified: January 16, 2007</releaseinfo>
+
+    <author>
+      <personname>Bo Ilic</personname>
+    </author>
+  </info>
+
+  <para>CAL is a strongly typed lazy functional language. The number of such
+  languages in current development is quite small, the main ones being Haskell
+  (<link xlink:href="http://www.haskell.org">http://www.haskell.org</link>)
+  and Clean (<link
+  xlink:href="http://clean.cs.ru.nl">http://clean.cs.ru.nl</link>).</para>
+
+  <para>This paper compares and contrasts CAL with Haskell and is intended for
+  readers already familiar with Haskell.</para>
+
+  <section>
+    <title>Summary of CAL language features</title>
+
+    <para>CAL implements essentially all the non-syntactic sugar features of
+    Haskell 98 (with its standard addendums) including:</para>
+
+    <itemizedlist spacing="compact">
+      <listitem>
+        <para>algebraic functions with parametric polymorphism and inferred
+        types</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>type declarations can specialize or assert types</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>data declarations for algebraic types</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>strictness flags for data constructor arguments</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>a module system supporting separate compilation</para>
+      </listitem>
+
+      <listitem>
+        <para>expression syntax supporting if-then-else, case, let (for both
+        local variable and function definitions) and lambda expressions</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>support for most of Haskell's expression operators</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>special syntax for tuples, strings, characters, numbers and
+        lists</para>
+      </listitem>
+
+      <listitem>
+        <para>an extensive collection of standard libraries</para>
+      </listitem>
+
+      <listitem>
+        <para>single parameter type classes</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>superclasses</para>
+          </listitem>
+
+          <listitem>
+            <para>derived instances, such as the instance declaration for Eq
+            List</para>
+          </listitem>
+
+          <listitem>
+            <para>deriving clauses for common classes</para>
+          </listitem>
+
+          <listitem>
+            <para>default class method definitions</para>
+          </listitem>
+
+          <listitem>
+            <para>higher-kinded type variables, such as with the Functor type
+            class</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>dynamics support via the Typeable type class and Dynamic
+        type</para>
+      </listitem>
+
+      <listitem>
+        <para>user documentation generated from source code (similar to
+        Haddock)</para>
+      </listitem>
+
+      <listitem>
+        <para>foreign function support</para>
+      </listitem>
+
+      <listitem>
+        <para>hierarchical module names</para>
+      </listitem>
+    </itemizedlist>
+
+    <para>CAL takes a different approach to syntax than Haskell:</para>
+
+    <itemizedlist spacing="compact">
+      <listitem>
+        <para>CAL uses an expression-oriented style rather than providing
+        equal support for an equation-based pattern matching style and an
+        expression style</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>there are syntactic features for improving the convenience
+            of pattern matching using the expression oriented style e.g. CAL's
+            use of data constructor field names</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>CAL does not make use of layout. Semicolons are required to
+        terminate function and other definitions and in case pattern
+        clauses.</para>
+      </listitem>
+
+      <listitem>
+        <para>CAL uses Java's syntax for comments</para>
+      </listitem>
+
+      <listitem>
+        <para>CAL's version of Javadoc or Haddock is more similar to Javadoc
+        (and is called CALDoc)</para>
+      </listitem>
+    </itemizedlist>
+
+    <para>CAL has the following features and characteristics not found in
+    Haskell 98:</para>
+
+    <itemizedlist spacing="compact">
+      <listitem>
+        <para>CAL is built on top of the Java Platform</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>CAL code compiles directly to JVM instructions (or
+            optionally to Java source code). CAL code is portable to any JVM
+            platform and can be distributed as JAR files.</para>
+          </listitem>
+
+          <listitem>
+            <para>CAL itself is implemented in Java</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>CAL provides the ability to work with Java object and primitive
+        types and call any Java method, field or constructor</para>
+      </listitem>
+
+      <listitem>
+        <para>CAL can surface various Java operators for casting, array
+        operations, instanceof checks, and null checks as CAL functions</para>
+      </listitem>
+
+      <listitem>
+        <para>polymorphic extensible records as in the Trex extension to
+        Hugs</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>tuples in CAL are extensible records with ordinal field
+            names</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>full Unicode support</para>
+      </listitem>
+
+      <listitem>
+        <para>support for internationalization and localization of CAL
+        modules</para>
+      </listitem>
+
+      <listitem>
+        <para>strictness annotations (plinging) on function arguments as well
+        as data constructor fields</para>
+      </listitem>
+
+      <listitem>
+        <para>ability to interoperate CAL with Java in an event-driven style
+        e.g. Java can call a CAL function that produces a (potentially not
+        fully evaluated) CAL value that can then depending on the client Java
+        code, be further explored via further calls to CAL functions exploring
+        this value</para>
+      </listitem>
+
+      <listitem>
+        <para>apis for programmatically building CAL code using Java at
+        runtime</para>
+      </listitem>
+
+      <listitem>
+        <para>deepSeq is supported for all types i.e. <code>deepSeq :: a -&gt;
+        b -&gt; b;</code> (as well as the usual <code>seq :: a -&gt; b -&gt;
+        b</code>)</para>
+      </listitem>
+
+      <listitem>
+        <para>Rich support for Dynamics. All types are automatically instances
+        of the Typeable type class (if possible)</para>
+      </listitem>
+
+      <listitem>
+        <para>various debugging tools, such as the ability to inspect
+        arbitrary CAL values without evaluating them</para>
+      </listitem>
+
+      <listitem>
+        <para>extensible support for exceptions</para>
+      </listitem>
+    </itemizedlist>
+  </section>
+
+  <section>
+    <title>Why did we create CAL instead of just using Haskell?</title>
+
+    <orderedlist numeration="loweralpha">
+      <listitem>
+        <formalpara>
+          <title>CAL is simple to use for interacting with real world
+          environments</title>
+
+          <para>CAL takes a practical approach to interacting with the real
+          world. This is one of the defining differences between CAL and
+          Haskell, and was one of the main motivators for us in implementing a
+          different language. For example, in the "History of Haskell" paper
+          by Paul Hudak et al, in section 3.2 it says that "Once we were
+          committed to a lazy language, a pure one was inescapable". Of
+          course, Haskell supports functions like unsafePerformIO, so there
+          are qualifications to this statement, but the general philosophy is
+          an emphasis on purity, and this is usually stated right at the
+          beginning as a requirement if one adopts the lazy approach.</para>
+        </formalpara>
+
+        <para>In contrast, CAL takes a more pragmatic approach. CAL's foreign
+        function and type API lets programmers import any Java method, field
+        or constructor as a CAL function, and any Java type as a CAL type.
+        This makes it easy and convenient to access the rich array of Java
+        libraries available with minimal effort. The drawback is that these
+        imported types may be mutable, and the imported functions may not be
+        pure. However, the imported functions and types can be made private to
+        a module and CAL wrapper functions written to make the public
+        functions actually exposed by the module pure.</para>
+
+        <para>CAL supports various mechanisms to make it easy to control
+        laziness and evaluation order in cases such as writing the wrapper
+        functions mentioned above. These are also quite useful for dealing
+        with certain classes of space leaks in a simple way. For example, CAL
+        supports seq, deepSeq, plinging of function arguments and plinging of
+        data constructor arguments. In addition, CAL has an eager function
+        primitive that tells the code generator to not create a lazy thunk for
+        an expression, but just compile strictly.</para>
+
+        <para>Any algebraic function created using algebraic CAL types and
+        non-foreign functions is pure. Impurity in the language only arises
+        via the foreign API when referring to non-immutable Java types. We
+        have found that the use of wrappers often lets us localize the
+        impurity in a simple way. One canonical example is with the function
+        <function>outputListWith :: [a] -&gt; (a -&gt; JObject) -&gt;
+        JList</function>, where JObject and JList are CAL foreign types for
+        the Java types java.lang.Object and java.lang.List respectively. The
+        implementation involves calling a foreign function to create a new
+        java.util.ArrayList, and then adding elements of the CAL list to it,
+        using an element marshaling function. In particular, the created Java
+        list is mutated in the body of the function. However, due to
+        strictness annotations, this happens in a definite order, and the
+        resulting function outputListWith is pure.</para>
+
+        <para>Another technique for localizing state is through the use of
+        execution context properties. It is frequently the case that state,
+        such as the current time zone, is locally constant over a computation.
+        CAL has an execution context, into which clients can set such state
+        for the duration of an execution. Constant applicative form (CAF)
+        values are also tied to an execution context.</para>
+
+        <para>In addition, the execution context gives clients control over
+        the execution of a CAL program. For example, they can request that the
+        CAL program suspends execution.</para>
+
+        <para>Another example of the practical nature of CAL is that CAL's
+        String type is a foreign type with implementation type
+        java.lang.String and not [Char].</para>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>CAL is a low-risk choice for business applications</title>
+
+          <para>Since CAL programs can be distributed as a collection of Java
+          JARS with no other run-time support required, CAL based applications
+          have the platform independence and security of a Java application.
+          This makes CAL based applications more acceptable in situations
+          where conservative IT policies are in place.</para>
+        </formalpara>
+
+        <para>In addition, standard tools and practices for working with Java
+        based applications work for CAL. For example, people are very familiar
+        with deploying JARs. Many people know how to configure and tune a JVM
+        for heap size, garbage collection characteristics etc. Tools used to
+        diagnose runtime problems, such as profilers and debuggers, work with
+        CAL.</para>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Programs do not need to be entirely written, or even
+          primarily written in CAL</title>
+
+          <para>We wanted to create a language where it was possible to
+          introduce strongly typed lazy functional programming in the places
+          where it makes sense, but be able to coexist with teams that did not
+          use or know how to use this technology. We wanted to lower the
+          barrier of entry to obtaining the benefits of CAL by being able to
+          localize its use to the situations where the advantages were most
+          dramatic.</para>
+        </formalpara>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>CAL has extensive runtime language creation
+          capabilities</title>
+
+          <para>Whole CAL modules can be programmatically created, checked,
+          and compiled on the fly. Essentially all of the services of the CAL
+          compiler and runtime are accessible to the application programmer at
+          runtime in an efficient way. For example, new modules, or functions
+          can be created, checked for correctness, and executed without going
+          through slow intermediate formats (such as a source language textual
+          representation) and without creating any intermediate files on disk.
+          This is done in a fully multi-threaded way, both for compilation and
+          execution.</para>
+        </formalpara>
+
+        <para>One illustration of parts of this functionality is with the
+        GemCutter tool which is used for creating CAL functions (Gems) in a
+        graphical environment. The GemCutter provides rapid feedback to the
+        user as to whether a connection between functions is type correct,
+        suggests valid connections, and allows for the execution of gems in
+        such a way that unsatisfied arguments have their values prompted for
+        at run-time.</para>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>CAL seeks to be as comfortable as possible for mainstream
+          developers to use</title>
+
+          <para>One of our design goals was to make CAL as simple and
+          comfortable as possible for mainstream developers to use. In
+          particular, while we wanted to make extensive use of concepts and
+          ideas from the strongly typed functional world, consistency with the
+          notation, terminology and programming style of this world was not a
+          main priority.</para>
+        </formalpara>
+
+        <para>For example, we wanted to use longer, more descriptive, less
+        mathematical names, as is common in Java. The Haskell functions null
+        and nub are isEmpty and removeDuplicates in CAL. The Haskell type
+        class Monoid is Appendable in CAL.</para>
+
+        <para>We wanted to use longer variable names in our code, including in
+        the standard libraries, and explain, in comments, why things were
+        implemented the way they were. Our comments follow the Java
+        conventions in syntax and in style.</para>
+      </listitem>
+    </orderedlist>
+  </section>
+
+  <section>
+    <title>CAL performance</title>
+
+    <para>CAL has a mature compiler and runtime implementation that can
+    produce very fast code. In the case of micro-benchmarks, it is possible to
+    write CAL code that performs essentially as well as Java code, mainly
+    because the resulting CAL code compiles down to essentially the same
+    underlying optimal Java code. In addition, the CAL runtime has the
+    following optimizations:</para>
+
+    <para><itemizedlist>
+        <listitem>
+          <para>compiles tail recursive functions as loops</para>
+        </listitem>
+
+        <listitem>
+          <para>makes use of unboxed values (for foreign types). For example,
+          the unboxed form of the Prelude.Int type is the primitive unboxed
+          Java int.</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>these are used (where possible) for function arguments,
+              return values, and data constructor field values</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>efficient run-time representation of record types, especially
+          for tuples</para>
+        </listitem>
+
+        <listitem>
+          <para>a global optimizer, written in CAL, that does global
+          transformations such as inlining and fusion</para>
+        </listitem>
+
+        <listitem>
+          <para>no use of slow features such as the Java reflection API at
+          runtime</para>
+        </listitem>
+      </itemizedlist>The CAL compiler and run-time are both fully
+    multi-threaded. Adjunct modules can be created, compiled and functionality
+    in them executed in a fully multi-threaded way.</para>
+
+    <para>The CAL compiler can be configured to produce Java source code as an
+    intermediate format (rather than Java bytecode directly). The resulting
+    Java source code is fairly readable and can be used to understand how CAL
+    lazy constructs are compiled, and the special cases that we handle. In
+    particular, many of our run-time code generation optimizations have been
+    discovered by looking at the generated source for key functions of
+    interest, and asking ourselves how we would speed up the Java
+    implementation if it were hand written.</para>
+  </section>
+
+  <section>
+    <title>CAL syntax examples</title>
+
+    <para>Below are several code examples to illustrate some of the syntax of
+    CAL for someone familiar with Haskell. They are taken from the Standard
+    CAL libraries, although often with some condensation for purposes of
+    clearer exposition.</para>
+
+    <orderedlist numeration="loweralpha">
+      <listitem>
+        <formalpara>
+          <title>Declaration of the List.map function</title>
+
+          <para>This example shows the use of case expressions, type
+          declarations, as well as some of the syntactic sugar for the List
+          type. The usage of semicolons is different from Haskell and
+          whitespace is not significant.<programlisting>map :: (a -&gt; b) -&gt; [a] -&gt; [b];
+public map mapFunction !list =
+    case list of
+    []     -&gt; [];
+    listHead : listTail -&gt; 
+        mapFunction listHead : map mapFunction listTail;
+    ;</programlisting></para>
+        </formalpara>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Declaration of the List.length function</title>
+
+          <para>Shows the use of the accumulating parameters pattern in the
+          declaration of the local function lengthHelper, as well as plinging
+          on the acc argument to make the function use constant
+          space.<programlisting>length :: [a] -&gt; Int;
+public length !list =
+    let
+        lengthHelper :: Int -&gt; [a] -&gt; Int;
+        lengthHelper !acc !list =
+            case list of
+            [] -&gt; acc;
+            listHead : listTail -&gt; lengthHelper (acc + 1) listTail;
+            ;
+    in  
+        lengthHelper 0 list;</programlisting></para>
+        </formalpara>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Declaration of the outputListWith function</title>
+
+          <para>This function converts a value of the CAL List type to a value
+          of the CAL JList type. The JList type is a foreign type whose
+          implementation type is the Java type java.lang.List. There are
+          foreign type declarations for the JObject and JList types, as well
+          as foreign function declarations for jArrayList_new and jList_add.
+          Notice that the implementation of outputListWith mutates a Java list
+          object, but the resulting function outputListWith is still a pure
+          function.</para>
+        </formalpara>
+
+        <para>This example also includes some CALDoc that provides end-user
+        documentation of the outputListWith function. <programlisting>/**
+ * Converts a CAL list to a Java list using the element mapping function {@code f@} of type {@code a -&gt; {@link JObject@}@} 
+ * to convert elements of the CAL list.
+ * 
+ * @arg list the CAL list.
+ * @arg f the mapping function converting elements of the list to {@link JObject@} values.
+ * @return the corresponding {@code JList@}.
+ */
+outputListWith :: [a] -&gt; (a -&gt; JObject) -&gt; JList;
+public outputListWith !list f =           
+    let  
+        javaList :: JList;
+        javaList = jArrayList_new;
+                                              
+        outputListWithHelper :: [a] -&gt; (a -&gt; JObject) -&gt; JList -&gt; JList;    
+        outputListWithHelper !list elementMappingFunction !javaList =
+            case list of
+            [] -&gt; javaList;
+            x : xs -&gt; 
+                if (jList_add javaList (elementMappingFunction x)) then
+                    outputListWithHelper xs elementMappingFunction javaList
+                else
+                    error "Adding an element to a Java list failed.";                     
+            ;
+    in  
+        outputListWithHelper list f javaList;   
+
+data foreign unsafe import jvm public "java.lang.Object"
+    public JObject deriving Inputable, Outputable;
+data foreign unsafe import jvm public "java.util.List"
+   public JList deriving Inputable, Outputable;
+foreign unsafe import jvm "constructor java.util.ArrayList"
+    private jArrayList_new :: JList;
+foreign unsafe import jvm "method add"
+    private jList_add :: JList -&gt; JObject -&gt; Boolean;
+</programlisting></para>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Declaration of the Maybe, Either and TypeRep algebraic data
+          types</title>
+
+          <para>Field names (such as "value") below are required in the data
+          declaration. Unlike in Haskell, field names do not occupy the
+          function namespace, and can be repeated within a module. Field names
+          can be repeated within a single data declaration (such as
+          "typeConsName" below) for a different data constructor, even when
+          they have different types.<programlisting>data public Maybe a =       
+    public Nothing |    
+    public Just 
+        value :: a 
+    deriving Eq, Ord;
+
+data public Either a b =     
+    public Left 
+        value :: a |   
+    public Right 
+        value :: b       
+    deriving Eq, Ord;
+
+data public TypeRep =    
+    protected TypeRep 
+        typeConsName :: !String 
+        argTypes :: ![TypeRep] |
+    
+    protected FunctionTypeRep 
+        domainType :: !TypeRep 
+        codomainType :: !TypeRep |
+
+    protected ListTypeRep 
+        elementType :: !TypeRep |    
+    
+    protected UnitTypeRep |
+    
+    protected ForeignTypeRep
+        typeConsName :: !String
+   
+    deriving Eq;
+    ;</programlisting></para>
+        </formalpara>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Syntax for pattern matching</title>
+
+          <para>Here are some examples of pattern matching syntax in CAL. It
+          shows the various syntactic shortcuts that are available for
+          extracting the fields of a data constructor. <informalexample>
+              <para>This example shows traditional position-based case
+              extraction. Instead of pattern variable args one could use an
+              underscore ("_") to indicate an unused field value.</para>
+
+              <para><literallayout><userinput>case typeOf (Just 'a') of TypeRep name args -&gt; name;
+</userinput><emphasis role="bold-italic">returns</emphasis><computeroutput>
+"Prelude.Maybe"</computeroutput></literallayout></para>
+            </informalexample><informalexample>
+              <para>An example of field name based case extraction. One can
+              name a subset of the field names of the TypeRep data
+              constructor. In particular, if the TypeRep data constructor
+              added additional fields, this code would not need to be updated.
+              <literallayout><userinput>case typeOf (Just 'a') of TypeRep {typeConsName} -&gt; typeConsName;
+</userinput><emphasis role="bold-italic">returns</emphasis><computeroutput>
+"Prelude.Maybe"</computeroutput></literallayout></para>
+            </informalexample><informalexample>
+              <para>Here are some examples of data constructor field selection
+              using the "." operator. <literallayout><userinput>(Left "pear" :: Either String Double).Left.value
+</userinput><emphasis role="bold-italic">returns</emphasis><computeroutput>
+"pear"</computeroutput></literallayout><literallayout><userinput>(Just "apple").Just.value
+</userinput><emphasis role="bold-italic">returns</emphasis><computeroutput>
+"apple"</computeroutput></literallayout><literallayout><userinput>(typeOf (undefined :: JList)).ForeignTypeRep.typeConsName
+</userinput><emphasis role="bold-italic">returns</emphasis><computeroutput>
+"Prelude.JList"</computeroutput></literallayout></para>
+            </informalexample></para>
+        </formalpara>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>The Appendable type class</title>
+
+          <para>The Appendable type class is similar to the Monoid type class
+          in Haskell. Note that the concat class method has a default
+          implementation.<programlisting>public class Appendable a where    
+    public empty :: a;        
+    public isEmpty :: a -&gt; Boolean;
+    public append :: a -&gt; a -&gt; a;    
+    public concat :: [a] -&gt; a
+        default concatDefault;
+    ;
+
+instance Appendable [a] where
+    empty = emptyList; 
+    isEmpty = isEmptyList;  
+    append = appendList;
+    concat = concatList;    
+    ;
+    
+instance Appendable String where
+    empty = emptyString;  
+    isEmpty = isEmptyString;
+    append = appendString;
+    concat = concatString;
+    ;</programlisting></para>
+        </formalpara>
+
+        <informalexample>
+          <para>Here are a few sample expressions. The operator form of append
+          is ++. Note also the use of the append class method in infix form
+          using back-quotes (as in Haskell).<literallayout><userinput>"peat" ++ "bog"</userinput>
+<emphasis role="bold-italic">returns</emphasis>
+<computeroutput>"peatbog"</computeroutput></literallayout><literallayout><userinput>"peat" `append` "bog"</userinput>
+<emphasis role="bold-italic">returns</emphasis>
+<computeroutput>"peatbog"</computeroutput></literallayout><literallayout><userinput>[3 :: Int, 1, 4] ++ [1, 5]
+</userinput><emphasis role="bold-italic">returns</emphasis>
+<computeroutput>[3, 1, 4, 1, 5]</computeroutput></literallayout></para>
+        </informalexample>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Monad and Sequence type classes</title>
+
+          <para>Here are some examples of some of the more interesting type
+          class definitions possible in CAL. The Monad type class involves a
+          declaration for a higher kinded type variable m. In addition, there
+          is a superclass constraint in that Functor is a superclass of
+          Monad.</para>
+        </formalpara>
+
+        <para>The Sequence type class can be used to abstract functionality
+        over, for example, the List and Array types. Notice the additional
+        constraints on the sort and concat class methods. <programlisting>public class Functor m =&gt; Monad m where
+    public bind :: m a -&gt; (a -&gt; m b) -&gt; m b;    
+    public anonymousBind :: m a -&gt; m b -&gt; m b; 
+    public return :: a -&gt; m a;
+    ;
+
+class Sequence c where
+    length :: c a -&gt; Int;
+    subscript :: c a -&gt; Int -&gt; a;     
+    sort :: Ord a =&gt; c a -&gt; c a;
+    concat :: Prelude.Appendable a =&gt; c a -&gt; a;
+    ;
+    
+instance Sequence Prelude.List where ...
+instance Sequence Array.Array where ...</programlisting></para>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Tuples and records</title>
+
+          <para>Tuples in CAL are simply records with ordinal field names #1,
+          #2, #3, .... <informalexample>
+              <para>For example, the following 3 tuples are all the same:
+              <literallayout><code>("Anton", 3.0, True)</code>
+<code>{#1 = "Anton", #2 = 3.0, #3 = True}</code>
+<code>{#2 = 3.0, #3 = True, #1 = "Anton"}</code></literallayout></para>
+            </informalexample><informalexample>
+              <para>Textual field names are also permitted, so the following
+              is also a valid record: <literallayout><code>{name = "Anton", occupation = "toddler", #99 = [Just 2.0, Nothing]}</code></literallayout></para>
+            </informalexample> <informalexample>
+              <para>The record selection operator is the dot: <literallayout><userinput>("Anton", 3.0, True).#1
+</userinput><emphasis role="bold-italic">returns</emphasis><computeroutput>
+"Anton"</computeroutput></literallayout><literallayout><userinput>{name = "Anton", occupation = "toddler"}.occupation
+</userinput><emphasis role="bold-italic">returns</emphasis><computeroutput>
+"toddler"</computeroutput></literallayout></para>
+            </informalexample><informalexample>
+              <para>Record extension is supported with special syntax or just
+              using a record case expression:<literallayout><userinput>{("Anton", 3.0) | toys = True}</userinput>
+<emphasis role="bold-italic">returns</emphasis>
+<computeroutput>{#1 = "Anton", #2 = 3.0, toys = True}</computeroutput> 
+</literallayout><literallayout><userinput>case ("Anton", 3.0) of (f1, f2) -&gt; {#1 = f1, #2 = f2, toys = True};</userinput> 
+<emphasis role="bold-italic">returns</emphasis><computeroutput>
+{#1 = "Anton", #2 = 3.0, toys = True}</computeroutput></literallayout></para>
+            </informalexample><informalexample>
+              <para>Record update is also supported with special syntax or
+              just using a record case expression:</para>
+
+              <literallayout><userinput>{("Anton", 10.0) | #2 := 11.0}</userinput>
+<emphasis role="bold-italic">returns</emphasis><computeroutput>
+("Anton", 11.0)</computeroutput></literallayout>
+
+              <literallayout><userinput>case ("Anton", 10.0) of (f1, _) -&gt; (f1, 11.0);</userinput>
+<emphasis role="bold-italic">returns</emphasis><computeroutput>
+("Anton", 11.0)</computeroutput> </literallayout>
+            </informalexample><informalexample>
+              <para>Records in CAL support polymorphic record extension. For
+              example, using the <function>field1</function> function to
+              extract the #1 field of a record works on any record with a #1
+              field: <programlisting>field1 :: r\#1 =&gt; {r | #1 :: a} -&gt; a;
+public field1 !r = r.#1;</programlisting><?dbfo-need height="1in" ?><literallayout><userinput>field1 ("pear", 2.0, Just 'a')</userinput>
+<emphasis role="bold-italic">returns</emphasis>
+<computeroutput>"pear"</computeroutput></literallayout><literallayout><userinput>field1 {#1 = "fig", size = 100.0}</userinput>
+<emphasis role="bold-italic">returns</emphasis><computeroutput>
+"fig"</computeroutput></literallayout></para>
+            </informalexample><informalexample>
+              <para>Finally, note that records can be instances of type
+              classes. For example, all records are instances of the Eq, Ord,
+              Show and Typeable type classes provided that their field types
+              are also instances of these classes.</para>
+
+              <para>So for example:<literallayout><userinput>sort [([1.0, 3.0], Just 'b'), ([1.0, 3.0], Just 'a'), ([1.0, 2.0], Just 'b'), 
+      ([1.0, 2.0], Just 'a')]</userinput>
+<emphasis role="bold-italic">returns</emphasis>
+<computeroutput>[([1.0, 2.0], Just 'a'), ([1.0, 2.0], Just 'b'), ([1.0, 3.0], Just 'a'),
+ ([1.0, 3.0], Just 'b')]</computeroutput></literallayout></para>
+            </informalexample>This example shows how records as well as the
+          List, Char, Double and Maybe types are instances of the Eq and Ord
+          type classes. Note that in the case of List and Maybe these are
+          derived instance declarations. In the case of the record type we
+          call the instance declarations universal record instance
+          declarations. For example, there is an instance: <programlisting>instance Eq r =&gt; Eq {r} where ...</programlisting>where
+          the constraint implies that a record is an instance of Eq provided
+          that any field also has a type that is an instance of Eq.</para>
+        </formalpara>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Exception support</title>
+
+          <para>Here is an example showing a function throwing a CAL value of
+          a record-type as an exception, catching it, and then doing some
+          simple manipulations:<programlisting>//tests using various Cal types as Exception types, including the interesting case of records
+calThrownException5 =
+    throw ("abc", 1 :: Int, 2 :: Integer, ["abc", "def"], Just (20 :: Int))
+    `catch`
+    (
+        let
+            handler :: (String, Int, Integer, [String], Maybe Int) -&gt; String;
+            handler r = show (r.#5, r.#4, r.#3, r.#2, r.#1);
+        in
+            handler
+    );
+
+//evaluates to True
+testCalThrownException5 =
+    calThrownException5 == "(Prelude.Just 20, [\"abc\", \"def\"], 2, 1, \"abc\")";
+
+instance Exception String where;
+instance Exception Int where;
+instance Exception Integer where;
+instance Exception a =&gt; Exception (Maybe a) where;
+instance Exception a =&gt; Exception [a] where;
+instance Exception r =&gt; Exception {r} where;</programlisting></para>
+        </formalpara>
+      </listitem>
+
+      <listitem>
+        <formalpara>
+          <title>Debugging support</title>
+
+          <para>CAL has a variety of features supporting debugging. This is a
+          short overview of one such feature, the showInternal
+          function.</para>
+        </formalpara>
+
+        <para>The showInternal function is useful for seeing to what extent a
+        lazy value has been evaluated, without in the process affecting the
+        evaluation. Here is an example showing that the showInternal function
+        does not force evaluation of its argument: <literallayout><userinput>showInternal (Just 2.0).Just.value</userinput>
+<emphasis role="bold-italic">returns</emphasis>
+<computeroutput>"(Prelude.Just 2.0).Prelude.Just.value"</computeroutput></literallayout>
+        Sharing is shown for nodes with children: <literallayout><userinput>showInternal (let x = Just 'a'; in (x, x))</userinput>
+<emphasis role="bold-italic">returns</emphasis><computeroutput>
+"(&lt;@1 = (Prelude.Just a)&gt;, &lt;@1&gt;)"</computeroutput></literallayout><informalexample>
+            <para>The following expression shows an interesting example of
+            sharing in one of the standard educational definitions of the
+            Fibonacci numbers. Notice the @1 and @2 tags in the returned
+            value. These show the sharing that is occurring in the graph.
+            <literallayout><userinput>let fibs = 1 : 1 : List.zipWith Prelude.add fibs (List.tail fibs) :: [Integer];
+ in (deepSeq (take 7 fibs) (showInternal fibs))</userinput>
+<emphasis role="bold-italic">returns</emphasis>
+<computeroutput>"(Prelude.Cons 1 (Prelude.Cons 1 (Prelude.Cons 2 (Prelude.Cons 3 (Prelude.Cons 
+5 &lt;@1 = (Prelude.Cons 8 &lt;@2 = (Prelude.Cons 13 (List.zipWith Prelude.addInteger
+&lt;@1&gt; &lt;@2&gt;))&gt;)&gt;)))))"</computeroutput></literallayout></para>
+          </informalexample></para>
+      </listitem>
+    </orderedlist>
+  </section>
+
+  <!-- 
+    This is a bit of a hack.  
+    DocBook really wants the legal notice to appear in the info for the article, 
+    ie. at the beginning of the document.
+    We work around this by making it the info for a section with empty section content.
+    -->
+
+  <section>
+    <info>
+      <title>Legal Notice</title>
+
+      &__LegalNotice__ey98qrh1;
+    </info>
+
+    <para></para>
+  </section>
+</article>

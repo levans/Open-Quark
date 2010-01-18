@@ -1,0 +1,287 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Set_Tests.cal
+ * Creation date: May 4, 2006.
+ * By: Raymond Cypher
+ */
+
+/**
+ * This module contains test cases for the {@link module = Set@} module.
+ *
+ * Note that *examples functions can and should still go into the Set module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Raymond Cypher
+ */
+module Cal.Test.Collections.Set_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, Maybe;
+    dataConstructor = Nothing, Just;
+    function = add, assert, downFrom, isEmpty, not, upFromTo;
+    ;
+import Cal.Collections.List using
+    function = take;
+    ;
+import Cal.Collections.Set using
+    typeConstructor = Set;
+    function = 
+        delete, deleteMax, deleteMin, difference, empty, filter, findMax, findMin, fromList, insert, intersection, 
+        isProperSubsetOf, isSubsetOf, member, partition, single, toList, union;
+    ;
+import Cal.Collections.Array;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Gen;
+    function = arbitrary, coarbitrary, generate, makeGen, quickCheck;
+    ; 
+
+
+
+//{-
+//{--------------------------------------------------------------------
+//Testing
+//--------------------------------------------------------------------}
+//testTree :: [Int] -> Set Int
+//testTree xs   = fromList xs
+//test1 = testTree [1..20]
+//test2 = testTree [30,29..10]
+//test3 = testTree [1,4,6,89,2323,53,43,234,5,79,12,9,24,9,8,423,8,42,4,8,9,3]
+
+testTree :: [Int] -> Set Int;
+private testTree = fromList;
+
+test1 :: Set Int;
+private test1 = testTree (upFromTo 1 20);
+
+test2 :: Set Int;
+private test2 = testTree (take 21 (downFrom 30));
+
+test3 :: Set Int;
+private test3 = testTree [1,4,6,89,2323,53,43,234,5,79,12,9,24,9,8,423,8,42,4,8,9,3];
+
+
+
+// Some sets used in the test functions.
+set0To9 = fromList [0 :: Int, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+set10To19 = fromList [10 :: Int, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+
+/**
+ * Test insertion into a set.
+ * @return True if the tests succeed.
+ */
+insertTests =
+    assert ((insert 4 (fromList [0 :: Int, 1, 2, 3, 5, 6, 7, 8, 9])) == set0To9)
+    && assert ((insert "January" empty) == (fromList ["January"]))
+    && assert (insert "February" (fromList ["January"]) == fromList ["January", "February"])
+    && assert (insert "January" (fromList ["February"]) == fromList ["January", "February"])
+    ;
+
+/**
+ * Test deleting from a set.
+ * @return True if the tests succeed.
+ */
+deleteTests =
+    assert ((delete "foo" empty) == empty)
+    && assert ((delete 10 (insert 10 set0To9)) == set0To9)
+    && assert ((delete 10 set0To9) == set0To9)
+    && assert ((delete 7 set0To9) == (fromList [0 :: Int, 1, 2, 3, 4, 5, 6, 8, 9]))
+    ;
+    
+/**
+ * Test isProperSubsetOf.
+ * @return True if the tests succeed.
+ */
+isProperSubsetOfTests =
+    assert (not (isProperSubsetOf set0To9 set10To19))
+    && assert (not (isProperSubsetOf set0To9 set0To9))
+    && assert (isProperSubsetOf (fromList [1 :: Int, 2]) set0To9)
+    && assert (not (isProperSubsetOf (fromList [1 :: Int, 2, 11]) set0To9))
+    ;
+
+/**
+ * Test isSubsetOf
+ * @return True if the tests succeed.
+*/
+isSubsetOfTests = 
+    assert (not (isSubsetOf set0To9 set10To19))
+    && assert (isSubsetOf set0To9 set0To9)
+    && assert (isSubsetOf (fromList [1 :: Int, 2]) set0To9)
+    && assert (not (isSubsetOf (fromList [1 :: Int, 2, 11]) set0To9))
+    ;
+
+/**
+ * Test union.
+ * @return True if the tests succeed.
+ */
+unionTests = 
+    assert ((union set0To9 set10To19) == (union set10To19 set0To9))
+    && assert (union set0To9 set10To19 == fromList ((toList set0To9) ++ (toList set10To19)))
+    && assert (union set0To9 set0To9 == set0To9)
+    && assert (union set0To9 (fromList [3 :: Int, 7]) == set0To9)
+    && assert (union (fromList [12 :: Int, 13]) set0To9 == insert 12 (insert 13 set0To9))
+    ;
+
+/**
+ * Test difference.
+ * @return True if the tests succeed.
+ */
+differenceTests =
+    let
+        e :: Set Int;
+        e = empty;
+    in
+        assert (difference set0To9 set0To9 == empty)
+        && assert (difference set0To9 empty == set0To9)
+        && assert (difference e set0To9 == e)
+        && assert (difference set0To9 (filter (\k -> Prelude.isEven k) set0To9)
+            == fromList [1 :: Int, 3, 5, 7, 9])
+        ;    
+
+/**
+ * Test intersection.
+ * @return True if the tests succeed.
+ */
+intersectionTests = 
+    let 
+        e = fromList [1 :: Int, 3, 4];
+    in
+        assert ((intersection set0To9 set10To19) == empty)
+        && assert ((intersection set0To9 set0To9) == set0To9)
+        && assert ((intersection set0To9 empty) == empty)
+        && assert ((intersection set0To9 e) == e)
+        && assert ((intersection e set10To19) == empty)
+    ;
+        
+/**
+ * Test filter.
+ * @return True if the tests succeed.
+ */
+filterTests = 
+    assert ((filter (\x -> x >= 0) set0To9) == set0To9)
+    && assert ((filter (\x -> x < 0) set0To9) == empty)
+    && assert ((filter (\x -> x == 0) set0To9) == (fromList [0 ::Int]))
+    && assert ((filter (\x -> Prelude.isEven x) set0To9) == (fromList [0 :: Int, 2, 4, 6, 8]))
+    ;    
+
+/**
+ * Test partition.
+ * @return True if the tests succeed.
+ */
+partitionTests =
+    assert ((partition (\x -> x >= 0) set0To9) == (set0To9, empty :: (Set Int)))
+    && assert ((partition (\x -> x< 0) set0To9) == (empty :: (Set Int), set0To9))
+    && assert ((partition (\x -> x == 0) set0To9) == (single (0 :: Int), delete 0 set0To9))
+    ;
+    
+testMapJust =
+    let
+        f :: Int -> Maybe Int;
+        f x = if (x > 4) then (Just x) else Nothing;
+    in
+        assert ((Set.mapJust f set0To9) == (Set.filter (\x -> x > 4) set0To9));
+
+
+prop_union_assoc :: Set Int -> Set Int -> Set Int -> Boolean;
+prop_union_assoc a b c =
+    Set.union a (Set.union b c) == Set.union (Set.union a b) c;
+
+prop_union_comm :: Set Int -> Set Int -> Boolean;
+prop_union_comm a b =
+    union a b == union b a;
+
+prop_intersection_assoc :: Set Int -> Set Int -> Set Int -> Boolean;
+prop_intersection_assoc a b c =
+    intersection a (intersection b c) == intersection (intersection a b) c;
+
+prop_intersection_comm :: Set Int -> Set Int -> Boolean;
+prop_intersection_comm a b =
+    intersection a b == intersection b a;
+
+prop_diff :: Set Int -> Boolean;
+prop_diff a =
+    difference a a == empty;
+
+prop_union :: Set Int -> Boolean;
+prop_union a =
+    union a a == a;
+
+prop_deMorgan :: Set Int -> Set Int -> Set Int -> Boolean;
+prop_deMorgan a b c =
+   difference a (union b c) == intersection (difference a b) (difference a c) &&
+   difference a (intersection b c) == union (difference a b) (difference a c);
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule = 
+    assert (quickCheck prop_union_assoc) 
+    && assert (quickCheck prop_union_comm) 
+    && assert (quickCheck prop_union_comm)
+    && assert (quickCheck prop_intersection_assoc)
+    && assert (quickCheck prop_intersection_comm)
+    && assert (quickCheck prop_diff)
+    && assert (quickCheck prop_union)
+    && assert (quickCheck prop_deMorgan)
+    && assert (set0To9 != set10To19)
+    && assert (member 4 set0To9)
+    && assert (not (member 4 set10To19))
+    && assert (isEmpty (empty :: Set Int))
+    && assert (not (isEmpty set0To9))
+    && assert insertTests
+    && assert deleteTests
+    && assert isProperSubsetOfTests
+    && assert isSubsetOfTests
+    && assert (((findMin set0To9) == 0) && ((findMin set10To19) == 10))
+    && assert (((findMax set0To9) == 9) && ((findMax set10To19) == 19))
+    && assert ((deleteMin set0To9) == (fromList [1 :: Int, 2, 3, 4, 5, 6, 7, 8, 9]))
+    && assert ((deleteMin set10To19) == (fromList [11 :: Int, 12, 13, 14, 15, 16, 17, 18, 19]))
+    && assert ((deleteMax set0To9) == (fromList [0 :: Int, 1, 2, 3, 4, 5, 6, 7, 8]))
+    && assert ((deleteMax set10To19) == (fromList [10 :: Int, 11, 12, 13, 14, 15, 16, 17, 18]))
+    && assert unionTests
+    && assert differenceTests
+    && assert intersectionTests
+    && assert filterTests
+    && assert partitionTests
+    && assert ((Set.map (Prelude.add 10) set0To9) == set10To19)
+    && assert ((Set.fold Prelude.add (0 :: Int) set0To9) == 45)
+    && assert ((toList set0To9) == [0 :: Int, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    && assert ((Set.toListWith (add 10) set0To9) == (Set.toList set10To19))
+    && assert ((Set.fromListWith (add 10) [1 :: Int, 2, 3]) == (Set.fromList [11 :: Int, 12, 13]))
+    && assert ((Set.toArray (Set.fromList [1 :: Int, 2, 3])) == (Array.fromList [1 :: Int, 2, 3]))
+    && assert ((Set.toArrayWith (add 10) set0To9) == (Set.toArray set10To19))
+    && assert ((Set.fromArrayWith (add 10) (Set.toArray set0To9)) == (Set.fromArray (Set.toArray set10To19)))
+    && assert testMapJust
+    ;
+//please leave testModule last! 

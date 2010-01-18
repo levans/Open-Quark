@@ -1,0 +1,1121 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Sudoku.cal
+ * Creation date: May 3, 2006.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains gems defining and solving a Sudoku puzzle.
+ * 
+ * This is a simple Sudoku solver as an example of CAL code. This is just a toy (something one of our developers
+ * knocked up in his spare time after a brief discussion on Sudoku in the coffee room!).  However, it demonstrates
+ * a CAL module that does something interesting, and a body of 'real' CAL code for inspection.
+ *
+ * {@em To try this out in the GemCutter:@}
+ * 
+ * {@orderedList
+ *  {@item Making puzzles
+ *  
+ *   {@orderedList
+ *    {@item Drag {@link makeRandomSudokuPuzzle@} onto the Table Top@}
+ *    {@item Connect its output to the {@link show@} Gem (use IntelliCut or drag {@code show@} in from the browser)@}
+ *    {@item Run this combination (from the context menu of {@code show@}, or toolbar)@}
+ *    {@item Provide the construction parameters.  size=3, nFilledValues=24@}
+ *    {@item Continue to execute (run on the toolbar)@}
+ *    {@item When the Value Output Panel pops up, click its ellipsis button to get a proper rendering of the puzzle@}
+ *   @}
+ *  @}
+ *  
+ *  {@item Solving puzzles
+ *  
+ *   {@orderedList
+ *    {@item Disconnect the two Gems (from the above demo)@}
+ *    {@item Drag {@link dumpSolutions@} onto the Table Top@}
+ *    {@item Connect {@link makeRandomSudokuPuzzle@} to {@code dumpSolutions@}@}
+ *    {@item Run this combination@}
+ *    {@item Provide the construction parameters (perhaps the same as above)@}
+ *    {@item Continue to execute (run on the toolbar)@}
+ *    {@item When the Value Output Panel pops up, click its ellipsis button to get a proper rendering of the solutions@}
+ *   @}
+ *  @}
+ * @}
+ * 
+ * Of course, it's possible to configure puzzles to be so large as to require too much time/resources to process
+ * (given the implementations of solvers herein). If you need to stop execution at any point, you can simply press
+ * the 'stop' button on the toolbar.
+ * 
+ * @author Richard Webster
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Samples.Sudoku;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, min, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    typeClass = Typeable;
+    function = fromMaybe, isJust, isNotANumber, uncurry;
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, join,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    function = any, concatMap, drop, findIndex, inputList, isSingletonList, mapIndexed, mapJust,
+        deleteFirstsBy, find, lookup, deleteBy, maximum, minimum, sort, removeDuplicates;
+    ;
+import Cal.Core.String;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Collections.Set using
+    typeConstructor = Set;
+    ;
+import Cal.Utilities.Random;
+import Cal.Utilities.Math;
+import Cal.Core.Bits;
+
+
+/**
+ * A Sudoku puzzle, containing a 9x9 grid of values, subdivided into 3x3 grid of blocks (each containing 3x3 values).
+ * Values that are specified will have a value from 1 to 9.
+ * Unspecified values will be represented by 0.
+ */
+data public SudokuPuzzle =
+    /**
+     * @arg size the number of cells on each side of a block, or the number of blocks on each side of the entire grid.
+     * @arg gridValues 9x9 values (across then down), 0 for unspecified.
+     */
+    private SudokuPuzzle 
+        size :: !Int
+        gridValues :: (Array Int)
+    ;
+
+/**
+ * Constructs a Sudoku puzzle by specifying 9 rows of 9 values.
+ */
+makeSudokuPuzzleByRows :: [[Int]] -> SudokuPuzzle;
+public makeSudokuPuzzleByRows !dataRows = 
+    let
+        nDataRows :: Int;
+        nDataRows = List.length dataRows;
+
+        size :: Int;
+        size = round $ Math.sqrt $ toDouble nDataRows;
+
+        nCellsPerRowColumnCell :: Int;
+        nCellsPerRowColumnCell = size * size;
+    in
+        if (size == 0 || nCellsPerRowColumnCell != nDataRows) then 
+            error "The number of rows must be the square of an integer value greater than zero."
+        else if (any (\!row -> List.length row != nCellsPerRowColumnCell) dataRows) then 
+            error ("The puzzle have " ++ intToString nCellsPerRowColumnCell ++ " values in each row.")
+        else checkPuzzle (SudokuPuzzle size $ Array.fromList $ concat dataRows);
+
+/**
+ * Constructs a Sudoku puzzle with only empty values.
+ */
+emptySudokuPuzzle :: Int -> SudokuPuzzle;
+emptySudokuPuzzle !size = 
+    let
+        nCellsPerRowColumnCell :: Int;
+        nCellsPerRowColumnCell = size * size;
+
+        nGridValues :: Int;
+        nGridValues = nCellsPerRowColumnCell * nCellsPerRowColumnCell;
+    in
+        SudokuPuzzle size $ Array.replicate nGridValues 0;
+
+/**
+ * Constructs a random Sudoku puzzle with the specified number of values specified.
+ * 
+ * TODO: add a function to generate a puzzle with exactly 1 solution...
+ */
+makeRandomSudokuPuzzle :: Int -> Int -> SudokuPuzzle;
+public makeRandomSudokuPuzzle !size !nFilledValues = 
+    let
+        nCellsPerRowColumnCell :: Int;
+        nCellsPerRowColumnCell = size * size;
+
+        nGridValues :: Int;
+        nGridValues = nCellsPerRowColumnCell * nCellsPerRowColumnCell;
+    in
+        if (nFilledValues < 0 || nFilledValues > nGridValues) then
+            error ("The number of filled values must be between 0 and " ++ intToString nGridValues ++ ".")
+        else
+            // Generate a (random) solution to an empty puzzle.
+            // Then blank out all but the specified number of slots (at random).
+            case (solvePuzzle $ emptySudokuPuzzle size) of
+            SudokuPuzzle {gridValues} -> 
+                let
+                    slotIndicesToPreserve :: Set Int;
+                    slotIndicesToPreserve = 
+                        let
+                            allSlotIndices :: Array Int;
+                            allSlotIndices = Array.fromList $ upFromTo 0 (nGridValues - 1);
+
+                            slotIndicesHelper :: Array Int -> Array Int;
+                            slotIndicesHelper !currentIndices = 
+                                let
+                                    currentSize :: Int;
+                                    currentSize = Array.length currentIndices;
+
+                                    indexToRemove :: Int;
+                                    indexToRemove = head $ Random.randomBoundedInts Random.initialSeed currentSize;
+                                in
+                                    if (currentSize <= nFilledValues) then currentIndices
+                                    else slotIndicesHelper $ Array.deleteAt indexToRemove currentIndices;
+                        in
+                            Set.fromArray $ slotIndicesHelper allSlotIndices;
+
+                    newGridValues :: Array Int;
+                    newGridValues = Array.mapIndexed (\!val !idx -> if (Set.member idx slotIndicesToPreserve) then val else 0) gridValues;
+                in
+                    SudokuPuzzle size newGridValues;
+            ;
+
+/**
+ * Updates the value of the specified slot in the puzzle grid.
+ */
+setPuzzleSlotValue :: SudokuPuzzle -> Int -> Int -> SudokuPuzzle;
+setPuzzleSlotValue !puzzle !slotN !newValue = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+        SudokuPuzzle size $ Array.updateAt slotN newValue gridValues;
+    ;
+
+/**
+ * Make the puzzle showable.
+ */
+instance Show SudokuPuzzle where
+    show = showSudokuPuzzle;
+    ;
+
+showSudokuPuzzle :: SudokuPuzzle -> String;
+showSudokuPuzzle !puzzle = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+        let
+            nCellsPerRowColumnCell :: Int;
+            nCellsPerRowColumnCell = size * size;
+
+            // Determine how many digits can be in a grid value so that the results can be nicely aligned.
+            maxNValueDigits :: Int;
+            maxNValueDigits = String.length $ intToString $ nCellsPerRowColumnCell;
+
+            // Break the array of grid values into rows.
+            allRows :: [Array Int];
+            allRows = Array.toList $ Array.chop nCellsPerRowColumnCell gridValues;
+
+            formatValue :: Int -> String;
+            formatValue !val = 
+                let
+                    baseValue :: String;
+                    baseValue = if (val == 0) then "." else intToString val;
+
+                    // Add padding spaces before the value in cases where there will be longer display strings.
+                    paddingValue :: String;
+                    paddingValue = String.space $ maxNValueDigits - String.length baseValue;
+                in
+                    paddingValue ++ baseValue;
+
+            formatRow :: Array Int -> String;
+            formatRow !rowValues = 
+                let
+                    formatRowForBlockValues :: Array Int -> String;
+                    formatRowForBlockValues rowBlockValues = join " " $ Array.toListWith formatValue rowBlockValues;
+                in
+                    join "   " $ Array.toListWith formatRowForBlockValues $ Array.chop size rowValues;
+
+            formattedRows :: [String];
+            formattedRows = map formatRow allRows;
+
+            formatRowsForBlock :: [String] -> String;
+            formatRowsForBlock !blockFormattedRows = join "\n" blockFormattedRows;
+        in
+            join "\n\n" $ map formatRowsForBlock $ List.chop size formattedRows;
+    ;
+
+/**
+ * Returns the values from a row of the puzzle grid (from left to right).
+ */
+rowValues :: SudokuPuzzle -> Int -> Array Int;
+rowValues !puzzle !rowN = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+        let
+            nCellsPerRowColumnCell :: Int;
+            nCellsPerRowColumnCell = size * size;
+        in
+            Array.subArray gridValues (rowN * nCellsPerRowColumnCell) ((rowN + 1) * nCellsPerRowColumnCell);
+    ;
+
+/**
+ * Returns the values from a column of the puzzle (from top to bottom).
+ */
+columnValues :: SudokuPuzzle -> Int -> Array Int;
+columnValues !puzzle !columnN = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+        let
+            nCellsPerRowColumnCell :: Int;
+            nCellsPerRowColumnCell = size * size;
+
+            allRowColBlockIndices :: Array Int;
+            allRowColBlockIndices = Array.fromList $ upFromTo 0 (nCellsPerRowColumnCell - 1);
+        in
+            Array.map (\!rowN -> Array.subscript gridValues (rowN * nCellsPerRowColumnCell + columnN)) allRowColBlockIndices;
+    ;
+
+/**
+ * Returns the values from the specified block of the puzzle (numbered across then down).
+ */
+blockValues :: SudokuPuzzle -> Int -> Array Int;
+blockValues !puzzle !blockN = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+        let
+            nCellsPerRowColumn :: Int;
+            nCellsPerRowColumn = size * size;
+
+            startRowIndex :: Int;
+            startRowIndex = (blockN / size) * size;
+
+            startColumnIndex :: Int;
+            startColumnIndex = (blockN % size) * size;
+
+            rowIndices :: Array Int;
+            rowIndices = Array.fromList $ upFromTo startRowIndex (startRowIndex + size - 1);
+
+            columnIndices :: Array Int;
+            columnIndices = Array.fromList $ upFromTo startColumnIndex (startColumnIndex + size - 1);
+        in
+            Array.zipWith (\!rowN !columnN -> Array.subscript gridValues (rowN * nCellsPerRowColumn + columnN)) 
+                          (Array.concat $ Array.map (\!val -> Array.replicate size val) rowIndices) 
+                          (Array.replicateArray columnIndices size);
+    ;
+
+/**
+ * Populates all empty values in the puzzle.
+ * An error is thrown if the puzzle cannot be solved.
+ */
+solvePuzzle :: SudokuPuzzle -> SudokuPuzzle;
+public solvePuzzle !puzzle = 
+    case (puzzleSolutions puzzle) of
+    [] -> 
+        // If no solutions are returned, then the puzzle is not valid.
+        error "There is no solution to the puzzle.";
+    firstSolution : _ -> 
+        // TODO: should anything special be done if there are multiple solutions?
+        firstSolution;
+    ;
+
+/**
+ * Returns the possible solutions to the puzzle.
+ */
+puzzleSolutions :: SudokuPuzzle -> [SudokuPuzzle];
+public puzzleSolutions !puzzle = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+    let
+        nCellsPerRowColumnCell :: Int;
+        nCellsPerRowColumnCell = size * size;
+
+        // Returns the row number within the full grid for the specified slot number.
+        slotRowIndex :: Int -> Int;
+        slotRowIndex !slotN = slotN / nCellsPerRowColumnCell;
+
+        // Returns the column number within the full grid for the specified slot number.
+        slotColumnIndex :: Int -> Int;
+        slotColumnIndex !slotN = slotN % nCellsPerRowColumnCell;
+
+        // Returns the block number within the grid for the specified slot number.
+        slotBlockIndex :: Int -> Int;
+        slotBlockIndex !slotN = 
+            let
+                blockRowN :: Int;
+                blockRowN = (slotRowIndex slotN) / size;
+
+                blockColumnN :: Int;
+                blockColumnN = (slotColumnIndex slotN) / size;
+            in
+                blockRowN * size + blockColumnN;
+
+        allRowColBlockIndices :: Array Int;
+        allRowColBlockIndices = Array.fromList $ upFromTo 0 (nCellsPerRowColumnCell - 1);
+
+        // The set of values 1 through 9, which are the possbile values for a slot in the grid.
+        possibleSlotValues :: Set Int;
+        possibleSlotValues = Set.fromDistinctAscList $ upFromTo 1 nCellsPerRowColumnCell;
+
+        makeAvailableValuesSet :: Array Int -> Set Int;
+        makeAvailableValuesSet !valuesUsed = 
+            Set.difference possibleSlotValues $ Set.fromArray valuesUsed;
+
+        // Determine the values available for each row, column, and block.
+        rowValuesAvailable :: Array (Set Int);
+        rowValuesAvailable = 
+            let
+                valuesAvailableForRow :: Int -> Set Int;
+                valuesAvailableForRow !rowN = makeAvailableValuesSet $ rowValues puzzle rowN;
+            in
+                Array.map valuesAvailableForRow allRowColBlockIndices;
+
+        columnValuesAvailable :: Array (Set Int);
+        columnValuesAvailable = 
+            let
+                valuesAvailableForColumn :: Int -> Set Int;
+                valuesAvailableForColumn !columnN = makeAvailableValuesSet $ columnValues puzzle columnN;
+            in
+                Array.map valuesAvailableForColumn allRowColBlockIndices;
+
+        blockValuesAvailable :: Array (Set Int);
+        blockValuesAvailable = 
+            let
+                valuesAvailableForBlock :: Int -> Set Int;
+                valuesAvailableForBlock !blockN = makeAvailableValuesSet $ blockValues puzzle blockN;
+            in
+                Array.map valuesAvailableForBlock allRowColBlockIndices;
+
+        // Determine the coordinates of all empty slots in the grid.
+        emptySlotPositions :: [Int];
+        emptySlotPositions = Array.findIndices (equals 0) gridValues;
+
+        // Determine the values available for each empty slot in the entire grid.
+        valuesAvailableForSlot :: Int -> Set Int;
+        valuesAvailableForSlot !slotN = 
+            Set.intersections [Array.subscript rowValuesAvailable $ slotRowIndex slotN,
+                               Array.subscript columnValuesAvailable $ slotColumnIndex slotN,
+                               Array.subscript blockValuesAvailable $ slotBlockIndex slotN];
+
+        emptySlotValuesAvailable :: [(Int, Set Int)];
+        emptySlotValuesAvailable = List.map (\!slotN -> (slotN, valuesAvailableForSlot slotN)) emptySlotPositions;
+
+        // Find the slot with the fewest values available.
+        minOptionsSlotValues :: (Int, Set Int);
+        minOptionsSlotValues = List.minimumBy (\!pr1 !pr2 -> compare (Set.size $ field2 pr1) (Set.size $ field2 pr2)) emptySlotValuesAvailable;
+
+        minOptionsSlotN :: Int;
+        minOptionsSlotN = field1 minOptionsSlotValues;
+
+        minOptionsValues :: [Int];
+        minOptionsValues = 
+//            Set.toList $ field2 minOptionsSlotValues;
+            randomizeListOrder $ Set.toList $ field2 minOptionsSlotValues;
+
+        // Generate modified verions of the current puzzle, each using one of the option values for the slot.
+        puzzleAlternatives :: [SudokuPuzzle];
+        puzzleAlternatives = map (setPuzzleSlotValue puzzle minOptionsSlotN) minOptionsValues;
+    in
+        // If there no empty values, then the puzzle is solved.
+        // Otherwise, generate all alternatives for the slot with the minimum number of options.
+        if (isEmpty emptySlotPositions) then [puzzle]
+        else concatMap puzzleSolutions puzzleAlternatives;
+    ;
+
+
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+
+/**
+ * Populates all empty values in the puzzle.
+ * An error is thrown if the puzzle cannot be solved.
+ */
+solvePuzzle2 :: SudokuPuzzle -> SudokuPuzzle;
+public solvePuzzle2 !puzzle = 
+    case (puzzleSolutions2 puzzle) of
+    [] -> 
+        // If no solutions are returned, then the puzzle is not valid.
+        error "There is no solution to the puzzle.";
+    firstSolution : _ -> 
+        // TODO: should anything special be done if there are multiple solutions?
+        firstSolution;
+    ;
+
+/**
+ * Return the possible solutions to the puzzle.
+ */
+puzzleSolutions2 :: SudokuPuzzle -> [SudokuPuzzle];
+public puzzleSolutions2 !puzzle = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+        let
+            nCellsPerRowColumnCell :: Int;
+            nCellsPerRowColumnCell = size * size;
+
+            // The set of values 1 through N, which are the possbile values for a slot in the grid.
+            possibleSlotValues :: Set Int;
+            possibleSlotValues = Set.fromDistinctAscList $ upFromTo 1 nCellsPerRowColumnCell;
+
+            allRowColBlockIndices :: Array Int;
+            allRowColBlockIndices = Array.fromList $ upFromTo 0 (nCellsPerRowColumnCell - 1);
+
+            makeAvailableValuesSet :: Array Int -> Set Int;
+            makeAvailableValuesSet !valuesUsed = 
+                Set.difference possibleSlotValues $ Set.fromArray valuesUsed;
+
+            // Determine the values available for each row, column, and block.
+            rowValuesAvailable :: Array (Set Int);
+            rowValuesAvailable = 
+                let
+                    valuesAvailableForRow :: Int -> Set Int;
+                    valuesAvailableForRow !rowN = makeAvailableValuesSet $ rowValues puzzle rowN;
+                in
+                    Array.map valuesAvailableForRow allRowColBlockIndices;
+
+            columnValuesAvailable :: Array (Set Int);
+            columnValuesAvailable = 
+                let
+                    valuesAvailableForColumn :: Int -> Set Int;
+                    valuesAvailableForColumn !columnN = makeAvailableValuesSet $ columnValues puzzle columnN;
+                in
+                    Array.map valuesAvailableForColumn allRowColBlockIndices;
+
+            blockValuesAvailable :: Array (Set Int);
+            blockValuesAvailable = 
+                let
+                    valuesAvailableForBlock :: Int -> Set Int;
+                    valuesAvailableForBlock !blockN = makeAvailableValuesSet $ blockValues puzzle blockN;
+                in
+                    Array.map valuesAvailableForBlock allRowColBlockIndices;
+
+            solutionGrids :: [Array Int];
+            solutionGrids = puzzleSolutions2Helper size rowValuesAvailable columnValuesAvailable blockValuesAvailable gridValues;
+        in
+            List.map (SudokuPuzzle size) solutionGrids;
+    ;
+
+/**
+ * A helper function to recursively generate all possible solutions to the puzzle.
+ * The initial values available for each row, column, and block are passed in.
+ * On each iteration a new values it specified, and this is called again with the alternative value removed from the appropriate sets.
+ */
+puzzleSolutions2Helper :: Int -> Array (Set Int) -> Array (Set Int) -> Array (Set Int) -> Array Int -> [Array Int];
+puzzleSolutions2Helper !size !rowValuesAvailable !columnValuesAvailable !blockValuesAvailable !gridValues = 
+    let
+        nCellsPerRowColumnCell :: Int;
+        nCellsPerRowColumnCell = size * size;
+
+        // Returns the row number within the full grid for the specified slot number.
+        slotRowIndex :: Int -> Int;
+        slotRowIndex !slotN = slotN / nCellsPerRowColumnCell;
+
+        // Returns the column number within the full grid for the specified slot number.
+        slotColumnIndex :: Int -> Int;
+        slotColumnIndex !slotN = slotN % nCellsPerRowColumnCell;
+
+        // Returns the block number within the grid for the specified slot number.
+        slotBlockIndex :: Int -> Int;
+        slotBlockIndex !slotN = 
+            let
+                blockRowN :: Int;
+                blockRowN = (slotRowIndex slotN) / size;
+
+                blockColumnN :: Int;
+                blockColumnN = (slotColumnIndex slotN) / size;
+            in
+                blockRowN * size + blockColumnN;
+
+        // Determine the coordinates of all empty slots in the grid.
+        emptySlotPositions :: [Int];
+        emptySlotPositions = Array.findIndices (equals 0) gridValues;
+
+        // Determine the values available for each empty slot in the entire grid.
+        valuesAvailableForSlot :: Int -> Set Int;
+        valuesAvailableForSlot !slotN = 
+            Set.intersections [Array.subscript rowValuesAvailable $ slotRowIndex slotN,
+                               Array.subscript columnValuesAvailable $ slotColumnIndex slotN,
+                               Array.subscript blockValuesAvailable $ slotBlockIndex slotN];
+
+        emptySlotValuesAvailable :: [(Int, Set Int)];
+        emptySlotValuesAvailable = List.map (\!slotN -> (slotN, valuesAvailableForSlot slotN)) emptySlotPositions;
+
+        // Find the slot with the fewest values available.
+        minOptionsSlotValues :: (Int, Set Int);
+        minOptionsSlotValues = List.minimumBy (\!pr1 !pr2 -> compare (Set.size $ field2 pr1) (Set.size $ field2 pr2)) emptySlotValuesAvailable;
+
+        minOptionsSlotN :: Int;
+        minOptionsSlotN = field1 minOptionsSlotValues;
+
+        minOptionsValues :: [Int];
+        minOptionsValues = 
+//            Set.toList $ field2 minOptionsSlotValues;
+            randomizeListOrder $ Set.toList $ field2 minOptionsSlotValues;
+
+        // Generate modified verions of the current puzzle grid, each using one of the option values for the slot.
+        generateAlternativeSolutions :: Int -> [Array Int];
+        generateAlternativeSolutions !alternativeValue = 
+            let
+                alternativeRowN :: Int;
+                alternativeRowN = slotRowIndex minOptionsSlotN;
+
+                alternativeColumnN :: Int;
+                alternativeColumnN = slotColumnIndex minOptionsSlotN;
+
+                alternativeBlockN :: Int;
+                alternativeBlockN = slotBlockIndex minOptionsSlotN;
+
+                removeValueFromNthSet :: Array (Set Int) -> Int -> Int -> Array (Set Int);
+                removeValueFromNthSet !sets !setIndex !valueToRemove = 
+                    let
+                        oldSet :: Set Int;
+                        oldSet = Array.subscript sets setIndex;
+
+                        newSet :: Set Int;
+                        newSet = Set.delete valueToRemove oldSet;
+                    in
+                        Array.updateAt setIndex newSet sets;
+
+                // Remove the alternative values from the sets of available values for the correct row, column, and block.
+                alternateRowValuesAvailable :: Array (Set Int);
+                alternateRowValuesAvailable = removeValueFromNthSet rowValuesAvailable alternativeRowN alternativeValue;
+
+                alternateColumnValuesAvailable :: Array (Set Int);
+                alternateColumnValuesAvailable = removeValueFromNthSet columnValuesAvailable alternativeColumnN alternativeValue;
+
+                alternateBlockValuesAvailable :: Array (Set Int);
+                alternateBlockValuesAvailable = removeValueFromNthSet blockValuesAvailable alternativeBlockN alternativeValue;
+
+                alternateGridValues :: Array Int;
+                alternateGridValues = Array.updateAt minOptionsSlotN alternativeValue gridValues;
+            in
+                puzzleSolutions2Helper size alternateRowValuesAvailable alternateColumnValuesAvailable 
+                                       alternateBlockValuesAvailable alternateGridValues;
+    in
+        // If there no empty values, then the puzzle is solved.
+        // Otherwise, generate all alternatives for the slot with the minimum number of options.
+        if (isEmpty emptySlotPositions) then [gridValues]
+        else concatMap generateAlternativeSolutions minOptionsValues;
+
+
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+
+/**
+ * Populates all empty values in the puzzle.
+ * An error is thrown if the puzzle cannot be solved.
+ */
+solvePuzzle3 :: SudokuPuzzle -> SudokuPuzzle;
+public solvePuzzle3 !puzzle = 
+    case (puzzleSolutions3 puzzle) of
+    [] -> 
+        // If no solutions are returned, then the puzzle is not valid.
+        error "There is no solution to the puzzle.";
+    firstSolution : _ -> 
+        // TODO: should anything special be done if there are multiple solutions?
+        firstSolution;
+    ;
+
+/**
+ * Returns the possible solutions to the puzzle.
+ */
+puzzleSolutions3 :: SudokuPuzzle -> [SudokuPuzzle];
+public puzzleSolutions3 !puzzle = 
+    case puzzle of
+    SudokuPuzzle {size, gridValues} -> 
+        let
+            nCellsPerRowColumnCell :: Int;
+            nCellsPerRowColumnCell = size * size;
+
+            // The set of values 1 through N, which are the possbile values for a slot in the grid.
+            possibleSlotBitValues :: Int;
+            possibleSlotBitValues = 
+                setBits 0 (Array.fromList $ upFromTo 1 nCellsPerRowColumnCell);
+
+            allRowColBlockIndices :: Array Int;
+            allRowColBlockIndices = Array.fromList $ upFromTo 0 (nCellsPerRowColumnCell - 1);
+
+            makeAvailableValuesBitSet :: Array Int -> Int;
+            makeAvailableValuesBitSet !valuesUsed = 
+                clearBits possibleSlotBitValues valuesUsed;
+
+            // Determine the values available for each row, column, and block.
+            rowValuesAvailable :: Array Int;
+            rowValuesAvailable = 
+                let
+                    valuesAvailableForRow :: Int -> Int;
+                    valuesAvailableForRow !rowN = makeAvailableValuesBitSet $ rowValues puzzle rowN;
+                in
+                    Array.map valuesAvailableForRow allRowColBlockIndices;
+
+            columnValuesAvailable :: Array Int;
+            columnValuesAvailable = 
+                let
+                    valuesAvailableForColumn :: Int -> Int;
+                    valuesAvailableForColumn !columnN = makeAvailableValuesBitSet $ columnValues puzzle columnN;
+                in
+                    Array.map valuesAvailableForColumn allRowColBlockIndices;
+
+            blockValuesAvailable :: Array Int;
+            blockValuesAvailable = 
+                let
+                    valuesAvailableForBlock :: Int -> Int;
+                    valuesAvailableForBlock !blockN = makeAvailableValuesBitSet $ blockValues puzzle blockN;
+                in
+                    Array.map valuesAvailableForBlock allRowColBlockIndices;
+
+            solutionGrids :: [Array Int];
+            solutionGrids = puzzleSolutions3Helper size rowValuesAvailable columnValuesAvailable blockValuesAvailable gridValues;
+        in
+            List.map (SudokuPuzzle size) solutionGrids;
+    ;
+
+/**
+ * A helper function to recursively generate all possible solutions to the puzzle.
+ * The initial values available for each row, column, and block are passed in.
+ * On each iteration a new values it specified, and this is called again with the alternative value removed from the appropriate sets.
+ */
+puzzleSolutions3Helper :: Int -> Array Int -> Array Int -> Array Int -> Array Int -> [Array Int];
+puzzleSolutions3Helper !size !rowValuesAvailable !columnValuesAvailable !blockValuesAvailable !gridValues = 
+    let
+        nCellsPerRowColumnCell :: Int;
+        nCellsPerRowColumnCell = size * size;
+
+        // Returns the row number within the full grid for the specified slot number.
+        slotRowIndex :: Int -> Int;
+        slotRowIndex !slotN = slotN / nCellsPerRowColumnCell;
+
+        // Returns the column number within the full grid for the specified slot number.
+        slotColumnIndex :: Int -> Int;
+        slotColumnIndex !slotN = slotN % nCellsPerRowColumnCell;
+
+        // Returns the block number within the grid for the specified slot number.
+        slotBlockIndex :: Int -> Int;
+        slotBlockIndex !slotN = 
+            let
+                blockRowN :: Int;
+                blockRowN = (slotRowIndex slotN) / size;
+
+                blockColumnN :: Int;
+                blockColumnN = (slotColumnIndex slotN) / size;
+            in
+                blockRowN * size + blockColumnN;
+
+        // Determine the coordinates of all empty slots in the grid.
+        emptySlotPositions :: [Int];
+        emptySlotPositions = Array.findIndices (equals 0) gridValues;
+
+        // Determine the values available for each empty slot in the entire grid.
+        valuesAvailableForSlot :: Int -> Int;
+        valuesAvailableForSlot !slotN = 
+            Bits.bitwiseAnd (Array.subscript rowValuesAvailable $ slotRowIndex slotN)
+                $ Bits.bitwiseAnd (Array.subscript columnValuesAvailable $ slotColumnIndex slotN) 
+                                  (Array.subscript blockValuesAvailable $ slotBlockIndex slotN);
+
+        emptySlotValuesAvailable :: [(Int, Int)];
+        emptySlotValuesAvailable = List.map (\!slotN -> (slotN, valuesAvailableForSlot slotN)) emptySlotPositions;
+
+        // Find the slot with the fewest values available.
+        minOptionsSlotValues :: (Int, Int);
+        minOptionsSlotValues = List.minimumBy (\!pr1 !pr2 -> compare (nBitsSet (nCellsPerRowColumnCell + 1) $ field2 pr1) 
+                                                                     (nBitsSet (nCellsPerRowColumnCell + 1) $ field2 pr2)) emptySlotValuesAvailable;
+        minOptionsSlotN :: Int;
+        minOptionsSlotN = field1 minOptionsSlotValues;
+
+        minOptionsValues :: [Int];
+        minOptionsValues = 
+            randomizeListOrder $ bitsSet (nCellsPerRowColumnCell + 1) $ field2 minOptionsSlotValues;
+
+        // Generate modified verions of the current puzzle grid, each using one of the option values for the slot.
+        generateAlternativeSolutions :: Int -> [Array Int];
+        generateAlternativeSolutions !alternativeValue = 
+            let
+                alternativeRowN :: Int;
+                alternativeRowN = slotRowIndex minOptionsSlotN;
+
+                alternativeColumnN :: Int;
+                alternativeColumnN = slotColumnIndex minOptionsSlotN;
+
+                alternativeBlockN :: Int;
+                alternativeBlockN = slotBlockIndex minOptionsSlotN;
+
+                removeValueFromNthSet :: Array Int -> Int -> Int -> Array Int;
+                removeValueFromNthSet !sets !setIndex !valueToRemove = 
+                    let
+                        oldBitSet :: Int;
+                        oldBitSet = Array.subscript sets setIndex;
+
+                        newBitSet :: Int;
+                        newBitSet = clearBit oldBitSet valueToRemove;
+                    in
+                        Array.updateAt setIndex newBitSet sets;
+
+                // Remove the alternative values from the sets of available values for the correct row, column, and block.
+                alternateRowValuesAvailable :: Array Int;
+                alternateRowValuesAvailable = removeValueFromNthSet rowValuesAvailable alternativeRowN alternativeValue;
+
+                alternateColumnValuesAvailable :: Array Int;
+                alternateColumnValuesAvailable = removeValueFromNthSet columnValuesAvailable alternativeColumnN alternativeValue;
+
+                alternateBlockValuesAvailable :: Array Int;
+                alternateBlockValuesAvailable = removeValueFromNthSet blockValuesAvailable alternativeBlockN alternativeValue;
+
+                alternateGridValues :: Array Int;
+                alternateGridValues = Array.updateAt minOptionsSlotN alternativeValue gridValues;
+            in
+                puzzleSolutions3Helper size alternateRowValuesAvailable alternateColumnValuesAvailable 
+                                       alternateBlockValuesAvailable alternateGridValues;
+    in
+        // If there no empty values, then the puzzle is solved.
+        // Otherwise, generate all alternatives for the slot with the minimum number of options.
+        if (isEmpty emptySlotPositions) then [gridValues]
+        else concatMap generateAlternativeSolutions minOptionsValues;
+
+
+
+setBit :: Int -> Int -> Int;
+setBit !bitsValue !bitN = 
+    Bits.bitwiseOr bitsValue $ Bits.shiftL 1 bitN;
+
+setBits :: Int -> Array Int -> Int;
+setBits !bitsValue !bitNs = 
+    Array.foldLeftStrict setBit bitsValue bitNs;
+
+clearBit :: Int -> Int -> Int;
+clearBit !bitsValue !bitN = 
+    Bits.bitwiseAnd bitsValue $ Bits.complement (Bits.shiftL 1 bitN);
+
+clearBits :: Int -> Array Int -> Int;
+clearBits !bitsValue !bitNs = 
+    Array.foldLeftStrict clearBit bitsValue bitNs;
+
+isBitSet :: Int -> Int -> Boolean;
+isBitSet !bitSetValue !bitN = 
+    bitSetValue == setBit bitSetValue bitN;
+
+nBitsSet :: Int -> Int -> Int;
+nBitsSet !nBitsToCheck !bitSetValue = 
+    let
+        nBitsSetHelper :: Int -> Int -> Int;
+        nBitsSetHelper !bitN !accum = 
+            if (bitN < 0) then accum
+            else nBitsSetHelper (bitN - 1) (if (isBitSet bitSetValue bitN) then accum + 1 else accum);
+    in
+        nBitsSetHelper (nBitsToCheck - 1) 0;
+
+bitsSet :: Int -> Int -> [Int];
+bitsSet !nBitsToCheck !bitSetValue = 
+    let
+        bitsSetHelper :: Int -> [Int];
+        bitsSetHelper !bitN = 
+            if (bitN < nBitsToCheck) then 
+                if (isBitSet bitSetValue bitN) then bitN : bitsSetHelper (bitN + 1)
+                else bitsSetHelper (bitN + 1)
+            else [];
+    in
+        bitsSetHelper 0;
+
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////
+
+
+/**
+ * Rearranges the list items into a random order.
+ * 
+ * TODO: perhaps this should be in the List module...
+ */
+randomizeListOrder :: [a] -> [a];
+randomizeListOrder !lst = 
+//    let
+//        // Generate random values to by which the list elements will be ordered.
+//        itemOrderValues :: [Int];
+//        itemOrderValues =  Random.randomInts Random.initialSeed;
+//    in
+//        List.map field1 $ List.sortBy (\!pr1 !pr2 -> compare (field2 pr1) (field2 pr2)) $ List.zip lst itemOrderValues;
+lst;
+
+/**
+ * Checks that a puzzle is valid.
+ * The puzzle can be complete or incomplete.
+ * Returns the original puzzle if valid, and throws an error otherwise.
+ */
+checkPuzzle :: SudokuPuzzle -> SudokuPuzzle;
+checkPuzzle !puzzle = 
+    case puzzle of
+    SudokuPuzzle {size} -> 
+        let
+            nCellsPerRowColumnCell :: Int;
+            nCellsPerRowColumnCell = size * size;
+
+            isValidValue :: Int -> Boolean;
+            isValidValue !val = val >= 0 && val <= nCellsPerRowColumnCell;
+
+            isEmptyValue :: Int -> Boolean;
+            isEmptyValue !val = val == 0;
+
+            checkValues :: String -> Array Int -> Boolean;
+            checkValues puzzlePartName !values = 
+                let
+                    valueList :: [Int];
+                    valueList = Array.toList values;
+
+                    nonEmptyValuesList :: [Int];
+                    nonEmptyValuesList = List.filter (not # isEmptyValue) valueList;
+
+                    distinctValuesList :: [Int];
+                    distinctValuesList = List.removeDuplicates nonEmptyValuesList;
+                in
+                    // First check that all values are in bounds.
+                    case (List.filter (not # isValidValue) valueList) of
+                    invalidValue : _ -> 
+                        error (puzzlePartName ++ " contains the invalid value " ++ intToString invalidValue ++ ".");
+                    [] -> 
+                        // Check that there are no duplicates in the non-zero values.
+                        if (length nonEmptyValuesList == length distinctValuesList) then True
+                        else
+                            case (List.deleteFirsts nonEmptyValuesList distinctValuesList) of
+                            repeatedValue : _ -> 
+                                error (puzzlePartName ++ " contains the value " ++ intToString repeatedValue ++ " more than once.");
+                            ;
+                    ;
+
+            allRowColBlockIndices :: Array Int;
+            allRowColBlockIndices = Array.fromList $ upFromTo 0 (nCellsPerRowColumnCell - 1);
+
+            rowsOk :: Boolean;
+            rowsOk = Array.all (\!rowN -> checkValues ("row" ++ intToString rowN) (rowValues puzzle rowN)) allRowColBlockIndices;
+
+            columnsOk :: Boolean;
+            columnsOk = Array.all (\!columnN -> checkValues ("column" ++ intToString columnN) (columnValues puzzle columnN)) allRowColBlockIndices;
+
+            blocksOk :: Boolean;
+            blocksOk = Array.all (\!blockN -> checkValues ("block" ++ intToString blockN) (blockValues puzzle blockN)) allRowColBlockIndices;
+        in
+            if (rowsOk && columnsOk && blocksOk) then puzzle
+            else error "unexpected error";
+    ;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// A test puzzle.
+puzzle1 :: SudokuPuzzle;
+puzzle1 =  makeSudokuPuzzleByRows 
+               [[0, 6, 0,   1, 0, 4,   0, 5, 0],
+                [0, 0, 8,   3, 0, 5,   6, 0, 0],
+			    [2, 0, 0,   0, 0, 0,   0, 0, 1],
+                            
+			    [8, 0, 0,   4, 0, 7,   0, 0, 6],
+			    [0, 0, 6,   0, 0, 0,   3, 0, 0],
+			    [7, 0, 0,   9, 0, 1,   0, 0, 4],
+
+			    [5, 0, 0,   0, 0, 0,   0, 0, 2],
+			    [0, 0, 7,   2, 0, 6,   9, 0, 0],
+			    [0, 4, 0,   5, 0, 8,   0, 7, 0]
+			   ];
+
+// A test puzzle with few empty values.
+puzzle2 :: SudokuPuzzle;
+puzzle2 = makeSudokuPuzzleByRows 
+              [[8, 6, 7,   3, 4, 0,   2, 5, 9],
+               [3, 4, 0,   9, 0, 5,   6, 7, 8],
+               [0, 5, 9,   6, 7, 8,   4, 1, 3],
+
+               [1, 0, 3,   0, 6, 0,   8, 9, 5],
+               [9, 7, 4,   0, 8, 3,   0, 6, 2],
+               [5, 0, 6,   1, 9, 2,   3, 4, 0],
+
+               [0, 3, 2,   7, 5, 0,   9, 8, 1],
+               [0, 1, 0,   8, 3, 9,   7, 2, 4],
+               [7, 9, 0,   2, 1, 4,   5, 3, 6]
+              ];
+
+// A test puzzle with mostly empty values (but many solutions).
+puzzle3 :: SudokuPuzzle;
+puzzle3 = makeSudokuPuzzleByRows 
+               [[0, 1, 0,   0, 0, 0,   0, 0, 0],
+                [0, 0, 0,   0, 5, 0,   7, 0, 0],
+                [0, 0, 0,   0, 0, 0,   0, 0, 0],
+                            
+                [0, 0, 0,   0, 0, 0,   0, 0, 0],
+                [0, 0, 0,   4, 0, 0,   0, 0, 0],
+                [0, 0, 0,   0, 0, 0,   0, 0, 0],
+
+                [0, 0, 0,   0, 0, 0,   0, 0, 0],
+                [0, 0, 2,   0, 0, 0,   0, 0, 0],
+                [0, 0, 0,   0, 0, 0,   0, 9, 0]
+               ];
+
+// A nasty puzzle with only 17 values specified (and only 1 solution).
+puzzle4 :: SudokuPuzzle;
+puzzle4 = makeSudokuPuzzleByRows 
+               [[0, 0, 0,   0, 6, 0,   0, 8, 0],
+                [0, 2, 0,   0, 0, 0,   0, 0, 0],
+                [0, 0, 1,   0, 0, 0,   0, 0, 0],
+                            
+                [0, 7, 0,   0, 0, 0,   1, 0, 2],
+                [5, 0, 0,   0, 3, 0,   0, 0, 0],
+                [0, 0, 0,   0, 0, 0,   4, 0, 0],
+
+                [0, 0, 4,   2, 0, 1,   0, 0, 0],
+                [3, 0, 0,   7, 0, 0,   6, 0, 0],
+                [0, 0, 0,   0, 0, 0,   0, 5, 0]
+               ];
+
+
+/* A template for specifying a puzzle.
+puzzle? :: SudokuPuzzle;
+puzzle? = makeSudokuPuzzleByRows 
+               [[0, 0, 0,   0, 0, 0,   0, 0, 0],
+                [0, 0, 0,   0, 0, 0,   0, 0, 0],
+			    [0, 0, 0,   0, 0, 0,   0, 0, 0],
+                            
+			    [0, 0, 0,   0, 0, 0,   0, 0, 0],
+			    [0, 0, 0,   0, 0, 0,   0, 0, 0],
+			    [0, 0, 0,   0, 0, 0,   0, 0, 0],
+
+			    [0, 0, 0,   0, 0, 0,   0, 0, 0],
+			    [0, 0, 0,   0, 0, 0,   0, 0, 0],
+			    [0, 0, 0,   0, 0, 0,   0, 0, 0]
+			   ];
+*/
+
+superPuzzle :: SudokuPuzzle;
+superPuzzle = makeSudokuPuzzleByRows 
+          [[ 0, 15,  8,  0,    0,  7, 10,  3,    0,  9,  5,  2,    0,  0,  4,  0],
+           [ 0, 14,  3,  0,    0, 15, 13,  0,    0,  0,  6, 11,    0,  0, 10,  8],
+           [ 6, 10,  0,  0,    0,  5,  0,  0,    0,  0,  0,  4,    2,  3,  0,  0],
+           [ 1,  0, 11,  0,    0,  0,  0,  0,   14,  0,  0,  0,   12,  6,  0,  0],
+
+           [ 0,  9,  1,  0,    0,  0,  0,  0,   11,  0,  7,  3,    0,  0,  0, 14],
+           [16,  0,  0,  8,    3,  0,  0,  4,    6,  1, 13,  9,    0, 10,  0,  7],
+           [ 5,  0,  0,  4,    1,  0,  0,  0,    0,  0,  0,  0,    0, 11,  0,  0],
+           [ 3,  0,  0,  7,   11,  0, 14, 16,    0,  0,  0,  0,    0, 12,  6,  9],
+
+           [ 2,  0,  0,  0,    0,  9,  1,  0,    0, 10,  0,  0,    3,  0, 11, 16],
+           [ 0,  0,  0,  0,    0,  3, 15, 14,    0,  7,  4,  8,   10,  0,  0,  0],
+           [ 0,  0,  0,  0,   10, 16,  0,  0,    0,  0,  0,  1,    8,  5,  0,  0],
+           [ 8,  0,  0,  0,    5,  0,  0,  0,    0, 13, 15, 16,    0,  7,  0, 12],
+
+           [ 9,  0,  0,  0,   15, 14,  6,  0,    0,  0,  0,  0,    0,  0,  0,  4],
+           [ 0,  0,  4,  1,    0,  0,  0,  0,    0,  0, 12, 14,    7,  0, 13,  2],
+           [ 0,  0,  2,  3,    0,  0,  0,  0,    0,  4, 16,  7,    5,  0,  0, 11],
+           [15,  0, 12,  0,    0, 13,  7,  0,    0,  0,  3,  0,    0,  0,  0,  0]
+          ];
+
+
+puzzle5by5 :: SudokuPuzzle;
+puzzle5by5 = makeSudokuPuzzleByRows 
+         [[ 0,  0, 23, 12, 16,    8, 18,  0,  0,  0,    0, 21, 17,  0,  0,    0,  0,  0,  0,  0,    0,  0,  0,  0,  7],
+          [17,  0,  0, 21,  0,    0,  0,  0,  0, 23,    0, 15,  0,  0, 16,    0, 18, 11,  7, 14,    0,  0,  0,  0, 25],
+          [ 0,  0,  0,  6,  1,    0,  7, 21,  0, 17,    3,  0,  0, 19,  0,   16, 20,  0,  0,  5,    0,  0, 14,  0,  0],
+          [ 7,  0, 24,  0,  0,    0,  0, 16,  0,  0,    0, 22, 10, 14,  0,   19,  3,  0,  0,  0,    0,  0,  0, 18, 21],
+          [11, 13,  0,  2,  0,    0,  0,  0,  0,  0,    0,  0,  5,  0,  0,    0, 10,  0,  0, 22,    0,  0, 23,  1,  0],
+
+          [25,  0,  0, 10,  0,    0,  8, 18,  0,  5,    0,  6,  0,  0,  3,    0, 22,  0,  0, 11,   17,  0,  1,  0,  0],
+          [ 1, 14,  0,  0,  8,    2,  6,  0,  4, 21,   22,  0, 11,  0,  0,    0,  0,  0, 16, 18,    0,  0, 13, 24,  0],
+          [ 0,  0,  0, 24,  6,    0, 12, 15, 23,  0,   13,  2,  9, 17,  0,    5,  0, 25,  0,  0,   19,  8,  0,  0, 22],
+          [22,  3, 17,  0, 18,   24, 20, 13,  0,  0,   21,  0,  0, 16,  5,    9,  0, 19,  0,  0,   12,  0,  0,  2,  4],
+          [ 0,  0, 11, 23,  0,    1, 16, 19, 10,  0,    0,  0, 24,  0, 12,    0, 21,  0,  3,  0,    0,  0, 20,  0,  0],
+
+          [20,  0,  0,  4,  0,   25,  0,  8, 12, 13,    5,  0,  1,  0,  0,    0,  0, 14, 19,  0,    0,  0,  0,  0, 16],
+          [ 2,  0,  0,  0, 24,    0, 23,  9,  0,  0,    0, 14,  6, 12, 25,    0,  0, 16, 18,  3,    7, 17, 10,  0,  0],
+          [ 0, 11,  8, 14,  0,    0,  0,  0,  3,  0,   10,  0,  0,  0, 18,    0,  6,  0,  0,  0,    0, 23, 19, 12,  0],
+          [ 0,  0, 22, 17,  3,   19,  1, 11,  0,  0,   24,  9,  2,  4,  0,    0,  0,  7, 12,  0,   25,  0,  0,  0, 20],
+          [10,  0,  0,  0,  0,    0,  2, 22,  0,  0,    0,  0,  7,  0, 15,   17,  8, 24,  0,  4,    0,  9,  0,  0, 14],
+
+          [ 0,  0,  6,  0,  0,    0, 15,  0, 17,  0,    8,  0, 13,  0,  0,    0, 12, 18,  5, 24,    0, 19, 16,  0,  0],
+          [24, 17,  0,  0, 25,    0,  0,  6,  0,  2,   12, 19,  0,  0, 22,    0,  0, 20,  9, 13,    3,  0,  7, 23,  8],
+          [14,  0,  0, 13, 11,    0,  0, 12,  0, 18,    0,  4, 16, 15,  9,    0, 25,  6, 23,  0,    1, 22,  0,  0,  0],
+          [ 0, 16,  9,  0,  0,    7,  4,  0,  0,  0,    0,  0, 20,  0, 24,    8, 11,  0, 10,  2,    5,  0,  0, 14,  6],
+          [ 0,  0, 19,  0,  7,    9,  0,  0, 24,  0,    6,  0,  0, 25,  0,    1,  0, 22, 15,  0,    0, 18,  0,  0, 13],
+
+          [ 0, 15, 10,  0,  0,   13,  0,  0,  7,  0,    0,  0, 25,  0,  0,    0,  0,  0,  0,  0,    0, 14,  0,  3, 23],
+          [ 6,  9,  0,  0,  0,    0,  0,  0, 15,  1,    0, 13, 19, 23,  0,    0,  0,  3,  0,  0,    0,  0, 22,  0, 18],
+          [ 0,  0,  1,  0,  0,   18,  0,  0, 19, 10,    0,  7,  0,  0,  2,   21,  0,  9, 25,  0,   13,  4,  0,  0,  0],
+          [ 4,  0,  0,  0,  0,   11, 17, 25, 16,  0,   15,  0,  0, 24,  0,    2,  0,  0,  0,  0,    0,  1,  0,  0, 19],
+          [13,  0,  0,  0,  0,    0,  0,  0,  0,  0,    0,  0,  3, 21,  0,    0,  0,  0,  1,  7,   24, 16,  5,  0,  0]
+         ];
+
+/**
+ * Dump the first few solutions to the puzzle.
+ * Each solution will also be checked to ensure it is valid.
+ */
+dumpSolutions :: SudokuPuzzle -> String;
+dumpSolutions !puzzle = 
+    let
+        maxNSolutions :: Int;
+        maxNSolutions = 5;
+
+        allSolutions :: [SudokuPuzzle];
+        allSolutions = puzzleSolutions puzzle;
+
+        firstNSolutions :: [SudokuPuzzle];
+        firstNSolutions = List.map checkPuzzle $ List.take maxNSolutions allSolutions;
+
+        suffix :: String;
+        suffix = if (List.lengthAtLeast (maxNSolutions + 1) allSolutions) then "..." else "";
+    in
+        (concat $ List.intersperse "\n=====================\n" 
+             $ List.mapIndexed (\!sln !slnIndex -> "Solution #" ++ intToString (slnIndex + 1) ++ ":\n" ++ show sln) firstNSolutions) 
+            ++ "\n" ++ suffix;
+
+/**
+ * Generates a random puzzle with the specified number of filled values, then solves it and outputs the original and the solved puzzle.
+ */
+generateAndSolvePuzzle :: Int -> Int -> String;
+generateAndSolvePuzzle !puzzleSize !nFilledValues = 
+    let
+        puzzle :: SudokuPuzzle;
+        puzzle = checkPuzzle $ makeRandomSudokuPuzzle puzzleSize nFilledValues;
+            
+        solvedPuzzle :: SudokuPuzzle;
+        solvedPuzzle = checkPuzzle $ solvePuzzle puzzle;
+    in
+        "Puzzle:\n" ++ show puzzle ++ "\n\nSolution:\n" ++ show solvedPuzzle;
+
+
+/* TODO:
+- Refactor the puzzleSolutions code so that various sets are calculated once up front, then minimally updated for each iteration.
+    Don't rebuild all the sets each time.
+
+- Try using the bits of an integer to keep track of which values are available.
+   This would only work for puzzles up to a size of 5 (with values 1 through 25)..
+*/
+

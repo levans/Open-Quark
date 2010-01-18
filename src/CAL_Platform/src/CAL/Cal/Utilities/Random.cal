@@ -1,0 +1,239 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Random.cal
+ * Created: Feb 8, 2006
+ * By: Bo Ilic
+ */
+
+/**
+Provides simple mechanisms for generating Lists of pseudo-random numbers of various common types.
+ 
+@author Bo Ilic 
+*/
+/*
+@implementation 
+
+The Random module is a lightweight wrapper around most of the functionality of the java.util.Random class. Note that
+java.util.Random is stateful, so care is taken below to expose only a pure functional api. In particular, the JRandom
+type is not public.
+
+The main missing functionality is the ability to, from a single seed, generate a list of random values, where the client
+controls what kind of value they want on an add-hoc basis e.g. first an Int, then a Double, then a Gaussian Double, etc.
+This would require exposing an immutable RandomGenerator type and functions such as:
+randomInt :: RandomGenerator -> (Int, RandomGenerator)
+Since Java's Random class combines generation with destructive update, it could not conveniently be used for this (although
+all the algorithms could be). This is the approach of Haskell's Random module.
+
+Haskell's Random module also provides two type classes: one to abstract over possible random number generation algorithms, and
+one to abstract over the value type that said generated random values live in. There is an interesting class method, split, that takes
+a random generator and produces two independent random number generators.
+ */
+module Cal.Utilities.Random;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Boolean, Double, Float, Int, Long;
+    dataConstructor = False, True;
+    function = eager;
+    ;
+       
+    
+//the foreign imports from java.lang.Random class were generated in the GemCutter using JFit
+
+///** foreign class byte[] */
+//data foreign unsafe import jvm private "byte[]"
+//    private JByteArray deriving Show, Inputable, Outputable, Eq;
+
+/** foreign class java.util.Random */
+data foreign unsafe import jvm private "java.util.Random"
+    private JRandom deriving Inputable, Outputable, Eq;
+
+///** foreign constructor java.util.Random */
+//foreign unsafe import jvm "constructor"
+//    private random_new :: JRandom;
+
+/** foreign constructor java.util.Random */
+foreign unsafe import jvm "constructor"
+    private random_new_Long :: Long -> JRandom;
+
+/** foreign method java.util.Random.nextBoolean */
+foreign unsafe import jvm "method nextBoolean"
+    private random_nextBoolean :: JRandom -> Boolean;
+
+///** foreign method java.util.Random.nextBytes */
+//foreign unsafe import jvm "method nextBytes"
+//    private random_nextBytes :: JRandom -> JByteArray -> ();
+
+/** foreign method java.util.Random.nextDouble */
+foreign unsafe import jvm "method nextDouble"
+    private random_nextDouble :: JRandom -> Double;
+
+/** foreign method java.util.Random.nextFloat */
+foreign unsafe import jvm "method nextFloat"
+    private random_nextFloat :: JRandom -> Float;
+
+/** foreign method java.util.Random.nextGaussian */
+foreign unsafe import jvm "method nextGaussian"
+    private random_nextGaussian :: JRandom -> Double;
+
+/** foreign method java.util.Random.nextInt */
+foreign unsafe import jvm "method nextInt"
+    private random_nextInt :: JRandom -> Int;
+
+/** foreign method java.util.Random.nextInt */
+foreign unsafe import jvm "method nextInt"
+    private random_nextInt_Int :: JRandom -> Int -> Int;
+
+/** foreign method java.util.Random.nextLong */
+foreign unsafe import jvm "method nextLong"
+    private random_nextLong :: JRandom -> Long;
+
+///** foreign method java.util.Random.setSeed */
+//foreign unsafe import jvm "method setSeed"
+//    private random_setSeed :: JRandom -> Long -> ();
+
+///** foreign method java.util.Random.toString */
+//foreign unsafe import jvm "method toString"
+//    private random_toString :: JRandom -> String;
+  
+/**
+ * A random system generated seed value that can be used as the initial seed for {@link randomInts@} and 
+ * similar functions when repeatable random sequences are not desired. Note: this is not a pure function,
+ * and returns a different value each time it is evaluated. Currently, this just returns the system time
+ * in milliseconds, but this is subject to change.
+ * @return a random system generated seed value.
+ */
+foreign unsafe import jvm "static method java.lang.System.currentTimeMillis"
+    public initialSeed :: Long;    
+    
+/**
+ * @arg seed the seed to use to start the list of random numbers
+ * @return an infinite pseudo-random list of {@link Int@} values uniformly distributed across all possible Ints.
+ */    
+randomInts :: Long -> [Int];
+public randomInts !seed =
+    let
+        randomIntsHelper :: JRandom -> [Int];
+        randomIntsHelper !randomNumberGenerator =
+            //the use of eager here is necessary for correctness, since we want e.g. the 3rd element of the
+            //list always to have the same value regardless of how a client explores the list. For example,
+            //without the use of eager (or sequencing the call to random_nextInt), we would have:
+            //take 10 (randomInts 1999) == reverse (take 10 randomInts)
+            (eager (random_nextInt randomNumberGenerator)) : (randomIntsHelper randomNumberGenerator);
+    in             
+        randomIntsHelper (random_new_Long seed); 
+
+/**
+ * @arg seed the seed to use to start the list of random numbers
+ * @arg maxExclusive the random ints will be less than maxExclusive but greater than or equal to 0. Must be positive or an error will occur.
+ * @return an infinite pseudo-random list of {@link Int@} values uniformly distributed between 0 (inclusive) and maxExclusive (exclusive).
+ */    
+randomBoundedInts :: Long -> Int -> [Int];
+public randomBoundedInts !seed !maxExclusive =
+    let
+        randomIntsHelper :: JRandom -> [Int];
+        randomIntsHelper !randomNumberGenerator =
+            (eager (random_nextInt_Int randomNumberGenerator maxExclusive)) : (randomIntsHelper randomNumberGenerator);
+    in 
+        randomIntsHelper (random_new_Long seed);     
+    
+/**
+ * @arg seed the seed to use to start the list of random numbers
+ * @return an infinite pseudo-random list of {@link Long@} values uniformly distributed across all possible Longs.
+ */    
+randomLongs :: Long -> [Long];
+public randomLongs !seed =
+    let
+        randomLongsHelper :: JRandom -> [Long];
+        randomLongsHelper !randomNumberGenerator =
+            (eager (random_nextLong randomNumberGenerator)) : (randomLongsHelper randomNumberGenerator);
+    in             
+        randomLongsHelper (random_new_Long seed);
+    
+
+    
+/**
+ * @arg seed the seed to use to start the list of random numbers
+ * @return an infinite pseudo-random list of {@link Boolean@} values uniformly distributed between {@link False@} and {@link True@}.
+ */    
+randomBooleans :: Long -> [Boolean];
+public randomBooleans !seed =
+    let
+        randomBooleansHelper :: JRandom -> [Boolean];
+        randomBooleansHelper !randomNumberGenerator =
+            (eager (random_nextBoolean randomNumberGenerator)) : (randomBooleansHelper randomNumberGenerator);
+    in             
+        randomBooleansHelper (random_new_Long seed);
+    
+/**
+ * @arg seed the seed to use to start the list of random numbers
+ * @return an infinite pseudo-random list of {@link Float@} values uniformly distributed between 0.0 and 1.0.
+ */    
+randomFloats :: Long -> [Float];
+public randomFloats !seed =
+    let
+        randomFloatsHelper :: JRandom -> [Float];
+        randomFloatsHelper !randomNumberGenerator =
+            (eager (random_nextFloat randomNumberGenerator)) : (randomFloatsHelper randomNumberGenerator);
+    in             
+        randomFloatsHelper (random_new_Long seed);
+    
+/**
+ * @arg seed the seed to use to start the list of random numbers
+ * @return an infinite pseudo-random list of {@link Double@} values uniformly distributed between 0.0 and 1.0.
+ */    
+randomDoubles :: Long -> [Double];
+public randomDoubles !seed =
+    let
+        randomDoublesHelper :: JRandom -> [Double];
+        randomDoublesHelper !randomNumberGenerator =
+            (eager (random_nextDouble randomNumberGenerator)) : (randomDoublesHelper randomNumberGenerator);
+    in             
+        randomDoublesHelper (random_new_Long seed);  
+    
+/**
+ * @arg seed the seed to use to start the list of random numbers
+ * @return an infinite pseudo-random list of {@link Double@} values that are distributed according to the Gaussian (or "normal") distribution
+ *         with mean 0.0 and standard deviation 1.0. 
+ */    
+randomGaussians :: Long -> [Double];
+public randomGaussians !seed =
+    let
+        randomGaussiansHelper :: JRandom -> [Double];
+        randomGaussiansHelper !randomNumberGenerator =
+            (eager (random_nextGaussian randomNumberGenerator)) : (randomGaussiansHelper randomNumberGenerator);
+    in             
+        randomGaussiansHelper (random_new_Long seed);   
+    
+
+    

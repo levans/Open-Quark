@@ -1,0 +1,457 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Array_Tests.cal
+ * Creation date: Oct 20, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for the {@link module = Array@} module.
+ *
+ * Note that *examples functions can and should still go into the Array module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Array_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Byte, Int, Long;
+    function = assert, eager, empty, input, maxBound, minBound, output, seq, undefined, unsafeCoerce, upFromTo;
+    ;
+import Cal.Collections.ArrayPrimitives using
+    typeConstructor = JIntArray;
+    function = array_length, array_makeDefault, intArray_subscript, intArray_update;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    dataConstructor = 
+        CharArray, BooleanArray, ByteArray, ShortArray, IntArray, LongArray, FloatArray, DoubleArray, ObjectArray, 
+        CalValueArray, EmptyArray;
+    function = sort, system_arraycopy;
+    ;    
+import Cal.Collections.List using
+    function = replicateList, take;
+    ;
+import Cal.Test.Core.Prelude_Tests using
+    typeConstructor = IntMod7;
+    ;
+
+import Cal.Utilities.Random using
+    function = randomInts;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Gen;
+    function = arbitrary, coarbitrary, quickCheck;
+    ; 
+
+testCompression :: Array Byte -> Boolean;
+testCompression originalData = 
+    let
+        compressedData = Array.compressBytes originalData;
+        uncompressedData = Array.decompressBytes compressedData;
+    in
+        assert (uncompressedData == originalData);
+
+testCompression1 = testCompression empty;
+testCompression2 = testCompression (Array.fromList [10, 1, 22, 3, 44, 5]);
+testCompression3 = testCompression (Array.fromList (upFromTo minBound maxBound));
+testCompression4 = testCompression (Array.fromList (replicateList (upFromTo minBound maxBound) 100));
+
+/*
+ * Apr 11/2006
+ * This version of replaceAll is faster than the current Array.replaceAll (since
+ * it only needs to do a single case-analysis, instead of one-per-update, one-per-read),
+ * but it's pretty gross to have to do an explicit case analysis in the function.
+ * (consider that it would be roughly 8 times longer if I'd implemented it for each
+ * potential element type, instead of just for Ints).
+ * Ideally we'd like to have the compiler optimizing the more natural style
+ * into something with comparable performance to this.
+ * 
+ * The benchmarks for Apr 11/2006:
+ *     
+ *     :pt arrayReplaceAllMainBenchmark 25 100000
+ *     First run time = 6,625ms
+ *     Average time   = 5,959ms
+ *     Standard deviation of runs = 99.15ms or 1.66% of average
+ *     Standard error of mean     = 33.05ms or 0.555% of average
+ *     
+ *     :pt arrayReplaceAllMainBenchmark_explicitCaseAnalysis 25 100000    
+ *     First run time = 4,593ms
+ *     Average time   = 4,418ms
+ *     Standard deviation of runs = 24.67ms or 0.55% of average
+ *     Standard error of mean     = 8.223ms or 0.186% of average
+ *     
+ *     :pt arrayReplaceAllNullBenchmark 25 100000
+ *     First run time = 3,828ms
+ *     Average time   = 3,789ms
+ *     Standard deviation of runs = 56.79ms or 1.49% of average
+ *     Standard error of mean     = 18.93ms or 0.5% of average
+ *     
+ * The null benchmark does no work except forcing the evaluation of all elements,
+ * which both of the "main" benchmarks do; it represents "benchmarking overhead".
+ * If we remove it from both times, the comparison is even more striking:
+ * 
+ *     Array.replaceAll:                (5959 - 3789) = 2170
+ *     replaceAll_explicitCaseAnalysis: (4718 - 3789) = 929
+ */
+replaceAll_explicitCaseAnalysis :: Array a -> (a -> Boolean) -> a -> Array a;
+replaceAll_explicitCaseAnalysis !array predicate replaceWithValue =
+    case array of
+    CharArray {values} -> undefined;
+    BooleanArray {values} -> undefined;
+    ByteArray  {values} -> undefined;
+    ShortArray {values} -> undefined;
+    IntArray {values} ->
+        let
+            size :: Int;
+            size = eager $ array_length values;
+            
+            updatedValues :: JIntArray;
+            updatedValues = eager $ array_makeDefault size;
+            
+            processElement :: Int -> JIntArray;
+            processElement !index =
+                if index >= size then
+                    updatedValues
+                else if predicate (unsafeCoerce (eager $ intArray_subscript values index)) then
+                    intArray_update updatedValues index (unsafeCoerce replaceWithValue)
+                    `seq`
+                    processElement (index + 1)
+                else
+                    processElement (index + 1);
+        in
+            system_arraycopy (output values) 0 (output updatedValues) 0 size
+            `seq`
+            IntArray (processElement 0);
+    LongArray {values} -> undefined;
+    FloatArray {values} -> undefined;
+    DoubleArray {values} -> undefined;
+    ObjectArray {values} -> undefined;
+    CalValueArray {values} -> undefined;
+    EmptyArray -> undefined;
+    ;
+
+arrayReplaceAllMainBenchmark !m !n =
+    let
+        array :: Array Int;
+        array = Array.fromList (upFromTo 1 100);
+        
+        predicate :: Int -> Boolean;
+        predicate !x = x <= m;           
+            
+        helper :: Int -> Array Int -> Array Int;
+        helper !index !currentArray =
+            if index < n then
+                (Array.isElem 101 currentArray)
+                `seq`
+                helper (index + 1) (Array.replaceAll currentArray predicate m)
+            else
+                currentArray;
+    in
+        helper 0 array;
+
+arrayReplaceAllMainBenchmark_explicitCaseAnalysis !m !n =
+let
+    array :: Array Int;
+    array = Array.fromList (upFromTo 1 100);
+    
+    predicate :: Int -> Boolean;
+    predicate !x = x <= m;           
+        
+    helper :: Int -> Array Int -> Array Int;
+    helper !index !currentArray =
+        if index < n then
+            (Array.isElem 101 currentArray)
+            `seq`
+            helper (index + 1) (replaceAll_explicitCaseAnalysis currentArray predicate m)
+        else
+            currentArray;
+in
+    helper 0 array;
+    
+arrayReplaceAllNullBenchmark !m !n =
+    let
+        array :: Array Int;
+        array = Array.fromList (upFromTo 1 100);
+        
+        myM :: Int;
+        myM = m;
+        
+        helper :: Int -> Array Int -> Array Int;
+        helper !index !currentArray =
+            if index < n then
+                Array.isElem 100 currentArray
+                `seq`
+                helper (index + 1) currentArray
+            else
+                currentArray;
+    in
+        helper 0 array;
+
+/*
+ * Apr 13/2006
+ * These benchmarks compare the performance of a native-Array implementation of
+ * zip3 versus an implementation that translates the arrays to and from lists and
+ * uses List.zip3.
+ * 
+ * :pt listRoundTripZip3Benchmark 50000
+ * First run time = 11,890ms
+ * Average time   = 11,923ms
+ * Standard deviation of runs = 445.96ms or 3.74% of average
+ * Standard error of mean     = 148.653ms or 1.247% of average
+ * 
+ * :pt arrayZip3Benchmark 50000
+ * First run time = 5,016ms
+ * Average time   = 4,788ms
+ * Standard deviation of runs = 51.26ms or 1.07% of average
+ * Standard error of mean     = 17.087ms or 0.357% of average
+ */
+arrayZip3Benchmark :: Int -> Array (Int, Int, Int);
+arrayZip3Benchmark !n =
+    let
+        array1 :: Array Int;
+        array1 = Array.fromList (upFromTo 1 100);
+        
+        array2 :: Array Int;
+        array2 = Array.fromList (upFromTo 1 100);
+        
+        array3 :: Array Int;
+        array3 = Array.fromList (upFromTo 1 100);
+        
+        helper :: Int -> Array (Int, Int, Int) -> Array (Int, Int, Int);
+        helper !index !currentArray =
+            if index >= n then
+                currentArray
+            else
+                Array.isElem (101, 101, 101) currentArray
+                `seq`
+                helper (index + 1) (Array.zip3 array1 array2 array3);
+    in
+        helper 0 (Array.zip3 array1 array2 array3);
+    
+listRoundTripZip3Benchmark :: Int -> Array (Int, Int, Int);
+listRoundTripZip3Benchmark !n =
+    let
+        array1 :: Array Int;
+        array1 = Array.fromList (upFromTo 1 100);
+        
+        array2 :: Array Int;
+        array2 = Array.fromList (upFromTo 1 100);
+        
+        array3 :: Array Int;
+        array3 = Array.fromList (upFromTo 1 100);
+        
+        helper :: Int -> Array (Int, Int, Int) -> Array (Int, Int, Int);
+        helper !index !currentArray =
+            if index >= n then
+                currentArray
+            else
+                Array.isElem (101, 101, 101) currentArray
+                `seq`
+                helper (index + 1) (Array.fromList (List.zip3 (Array.toList array1) (Array.toList array2) (Array.toList array3)));
+    in
+        helper 0 (Array.fromList (List.zip3 (Array.toList array1) (Array.toList array2) (Array.toList array3)));
+
+////////////////////////////////////////////////////////////////////
+
+toIntMod7Array :: [Int] -> Array IntMod7;
+toIntMod7Array !list = Array.fromList $ Prelude_Tests.toIntMod7List list;
+
+toIntArray :: Array IntMod7 -> Array Int;
+toIntArray !array = Array.map Prelude_Tests.fromIntMod7 array;
+
+toCanonicalIntArray :: Array IntMod7 -> Array Int;
+toCanonicalIntArray !array = Array.map Prelude_Tests.canonicalInt array;
+
+
+testIntMod7Array =
+    let        
+        a1 :: Array IntMod7;
+        a1 = toIntMod7Array [13, 11, 12, -1, -3, -2, 6, 4, 5];
+        
+        sa1 :: Array IntMod7;
+        sa1 = toIntMod7Array [11, -3, 4, 12, -2, 5, 13, -1, 6];
+        
+        a2 :: Array IntMod7;
+        a2 = toIntMod7Array [6, 4, 5];
+        
+        a3 :: Array IntMod7;
+        a3 = toIntMod7Array [13, 11, 12];
+        
+        a4 :: Array IntMod7;
+        a4 = a3 ++ a3 ++ a3;
+        
+        sa4 = toIntMod7Array [11, 11, 11, 12, 12, 12, 13, 13, 13];
+    in
+        assert (a1 == a4)
+        && assert (sort a1 == sa1)
+        && assert (sa1 == sa4)
+        && assert (toIntArray (sort a1) == toIntArray sa1)
+        && assert (toIntArray (sort a1) != toIntArray sa4)
+        && assert (toCanonicalIntArray (Array.map (Prelude.multiply (Prelude_Tests.toIntMod7 2)) a1)
+                   == Array.fromList [5, 1, 3, 5, 1, 3, 5, 1, 3])
+        && assert (toIntArray (Array.map (Prelude.multiply (Prelude_Tests.toIntMod7 2)) a1)
+                   == Array.fromList [26, 22, 24, -2, -6, -4, 12, 8, 10])
+        ;
+
+////////////////////////////////////////////////////////////////////
+
+/*
+ * Aug 31/2006
+ * These benchmarks compare the performance of the generic Array.sort function
+ * with the specialized sort functions for arrays of primitive types.
+ * 
+ * All of the following numbers are obtained after the relevant CAFs have
+ * been evaluated.
+ *
+ * Base time for sortedRandomIntArray2 == sortedRandomIntArray2 and sortedRandomList2 == sortedRandomList2 is about 1000ms
+ * 
+ * Array.sortPrimitive randomIntArray2 == sortedRandomIntArray2
+ * Runs (ms): 1702 1593 1656 1687 1734 1703
+ * Average (ms): 1679 -> +679 above base time
+ * 
+ * -> These numbers are comparable to that of the original version of Array.sort for the same array.
+ * 
+ * Array.sort randomIntArray2 == sortedRandomIntArray2
+ * Runs (ms): 21850 24896 21507 21382 21804 23569
+ * Average (ms): 22501 -> +21501 above base time
+ * 
+ * List.sort randomList2 == sortedRandomList2
+ * Runs (ms): 127650 129071 126541 129602 127869
+ * Average (ms): 128147 -> +127147 above base time
+ */
+
+randomList :: Int -> Long -> [Int];
+randomList !size !seed = take size (randomInts seed);
+
+randomIntArray :: Int -> Long -> Array Int;
+randomIntArray !size !seed = Array.fromList $ randomList size seed;
+
+randomIntArray1 = randomIntArray 200000 13579;
+
+randomIntArray2 = randomIntArray 2000000 24680;
+
+sortedRandomIntArray2 = Array.sortPrimitive randomIntArray2;
+
+randomList2 = randomList 2000000 24680;
+
+sortedRandomList2 = List.sort randomList2;
+
+////////////////////////////////////////////////////////////////////
+
+multiDimArray :: Array (Array Int);
+multiDimArray =
+    Array.fromList [
+        Array.fromList [1, 2, 3],
+        Array.fromList [4, 5, 6],
+        Array.fromList [7, 8, 9]
+        ];
+
+testRoundTripMultiDimArray =
+    (input $ output multiDimArray) == multiDimArray
+    && (Array.inputPrimitive $ Array.outputPrimitive multiDimArray) == multiDimArray
+    && (Array.map (Array.inputPrimitive # Array.outputPrimitive) multiDimArray) == multiDimArray;
+
+
+/**
+ * check conversion to/from list
+ */
+prop_toList :: Array Int -> Boolean;
+prop_toList a = a == Array.fromList (Array.toList a);
+
+/**
+ * check that sort is independent of the order of the input array.
+ */
+prop_sortReverse :: Array Int -> Boolean;
+prop_sortReverse a = Array.sort a == Array.sort (Array.reverse a);
+
+/**
+ * Checks that subscript is the same as list subscipt
+ */
+prop_subscript :: Array Int -> Boolean;
+prop_subscript array =
+    let 
+        check :: Array Int -> [Int] -> Int -> Boolean;
+        check array list i = 
+            if (i < 0) then
+                Prelude.True
+            else
+                (((List.subscript list i) == (Array.subscript array i)) `Prelude.and` (check array list (i-1)));
+    in
+        check array (Array.toList array) ((Array.length array) - 1);
+
+/**
+ * checks the list and array foldLeft are equiv
+ */
+prop_foldLeft :: Array Int -> Int -> (Int -> Int -> Int)-> Boolean;
+prop_foldLeft array initialValue f = 
+    (Array.foldLeft f initialValue array) == (List.foldLeft f initialValue (Array.toList array));
+ 
+/**
+ * checks the list and array foldRight are equiv
+ */
+prop_foldRight :: Array Int -> Int -> (Int -> Int -> Int)-> Boolean;
+prop_foldRight array initialValue f = 
+    (Array.foldRight f initialValue array) == (List.foldRight f initialValue (Array.toList array));
+
+/**
+ * This property specifies that the array periodize function must be equivalent to
+ * converting the array to a list, applying the list periodize, and then converting back to arrays.
+ */
+prop_periodize :: Int -> Array Prelude.Double -> Boolean;
+prop_periodize period array =
+    Array.periodize (Prelude.abs period + 1) array == Array.fromList (List.map Array.fromList (List.periodize (Prelude.abs period + 1) (Array.toList array)));
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    assert testCompression1
+    && assert testCompression2
+    && assert testCompression3
+    && assert testCompression4
+    && assert testIntMod7Array
+    && assert testRoundTripMultiDimArray
+    && assert (quickCheck prop_toList)
+    && assert (quickCheck prop_sortReverse)
+    && assert (quickCheck prop_subscript)
+    && assert (quickCheck prop_foldLeft)
+    && assert (quickCheck prop_foldRight)
+    && assert (quickCheck prop_periodize)
+   ;
+
+//please leave testModule last! It makes it easy to see what tests are hooked up.
+

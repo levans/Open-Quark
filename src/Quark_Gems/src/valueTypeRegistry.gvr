@@ -1,0 +1,59 @@
+// Handler List Set-up.
+// -"//" at the beginning of the line denotes comments which will be ignored.
+// -Completely Empty lines will be ignored
+// -Sections are:
+// "ValueNode:" followed by the list of ValueNode handler classes, then
+// "ValueEditor:" followed by the list of ValueEditor handler classes, then
+// "ValueEditorDirector:" followed by the ValueEditorDirector handler class, then
+// "ValueNodeTransformer:" followed by the ValueNodeTransformer handler class.
+
+
+ValueNode:
+
+org.openquark.cal.valuenode.ParametricValueNode$ParametricValueNodeProvider
+org.openquark.cal.valuenode.GemEntityValueNode$GemEntityValueNodeProvider
+org.openquark.cal.valuenode.DataConstructorValueNode$DataConstructorValueNodeProvider
+org.openquark.cal.valuenode.ForeignValueNode$ForeignValueNodeProvider
+org.openquark.cal.valuenode.LiteralValueNode$LiteralValueNodeProvider
+org.openquark.cal.valuenode.ListValueNode$ListValueNodeProvider
+org.openquark.cal.valuenode.JTimeValueNode$JTimeValueNodeProvider
+org.openquark.cal.valuenode.RelativeDateValueNode$RelativeDateValueNodeProvider
+org.openquark.cal.valuenode.RelativeTimeValueNode$RelativeTimeValueNodeProvider
+org.openquark.cal.valuenode.ListOfCharValueNode$ListOfCharValueNodeProvider
+org.openquark.cal.valuenode.ColourValueNode$ColourValueNodeProvider
+org.openquark.cal.valuenode.RelativeDateTimeValueNode$RelativeDateTimeValueNodeProvider
+org.openquark.cal.valuenode.FileNameValueNode$FileNameValueNodeProvider
+org.openquark.cal.valuenode.JTimeValueNode$JTimeValueNodeProvider
+org.openquark.cal.valuenode.RangeValueNode$RangeValueNodeProvider
+org.openquark.cal.valuenode.RecordValueNode$RecordValueNodeProvider
+org.openquark.cal.valuenode.NTupleValueNode$NTupleValueNodeProvider
+
+
+ValueEditor:
+
+org.openquark.gems.client.valueentry.ParametricValueEditor$ParametricValueEditorProvider
+org.openquark.gems.client.valueentry.IntellicutValueEditor$IntellicutValueEditorProvider
+org.openquark.gems.client.valueentry.NumberValueEditor$NumberValueEditorProvider
+org.openquark.gems.client.valueentry.ListTupleValueEditor$ListTupleValueEditorProvider
+org.openquark.gems.client.valueentry.StringValueEditor$StringValueEditorProvider
+org.openquark.gems.client.valueentry.AlgebraicValueEditor$AlgebraicValueEditorProvider
+org.openquark.gems.client.valueentry.EnumeratedValueEditor$EnumeratedValueEditorProvider
+org.openquark.gems.client.valueentry.FileNameValueEditor$FileNameValueEditorProvider
+org.openquark.gems.client.valueentry.RelativeDateValueEditor$RelativeDateValueEditorProvider
+org.openquark.gems.client.valueentry.RelativeTimeValueEditor$RelativeTimeValueEditorProvider
+org.openquark.gems.client.valueentry.RelativeDateTimeValueEditor$RelativeDateTimeValueEditorProvider
+org.openquark.gems.client.valueentry.TimeValueEditor$TimeValueEditorProvider
+org.openquark.gems.client.valueentry.ColourValueEditor$ColourValueEditorProvider
+org.openquark.gems.client.valueentry.JDBCResultSetEditor$JDBCResultSetEditorProvider
+org.openquark.gems.client.valueentry.RangeValueEditor$RangeValueEditorProvider
+org.openquark.gems.client.valueentry.RecordValueEditor$RecordValueEditorProvider
+org.openquark.gems.client.valueentry.TupleValueEditor$TupleValueEditorProvider
+
+ValueEditorDirector:
+
+org.openquark.gems.client.valueentry.DefaultValueEditorDirector
+
+
+ValueNodeTransformer:
+
+org.openquark.cal.valuenode.DefaultValueNodeTransformer

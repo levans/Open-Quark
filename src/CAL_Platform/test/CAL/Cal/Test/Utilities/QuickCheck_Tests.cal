@@ -1,0 +1,384 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * QuickCheck_Tests.cal
+ * Created: Sept 2006
+ * By: Magnus Byne
+ */
+
+/**
+ * This module contains test cases for the {@link QuickCheck@} module.
+ * 
+ * @author Magnus byne
+ */
+
+module Cal.Test.Utilities.QuickCheck_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Double, Int, Maybe, String;
+    dataConstructor = True, Nothing, Just;
+    function = assert, concat, not;
+    ;
+
+
+import Cal.Collections.List using
+    function = head, sort, tail;
+    ;
+import Cal.Core.String;
+import Cal.Core.Debug;
+import Cal.Core.Dynamic using
+    function = dynamicRecordFieldNames, fromDynamic, recordFieldValue, toDynamic;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Gen, Property, Result;
+    function = 
+        arbitrary, classify, coarbitrary, forAll, generate, implies, makeChooseOneOfGen, makeDefaultGenParams, makeGen, 
+        mapGen, quickCheck, summarize, testResults, defaultConfig;
+    ; 
+
+
+
+/**
+ * A property for testing that should be true
+ */
+prop_true :: Int -> Int -> Boolean;
+prop_true x y = x * y == y * x;
+
+truePropertyTest :: Boolean;
+truePropertyTest = quickCheck prop_true;
+
+/**
+ * A property for testing that is should be false
+ */
+prop_false :: (Double->Double) -> (Double->Double) -> Double -> Boolean;
+prop_false f g x =  f (g x) == g (f x);
+
+falsePropertyTest :: Boolean;
+falsePropertyTest =  
+        not $ quickCheck prop_false;
+
+/**
+ * A simple guarded property that should be true
+ */
+prop_implies :: Int -> Int -> Property;
+prop_implies x y = (x < y) `implies` (y > x);
+
+impliesPropertyTest :: Boolean;
+impliesPropertyTest = 
+    quickCheck prop_implies;
+
+/**
+ * A simple classifying property that should be true
+ * and classify all tests for which the generated list has length greater than 1.
+ */
+prop_classify :: String -> Property;
+prop_classify str = 
+    let 
+        len :: Int;
+        len=String.length str;
+    in
+        classify (len > 1) "nontrivial" ( (String.reverse $ String.reverse str) == str);
+
+classifyPropertyTest :: Boolean;
+classifyPropertyTest =
+    let
+        getLabels :: Result->[String];
+        getLabels r = r.QuickCheck.Result.labels;
+        
+        res :: [Result];
+        res = testResults defaultConfig prop_classify;
+        
+        allLabels :: [String];
+        allLabels = concat (List.map getLabels res);
+    in
+         ((List.length allLabels) > 0);
+ 
+/**
+ * A simple forAll property. Uses a custom int generator that
+ * returns one of 1,2,3
+ */
+prop_forAll :: Property;
+prop_forAll = 
+    forAll 
+         (makeChooseOneOfGen [ 1 :: Int, 2 :: Int, 3 :: Int]) 
+         (\y -> (y > 0) && (y < (4 :: Int)));
+
+forAllPropertyTest :: Boolean;
+forAllPropertyTest = 
+    quickCheck prop_forAll;
+
+
+/**
+ * Property to test arbitrary record creation - includes nested ordinal record
+ */
+prop_record :: { x :: Int, y :: String, z :: [Int], w :: (String, Int)} -> Boolean;
+prop_record record = 
+    let 
+        dynamicRecord :: Dynamic.Dynamic;
+        dynamicRecord = toDynamic record;
+    in
+        //verify the record field types
+        List.length (dynamicRecordFieldNames dynamicRecord).Just.value == 4 &&
+        ((fromDynamic (recordFieldValue record "x")) :: Maybe Int) != Nothing &&  
+        ((fromDynamic (recordFieldValue record "y")) :: Maybe String) != Nothing && 
+        ((fromDynamic (recordFieldValue record "z")) :: Maybe [Int]) != Nothing &&
+        ((fromDynamic (recordFieldValue record "w")) :: Maybe (String, Int)) != Nothing;
+
+recordPropertyTest :: Boolean;
+recordPropertyTest = 
+    quickCheck prop_record;
+
+/**
+ * Checks various special cases for reords - tupes, ordinal only, textual only, mixed..
+ */
+recordTests :: Boolean;
+recordTests = 
+    (generate makeDefaultGenParams (arbitrary::Gen {}) == {}) 
+    && (generate makeDefaultGenParams (arbitrary::Gen {#1::Double}) == {#1=4.439141203113758})
+    && (generate makeDefaultGenParams (arbitrary::Gen {#1::Int, #2::Int}) == {#1=4, #2=1})
+    && (generate makeDefaultGenParams (arbitrary::Gen {x::Int, y::Int}) == {x=4, y=1})  
+    && (generate makeDefaultGenParams (arbitrary::Gen (Int,Prelude.Char)) == (4,'?'))
+    && (generate makeDefaultGenParams (arbitrary::Gen {#1::Int, x::Int}) == {#1=4,x=1})
+    && (generate makeDefaultGenParams (arbitrary::Gen (Int,Int,Int)) == (4,1,4))
+    && (generate makeDefaultGenParams (arbitrary::Gen {#1::Int,#2::Int,#4::Int}) == {#1=4, #2=1, #4=4})
+    && (generate makeDefaultGenParams (arbitrary::Gen {x::Int,y::Int,z::Int}) == {x=4, y=1, z=4})
+     ;
+
+/**
+ * Test the coarbitrary record primitive function - coarbitrary is used for generating functions
+ * This test checks that x!=y => f(x) != f(y) where x,y are records. As f is an arbitrary 
+ * function it could be happen x != y && f(x) = f(y) but it is not likely.
+ */
+coarbitraryRecordTest :: Boolean;
+coarbitraryRecordTest = 
+    let
+        func :: (Int, Int) -> Int;
+        func = generate makeDefaultGenParams (arbitrary :: Gen ( (Int, Int) -> Int ));
+    in
+        (func (0,0)) != (func (0,1)) &&
+        (func (0,0)) != (func (1,0)); 
+
+/**
+ * Test the summary function - makes sure the correct precentages are returned
+ */
+testSummary :: Boolean;
+testSummary =
+    let
+        summary :: String;
+        summary = summarize [ QuickCheck.Result (Just True) ["label1"] [], 
+                              QuickCheck.Result (Just True) ["label2"] [],
+                              QuickCheck.Result (Just True) ["label2"] [],
+                              QuickCheck.Result (Just True) ["label3"] []];
+    in
+        (String.indexOfString "label1: 25%" summary) != -1 &&
+        (String.indexOfString "label2: 50%" summary) != -1 &&
+        (String.indexOfString "label3: 25%" summary) != -1;
+
+
+/**
+ * Here we define the type constructor Natural, and make it an instance of
+ * arbitrary, such that arbitrary::Natural only returns non-negative integers. Natural
+ * can then be used as a property parameter and converted to int as needed in the
+ * property definition. This tests an alternative technique to supplying a custom generator with
+ * forAll.
+ */
+data Natural = public Natural value :: !Int;
+
+instance Debug.Show Natural where
+    show = showNatural;
+    ;
+    
+showNatural :: Natural -> String;
+showNatural n = Debug.show n.Natural.value;
+
+instance QuickCheck.Arbitrary Natural where
+    arbitrary = arbitraryNatural;
+    coarbitrary = coarbitraryNatural;
+    ;
+
+arbitraryNatural :: Gen (Natural);
+arbitraryNatural = 
+    makeGen (\genParams -> Natural (QuickCheck.getBoundedInt genParams 0 (Prelude.maxBound::Int)));
+ 
+coarbitraryNatural :: Natural -> Gen b -> Gen b;
+coarbitraryNatural n = 
+    coarbitrary n.Natural.value; 
+
+prop_natural :: Natural -> Boolean;
+prop_natural x = x.Natural.value >= 0;
+
+/**
+ * here we test a similar technique for ordered lists
+ */
+data OrderedList a = public OrderedList value :: ![a];
+
+instance Debug.Show a => Debug.Show (OrderedList a) where
+    show = showOrderedList;
+    ;
+    
+showOrderedList :: Debug.Show a => OrderedList a -> String;
+showOrderedList n = Debug.show n.OrderedList.value;
+
+instance (Arbitrary a, Prelude.Ord a) => QuickCheck.Arbitrary (OrderedList a) where
+    arbitrary = arbitraryOrderedList;
+    coarbitrary = coarbitraryOrderedList;
+    ;
+
+arbitraryOrderedList :: (Arbitrary a, Prelude.Ord a) => Gen (OrderedList a);
+arbitraryOrderedList = 
+    mapGen (\a -> OrderedList (List.sort a)) arbitrary;
+ 
+coarbitraryOrderedList :: (Arbitrary a, Prelude.Ord a) => OrderedList a -> Gen b -> Gen b;
+coarbitraryOrderedList n = 
+    coarbitrary n.OrderedList.value; 
+
+isOrdered :: Prelude.Ord a => [a] -> Boolean;
+isOrdered a = List.sort a == a;
+
+/**
+ * This is the function that we wish to test using ordered lists
+ * it inserts an element into an ordered list and preserves the ordering
+ */
+orderedInsert :: Prelude.Ord a => a -> [a] -> [a];
+orderedInsert value list =
+    case list of
+        [] -> [value];
+        head : tail ->  if ( value < head ) then  
+                            value : head : tail 
+                        else
+                            head : orderedInsert value tail;
+    ;
+
+/**
+ * Property to check ordered insert using the ordered list type
+ */
+prop_ordInsert :: (OrderedList Prelude.Float) -> Prelude.Float -> Boolean;
+prop_ordInsert ordList value = 
+    let 
+        //extract the list from OrderedList Wrapper
+        lst = ordList.OrderedList.value; 
+    in 
+        isOrdered (orderedInsert value lst);
+
+/*
+ * This shows how the property could be implemented using a forAll
+ * 
+ * It can be simpler to use forAll, but it is not possible
+ * in all situations, e.g. function arguments
+ */
+prop_ordInsert2 :: Prelude.Decimal -> Property;
+prop_ordInsert2 value =
+    forAll
+        (mapGen sort (arbitrary::Gen [Prelude.Decimal]))
+        (\lst -> isOrdered (orderedInsert value lst));
+
+/**
+ * Make a simple enumerated type to test the derviing clause
+ */
+data public MyEnum1 =
+    public OnlyOne 
+    deriving Arbitrary, Debug.Show, Prelude.Eq;
+
+data public MyEnum2 =
+    public One |
+    public Two
+    deriving Arbitrary, Debug.Show, Prelude.Eq;
+
+data public MyEnum5 =
+    public A |
+    public B |
+    public C |
+    public D |
+    public E
+    deriving Arbitrary, Debug.Show, Prelude.Eq;
+
+
+/**
+ * Define a generator using the makeListGen function
+ * generated ids should match [abcdefghijklmnopqrstuvwxyz_][abcdefghijklmnopqrstuvwxyz_0123456789]{0,19}
+ */
+idGen :: Gen String;
+public idGen =
+    QuickCheck.zipWithGen Prelude.append
+    (mapGen String.fromChar $ (makeChooseOneOfGen (String.toList "abcdefghijklmnopqrstuvwxyz_")))
+    (mapGen String.fromList $
+    QuickCheck.makeListGen (QuickCheck.makeBoundedIntGen 0 20) (makeChooseOneOfGen (String.toList "abcdefghijklmnopqrstuvwxyz_0123456789")));
+ 
+testIdGen :: Property;
+testIdGen = 
+    forAll idGen
+    (\id -> (String.length id) > 0 && (String.length id) <= 20);
+          
+
+
+//this property exercises the arbitrary and generateInstance methods that are automaticaly 
+//generated by the compiler.
+prop_MyEnum1 :: MyEnum1 -> Boolean;
+prop_MyEnum1 value = value == OnlyOne;
+
+prop_MyEnum2 :: MyEnum2 -> Boolean;
+prop_MyEnum2 value = value == One || value == Two;
+
+prop_MyEnum5 :: MyEnum5 -> Boolean;
+prop_MyEnum5 value = value == A || value == B || value == C || value == D || value == E;
+
+//this exercises the coarbitrary method. It should be false.
+prop_MyEnumCoArb :: (MyEnum5->MyEnum5) -> (MyEnum5->MyEnum5) -> MyEnum5 -> Boolean;
+prop_MyEnumCoArb f g x =  f (g x) == g (f x);
+
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+testModule :: Boolean;
+public testModule =
+    assert truePropertyTest 
+    && assert falsePropertyTest 
+    && assert impliesPropertyTest 
+    && assert classifyPropertyTest 
+    && assert forAllPropertyTest 
+    && assert recordPropertyTest 
+    && assert recordTests
+    && assert coarbitraryRecordTest
+    && assert testSummary
+    && assert (quickCheck testIdGen)
+    && assert (quickCheck prop_natural)
+    && assert (quickCheck prop_ordInsert)
+    && assert (quickCheck prop_ordInsert2)
+    && assert (quickCheck prop_MyEnum1)
+    && assert (quickCheck prop_MyEnum2)
+    && assert (quickCheck prop_MyEnum5)
+    && assert (not $ quickCheck prop_MyEnumCoArb);
+    

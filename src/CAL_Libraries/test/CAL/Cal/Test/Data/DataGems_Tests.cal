@@ -1,0 +1,307 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * DataGems_Tests.cal
+ * Creation date: Feb 28, 2003.
+ * By: Edward Lam
+ */
+
+/*
+ * This is a module implementing some tests for the DataGems module.
+ * Author: Luke Evans
+ */
+
+/////////////////////////////////////////////////////////////////////////
+module Cal.Test.Data.DataGems_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = True, False;
+    ;
+import Cal.Collections.List;
+import Cal.Data.DataGems;
+
+// Load the Sun's ODBCDriver
+public loadSunODBCDriver  = DataGems.jdbcDriverLoad ("sun.jdbc.odbc.JdbcOdbcDriver");
+
+// Connect to the old (and very wrinkly) craze DB
+//public connectToCraze = DataGems.jdbcConnectionWithDriverCheck "sun.jdbc.odbc.JdbcOdbcDriver" "jdbc:odbc:craze" "" "";
+public connectToCraze = DataGems.jdbcConnectionWithDriverCheck "com.inzoom.jdbcado.Driver" "jdbc:izmado:Provider=MSDASQL;Data Source=craze" "" "";
+
+// Get all the cities from craze (regions)
+public crazeCities  = 
+    DataGems.dataFromResultSet
+        (DataGems.jdbcQueryToResultSet connectToCraze "SELECT sales_city FROM region")
+        (DataGems.extractStringWithDefault "" 1);
+
+
+//public lukesXtreme = DataGems.jdbcConnectionWithDriverCheck ("sun.jdbc.odbc.JdbcOdbcDriver") ("jdbc:odbc:Xtreme Sample Database 10") ("") ("");
+public lukesXtreme = DataGems.jdbcConnectionWithDriverCheck "com.inzoom.jdbcado.Driver" "jdbc:izmado:Provider=MSDASQL;Data Source=Xtreme Sample Database 10" "" "";
+
+public rx = 
+    DataGems.jdbcQueryToResultSet
+              lukesXtreme
+              "SELECT Credit.[Customer Credit ID], Credit.Amount FROM Credit";
+
+public xtremeProductOrders = 
+    DataGems.jdbcQueryToResultSet
+              lukesXtreme
+              ("SELECT Product.[Product Name], [Orders Detail].[Unit Price], [Orders Detail].Quantity "
+                ++ "FROM [Orders Detail], Product "
+                ++ "WHERE [Orders Detail].[Product ID] = Product.[Product ID]");
+
+public xtremeProductOrdersList  = 
+    DataGems.dataFromResultSet xtremeProductOrders 
+        (DataGems.extractTuple3 
+             (DataGems.extractStringWithDefault "" 1) 
+             (DataGems.extractIntWithDefault 0 3)
+             (DataGems.extractDoubleWithDefault 0.0 2) 
+        );
+
+count_xtremeProductOrders :: Int;
+public count_xtremeProductOrders = 
+    DataGems.rowCount xtremeProductOrders;
+
+
+//public connectToRDPeople  = DataGems.jdbcConnectionWithDriverCheck "sun.jdbc.odbc.JdbcOdbcDriver" "jdbc:odbc:RDPeople" "" "";
+public connectToRDPeople = DataGems.jdbcConnectionWithDriverCheck "com.inzoom.jdbcado.Driver" "jdbc:izmado:Provider=MSDASQL;Data Source=RDPeople" "" "";
+
+public rdPeople = 
+    let
+        sql = "SELECT Team, Name FROM People";
+        rs = DataGems.jdbcQueryToResultSet connectToRDPeople sql;
+    in
+        DataGems.dataFromResultSet rs
+            (DataGems.extractTuple2 
+                 (DataGems.extractStringWithDefault "" 1) 
+                 (DataGems.extractStringWithDefault "" 2)
+            );
+
+
+public dataMapTest = 
+    let
+//        sql = "SELECT [Customer ID], [Customer Name], [Last Year's Sales] FROM Customer";
+        sql = "SELECT [Order ID], [Ship Via], [Order Amount] FROM Orders";
+
+        rs = DataGems.jdbcQueryToResultSet connectToCraze sql;
+    in
+        DataGems.dataMapFromResultSet rs (DataGems.extractInt 1) (DataGems.extractTuple2 (DataGems.extractString 2) (DataGems.extractDouble 3));
+
+
+// Gems to connect to an Excel spreadsheet via the MS Jet OLE DB provider and extract the data from one of its regions.
+public stuffSpreadsheet = DataGems.jdbcConnectionWithDriverCheck "com.inzoom.jdbcado.Driver" "jdbc:izmado:Provider=Microsoft.Jet.OLEDB.4.0;Data Source=\\\\rwebster01\\public\\stuff.xls;Extended Properties=Excel 8.0" "" "";
+
+public spreadsheetData = DataGems.dataFromResultSet (DataGems.jdbcQueryToResultSet stuffSpreadsheet "select * from stuff") (DataGems.extractList DataGems.extractString);
+
+
+//Demo in Paris Feb 23 - March 5, 2004.
+    
+pairDiff :: Prelude.Num a => (a, a) -> a;
+pairDiff p = Prelude.abs ((Prelude.fst p) - (Prelude.snd p));
+
+numberPairData :: [(Double, Double)];
+numberPairData = ([(20.0, 1.0), (2, 5), (10, 17), (11, 2)]);
+
+stringData :: [String];
+stringData = (["the", "quick", "brown", "fox", "jumped", "over", "the", "lazy", "dog"]);
+
+demoTableTop :: Double -> [(Double, Double)];
+demoTableTop n = List.filter (\p -> (\p n -> pairDiff p > n) p n) numberPairData;
+
+funWithGrouping :: [([(String, String, Double)], Double)];
+funWithGrouping = List.map (\x -> (x,
+ List.sum (List.map Prelude.field3 x))) (List.groupBy (\x y -> Prelude.equals 
+(Prelude.field1 x,  Prelude.field2 x)
+(Prelude.field1 y,  Prelude.field2 y)) (List.sortBy (\x y -> Prelude.compare 
+(Prelude.field1 x,  Prelude.field2 x)
+(Prelude.field1 y,  Prelude.field2 y)) ([("Vancouver", "Bo", 6.0),
+("Victoria", "Michael", 5.4),
+("Vancouver", "Anton", 2.0),
+("Paris", "Yves", 5.9),
+("Vancouver", "Anton", 6)])));
+
+funWithGrouping2 :: ([Double] -> a) -> [([(String, String, Double)], a)];
+funWithGrouping2 f = List.map (\arg_1 -> (\x f -> (x,
+ f (List.map Prelude.field3 x))) arg_1 f) (List.groupBy (\x y -> Prelude.equals 
+(Prelude.field1 x,  Prelude.field2 x)
+(Prelude.field1 y,  Prelude.field2 y)) (List.sortBy (\x y -> Prelude.compare 
+(Prelude.field1 x,  Prelude.field2 x)
+(Prelude.field1 y,  Prelude.field2 y)) ([("Vancouver", "Bo", 6.0),
+("Victoria", "Michael", 5.4),
+("Vancouver", "Anton", 2.0),
+("Paris", "Yves", 5.9),
+("Vancouver", "Anton", 6)])));
+
+
+table1 :: [(String, Double)];
+table1 = [("USA", 100), ("France", 200)];
+
+table2 :: [(String, Int, Double)];
+table2 = [("USA", 1997, 10), ("USA", 1998, 20), ("Japan", 1998, 30), ("Japan", 1999, 40)];
+
+// Connect to test data
+connectToFlows  = DataGems.jdbcConnectionWithDriverCheck "sun.jdbc.odbc.JdbcOdbcDriver" "jdbc:odbc:flowData" "" "";
+
+flow1 :: DataGems.ResultSet;
+flow1 = 
+    let
+        sql = "SELECT Country, M1 FROM Flow1";
+    in
+        DataGems.jdbcQueryToResultSet connectToFlows sql;
+
+flow2 :: DataGems.ResultSet;
+flow2 =         
+    let
+        sql = "SELECT Country, Year, M2 FROM Flow2";
+    in
+        DataGems.jdbcQueryToResultSet connectToFlows sql;
+        
+flow1AsList :: [(String, Double)];
+flow1AsList = 
+    DataGems.dataFromResultSet flow1 
+        (DataGems.extractTuple2
+             (DataGems.extractStringWithDefault "" 1)
+             (DataGems.extractDoubleWithDefault 0.0 2)
+        );
+
+flow2AsList :: [(String, Int, Double)];
+flow2AsList = 
+    DataGems.dataFromResultSet flow2 
+    (DataGems.extractTuple3
+         (DataGems.extractStringWithDefault "" 1)
+         (DataGems.extractIntWithDefault 0 2)
+         (DataGems.extractDoubleWithDefault 0.0 3)
+    );
+
+joinBy :: (a -> a -> Prelude.Ordering) -> (b -> b -> Prelude.Ordering) ->
+ (a -> b -> Prelude.Ordering) -> [a] -> [b] -> [(Maybe a, Maybe b)];
+joinBy compareX compareY compareXY xs ys =
+    let
+        xsSorted = List.sortBy compareX xs;
+        ysSorted = List.sortBy compareY ys;
+    in
+        joinByHelper compareXY xsSorted ysSorted;
+
+joinByHelper :: (a -> b -> Prelude.Ordering) -> [a] -> [b] -> [(Maybe a, Maybe b)];
+joinByHelper compareXY xs ys =
+    case xs of
+    x : xs_rest -> 
+        case ys of
+        y : ys_rest ->
+            let
+                c = compareXY x y;
+            in
+                if c == Prelude.EQ then                
+                    (Prelude.Just x, Prelude.Just y) : joinByHelper2 compareXY x ys_rest (joinByHelper compareXY xs_rest)
+                else if c == Prelude.LT then
+                    (Prelude.Just x, Prelude.Nothing) : joinByHelper compareXY xs_rest ys
+                else
+                    (Prelude.Nothing, Prelude.Just y) : joinByHelper compareXY xs ys_rest
+            ;
+        [] -> List.map (\u -> (Prelude.Just u, Prelude.Nothing)) xs;
+        ;
+    []-> List.map (\u -> (Prelude.Nothing, Prelude.Just u)) ys;
+    ;
+
+joinByHelper2 compareXY x ys cont =
+    case ys of
+    [] -> cont ys;
+    y : ys_rest ->
+        if (compareXY x y) == Prelude.EQ then
+            (Prelude.Just x, Prelude.Just y) : joinByHelper2 compareXY x ys_rest cont
+        else
+            cont ys_rest;
+    ;
+        
+projectStructure p =
+    case p of
+    (maybeStringDouble, maybeStringIntDouble) ->
+        case maybeStringDouble of
+        Prelude.Just s1d1 ->
+            let
+                s1 = Prelude.field1 s1d1;
+                d1 = Prelude.field2 s1d1;
+            in
+            case maybeStringIntDouble of
+            Prelude.Just s2i2d2 ->
+                let
+                    s2 = Prelude.field1 s2i2d2;
+                    i2 = Prelude.field2 s2i2d2;
+                    d2 = Prelude.field3 s2i2d2;
+                in
+                    (s1, Prelude.Just i2, Prelude.Just d1, Prelude.Just d2);
+            Prelude.Nothing ->
+                (s1, Prelude.Nothing, Prelude.Just d1, Prelude.Nothing);
+            ;
+        Prelude.Nothing ->
+            case maybeStringIntDouble of
+            Prelude.Just s2i2d2 ->
+                let
+                    s2 = Prelude.field1 s2i2d2;
+                    i2 = Prelude.field2 s2i2d2;
+                    d2 = Prelude.field3 s2i2d2;
+                in
+                    (s2, Prelude.Just i2, Prelude.Nothing, Prelude.Just d2);
+            Prelude.Nothing ->
+                Prelude.error "should not occur by definition of joining field";
+            ;
+        ;
+    ;
+                
+joinTest :: [(Maybe (String, Double), Maybe (String, Int, Double))];
+joinTest = joinBy (\x y -> Prelude.compare (Prelude.field1 x) (Prelude.field1 y)) (\x y -> Prelude.compare (Prelude.field1 x, Prelude.field2 x)
+ (Prelude.field1 y, Prelude.field2 y)) (\x y -> Prelude.compare (Prelude.field1 x) (Prelude.field1 y)) table1 table2;
+
+removeStructureJoin :: [(String, Maybe Int, Maybe Double, Maybe Double)];
+removeStructureJoin = List.map projectStructure joinTest;
+
+joinTestWithDB :: [(Maybe (String, Double), Maybe (String, Int, Double))];
+joinTestWithDB = joinBy (\x y -> Prelude.compare (Prelude.field1 x) (Prelude.field1 y)) (\x y -> Prelude.compare (Prelude.field1 x, Prelude.field2 x)
+ (Prelude.field1 y, Prelude.field2 y)) (\x y -> Prelude.compare (Prelude.field1 x) (Prelude.field1 y)) flow1AsList flow2AsList;
+
+maximumWithLimit :: Prelude.Ord a => a -> [a] -> a;
+public maximumWithLimit limit = List.foldRight1 (maxWithLimit limit);
+
+maxWithLimit :: Prelude.Ord a => a -> a -> a -> a;
+public maxWithLimit limit x y =
+    if x > limit || y > limit then
+        limit
+    else
+        Prelude.max x y;
+        
+public testMaxWithLimit = 
+    let
+        testVals :: [Int];
+        testVals = List.replicateList [1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4] 1000;
+    in
+        maximumWithLimit 5 testVals;
+

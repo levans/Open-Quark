@@ -1,0 +1,3745 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * List.cal
+ * Created: Oct 14, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines many useful functions for the {@link Prelude.List@} type. Note that the List type itself is defined
+ * in the {@link Prelude@} module due to the fact that it is supported via built-in notation.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Collections.List;
+import Cal.Core.Prelude using
+    typeClass = Appendable, Eq, Inputable, Num, Ord, Outputable;
+    typeConstructor = 
+        Boolean, CalValue, Char, Either, Int, JCollection, JComparator, JList, JObject, List, Long, Maybe, Ordering, 
+        String;
+    dataConstructor = False, True, Left, Right, Cons, Nothing, Just, LT, EQ, GT;
+    function = 
+        add, append, assert, compare, compose, concat, equals, error, flip, fst, greaterThan, isEmpty, isEven, 
+        makeComparator, max, min, multiply, not, notEquals, output, seq, snd, unsafeCoerce, upFromTo;
+    ;
+//we want to maintain the generality and functional independence of the List module.
+//Please do not add more imports.
+
+/**
+ * Returns the first element of the specified list. Terminates in an error on an empty list.
+ * 
+ * @arg list the list whose first element is to be returned.
+ * @return the first element of the list.
+ */
+head :: [a] -> a;
+public head !list =
+    case list of
+    listHead : _ -> 
+        listHead;
+    [] ->
+        error "Empty list.";
+    ;
+    
+/**
+ * Returns a list of the elements after the first element of the list. Terminates in an error on an empty list.
+ * 
+ * @arg list the list whose tail is to be returned.
+ * @return a list of the elements after the first element of the list.
+ */
+tail :: [a] -> [a];
+public tail !list =
+    case list of
+    _ : listTail -> 
+        listTail;
+    [] ->
+        error "Empty list.";
+    ;
+    
+
+/**
+ * Returns the last element of the specified list. This function is O(n) where n is the length of the list.
+ * Terminates in an error on an empty list.
+ * 
+ * @arg list the list whose last element is to be returned.
+ * @return the first element of the list.
+ */
+/*
+implementation note: this is the old version of List.last. It does case analysis on the list twice per element
+(once in the case in the function itself, and once in the call to isNull) whereas the new version does so just once.
+
+last :: [a] -> a;
+public last !list =
+    case list of
+    listHead : listTail -> if isEmpty listTail then listHead else last listTail;
+    []     -> error "Prelude.last: empty list.";
+    ; 
+*/        
+last :: [a] -> a;
+public last !list =
+    let
+        lastHelper :: a -> [a] -> a;
+        lastHelper element !list =
+            case list of
+            [] -> element;
+            listHead : listTail -> lastHelper listHead listTail;
+            ;
+    in  
+        case list of
+        listHead : listTail ->
+            lastHelper listHead listTail;
+        [] ->
+            error "Empty list.";
+        ;
+
+/**
+ * Returns a list of all the elements of the list except the last one. Terminates in an error on an empty list.
+ * 
+ * @arg list the list whose elements except the last one are to be returned.
+ * @return a list of all the elements of the list except the last one.
+ */
+init :: [a] -> [a];
+public init !list =
+    case list of
+    x : xs -> if isEmpty xs then [] else x : init xs;
+    []     -> error "Empty list.";
+    ;
+
+/**
+ * {@code map mapFunction list@} applies the function {@code mapFunction@} to each element of the list and returns the
+ * resulting list.
+ * 
+ * @arg mapFunction a function to be applied to each element of the list.
+ * @arg list the list.
+ * @return the list obtained by applying {@code mapFunction@} to each element of the list.
+ */
+map :: (a -> b) -> [a] -> [b];
+public map =
+    Prelude.map;
+
+/**
+ * {@code mapIndexed mapFunction list@} applies the function {@code mapFunction@} to each element of the list, where
+ * {@code mapFunction@} is passed both the element value, and its zero-based index in the list. 
+ * 
+ * @arg mapFunction 
+ *         a function to be applied to each element of the list, being passed both the element value, and its
+ *         zero-based index in the list.
+ * @arg list the list.
+ * @return the list obtained by applying {@code mapFunction@} to each element of the list.
+ */
+mapIndexed :: (a -> Int -> b) -> [a] -> [b];
+public mapIndexed mapFunction !list =
+    let
+        mapIndexedHelper !index !list =
+            case list of
+            [] ->
+                [];
+            listHead : listTail ->
+                mapFunction listHead index : mapIndexedHelper (index + 1) listTail;
+            ;
+    in
+        mapIndexedHelper 0 list;
+    
+/* @example */
+mapIndexedExamples :: Boolean;
+mapIndexedExamples =
+    assert 
+    (
+        mapIndexed 
+            (\!value !index -> if index == 0 then toUpperCase value else toLowerCase value)
+            ['a', 'b', 'C', 'd']
+        == ['A', 'b', 'c', 'd']
+    )
+    && assert
+    (
+        mapIndexed
+            (\!value !index -> if Prelude.isEven index then value + 5 else value - 5)
+            [6 :: Int, 4, 3, 12]
+        == [11, -1, 8, 7]
+    )
+    ;
+
+/**
+ * Must remain private. Support for test code in the List module.
+ */
+foreign unsafe import jvm "static method java.lang.Character.toUpperCase"
+    private toUpperCase :: Char -> Char;
+
+/**
+ * Must remain private. Support for test code in the List module.
+ */
+foreign unsafe import jvm "static method java.lang.Character.toLowerCase"
+    private toLowerCase :: Char -> Char;
+
+/**
+ * {@code filter keepIfTrueFunction list@} applies the predicate function to each element of the list, and returns
+ * the list of elements for which the predicate evaluates to {@link True@}.
+ * 
+ * @arg keepIfTrueFunction a predicate which returns {@link True@} for items that should be kept, and {@link False@} for
+ *                         items that should be dropped.
+ * @arg list the list.
+ * @return the list of those elements that satisfy the given predicate.
+ */
+filter :: (a -> Boolean) -> [a] -> [a];
+public filter keepIfTrueFunction !list =
+    case list of
+    []     -> [];
+    listHead : listTail ->
+        let
+            rest = filter keepIfTrueFunction listTail;
+        in
+            if keepIfTrueFunction listHead then
+                listHead : rest
+            else
+                rest;
+    ;
+    
+/**
+ * {@code filterIndexed keepIfTrueFunction list@} applies the predicate function {@code keepIfTrueFunction@} to each element
+ * of the list, and returns the list of elements for which the predicate evaluates to {@link True@}. {@code keepIfTrueFunction@}
+ * is a function that is passed both the element value, and its zero-based index in the list.
+ * 
+ * @arg keepIfTrueFunction
+ *          a predicate which returns {@link True@} for items that should be kept, and {@link False@} for items that should
+ *          be dropped. It is passed both the element value, and its zero-based index in the list.
+ * @arg list the list.
+ * @return the list of those elements that satisfy the given predicate.
+ */    
+filterIndexed :: (a -> Int -> Boolean) -> [a] -> [a];
+public filterIndexed keepIfTrueFunction !list =
+    let
+        filterIndexedHelper !index !list =
+            case list of
+            []     -> [];
+            listHead : listTail ->
+                let
+                    rest = filterIndexedHelper (index + 1) listTail;
+                in
+                    if keepIfTrueFunction listHead index then
+                        listHead : rest
+                    else
+                        rest;
+            ;
+    in
+        filterIndexedHelper 0 list;
+    
+/* @example */
+filterIndexedExamples :: Boolean;
+filterIndexedExamples =
+    assert
+    (
+        filterIndexed
+            (\!value !index -> value > 5 && Prelude.isEven index)
+            [1 :: Int, 2, 3, 4, 10, 20, 30, 40]
+        == [10, 30]
+    )
+    && assert 
+    (
+        filterIndexed
+            (\!value !index -> value > 5 || Prelude.isEven index)
+            [1 :: Int, 2, 3, 4, 10, 20, 30, 40]
+        == [1, 3, 10, 20, 30, 40]
+    )
+    ;
+
+/**
+ * Returns the length of the specified list. This function is O(n) in time, where n is the length of the list.
+ * 
+ * Because {@code List.length@} is O(n) where n is the length of the list, it can be more efficient to
+ * call {@link Prelude.isEmpty@}, {@link List.isSingletonList@} or {@link List.lengthAtLeast@} (as appropriate) if all that
+ * is needed is a bound on the length of the list.
+ * 
+ * @arg list the list whose length is to be returned.
+ * @return the length of the list.
+ * @see Prelude.isEmpty, isSingletonList, lengthAtLeast 
+ */
+length :: [a] -> Int;
+public length =
+    Prelude.length;
+
+/**
+ * {@code subscript list index@} returns the nth element of the list where n = {@code index@}. The indices start at 0. If
+ * the index is negative or is greater than or equal to the length of the list, an error results.
+ * 
+ * @arg list the list to be accessed.
+ * @arg index the index of the list element to be returned.
+ * @return the element in the list at the position indicated by {@code index@}.
+ */   
+subscript :: [a] -> Int -> a;
+public subscript !list !index =
+    case list of
+    listHead : listTail ->
+        if index == 0 then
+            listHead
+        else if index > 0 then
+            subscript listTail (index - 1)
+        else 
+            error "Negative index.";
+    
+    [] -> error "Index out of bounds.";
+    ;
+
+/**
+ * {@code foldLeft foldFunction initialValue list@} collapses or 'folds' the list down to a single result, starting
+ * from the left of the list. It uses {@code initialValue@} as the initial value for the folding process, and
+ * {@code foldFunction@} as the collapsing function.
+ * 
+ * If {@code foldFunction@} is strict in both of its arguments it is usually better to use {@link foldLeftStrict@}
+ * instead of {@code foldLeft@} since using {@code foldLeft@} will cause significantly more memory to be used than using
+ * {@link foldLeftStrict@}. If {@code foldFunction@} is not strict in both of its arguments, it usually results in better
+ * lazy behavior to use {@link foldRight@} rather than {@code foldLeft@}. 
+ * 
+ * @arg foldFunction the function to be used in folding the list.
+ * @arg initialValue the initial value for the folding process.
+ * @arg list the list to be folded over.
+ * @return the single result obtained from folding {@code foldFunction@} over the list.
+ * @see foldLeftStrict, foldRight, foldLeft1, foldLeft1Strict, foldRight1
+ */
+foldLeft :: (a -> b -> a) -> a -> [b] -> a;
+public foldLeft foldFunction initialValue !list =
+    case list of
+    [] -> initialValue;
+    listHead : listTail -> foldLeft foldFunction (foldFunction initialValue listHead) listTail;
+    ;
+
+/**
+ * {@code foldLeft1@} is similar to {@link foldLeft@}, except that it uses the first element of the list as the initial value
+ * in the folding process. Hence it gives an error if list is the empty list.
+ * 
+ * If {@code foldFunction@} is strict in both of its arguments it is usually better to use {@link foldLeft1Strict@}
+ * instead of {@code foldLeft1@} since using {@code foldLeft1@} will cause significantly more memory to be used than using
+ * {@link foldLeft1Strict@}. If {@code foldFunction@} is not strict in both of its arguments, it usually results in better
+ * lazy behavior to use {@link foldRight1@} rather than {@code foldLeft1@}. 
+ * 
+ * @arg foldFunction the function to be used in folding the list.
+ * @arg list the list to be folded over.
+ * @return the single result obtained from folding {@code foldFunction@} over the list.
+ * @see foldLeft, foldLeftStrict, foldRight, foldLeft1Strict, foldRight1
+ */
+foldLeft1 :: (a -> a -> a) -> [a] -> a;
+public foldLeft1 foldFunction !list =
+    case list of
+    listHead : listTail -> foldLeft foldFunction listHead listTail;
+    [] -> error "Empty list.";
+    ;  
+
+/**
+ * This is the strict version of {@link foldLeft@}. It is used for efficiency reasons in certain situations.
+ * For example, it can be used to define the length, sum and product functions so that they are constant
+ * space functions, whereas the versions defined with foldLeft would not be constant space.
+ * 
+ * If {@code foldFunction@} is strict in both of its arguments it is usually better to use {@code foldLeftStrict@}
+ * instead of {@link foldLeft@} since using {@link foldLeft@} will cause significantly more memory to be used than using
+ * {@code foldLeftStrict@}. If {@code foldFunction@} is not strict in both of its arguments, it usually results in better
+ * lazy behavior to use {@link foldRight@} rather than {@link foldLeft@}. 
+ * 
+ * @arg foldFunction the function to be used in folding the list.
+ * @arg initialValue the initial value for the folding process.
+ * @arg list the list to be folded over.
+ * @return the single result obtained from folding {@code foldFunction@} over the list.
+ * @see foldLeft, foldRight, foldLeft1, foldLeft1Strict, foldRight1
+ */
+/*
+ * @implementation notice that the difference between the implementation of foldLeftStrict and
+ * foldLeft is just in the plinging of the initialValue argument.
+ */
+foldLeftStrict ::  (a -> b -> a) -> a -> [b] -> a;
+public foldLeftStrict =
+    Prelude.foldLeftStrict;
+
+/**
+ * {@code foldLeft1Strict@} is similar to {@link foldLeftStrict@}, except that it uses the first element of the list as
+ * the initial value in the folding process. Hence it gives an error if list is the empty list.
+ * 
+ * @arg foldFunction the function to be used in folding the list.
+ * @arg list the list to be folded over.
+ * @return the single result obtained from folding {@code foldFunction@} over the list.
+ * @see foldLeft, foldLeftStrict, foldRight, foldLeft1, foldRight1
+ */
+foldLeft1Strict :: (a -> a -> a) -> [a] -> a;
+public foldLeft1Strict foldFunction !list = 
+    case list of
+    listHead : listTail -> foldLeftStrict foldFunction listHead listTail;
+    [] -> error "Empty list.";
+    ;
+    
+/**
+ * Similar to {@link foldLeft@}, except that the folding process on the list is started with its rightmost element.
+ * Often the result of applying {@link foldLeft@} or {@code foldRight@} is the same, and the choice between them is a matter of
+ * efficiency. Which is better depends on the nature of the folding function. As a general rule, if the folding
+ * function is strict in both arguments, {@link foldLeftStrict@} is a good choice. Otherwise {@code foldRight@} is often best.
+ * 
+ * @arg foldFunction the function to be used in folding the list.
+ * @arg initialValue the initial value for the folding process.
+ * @arg list the list to be folded over.
+ * @return the single result obtained from folding {@code foldFunction@} over the list.
+ * @see foldLeft, foldLeftStrict, foldLeft1, foldLeft1Strict, foldRight1
+ */
+foldRight :: (a -> b -> b) -> b -> [a] -> b;
+public foldRight = 
+    Prelude.foldRight; 
+
+/**
+ * Similar to {@link foldLeft1@}, except that the folding process on the list is started with its rightmost element.
+ * Often the result of applying {@link foldLeft1@} or {@code foldRight1@} is the same, and the choice between them is a matter of
+ * efficiency. Which is better depends on the nature of the folding function. As a general rule, if the folding
+ * function is strict in both arguments, {@link foldLeft1Strict@} is a good choice. Otherwise {@code foldRight1@} is often best.
+ * 
+ * @arg foldFunction the function to be used in folding the list.
+ * @arg list the list to be folded over.
+ * @return the single result obtained from folding {@code foldFunction@} over the list.
+ * @see foldLeft, foldLeftStrict, foldRight, foldLeft1, foldLeft1Strict
+ */
+foldRight1 :: (a -> a -> a) -> [a] -> a;
+public foldRight1 foldFunction !list =
+    case list of
+    listHead : listTail ->
+        if isEmpty listTail then
+            listHead
+        else 
+            foldFunction listHead (foldRight1 foldFunction listTail);
+    
+    [] -> error "Empty list.";
+    ;    
+
+/**
+ * {@code accumulateLeft@} is similar to {@link foldLeft@}, except that it returns the list of partial folds, instead of the completely
+ * folded result. {@link mapAccumulateLeft@} is a generalization. {@code accumulateLeft@} is similar to the Crystal Reports concept of 
+ * a running total.
+ * 
+ * If {@code accumulateFunction@} is strict in both of its arguments it is usually better to use {@link accumulateLeftStrict@}
+ * instead of {@code accumulateLeft@} since using {@code accumulateLeft@} will cause significantly more memory to be used than using
+ * {@link accumulateLeftStrict@}. 
+ * 
+ * @arg accumulateFunction the function to be used in accumulating the list.
+ * @arg initialValue the initial value for the accumulating process.
+ * @arg list the list to be accumulated.
+ * @return a list of successive accumulated values from the left.
+ * @see foldLeft, mapAccumulateLeft, accumulateLeft1, accumulateLeftStrict
+ */
+/*@implementation the accumulate family of functions are based on the Haskell scan functions,
+ * they have been renamed for clarity.
+ */
+accumulateLeft :: (a -> b -> a) -> a -> [b] -> [a];
+public accumulateLeft accumulateFunction initialValue list =
+    initialValue : 
+        (case list of
+         []     -> [];
+         listHead : listTail -> accumulateLeft accumulateFunction (accumulateFunction initialValue listHead) listTail;);
+
+/* @example */
+accumulateLeftExamples :: Boolean;
+accumulateLeftExamples =
+    assert ((accumulateLeft add 10.0 [3, 1, 4, 1, 5, 9]) == [10.0, 13, 14, 18, 19, 24, 33])
+    && assert ((accumulateLeft (flip Cons) ['!'] ['l','a','t','s','y','r','C']) == [['!'],['l','!'],['a','l','!'],['t','a','l','!'],['s','t','a','l','!'],['y','s','t','a','l','!'],['r','y','s','t','a','l','!'],['C','r','y','s','t','a','l','!']]); 
+
+
+/**
+ * {@code accumulateLeft1@} is similar to {@link accumulateLeft@}, except that it 
+ * uses the first element of the list as the initial value of the accumulation.
+ * 
+ * If {@code accumulateFunction@} is strict in both of its arguments it is usually better to use {@link accumulateLeft1Strict@}
+ * instead of {@code accumulateLeft1@} since using {@code accumulateLeft1@} will cause significantly more memory to be used than using
+ * {@link accumulateLeft1Strict@}.
+ * 
+ * @arg accumulateFunction the function to be used in accumulating the list.
+ * @arg list the list to be accumulated.
+ * @return a list of successive accumulated values from the left.
+ * @see accumulateLeft1Strict, foldLeft1, accumulateLeft 
+ */
+accumulateLeft1 :: (a -> a -> a) -> [a] -> [a];
+public accumulateLeft1 accumulateFunction !list =   
+    case list of
+    listHead : listTail -> accumulateLeft accumulateFunction listHead listTail;
+    [] -> [];
+    ;
+
+/* @example */
+accumulateLeft1Examples :: Boolean;
+accumulateLeft1Examples =
+    assert ((accumulateLeft1 add [20.0, 1, 5, 2, 8]) == [20.0, 21, 26, 28, 36])
+    && assert ((accumulateLeft1 append [['f','i','s','h'], ['c','a','t'], ['d','o','g'], ['b','i','r','d']]) == [['f','i','s','h'], ['f','i','s','h','c','a','t'], ['f','i','s','h','c','a','t','d','o','g'], ['f','i','s','h','c','a','t','d','o','g','b','i','r','d']]);
+
+
+/**
+ * This is the strict version of {@link accumulateLeft@}. It is used for efficiency reasons in certain situations. 
+ * If {@code accumulateFunction@} is strict in both of its arguments it is usually better to use {@link accumulateLeftStrict@}
+ * instead of {@code accumulateLeft@} since using {@code accumulateLeft@} will cause significantly more memory to be used than using
+ * {@link accumulateLeftStrict@}. 
+ * 
+ * @arg accumulateFunction the function to be used in accumulating the list.
+ * @arg initialValue the initial value for the accumulating process.
+ * @arg list the list to be accumulated.
+ * @return a list of successive accumulated values from the left.
+ * @see foldLeftStrict, accumulateLeft
+ */
+accumulateLeftStrict :: (a -> b -> a) -> a -> [b] -> [a];
+public accumulateLeftStrict accumulateFunction !initialValue list =
+    initialValue : 
+        (case list of
+         []     -> [];
+         listHead : listTail -> accumulateLeftStrict accumulateFunction (accumulateFunction initialValue listHead) listTail;);
+
+/**
+ * {@code accumulateLeft1Strict@} is similar to {@link accumulateLeftStrict@}, except that it uses the first element of the list as
+ * the initial value in the accumulating process.
+ * 
+ * @arg accumulateFunction the function to be used in accumulating the list.
+ * @arg list the list to be accumulated.
+ * @return a list of successive accumulated values from the left.
+ * @see foldLeft1, accumulateLeft1
+ */
+accumulateLeft1Strict :: (a -> a -> a) -> [a] -> [a];
+public accumulateLeft1Strict accumulateFunction !list =   
+    case list of
+    listHead : listTail -> accumulateLeftStrict accumulateFunction listHead listTail;
+    [] -> [];
+    ;
+
+/**
+ * {@code accumulateRight@} is similar to {@link accumulateLeft@}, except that the accumulation process
+ * proceeds from right to left. Unlike foldRight and foldLeft, the result of accumulateRight and accumulateLeft
+ * generally differ, and the choice between them is not one of efficency.
+ * 
+ * @arg accumulateFunction the function to be used in accumulating the list.
+ * @arg initialValue the initial value for the accumulating process.
+ * @arg list the list to be scanned over.
+ * @return a list of successive accumulated values from the right.
+ * @see foldRight, mapAccumulateRight, accumulateLeft
+ */
+accumulateRight :: (a -> b -> b) -> b -> [a] -> [b];
+public accumulateRight accumulateFunction initialValue !list =
+    case list of
+    [] -> [initialValue];
+    listHead : listTail ->
+        let
+            tailAccumulate = accumulateRight accumulateFunction initialValue listTail;
+        in
+            accumulateFunction listHead (head tailAccumulate) : tailAccumulate;
+    ;
+
+/* @example */
+accumulateRightExamples :: Boolean;
+accumulateRightExamples = 
+    assert ((accumulateRight add 10.0 [3, 1, 4, 1, 5, 9]) == [33.0, 30, 29, 25, 24, 19, 10])
+    && assert ((accumulateRight Cons ['!'] ['C','r','y','s','t','a','l']) == [['C','r','y','s','t','a','l','!'],['r','y','s','t','a','l','!'],['y','s','t','a','l','!'],['s','t','a','l','!'],['t','a','l','!'],['a','l','!'],['l','!'],['!']]);    
+
+
+/**
+ * {@code accumulateRight1@} is similar to {@link accumulateRight@}, except that it 
+ * uses the first element of the list as the initial value of the accumulation.
+ * 
+ * @arg accumulateFunction the function to be used in scanning the list.
+ * @arg list the list to be scanned over.
+ * @return a list of successive reduced values from the right.
+ * @see foldRight1, accumulateRight
+ */
+//accumulateRight1 is analogous to the Crystal reports concept of a running total, except in reverse
+accumulateRight1 :: (a -> a -> a) -> [a] -> [a];
+public accumulateRight1 accumulateFunction !list =
+    case list of
+    [] -> [];
+    listHead : listTail ->
+        if isEmpty listTail then
+            [listHead]
+        else
+            let
+                tailaccumulate = accumulateRight1 accumulateFunction listTail;
+            in
+                accumulateFunction listHead (head tailaccumulate) : tailaccumulate;
+    ;
+    
+/* @example */
+accumulateRight1Examples :: Boolean;
+accumulateRight1Examples =
+    assert ((accumulateRight1 add [20.0, 1, 5, 2, 8]) == [36.0,16,15,10,8])   
+    && assert ((accumulateRight1 append [['f','i','s','h'], ['c','a','t'], ['d','o','g'], ['b','i','r','d']]) == [['f','i','s','h','c','a','t','d','o','g','b','i','r','d'], ['c','a','t','d','o','g','b','i','r','d'],['d','o','g','b','i','r','d'],['b','i','r','d']]);
+
+
+/**
+ * {@code iterate f x@} returns the infinite list {@code [x, f x, f(f x), f(f(f x)), ...]@}.
+ * 
+ * @arg iterationFunction the iteration function.
+ * @arg initialValue the initial value.
+ * @return the infinite list {@code [initialValue, iterationFunction initialValue, iterationFunction(iterationFunction initialValue), ...]@}
+ */  
+iterate :: (a -> a) -> a -> [a];
+public iterate =
+    Prelude.iterate;
+
+/**
+ * {@code repeat valueToRepeat@} returns the infinite list {@code [valueToRepeat, valueToRepeat, valueToRepeat, ...]@}.
+ * 
+ * @arg valueToRepeat the value to be repeated.
+ * @return the infinite list {@code [valueToRepeat, valueToRepeat, valueToRepeat, ...]@}
+ */
+repeat :: a -> [a];
+public repeat =
+    Prelude.repeat;
+
+/**
+ * {@code replicate nCopies valueToReplicate@} is a list of length {@code nCopies@}, with every element equal to
+ * {@code valueToReplicate@}.
+ * 
+ * @arg nCopies the number of copies.
+ * @arg valueToReplicate the value to be replicated.
+ * @return a list of length {@code nCopies@}, with every element equal to {@code valueToReplicate@}.
+ */
+replicate :: Int -> a -> [a];
+public replicate =
+    Prelude.replicate;
+
+/**
+ * {@code cycle list@} is the infinite repetition of the list. If {@code list@} is already an infinite list, then cycle list is
+ * just the original list.
+ * 
+ * @arg list the list to be repeated.
+ * @return the infinite repetition of the list.
+ */
+cycle :: [a] -> [a];
+public cycle !list =
+    if isEmpty list then
+        error "Empty list."
+    else 
+        let
+            //note that this is a recursive definition of cycledList            
+            cycledList = list ++ cycledList;
+        in
+            cycledList;
+
+/**
+ * {@code take nElements list@} returns a list consisting of the first {@code nElements@} elements of {@code list@}.
+ * If the list has fewer than {@code nElements@} elements, it just returns the list.
+ * 
+ * @arg nElements the number of elements to take.
+ * @arg list the list from which elements are to be taken.
+ * @return a list of the requested elements from the list.
+ */
+take :: Int -> [a] -> [a];
+public take =
+    Prelude.take;
+
+/**
+ * {@code drop nElements list@} drops the first {@code nElements@} elements of the list and returns the remaining elements
+ * 
+ * @arg nElements the number of elements to drop.
+ * @arg list the list from which elements are to be dropped.
+ * @return a list of the remaining elements.
+ */
+drop :: Int -> [a] -> [a];
+public drop !nElements !list =
+    if nElements <= 0 then list
+    else
+        case list of
+        [] -> [];
+        _ : listTail -> drop (nElements - 1) listTail;           
+    ;
+
+/**
+ * {@code split nElemsToSplit list@} returns a pair of lists. The first consists of the first {@code nElemsToSplit@}
+ * elements of list, the second consists of the remaining elements.
+ * 
+ * @arg nElemsToSplit the number of elements to be returned in the first list.
+ * @arg list the list to be split.
+ * @return a pair of lists. The first consists of the first {@code nElemsToSplit@} elements of list,
+ *         the second consists of the remaining elements.
+ */
+splitAt :: Int -> [a] -> ([a], [a]);
+public splitAt nElemsToSplit list =
+    (take nElemsToSplit list, drop nElemsToSplit list);
+
+/**
+ * {@code takeWhile takeWhileTrueFunction list@} returns the longest prefix of the list for which {@code takeWhileTrueFunction@}
+ * is {@link True@} for each element.
+ * 
+ * e.g. {@code takeWhile {@link isEven@} [6, 2, 1, 2] = [6, 2]@}
+ * 
+ * @arg takeWhileTrueFunction a predicate to be applied to the elements of the list.
+ * @arg list the list from which elements are to be taken.
+ * @return the longest prefix of the list for which {@code takeWhileTrueFunction@} is True 
+ *         for each element.
+ */
+takeWhile :: (a -> Boolean) -> [a] -> [a];
+public takeWhile =
+    Prelude.takeWhile;
+
+/**
+ * {@code dropWhile dropWhileTrueFunction list@} drops the longest prefix of the list for which {@code dropWhileTrueFunction@}
+ * is {@link True@} for each element.
+ * 
+ * e.g. {@code dropWhile {@link isEven@} [6, 2, 1, 2] = [1, 2]@}
+ * 
+ * @arg dropWhileTrueFunction a predicate to be applied to the elements of the list.
+ * @arg list the list from which elements are to be taken.
+ * @return the remainder of the list after having dropped the longest prefix in
+ *         which {@code dropWhileTrueFunction@} is {@link True@} for each element.
+ */
+dropWhile :: (a -> Boolean) -> [a] -> [a];
+public dropWhile dropWhileTrueFunction !list =
+    case list of
+    [] -> [];
+    listHead : listTail ->
+        if dropWhileTrueFunction listHead then
+            dropWhile dropWhileTrueFunction listTail
+        else
+            list;
+    ;
+
+/**
+ * {@code span predicate list@} breaks up {@code list@} into a pair of lists. The start of the second list is
+ * the first element of list on which predicate is False.
+ * 
+ * e.g. {@unorderedList 
+ * {@item {@code span {@link isEven@} [1, 2] = ([], [1, 2])@}@}
+ * {@item {@code span {@link isEven@} [4, 2, 1, 6] = ([4, 2], [1, 6])@}@}
+ * @}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be broken up into a pair of lists.
+ * @return a pair of lists, where the first list is the longest prefix of the list for which predicate
+ *         is {@link True@} for each element, and the second list contains the remaining elements of the original list.
+ */
+span :: (a -> Boolean) -> [a] -> ([a], [a]);
+public span predicate !list =
+    case list of
+    [] -> ([], []);
+    listHead : listTail ->
+        if predicate listHead then
+            let
+                spanListTail = span predicate listTail;
+            in
+                (listHead : spanListTail.#1, spanListTail.#2)
+        else
+            ([], list);
+    ;
+
+/**
+ * {@code break predicate list@} breaks up list into a pair of lists. The start of the second list is the first element of
+ * {@code list@} on which predicate is {@link True@}.
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be broken up into a pair of lists.
+ * @return a pair of lists, where the first list is the longest prefix of the list for which predicate
+ *         is {@link False@} for each element, and the second list contains the remaining elements of the original list.
+ */
+break :: (a -> Boolean) -> [a] -> ([a], [a]);
+public break predicate = 
+    span (compose not predicate);
+
+
+/**
+ * {@code breakAll predicate list@} returns a list of lists, formed by splitting the original list before
+ * each element for which the predicate returns True.
+ *
+ * e.g.
+ * {@code breakAll (\x -> x==1) [2::Int,1,1,2,3,1,2] == [[2],[1], [1,2,3],[1,2]]@}
+ *
+ * @arg predicate  a predicate to be applied to the elements of the list.
+ * @arg list       the list to be broken up into sublists.
+ * @return         a list of nonempty sublists of the original list, which {@link Prelude.concat@} to the original list, 
+ *                 and where each sublist has a maximal tail of elements not satisfying the predicate.
+ */
+breakAll :: (a -> Boolean) -> [a] -> [[a]];
+public breakAll predicate !list =
+    case list of
+    [] -> [];
+    x : xs ->
+        let
+            (xs_leading_not_ps, rest) = break predicate xs;
+        in
+            (x : xs_leading_not_ps) : breakAll predicate rest;
+    ;
+
+/* @example */
+breakAllExamples :: Boolean;
+private breakAllExamples =
+    assert (breakAll (\x -> x==1) ([]::[Int]) == [])
+    && assert (breakAll (\x -> x==1) [1::Int] == [[1]])
+    && assert (breakAll (\x -> x==1) [2::Int] == [[2]])
+    && assert (breakAll (\x -> x==1) [1::Int,1,1,2,3,1] == [[1], [1], [1,2,3], [1]])
+    && assert (breakAll (\x -> x==1) [2::Int,1,1,2,3,1,2] == [[2], [1], [1,2,3], [1,2]])
+    // laziness test:
+    && assert ((take 2 $ breakAll (\n -> Prelude.remainder n 3 ==
+        (0::Int)) (Prelude.upFrom 0)) == [[0,1,2], [3,4,5]])
+    ;
+
+
+/**
+ * Reverses the elements of a list. reverse is O(n) time where n is the length of the list.
+ * 
+ * @arg list the list to be reversed.
+ * @return a list containing the elements in the specified list, in reverse order.
+ */
+/*
+implementation note: this is the old (slower) version of List.reverse.
+
+reverse :: [a] -> [a];
+public reverse = foldLeft (flip Cons) [];
+*/ 
+reverse :: [a] -> [a];
+public reverse !list =
+    let
+        reverseHelper :: [a] -> [a] -> [a];
+        reverseHelper !sourceList resultList =
+            case sourceList of
+            [] ->
+                resultList;
+            headSourceList : tailSourceList ->
+                reverseHelper tailSourceList (headSourceList : resultList);
+            ;
+    in
+        reverseHelper list [];    
+
+/**
+ * {@code andList list@} returns {@link True@} if every element of the list is {@link True@} (and the list is finite).
+ * 
+ * @arg list the list whose elements are to be tested.
+ * @return {@link True@} if every element of the list is {@link True@} (and the list is finite).
+ */
+/*  
+implementation note: this is the old slower version of andList, which is close to the version
+in the Haskell standard Prelude. The new version is more direct, and faster, because it
+can take more advantage of CAL's strictness and unboxing optimizations.
+
+andList :: [Boolean] -> Boolean;
+public andList = foldRight and True;    
+*/    
+andList :: [Boolean] -> Boolean;
+public andList !list =
+    case list of
+    [] -> True;
+    listHead : listTail -> listHead && andList listTail;
+    ;
+
+/* @example */
+andListExamples :: Boolean; 
+private andListExamples =
+    assert (andList [])
+    && assert (andList [True])
+    && assert (not (andList [False]))
+    && assert (andList [True, True, True])
+    && assert (not (andList (repeat False)))
+    && assert (not (andList (True : False : repeat True)))
+    && assert (andList (replicate 100000 True)) //this is a test of proper stack usage
+    ;
+
+/**
+ * {@code orList list@} returns {@link True@} if at least one element of the list is {@link True@}.
+ * 
+ * @arg list the list whose elements are to be tested.
+ * @return {@link True@} if at least one element of the list is {@link True@}.
+ */
+/*  
+implementation note: this is the old slower version of orList, which is close to the version
+in the Haskell standard Prelude. 
+
+orList :: [Boolean] -> Boolean;
+public orList = foldRight or False; 
+*/
+orList :: [Boolean] -> Boolean;
+public orList !list =
+    case list of
+    [] -> False;
+    listHead : listTail -> listHead || orList listTail;
+    ;
+        
+/* @example */
+orListExamples :: Boolean;  
+private orListExamples =
+    assert (not (orList []))
+    && assert (orList [True])
+    && assert (orList [False, False, False, True])
+    && assert (not (orList [False]))
+    && assert (orList [True, True, True])
+    && assert (orList (repeat True)) 
+    && assert (not (orList (replicate 100000 False))) //this is a test of proper stack usage
+    ;  
+
+
+/**
+ * {@code any predicate list@} returns {@link True@} if the predicate function evaluates to {@link True@} on at least
+ * one element of the list.
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list whose elements are to be tested.
+ * @return {@link True@} if the predicate function evaluates to {@link True@} on at least one element of the list.
+ */
+/*
+implementation note: this is the old slower version of any, which is close to the version
+in the Haskell standard Prelude.
+
+any :: (a -> Boolean) -> [a] -> Boolean;
+public any predicate = compose orList (map predicate);
+*/
+any :: (a -> Boolean) -> [a] -> Boolean;
+public any predicate !list =
+    case list of
+    [] -> False;
+    listHead : listTail -> predicate listHead || any predicate listTail;
+    ;
+
+/* @example */
+anyExamples :: Boolean;
+private anyExamples = 
+    assert (any (equals 1.0) [2.0, 3.0, 1.0])
+    && assert (any (equals "apple") ["pear", "cherry", "peach", "apple", "strawberry"])
+    && assert (not (any (equals 1.0) [2.0, 3.0, 5.0]))
+    && assert (not (any (equals 1.0) []))
+    && assert (not (any (greaterThan (0 :: Int)) (upFromTo 1 100))) //the predicate is True for negative numbers
+    && assert (any (greaterThan (0 :: Int)) ((upFromTo 1 100) ++ [-1]))
+    && assert (any (equals (200000 :: Long)) (upFromTo 1 200000)) //this is a test of proper stack usage. 
+    ;
+    
+
+/**
+ * {@code all predicate list@} returns {@link True@} if the predicate function evaluates to {@link True@} on all the
+ * elements of the list (and the list is finite).
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list whose elements are to be tested.
+ * @return {@link True@} if the predicate function evaluates to {@link True@} on all the elements of the list (and the
+ *         list is finite).
+ */
+/*
+implementation note: this is the old slower version of all, which is close to the version
+in the Haskell standard Prelude.
+
+all :: (a -> Boolean) -> [a] -> Boolean;
+public all predicate = compose andList (map predicate);
+*/
+all :: (a -> Boolean) -> [a] -> Boolean;
+public all predicate !list =
+    case list of
+    [] -> True;
+    listHead : listTail -> predicate listHead && all predicate listTail;
+    ;
+
+/* @example */
+allExamples :: Boolean;
+private allExamples =
+    assert (all (equals 7.0) [7.0, 7.0, 7.0])
+    && assert (all (equals 2.0) [])
+    && assert (all (equals "apple") ["apple", "apple"])
+    && assert (all (equals 1.0) (replicate 100000 1.0)) //this is a test of proper stack usage
+    ;
+
+
+/**
+ * {@code isElem elementValue list@} returns {@link True@} if {@code elementValue@} is an element of the list.
+ *
+ * @arg elementValue the value to be tested for membership in the list.
+ * @arg list the list to be checked.
+ * @return {@link True@} if {@code elementValue@} is an element of the list.
+ * @see isElemBy
+ */
+isElem :: Eq a => a -> [a] -> Boolean;
+public isElem = 
+    compose any equals;   
+
+/**
+ * {@code isNotElem elementValue list@} returns {@link True@} if {@code elementValue@} is not an element of the list.
+ * 
+ * @arg elementValue the value to be tested for membership in the list.
+ * @arg list the list to be checked.
+ * @return {@link True@} if {@code elementValue@} is not an element of the list.
+ * @see isElem
+ */
+isNotElem :: Eq a => a -> [a] -> Boolean;
+public isNotElem = 
+    compose all notEquals;
+
+/**
+ * {@code lookup key map@} returns the value corresponding to key in the map (association list).
+ * 
+ * @arg key the key for which the map is to be searched.
+ * @arg map the map (association list) to be searched.
+ * @return the value corresponding to key in the map.
+ */
+lookup :: (Eq a) => a -> [(a, b)] -> Maybe b;
+public lookup key !map =
+    case map of
+    [] -> Nothing;
+    mapHead : mapTail ->
+        if key == mapHead.#1 then
+            Just mapHead.#2
+        else
+            lookup key mapTail;
+    ;
+
+/**
+ * {@code sum list@} returns the sum of all the elements of {@code list@}, adding from left to right. sum applied to an
+ * empty list is 0.
+ * 
+ * @arg list the list whose elements are to be summed.
+ * @return the sum of all the elements of the list, adding from left to right, or 0 if the list is empty.
+ */
+sum :: (Num a) => [a] -> a;
+public sum = 
+    foldLeftStrict add 0;
+
+/**
+ * {@code product list@} return the product of all the elements of {@code list@}, multiplying from left to right. product
+ * applied to an empty list is 1.
+ * 
+ * @arg list the list whose elements are to be multiplied.
+ * @return the product of all the elements of list, multiplying from left to right, or 1 if the list is empty.
+ */
+product :: Num a => [a] -> a;
+public product =
+    foldLeftStrict multiply 1;
+
+/**
+ * Returns the maximum value in the specified list.
+ * Terminates in an error on an empty list.
+ * 
+ * @arg list the list whose maximum value is to be returned.
+ * @return the maximum value in the list.
+ */
+//implementation note: Haskell's maximum uses foldLeft1 instead of foldLeft1Strict. This causes space leaks in
+//certain situations. The exact behavior of the max function depends on the instance, but reasonable max
+//functions will be strict in both arguments and so it makes sense to use foldLeft1Strict.
+maximum :: Ord a => [a] -> a;
+public maximum =
+    foldLeft1Strict max;
+
+/* @example */
+maximumExamples :: Boolean;
+private maximumExamples =
+    assert (maximum ['z','e','r','o'] == 'z') &&
+    assert (maximum [10, 20, 50.8, 23] == 50.8)
+    ;
+
+/**
+ * Returns the minimum value in the specified list.
+ * Terminates in an error on an empty list.
+ * 
+ * @arg list the list whose minimum value is to be returned.
+ * @return the minimum value in the list.
+ */
+minimum :: Ord a => [a] -> a;
+public minimum = 
+    foldLeft1Strict min;
+
+/**
+ * {@code concatMap mapFunction list@} applies {@code mapFunction@} to each element of list and then concatenates the
+ * resulting list. The result type of the {@code mapFunction@} (b below) is {@link Appendable@} to allow for the concatenation.
+ * 
+ * @arg mapFunction a function to be applied to the elements in the list.
+ * @arg list the list whose elements are to be mapped.
+ * @return the concatenation of the values obtained from mapping {@code mapFunction@} to the elements in the list.
+ */
+concatMap :: (Appendable b) => (a -> b) -> [a] -> b;
+public concatMap =
+    Prelude.concatMap;
+
+/**
+ * Converts two lists into a list of corresponding pairs.
+ * If one input list is short, excess elements of the longer list are discarded.
+ * 
+ * e.g. {@code zip [6, 3] [10, 20, 30] = [(6,10), (3, 20)]@}
+ * 
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @return a list of corresponding pairs.
+ * @see zipWith
+ */
+zip :: [a] -> [b] -> [(a, b)];
+public zip =
+    Prelude.zip;
+
+/**
+ * Converts three lists into a list of corresponding triples.
+ * The returned list is as long as the shortest of the input lists.
+ * 
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @return a list of corresponding triples.
+ * @see zipWith3
+ */
+zip3 :: [a] -> [b] -> [c] -> [(a, b, c)];
+public zip3 !list1 list2 list3 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs -> (a, b, c) : zip3 as bs cs;
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Converts four lists into a list of corresponding 4-tuples.
+ * The returned list is as long as the shortest of the input lists.
+ * 
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @return a list of corresponding 4-tuples.
+ * @see zipWith4
+ */
+zip4 :: [a] -> [b] -> [c] -> [d] -> [(a, b, c, d)];
+public zip4 !list1 list2 list3 list4 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds -> (a, b, c, d) : zip4 as bs cs ds;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Converts five lists into a list of corresponding 5-tuples.
+ * The returned list is as long as the shortest of the input lists.
+ * 
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @arg list5 the fifth list to be zipped.
+ * @return a list of corresponding 5-tuples.
+ * @see zipWith5
+ */
+zip5 :: [a] -> [b] -> [c] -> [d] -> [e] -> [(a, b, c, d, e)];
+public zip5 !list1 list2 list3 list4 list5 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es -> (a, b, c, d, e) : zip5 as bs cs ds es;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Converts six lists into a list of corresponding 6-tuples.
+ * The returned list is as long as the shortest of the input lists.
+ * 
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @arg list5 the fifth list to be zipped.
+ * @arg list6 the sixth list to be zipped.
+ * @return a list of corresponding 6-tuples.
+ * @see zipWith6
+ */
+zip6 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [(a, b, c, d, e, f)];
+public zip6 !list1 list2 list3 list4 list5 list6 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es ->
+                        case list6 of
+                        f : fs -> (a, b, c, d, e, f) : zip6 as bs cs ds es fs;
+                        [] -> [];
+                        ;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Converts seven lists into a list of corresponding 7-tuples.
+ * The returned list is as long as the shortest of the input lists.
+ * 
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @arg list5 the fifth list to be zipped.
+ * @arg list6 the sixth list to be zipped.
+ * @arg list7 the seventh list to be zipped.
+ * @return a list of corresponding 7-tuples.
+ * @see zipWith7
+ */
+zip7 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [(a, b, c, d, e, f, g)];
+public zip7 !list1 list2 list3 list4 list5 list6 list7 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es ->
+                        case list6 of
+                        f : fs ->
+                            case list7 of
+                            g : gs -> (a, b, c, d, e, f, g) : zip7 as bs cs ds es fs gs;
+                            [] -> [];
+                            ;
+                        [] -> [];
+                        ;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Returns a list where each element is the result of applying a function to the
+ * corresponding elements of two lists.
+ * 
+ * {@code zipWith@} generalises {@link zip@} by zipping with the function given as the first
+ * argument, instead of a tupling function. For example, {@code zipWith {@link add@}@} applied
+ * to two lists produces the list of corresponding sums.
+ * 
+ * Example:
+ * {@code
+ * zipWith add [1.0, 2.0, 3.0] [4.0, 5.0, 6.0]
+ *    == [5.0, 7.0, 9.0]
+ * @}
+ * 
+ * @arg zipFunction the zipping function.
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @return a list of the element-wise combinations of the input lists.
+ * @see zip
+ */
+zipWith :: (a -> b -> c) -> [a] -> [b] -> [c];
+public zipWith zipFunction !list1 list2 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs -> (zipFunction a b) : zipWith zipFunction as bs;
+        [] -> [];
+        ;
+    [] -> [];
+    ; 
+
+/**
+ * Returns a list where each element is the result of applying a function to the
+ * corresponding elements of three lists.
+ *
+ * @arg zipFunction the zipping function.
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @return a list of the element-wise combinations of the input lists.
+ * @see zip3
+ */
+zipWith3 :: (a -> b -> c -> d) -> [a] -> [b] -> [c] -> [d];
+public zipWith3 zipFunction !list1 list2 list3 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs -> (zipFunction a b c) : zipWith3 zipFunction as bs cs;
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Returns a list where each element is the result of applying a function to the
+ * corresponding elements of four lists.
+ * 
+ * @arg zipFunction the zipping function.
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @return a list of the element-wise combinations of the input lists.
+ * @see zip4
+ */
+zipWith4 :: (a -> b -> c -> d -> e) -> [a] -> [b] -> [c] -> [d] -> [e];
+public zipWith4 zipFunction !list1 list2 list3 list4 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds -> (zipFunction a b c d) : zipWith4 zipFunction as bs cs ds;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Returns a list where each element is the result of applying a function to the
+ * corresponding elements of five lists.
+ * 
+ * @arg zipFunction the zipping function.
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @arg list5 the fifth list to be zipped.
+ * @return a list of the element-wise combinations of the input lists.
+ * @see zip5
+ */
+zipWith5 :: (a -> b -> c -> d -> e -> f) -> [a] -> [b] -> [c] -> [d] -> [e] -> [f];
+public zipWith5 zipFunction !list1 list2 list3 list4 list5 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es -> (zipFunction a b c d e) : zipWith5 zipFunction as bs cs ds es;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Returns a list where each element is the result of applying a function to the
+ * corresponding elements of six lists.
+ * 
+ * @arg zipFunction the zipping function.
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @arg list5 the fifth list to be zipped.
+ * @arg list6 the sixth list to be zipped.
+ * @return a list of the element-wise combinations of the input lists.
+ * @see zip6
+ */
+zipWith6 :: (a->b->c->d->e->f->g) -> [a]->[b]->[c]->[d]->[e]->[f]->[g];
+public zipWith6 zipFunction !list1 list2 list3 list4 list5 list6 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es ->
+                        case list6 of
+                        f : fs -> (zipFunction a b c d e f) : zipWith6 zipFunction as bs cs ds es fs;
+                        [] -> [];
+                        ;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Returns a list where each element is the result of applying a function to the
+ * corresponding elements of seven lists.
+ * 
+ * @arg zipFunction the zipping function.
+ * @arg list1 the first list to be zipped.
+ * @arg list2 the second list to be zipped.
+ * @arg list3 the third list to be zipped.
+ * @arg list4 the fourth list to be zipped.
+ * @arg list5 the fifth list to be zipped.
+ * @arg list6 the sixth list to be zipped.
+ * @arg list7 the seventh list to be zipped.
+ * @return a list of the element-wise combinations of the input lists.
+ * @see zip7
+ */
+zipWith7 :: (a->b->c->d->e->f->g->h) -> [a]->[b]->[c]->[d]->[e]->[f]->[g]->[h];
+public zipWith7 zipFunction !list1 list2 list3 list4 list5 list6 list7 =
+    case list1 of
+    a : as ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es ->
+                        case list6 of
+                        f : fs ->
+                            case list7 of
+                            g : gs -> (zipFunction a b c d e f g) : zipWith7 zipFunction as bs cs ds es fs gs;
+                            [] -> [];
+                            ;
+                        [] -> [];
+                        ;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+/**
+ * Transforms a list of pairs into a pair of lists.
+ * 
+ * @arg list the list to be unzipped.
+ * @return a pair of lists.
+ * @see zip
+ */
+//todoBI it would be nice if the unzipn family of functions could be defined more functorially
+unzip :: [(a, b)] -> ([a], [b]);
+public unzip !list =
+    case list of
+    [] -> ([], []);
+    x : xs ->
+        let 
+            // the use of the lazy pattern match is important here, or otherwise unzip will strictly evalute the list!
+            (tail1, tail2) = unzip xs;           
+        in
+            case x of
+            (x1, x2) ->
+                (x1 : tail1, x2 : tail2);
+            ;
+    ;
+
+/**
+ * Transforms a list of triples into a triple of lists.
+ * 
+ * @arg list the list to be unzipped.
+ * @return a triple of lists.
+ * @see zip3
+ */
+unzip3 :: [(a, b, c)] -> ([a], [b], [c]);                  
+public unzip3 !list =
+    case list of
+    [] -> ([], [], []);
+    x : xs ->    
+        let
+            // the use of the lazy pattern match is important here, or otherwise unzip3 will strictly evalute the list!
+            (tail1, tail2, tail3) = unzip3 xs;            
+        in
+            case x of
+            (x1, x2, x3) ->
+                (x1 : tail1, x2 : tail2, x3 : tail3);
+            ;
+    ;
+
+/**
+ * Transforms a list of 4-tuples into a 4-tuple of lists.
+ * 
+ * @arg list the list to be unzipped.
+ * @return a 4-tuple of lists.
+ * @see zip4
+ */
+unzip4 :: [(a, b, c, d)] -> ([a], [b], [c], [d]);
+public unzip4 !list =
+    case list of
+    [] -> ([], [], [], []);
+    x : xs -> 
+        let
+            (tail1, tail2, tail3, tail4) = unzip4 xs;            
+        in 
+            case x of
+            (x1, x2, x3, x4) ->
+                (x1 : tail1, x2 : tail2, x3 : tail3, x4 : tail4);                
+            ;
+    ;
+
+/**
+ * Transforms a list of 5-tuples into a 5-tuple of lists.
+ * 
+ * @arg list the list to be unzipped.
+ * @return a 5-tuple of lists.
+ * @see zip5
+ */
+unzip5 :: [(a,b,c,d,e)] -> ([a],[b],[c],[d],[e]);
+public unzip5 !list =
+    case list of
+    [] -> ([], [], [], [], []);
+    x : xs -> 
+        let
+            (tail1, tail2, tail3, tail4, tail5) = unzip5 xs;            
+        in
+            case x of
+            (x1, x2, x3, x4, x5) ->
+                (x1 : tail1, x2 : tail2, x3 : tail3, x4 : tail4, x5 : tail5);                
+            ;
+    ;
+
+/**
+ * Transforms a list of 6-tuples into a 6-tuple of lists.
+ * 
+ * @arg list the list to be unzipped.
+ * @return a 6-tuple of lists.
+ * @see zip6
+ */
+unzip6 :: [(a,b,c,d,e,f)]-> ([a],[b],[c],[d],[e],[f]);
+public unzip6 !list =
+    case list of
+    [] -> ([], [], [], [], [], []);
+    x : xs ->     
+        let
+            (tail1, tail2, tail3, tail4, tail5, tail6) = unzip6 xs;           
+        in
+            case x of
+            (x1, x2, x3, x4, x5, x6) ->
+                (x1 : tail1, x2 : tail2, x3 : tail3, x4 : tail4, x5 : tail5, x6 : tail6);                
+            ;
+    ;
+
+/**
+ * Transforms a list of 7-tuples into a 7-tuple of lists.
+ * 
+ * @arg list the list to be unzipped.
+ * @return a 7-tuple of lists.
+ * @see zip7
+ */
+unzip7 :: [(a,b,c,d,e,f,g)] -> ([a],[b],[c],[d],[e],[f],[g]);
+public unzip7 !list =
+    case list of
+    [] -> ([], [], [], [], [], [], []);
+    x : xs ->    
+        let
+            (tail1, tail2, tail3, tail4, tail5, tail6, tail7) = unzip7 xs;            
+        in
+            case x of            
+            (x1, x2, x3, x4, x5, x6, x7) ->
+                (x1 : tail1, x2 : tail2, x3 : tail3, x4 : tail4, x5 : tail5, x6 : tail6, x7 : tail7);                
+            ;
+    ;
+
+/**
+ * Returns the index of the first element in the given list which is equal to
+ * the specified value, or {@link Nothing@} if there is no such element.
+ * 
+ * @arg x the value to be found.
+ * @arg list the list to be searched.
+ * @return the index of the first element in the given list which is equal to
+ *         the specified value, or {@link Nothing@} if there is no such element.
+ */
+elemIndex :: Eq a => a -> [a] -> Maybe Int;
+public elemIndex x = 
+    findIndex (equals x);
+
+/**
+ * Returns the indices of all elements of the specified list equal to the
+ * specified value, in ascending order.
+ * 
+ * @arg x the value to be found.
+ * @arg list the list to be searched.
+ * @return the indices of all elements of the specified list equal to the
+ *         specified value, in ascending order.
+ */
+elemIndices :: Eq a => a -> [a] -> [Int];
+public elemIndices x = 
+    findIndices (equals x);
+
+/**
+ * {@code find predicate list@} returns the first value of list for which the predicate function is {@link True@},
+ * if there is one, or {@link Nothing@} otherwise.
+ * 
+ * e.g. {@code find {@link isEven@} [1, 1, 4, 1, 2, 1, 1, 6] == Just 4@}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be searched.
+ * @return the first value of list for which the predicate function is {@link True@}, if there is one, or
+ *         {@link Nothing@} otherwise.
+ */
+find :: (a -> Boolean) -> [a] -> Maybe a;
+public find predicate !list =
+    case list of
+    [] -> Nothing;
+    listHead : listTail ->
+        if predicate listHead then
+            Just listHead
+        else
+           find predicate listTail;
+    ; 
+
+/* @example */
+findExamples :: Boolean;
+private findExamples =
+    assert (find isEven [1 :: Int, 1, 4, 1, 2, 1, 1, 6] == Just 4)
+    && assert (find isEven [] == Nothing)
+    && assert (find isEven [1 :: Int, 1, 3, 1, 5] == Nothing)
+    ;  
+    
+/**
+ * {@code findIndex predicate list@} returns the first index of list for which the predicate function is {@link True@},
+ * if there is one, or {@link Nothing@} otherwise. The index is 0-based.
+ * 
+ * e.g. {@code findIndex {@link isEven@} [1, 1, 4, 1, 2, 1, 1, 6] == {@link Just@} 2@}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be searched.
+ * @return the first index of list for which the predicate function is {@link True@}, if there is one, or {@link Nothing@} otherwise.
+ * @see findIndices
+ */
+findIndex :: (a -> Boolean) -> [a] -> Maybe Int;
+public findIndex predicate !list =
+    let
+        findIndexHelper :: (a -> Boolean) -> Int -> [a] -> Maybe Int;
+        findIndexHelper predicate !currentIndex !list = 
+            case list of
+            [] -> Nothing;
+            listHead : listTail ->
+                if predicate listHead then
+                    Just currentIndex
+                else
+                    findIndexHelper predicate (currentIndex + 1) listTail;
+            ;
+    in
+        findIndexHelper predicate 0 list;
+
+/* @example */
+findIndexExamples :: Boolean;
+findIndexExamples =
+    assert (findIndex isEven [1 :: Int, 1, 4, 1, 2, 1, 1, 6, 3] == Just 2)
+    && assert (findIndex (equals "apple") ["apple", "cherry", "peach", "banana", "apple", "orange"] == Just 0)
+    && assert (findIndex (equals "pear") ["apple", "cherry", "peach", "banana", "apple", "orange"] == Nothing)
+    && assert (findIndex isEven (upFromTo 1 (10000 :: Int)) == Just 1)
+    ; 
+  
+/**
+ * Returns the indices of all elements satisfying the specified predicate, in ascending order. The index values are 0-based.
+ * 
+ * e.g. {@code findIndices {@link isEven@} [1, 1, 4, 1, 2, 1, 1, 6] == [2, 4, 7]@}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be searched.
+ * @return the list of all indices of list for which the predicate function evaluates to {@link True@}.
+ * @see findIndex
+ */
+/*
+implementation note: this is the old slower version of findIndices, which is close to the version
+in the Haskell standard Prelude.
+
+//findIndices predicate xs  = [ i | (x,i) <- zip xs [0..], predicate x ]
+//in this case, the Haskell version is easier to understand. List comprehensions are nice.
+findIndices :: (a -> Boolean) -> [a] -> [Int];
+public findIndices predicate xs = map snd (filter (compose predicate fst) (zip xs (upFrom 0)));
+*/
+findIndices :: (a -> Boolean) -> [a] -> [Int];  
+public findIndices predicate !list =
+    let
+        findIndicesHelper :: (a -> Boolean) -> Int -> [a] -> [Int];
+        findIndicesHelper predicate !currentIndex !list =
+            case list of
+            [] -> [];
+            listHead : listTail ->
+                if predicate listHead then
+                    currentIndex : findIndicesHelper predicate (currentIndex + 1) listTail
+                else
+                    findIndicesHelper predicate (currentIndex + 1) listTail;
+            ;
+    in  
+        findIndicesHelper predicate 0 list;
+
+/* @example */
+findIndicesExamples :: Boolean;
+private findIndicesExamples =
+    assert (findIndices isEven [1 :: Int, 1, 4, 1, 2, 1, 1, 6, 3] == [2, 4, 7])
+    && assert (findIndices (equals "apple") ["apple", "cherry", "peach", "banana", "apple", "orange"] == [0, 4])
+    && assert (findIndices (equals "pear") ["apple", "cherry", "peach", "banana", "apple", "orange"] == [])
+    && assert (length (findIndices isEven (upFromTo 1 (10000 :: Int))) == 5000)
+    ;
+
+/**
+ * {@code removeDuplicates list@} returns the sublist of list with duplicates removed. Ordering is preserved.
+ * 
+ * e.g. {@code removeDuplicates [3, 3, 1, 1, 3, 4, 1] = [3, 1, 4]@}
+ * 
+ * @arg list the list to remove duplicates from.
+ * @return the sublist of list with duplicates removed.
+ */
+//removeDuplicates is called nub in Haskell i.e. it finds the "nub" or the essence of the list.
+removeDuplicates :: (Eq a) => [a] -> [a];
+public removeDuplicates = 
+    removeDuplicatesBy equals;
+
+/* @example */
+removeDuplicatesExamples :: Boolean;
+private removeDuplicatesExamples =
+    assert (removeDuplicates [3.0, 3, 1, 1, 3, 4, 1] == [3, 1, 4])
+    && assert (removeDuplicates ['d','e','l','e','t','e',' ','=',' ','d','e','l','e','t','e','B','y',' ','e','q','u','a','l','s',';'] ==
+                                ['d','e','l','t',' ','=','B','y','q','u','a','s',';'])
+    && assert (length (removeDuplicates (Prelude.upFromTo (1 :: Long) 50)) == 50)
+    && assert (length (removeDuplicates (Prelude.replicate 10000 'a')) == 1)
+    ;
+
+/**
+ * {@code removeDuplicatesBy eq list@} returns the sublist of list with duplicates (as determined by {@code eq@}) removed.
+ * Ordering is preserved.
+ * 
+ * e.g. {@code removeDuplicatesBy {@link equals@} [3, 3, 1, 1, 3, 4, 1] = [3, 1, 4]@}
+ * 
+ * @arg eq the equality comparison function to use in comparing the list elements.
+ * @arg list the list to be rid of duplicates.
+ * @return the sublist of list with duplicates (as determined by {@code eq@}) removed.
+ */
+/*
+implementation note: this is the old slower version of removeDuplicatesBy.
+
+removeDuplicatesBy :: (a -> a -> Boolean) -> [a] -> [a];
+public removeDuplicatesBy eq !xs =
+    let
+        notEq eq x y = not (eq x y);
+    in
+        case xs of
+        [] -> [];
+        xs_head : xs_tail -> xs_head : removeDuplicatesBy eq (filter (notEq eq xs_head) xs_tail);
+        ;
+*/
+removeDuplicatesBy :: (a -> a -> Boolean) -> [a] -> [a];
+public removeDuplicatesBy eq !list = 
+    let
+        removeDuplicatesByHelper :: (a -> a -> Boolean) -> [a] -> [a] -> [a];
+        removeDuplicatesByHelper eq !list accList = 
+            case list of
+            [] -> [];
+            listHead : listTail ->
+                if (isElemBy eq listHead accList) then
+                    removeDuplicatesByHelper eq listTail accList
+                else
+                    listHead : removeDuplicatesByHelper eq listTail (listHead : accList);
+            ;
+    in  
+        removeDuplicatesByHelper eq list [];
+
+/* @example */
+removeDuplicatesByExamples :: Boolean;
+private removeDuplicatesByExamples =
+    assert (removeDuplicatesBy (\x y -> (toLowerCaseString x) == (toLowerCaseString y)) ["Apple", "apple", "Pear", "pear", "banana", "Banana"]
+        == ["Apple", "Pear", "banana"])    
+    && assert (removeDuplicatesBy (\x y -> (fst x) == (fst y)) ([(1, 'a'), (3, 'd'), (1, 'b'), (1, 'c'), (3, 'b'), (3, 'c')] :: [(Int, Char)])
+        == [(1, 'a'), (3, 'd')])
+    && assert (removeDuplicatesBy equals ([(1, 'a'), (3, 'd'), (1, 'b'), (1, 'c'), (3, 'b'), (3, 'c')] :: [(Int, Char)])
+        == [(1, 'a'), (3, 'd'), (1, 'b'), (1, 'c'), (3, 'b'), (3, 'c')])
+    ;   
+
+/**
+ * DO NOT MAKE PUBLIC.
+ * Included in the List module for testing purposes only.
+ * Clients should use {@link "Cal.Core.String.toLowerCase"@}.
+ */
+foreign unsafe import jvm "method toLowerCase" private toLowerCaseString :: String -> String;
+
+/**
+ * {@code delete x list@} returns the list with the first element equivalent to {@code x@} removed.
+ * 
+ * e.g. {@code delete 1 [3, 1, 4, 1, 5, 9] = [3, 4, 1, 5, 9]@}
+ * 
+ * @arg x the value of the element to be removed.
+ * @arg list the list from which an element is to be removed.
+ * @return the list with the first element equivalent to x removed.
+ * @see deleteBy
+ */
+delete :: Eq a => a -> [a] -> [a];
+public delete = 
+    deleteBy equals;
+
+/**
+ * {@code deleteBy eq x list@} returns the list with the first element equivalent to {@code x@} (under {@code eq@}) removed.
+ * 
+ * e.g. {@code deleteBy equals 1 [3, 1, 4, 1, 5, 9] = [3, 4, 1, 5, 9]@}
+ * 
+ * @arg eq the equality comparison function to use in comparing the list elements.
+ * @arg x the value of the element to be removed.
+ * @arg list the list from which an element is to be removed.
+ * @return the list with the first element equivalent to x (under {@code eq@}) removed.
+ */
+//implementation note: in Haskell, this has the more specialized type signature:
+//deleteBy :: (a -> a -> Boolean) -> a -> [a] -> [a];
+deleteBy :: (a -> b -> Boolean) -> a -> [b] -> [b];
+public deleteBy eq x !list =   
+    case list of
+    [] -> [];
+    xs_head : xs_tail -> if eq x xs_head then xs_tail else xs_head : deleteBy eq x xs_tail;
+    ;
+
+/**
+ * This function takes two lists and returns the first list with
+ * the first occurrence of each element of the second list removed.
+ * 
+ * Each element of the second list removes at most one element of the first list, and it removes the leftmost element.
+ * 
+ * e.g. {@unorderedList
+ * {@item {@code deleteFirsts [3, 1, 4, 1, 5] [1] = [3, 4, 1, 5]@}@}
+ * {@item {@code deleteFirsts [3, 1, 4, 1, 5] [5, 4] = [3, 1, 1]@}@}
+ * {@item {@code deleteFirsts [3] [1, 7] = [3]@}@}
+ * @}
+ * 
+ * @arg list1 the first list.
+ * @arg list2 the second list.
+ * @return the list {@code list1@} with elements that are equivalent to elements in {@code list2@} removed.
+ * @see deleteFirstsBy
+ */
+//deleteFirsts is operator (\\) in Haskell. Looks like it is intended to evoke the notation for set difference.
+deleteFirsts :: (Eq a) => [a] -> [a] -> [a];
+public deleteFirsts = 
+    foldLeft (flip delete);
+
+/**
+ * This function takes a predicate and two lists and returns the first list with
+ * the first occurrence of each element of the second list removed.
+ * 
+ * Each element of the second list removes at most one element of the first list, and it removes the leftmost element.
+ * 
+ * e.g. {@unorderedList
+ * {@item {@code deleteFirstsBy {@link equals@} [3, 1, 4, 1, 5] [1] = [3, 4, 1, 5]@}@}
+ * {@item {@code deleteFirstsBy {@link equals@} [3, 1, 4, 1, 5] [5, 4] = [3, 1, 1]@}@}
+ * {@item {@code deleteFirstsBy {@link equals@} [3] [1, 7] = [3]@}@}
+ * @}
+ * 
+ * @arg eq the equality comparison function to use in comparing the list elements.
+ * @arg list1 the first list.
+ * @arg list2 the second list.
+ * @return the list {@code list1@} with elements that are equivalent to elements in {@code list2@} (via {@code eq@}) removed.
+ */
+//implementation note: in Haskell, this has the more specialized type signature:
+//deleteFirstsBy :: (a -> a -> Boolean) -> [a] -> [a] -> [a];
+deleteFirstsBy :: (a -> b -> Boolean) -> [b] -> [a] -> [b];
+public deleteFirstsBy eq = 
+    foldLeft (flip (deleteBy eq));
+
+
+/**
+ * {@code union list1 list2@} returns {@code list1@} concatenated with the nonduplicate elements of {@code list2@}
+ * that do not occur in {@code list1@}.
+ * 
+ * e.g. {@code union [3, 1, 5, 1] [9, 1, 6, 9] = [3, 1, 5, 1, 9, 6]@}
+ * 
+ * @arg list1 the first list.
+ * @arg list2 the second list.
+ * @return {@code list1@} concatenated with the nonduplicate elements of {@code list2@} that do not occur in {@code list1@}.
+ * @see unionBy
+ */
+union :: (Eq a) => [a] -> [a] -> [a];
+public union = 
+    unionBy equals;
+
+/* @example */
+unionExamples :: Boolean;
+private unionExamples = 
+    assert ((union [3.0, 1, 5, 1] [9, 1, 6, 9]) == [3, 1, 5, 1, 9, 6]) &&
+    assert ((union ['h','e','l','l','o'] ['w','w','w','-','w','o','r','l','d']) == ['h','e','l','l','o','w','-','r','d'])
+    ;
+
+/**
+ * {@code unionBy eq list1 list2@} returns {@code list1@} concatenated with the nonduplicate elements of {@code list2@}
+ * (under {@code eq@}) that do not occur in {@code list1@}.
+ * 
+ * e.g. {@code unionBy {@link equals@} [3, 1, 5, 1] [9, 1, 6, 9] = [3, 1, 5, 1, 9, 6]@}
+ * 
+ * @arg eq the equality comparison function to use in comparing the list elements.
+ * @arg list1 the first list.
+ * @arg list2 the second list.
+ * @return {@code list1@} concatenated with the nonduplicate elements of {@code list2@} (under {@code eq@}) that do not
+ *         occur in {@code list1@}.
+ */
+unionBy :: (a -> a -> Boolean) -> [a] -> [a] -> [a];
+public unionBy eq list1 list2 = 
+    list1 ++ (foldLeft (flip (deleteBy eq)) (removeDuplicatesBy eq list2) list1);
+
+/**
+ * Takes the intersection of two lists.
+ * 
+ * e.g. {@code intersect [3, 1, 4, 1] [1, 5, 9, 3] = [3, 1, 1]@}
+ * 
+ * @arg list1 the first list.
+ * @arg list2 the second list.
+ * @return the sublist of element of {@code list1@} that are also in {@code list2@}.
+ * @see intersectBy
+ */
+intersect :: (Eq a) => [a] -> [a] -> [a];
+public intersect = 
+    intersectBy equals;
+
+/**
+ * Returns whether a value is an element of a list, according to the specified equality comparison function.
+ * 
+ * @arg eq the equality comparison function to use in comparing the list elements.
+ * @arg x the value to be tested for membership in the list.
+ * @arg list the list to be checked.
+ * @return {@link True@} if {@code x@} is an element of the list according to {@code eq@}; {@link False@} otherwise.
+ */
+//this function is not in Haskell's preludes but seems useful, and is essential for a higher order definition of intesectBy
+//that doesn't use list comprehensions, lambda declaration, or locally defined supercombinators.
+//implementation note: in Haskell, this has the more specialized type signature:
+//isElemBy :: (a -> a -> Boolean) -> a -> [a] -> Boolean;
+isElemBy :: (a -> b -> Boolean) -> a -> [b] -> Boolean;
+public isElemBy eq x !list = 
+    any (eq x) list;
+
+/**
+ * Takes the intersection of two lists.
+ * 
+ * e.g. {@code intersectBy {@link equals@} [3, 1, 4, 1] [1, 5, 9, 3] = [3, 1, 1]@}
+ * 
+ * @arg eq the equality comparison function to use in comparing the list elements.
+ * @arg list1 the first list.
+ * @arg list2 the second list.
+ * @return the sublist of element of {@code list1@} that are also in {@code list2@} according to {@code eq@}.
+ */
+//intersectBy eq xs ys = [x | x <- xs, any (eq x) ys]
+//intersectBy can be given a more efficient implementation if the lists are sortable. In general, some of the functions
+//in the Hugs List module do not have efficient implementations. However, they can be used as a starting point for
+// primitives for a function library and improved or changed later as needed.
+//implementation note: in Haskell, this has the more specialized type signature:
+//intersectBy :: (a -> a -> Boolean) -> [a] -> [a] -> [a];
+intersectBy :: (a -> b -> Boolean) -> [a] -> [b] -> [a];
+public intersectBy eq list1 list2 =
+    filter (flip (isElemBy eq) list2) list1;
+
+/**
+ * This function takes an element and a list and "intersperses" that element
+ * between the elements of the list.
+ * 
+ * e.g. {@code intersperse 0 [1, 2, 3] = [1, 0, 2, 0, 3]@}
+ * 
+ * @arg separator the element to be interspersed between the elements of the list.
+ * @arg list the list whose elements are to be interspersed by the separator.
+ * @return the interspersed list.
+ */
+intersperse :: a -> [a] -> [a];
+public intersperse =
+    Prelude.intersperse;
+
+/**
+ * This function intersperses a separator between each pair of elements in a list
+ * and then concatenates the list elements together.
+ * 
+ * e.g. {@code join ", " ["a", "b", "c"] = "a, b, c"@}
+ * 
+ * @arg separator the element to be interspersed between the elements of the list.
+ * @arg elements the list whose elements are to be interspersed by the separator.
+ * @return the concatenation of the interspersed list.
+ */
+join :: Appendable a => a -> [a] -> a;
+public join separator elements =
+    concat $ intersperse separator elements;
+
+/**
+ * Transposes the rows and columns of the specified list of lists.
+ *
+ * e.g. {@code transpose [[1,2,3],[4,5,6]] = [[1,4],[2,5],[3,6]]@}
+ * 
+ * This function is like the matrix transpose from linear algebra, however it also works when
+ * the element lists are not all of equal lengths.
+ * 
+ * @arg listOfLists the list of lists to be transposed.
+ * @return the transposition of the argument.
+ */
+transpose :: [[a]] -> [[a]];
+public transpose !listOfLists =
+    let
+        listOfNonEmptyLists = filter (\x -> not (isEmpty x)) listOfLists;
+    in
+        if isEmpty listOfNonEmptyLists then
+            []
+        else
+            map head listOfNonEmptyLists : transpose (map tail listOfNonEmptyLists);
+
+/* @example */
+transposeExamples :: Boolean;
+transposeExamples = 
+    assert ((transpose [[1.0, 2], [3, 4], [5, 6], [7, 8]]) == [[1, 3, 5, 7], [2, 4, 6, 8]]) 
+    && assert ((transpose [[1.0, 3, 5, 7], [2, 4]]) == [[1, 2], [3, 4], [5], [7]]) 
+    && assert ((transpose [[1.0, 2, 3], [4], [5, 6]]) == [[1, 4, 5], [2, 6], [3]])
+    //todoBI should work when equalsListList [] [] works
+    //&& equalsListList (transpose [[], [], []]) [] 
+    && assert (isEmpty (transpose [[], [], []]))
+    ;
+
+/**
+ * This function takes a predicate and a list and returns the pair of lists of
+ * elements which respectively do and do not satisfy the predicate.
+ * 
+ * e.g. {@code partition {@link isEven@} [3, 1, 4, 1, 5, 9, 2, 6] = ([4, 2, 6], [3, 1, 1, 5, 9])@}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be partitioned.
+ * @return a pair of lists of elements which respectively do and do not satisfy the predicate.
+ */
+//Note that this implementation applies the predicate function at most once to each element of xs
+partition :: (a -> Boolean) -> [a] -> ([a], [a]);
+public partition predicate list =
+    let
+        /**         
+         * a helper function for partition
+         * {@code select predicate x tfs@} appends x to the first list if predicate x is True,
+         * and to the second list otherwise.
+         */
+        select :: (a -> Boolean) -> a -> ([a], [a]) -> ([a], [a]);
+        select !predicate x tfs =
+            if (predicate x) then (x : fst tfs, snd tfs)
+            else (fst tfs, x : snd tfs);
+    in      
+        foldRight (select predicate) ([], []) list;
+
+/**
+ * Splits the specified list into a list of lists of equal, adjacent elements.
+ * Note that the list is not sorted prior to grouping.
+ * 
+ * @arg list the list to be split.
+ * @return a list of lists of equal, adjacent elements.
+ * @see groupBy
+ */
+group :: (Eq a) => [a] -> [[a]];
+public group = 
+    groupBy equals;
+
+/* @example */
+groupExamples :: Boolean;
+private groupExamples = 
+    assert (group ['M','i','s','s','i','s','s','i','p','p','i'] == [['M'], ['i'], ['s','s'], ['i'], ['s','s'], ['i'], ['p','p'], ['i']])
+    && assert (group [1 :: Int, 2, 3, 1, 1, 3, 3, 3, 2, 2] == [[1], [2], [3], [1, 1], [3, 3, 3], [2, 2]])
+    && assert (group ([] :: [Int]) == [])
+    ;
+
+/**
+ * Splits the specified list into a list of lists of equal, adjacent elements.
+ * Note that the list is not sorted prior to grouping.
+ * 
+ * @arg equalityFunction the equality comparison function to use in comparing the list elements.
+ * @arg list the list to be split.
+ * @return a list of lists of equal, adjacent elements.
+ */
+groupBy :: (a -> a -> Boolean) -> [a] -> [[a]];
+public groupBy equalityFunction !list =
+    case list of
+    []  -> [];
+    listHead : listTail ->
+        let
+            pr = span (equalityFunction listHead) listTail;
+        in
+            (listHead : fst pr) : groupBy equalityFunction (snd pr);
+    ;
+
+/**
+ * Returns the list of all initial segments of the specified list, shortest first.
+ * 
+ * e.g. {@code inits [3, 1, 4] = [[], [3], [3, 1], [3, 1, 4]]@}
+ * 
+ * @arg list the list whose initial segments are to be returned.
+ * @return the list of all initial segments of the argument, shortest first.
+ */
+inits :: [a] -> [[a]];
+public inits !list =
+    case list of    
+    [] -> [[]]; //this is a great test for the typechecker! [[]] is a list with 1 element, the empty list. 
+    listHead : listTail -> [] : (map (Cons listHead) (inits listTail));
+    ;
+  
+/**
+ * Returns the list of all final segments of the specified list, longest first.
+ * 
+ * e.g. {@code tails [3, 1, 4] = [[3, 1, 4], [1, 4], [4], []]@}
+ * 
+ * @arg list the list whose final segments are to be returned.
+ * @return the list of all final segments of the argument, longest first.
+ */
+tails :: [a] -> [[a]];
+public tails !list =
+    case list of
+    [] -> [[]];
+    listHead : listTail -> (listHead : listTail) : tails listTail;
+    ;
+
+/**
+ * Returns whether {@code listToTest@} starts with the specified prefix.
+ *
+ * @arg prefix
+ * @arg listToTest the list to be tested for starting with {@code prefix@}. 
+ * @return {@link True@} if {@code listToTest@} starts with the list {@code prefix@}.   
+ * @see startsWithBy
+ */    
+startsWith :: (Eq a) => [a] -> [a] -> Boolean;
+public startsWith = 
+    startsWithBy equals;
+
+/* @example */
+startsWithExamples :: Boolean;
+private startsWithExamples =
+    assert (startsWith ['H','e','l','l','o'] ['H','e','l','l','o',' ','W','o','r','l','d','!'])
+    && assert (startsWith [20, 10] [20, 10, 5.0, 28, 23])
+    && assert (not (startsWith [10, 5] [20, 10, 5.0, 28, 23]))
+    ;
+
+/**
+ * Returns whether {@code listToTest@} starts with the specified prefix using {@code eq@} as the notion of equality between 
+ * elements of the prefix and elements of the listToTest.
+ * 
+ * @arg eq the equality comparison function to use in comparing the list elements for equality.
+ * @arg prefix
+ * @arg listToTest the list to be tested for starting with {@code prefix@}.
+ * @return {@link True@} if {@code listToTest@} starts with the list {@code prefix@} using {@code eq@} for comparing list
+ *         elements for equality.   
+ */
+//implementation note: in Haskell, this has the name isPrefixOfBy and the more specialized type signature:
+//isPrefixOfBy :: (a -> a -> Boolean) -> [a] -> [a] -> Boolean;
+startsWithBy :: (a -> b -> Boolean) -> [a] -> [b] -> Boolean;
+public startsWithBy eq !prefix listToTest =
+    case prefix of
+    [] -> True;
+    prefix_head : prefix_tail ->
+        if isEmpty listToTest then
+            False
+        else
+            (eq prefix_head (head listToTest)) && (startsWithBy eq prefix_tail (tail listToTest));
+    ;
+                             
+
+/**
+ * Returns whether {@code listToTest@} ends with the specified suffix.
+ * 
+ * @arg suffix 
+ * @arg listToTest the list to be tested for ending with {@code suffix@}.  
+ * @return {@link True@} if {@code listToTest@} ends with the list {@code suffix@}. 
+ */
+endsWith :: (Eq a) => [a] -> [a] -> Boolean;
+public endsWith !suffix listToTest = 
+    startsWith (reverse suffix) (reverse listToTest);
+  
+/* @example */
+endsWithExamples :: Boolean;
+private endsWithExamples =
+    assert (endsWith ['W','o','r','l','d','!'] ['H','e','l','l','o',' ','W','o','r','l','d','!'])
+    && assert (endsWith [28, 23] [20, 10, 5.0, 28, 23])
+    && assert (not (endsWith [20, 10] [20, 10, 5.0, 28, 23]))
+    ; 
+
+//This is a useful higher order function, although it looks obscure at first.
+/**
+ * This function behaves like a combination of {@link map@} and {@link foldLeft@}. It applies a
+ * function to each element of a list, passing an accumulating parameter from
+ * left to right, and returning a final value of this accumulator together with
+ * the new list.
+ * 
+ * Intuitively, this function encapsulates the logic of a running total computation.
+ * 
+ * In general, the accumulation proceeds one step at a time: f s{i} x{i} = (s{i+1}, y{i})
+ * and the function returns (s{n+1}, [y0, y1, ..., yn]). In other words, the final value of the
+ * accumulation s{n+1} as well as the partial result accumulations [y0, ..., yn].
+ *
+ * There is a nice discussion in Peyton Jones and Lester, Implementing Functional Languages pg 56.
+ * 
+ * @arg accumulatorFunction the processing function.
+ * @arg initialAccumulator the initial value of the accumulator.
+ * @arg list the list of values over which the accumulation is performed.
+ * @see mapAccumulateRight, map, foldLeft, accumulateLeft
+ */ 
+mapAccumulateLeft :: (a -> b -> (a, c)) -> a -> [b] -> (a, [c]);
+public mapAccumulateLeft accumulatorFunction initialAccumulator !list = 
+    case list of
+    [] -> (initialAccumulator, []);
+    list_head : list_tail ->
+        let
+            updatedAccumulator  = accumulatorFunction initialAccumulator list_head;
+            result = mapAccumulateLeft accumulatorFunction (fst updatedAccumulator) list_tail;
+        in (fst result, snd updatedAccumulator : snd result);
+    ;
+
+/**
+ * This is the strict version of {@link mapAccumulateLeft@}. It is used for efficiency reasons in certain situations.
+ * If {@code accumulatorFunction@} is strict in both of its arguments it is usually better to use {@code mapAccumulateLeftStrict@}
+ * instead of {@link mapAccumulateLeft@} since using {@link mapAccumulateLeft@} will cause significantly more memory to be used than using
+ * {@code foldLeftStrict@}.
+ * 
+ * @arg accumulatorFunction the processing function.
+ * @arg initialAccumulator the initial value of the accumulator.
+ * @arg list the list of values over which the accumulation is performed.
+ * @see mapAccumulateLeft, accumulateLeftStrict, foldLeftStrict
+ */ 
+/*TODO-MB this function needs further investigation - is there a potential space leak in the evaluation
+ *of the second part of the initialAccumulator - what types of accumulator functions is this important for 
+ */
+mapAccumulateLeftStrict :: (a -> b -> (a, c)) -> a -> [b] -> (a, [c]);
+public mapAccumulateLeftStrict accumulatorFunction !initialAccumulator !list = 
+    case list of
+    [] -> (initialAccumulator, []);
+    list_head : list_tail ->
+        let
+            updatedAccumulator  = accumulatorFunction initialAccumulator list_head;
+            result = mapAccumulateLeft accumulatorFunction (fst updatedAccumulator) list_tail;
+        in (fst result, snd updatedAccumulator : snd result);
+    ;
+
+/**
+ * This function behaves like a combination of {@link map@} and {@link foldRight@}. It applies a
+ * function to each element of a list, passing an accumulating parameter from
+ * right to left, and returning a final value of this accumulator together with
+ * the new list.
+ * 
+ * This is analogous to mapAccumulateLeft except that the accumulation starts at the
+ * right of the list and works towards the first element.
+ * 
+ * @arg accumulatorFunction the processing function.
+ * @arg initialAccumulator the initial value of the accumulator.
+ * @arg list the list of values over which the accumulation is performed.
+ * @see mapAccumulateLeft, map, foldRight, accumulateRight
+ */ 
+mapAccumulateRight :: (a -> b -> (a, c)) -> a -> [b] -> (a, [c]);
+public mapAccumulateRight accumulatorFunction initialAccumulator !list =
+    case list of
+    [] -> (initialAccumulator, []);
+    xs_head : xs_tail ->
+        let
+            s_ys = mapAccumulateRight accumulatorFunction initialAccumulator xs_tail;
+            s_y  = accumulatorFunction (fst s_ys) xs_head;
+        in (fst s_y, snd s_y : snd s_ys);
+    ;
+
+/**
+ * The {@code unfoldRight@} function is a "dual" to {@link foldRight@}: while {@code foldRight@} reduces a
+ * list to a summary value, {@link unfoldRight@} builds a list from a seed value. The
+ * function takes the element and returns {@link Nothing@} if it is done producing the
+ * list or returns {@code {@link Just@} (a,b)@}, in which case, {@code a@} is prepended to the list and {@code b@}
+ * is used as the next element in a recursive call. For example,
+ * 
+ * {@code {@link iterate@} f initialValue == unfoldRight (\x -> {@link Just@} (x, f x)) initialValue@}
+ * 
+ * In some cases, {@code unfoldRight@} can undo a {@link foldRight@} operation:
+ * 
+ * {@code unfoldRight g ({@link foldRight@} f z xs) == xs@}
+ * 
+ * if the following holds:
+ * {@unorderedList
+ * {@item {@code g (f x y) == {@link Just@} (x,y)@}@}
+ * {@item {@code g z == {@link Nothing@}@}@}
+ * @}
+ */
+unfoldRight :: (b -> Maybe (a,b)) -> b -> [a];
+public unfoldRight !f b =
+    case f b of
+    Nothing -> [];
+    Just x  -> fst x : unfoldRight f (snd x);
+    ;
+    
+/**
+ * Assuming that {@code list1@} and {@code list2@} are sorted, {@code merge list1 list2@} will merge all
+ * the elements of the two lists into a single sorted list. If an element of {@code list1@} is equal
+ * to an element of {@code list2@}, then the element of {@code list1@} will be before the element of {@code list2@}
+ * in the merged result.
+ * 
+ * @arg list1 assumed to be sorted
+ * @arg list2 assumed to be sorted
+ * @return the result of merging {@code list1@} and {@code list2@}. Will be a sorted list.
+ */    
+merge :: Ord a => [a] -> [a] -> [a];
+public merge !list1 !list2 =
+    mergeBy compare list1 list2; 
+
+/* @example */
+mergeExamples :: Boolean;
+mergeExamples =
+    assert (merge [1 :: Int, 3, 5] [2, 4, 6] == [1, 2, 3, 4, 5, 6])
+    && assert (merge [] ['a', 'b'] == ['a', 'b'])
+    && assert (merge ['c', 'd'] [] == ['c', 'd'])
+    ;
+ 
+/**
+ * Assuming that {@code list1@} and {@code list2@} are sorted according to {@code comparator@},
+ * {@code mergeBy comparator list1 list2@} will merge all the elements of the two lists into
+ * a single list sorted according to {@code comparator@}. If an element of {@code list1@} is equal
+ * to an element of {@code list2@} under the comparator, then the element of {@code list1@} will
+ * be before the element of {@code list2@} in the merged result.
+ * 
+ * @arg comparator comparison function to define the order of elements.
+ * @arg list1 assumed to be sorted according to {@code comparator@}
+ * @arg list2 assumed to be sorted according to {@code comparator@}
+ * @return the result of merging {@code list1@} and {@code list2@}. Will be sorted according to {@code comparator@}.
+ */    
+mergeBy :: (a -> a -> Ordering) -> [a] -> [a] -> [a];
+public mergeBy comparator !list1 !list2 =
+    case list2 of
+    [] -> list1;
+    list2Head : list2Tail -> 
+        case list1 of
+        [] -> list2;
+        list1Head : list1Tail ->
+            case comparator list1Head list2Head of
+            GT -> list2Head : mergeBy comparator list1 list2Tail;
+            _  -> list1Head : mergeBy comparator list1Tail list2;            
+            ;
+        ;
+    ;
+    
+/* @example */
+mergeByExamples :: Boolean;
+mergeByExamples = 
+    //mergeBy orders equal elements of the first list first.                                 
+    assert (mergeBy (\x y -> compare (fst x) (fst y)) [(1 :: Int, 'a'), (1, 'e'), (3, 'd')] [(1, 'b'), (1, 'c'), (3, 'b'), (3, 'c')]
+            == [(1, 'a'), (1, 'e'), (1, 'b'), (1, 'c'), (3, 'd'), (3, 'b'), (3, 'c')])
+    ;
+
+/**
+ * Sorts the specified list. All order comparisons are done using the
+ * {@link Prelude.compare@} class method.
+ * 
+ * This function implements a stable sort in that items which evaluate to {@link EQ@}
+ * under the {@code comparisonFunction@} preserve their original ordering in the original
+ * list.
+ * 
+ * @arg list the list to be sorted.
+ * @return the sorted list.
+ * @see sortBy
+ */
+sort :: (Ord a) => [a] -> [a];
+public sort = 
+    sortBy compare;   
+
+/* @example */
+sortExamples :: Boolean;
+private sortExamples =
+    assert (sort ['z','e','b','r','a'] == ['a','b','e','r','z'])
+    && assert (sort [20, 70, 10, 49.5] == [10, 20, 49.5, 70])
+    && assert (sort [-20 :: Int, 70, 10, 40, 30, 1] == [-20, 1, 10, 30, 40, 70])
+    ;
+
+//The sort in the Haskell report is an inefficient insertion sort. We use mergesort adapted from the GHC Prelude.
+/**
+ * Sorts the specified list according to the specified comparison function. All
+ * order comparisons are done using the supplied comparison function.
+ * 
+ * This function implements a stable sort in that items which evaluate to {@link EQ@}
+ * under the comparisonFunction preserve their original ordering in the original
+ * list.
+ * 
+ * @arg comparisonFunction the comparison function to use in determining the
+ *      order of the elements.
+ * @arg list the list to be sorted.
+ * @return the sorted list.
+ */
+sortBy :: (a -> a -> Ordering) -> [a] -> [a];
+public sortBy comparisonFunction !list =
+    let
+        sortHelper :: (a -> a -> Ordering) -> [[a]] -> [a];
+        sortHelper cmp !xss =
+            case xss of
+            []            -> [];
+            xs1 : xssTail ->
+                case xssTail of
+                []                -> xs1;
+                xs2 : xssTailTail ->        
+                    sortHelper cmp (mergePairs cmp xss);
+                ;
+            ;                  
+            
+        mergePairs :: (a -> a -> Ordering) -> [[a]] -> [[a]];
+        mergePairs cmp !xss =
+            case xss of
+            []       -> [];
+            xs1 : xssTail ->
+                case xssTail of
+                []                -> xss;
+                xs2 : xssTailTail -> (mergeBy cmp xs1 xs2) : mergePairs cmp xssTailTail;
+                ;
+            ;                  
+    in  
+        sortHelper comparisonFunction (map list1 list);
+
+/* @example */
+sortByExamples :: Boolean;   
+private sortByExamples =
+    assert (sortBy compare [3.0, 1, 5, 1, 4, 9, 2, 7] == [1, 1, 2, 3, 4, 5, 7, 9])
+                                                  
+    //sortBy is a stable sort i.e. equal elements do not change their order                                                  
+    && assert (sortBy (\x y -> compare (fst x) (fst y)) ([(1, 'a'), (3, 'd'), (1, 'b'), (1, 'c'), (3, 'b'), (3, 'c')] :: [(Int, Char)])
+          == [(1, 'a'), (1, 'b'), (1, 'c'), (3, 'd'), (3, 'b'), (3, 'c')])
+              
+    && assert (sortBy compare ["Apple", "apple", "Pear", "pear", "banana", "Banana"]
+          == ["Apple", "Banana", "Pear", "apple", "banana", "pear"])
+      
+    && assert (sortBy (\x y -> compare (toLowerCaseString x) (toLowerCaseString y)) ["Apple", "apple", "Pear", "pear", "banana", "Banana"]
+          == ["Apple", "apple", "banana", "Banana", "Pear", "pear"])             
+    ;
+
+
+/**
+ * {@summary {@code sortExternal@} is an alternative to {@link sort@}. It is a stable sort (does not reorder equivalent elements).@}
+ * 
+ * Its functionality is the same (in most cases) to {@link sort@} but it does its sorting by delegating to Java's sorting mechanism. 
+ * It can be significantly faster when making full use of the resulting sorted list. However, it can be slower when taking only the
+ * first few elements of the resulting list, when the superior laziness of {@link sort@} comes into play.
+ * 
+ * @arg list the list to be sorted.
+ * @return the list, sorted. 
+ * @see sort
+ */
+sortExternal :: Ord a => [a] -> [a];
+public sortExternal = sortByExternal compare;
+
+/* @example */
+sortExternalExamples :: Boolean;
+private sortExternalExamples =    
+    assert (sortExternal ['z','e','b','r','a'] == ['a','b','e','r','z'])
+    && assert (sortExternal [20, 70, 10, 49.5] == [10, 20, 49.5, 70])
+    && assert (sortExternal [-20 :: Int, 70, 10, 40, 30, 1] == [-20, 1, 10, 30, 40, 70])
+    && assert (sortExternal ([] :: [Char]) == [])
+    && assert (sortExternal ([10 :: Int]) == [10])
+    && assert (sortExternal [20, 10] == [10 :: Int, 20])                                      
+    && assert (sortExternal [30, 20, 10] == [10 :: Int, 20, 30])                                        
+    && assert (sortExternal [40, 30, 20, 10] == [10 :: Int, 20, 30, 40])                                      
+    && assert (sortExternal [50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50])                                      
+    && assert (sortExternal [60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60])                                       
+    && assert (sortExternal [70, 60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60, 70]) 
+    && assert (sortExternal [80, 70, 60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60, 70, 80])                               
+    && assert (sortExternal [90, 80, 70, 60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60, 70, 80, 90]) 
+    ;
+          
+/**
+ * {@summary {@code sortByExternal@} is an alternative to {@link sortBy@}.
+ * It is a stable sort (does not reorder equivalent elements).@}
+ * 
+ * Its functionality is the same (in most cases) to {@link sortBy@} but it does its sorting by delegating to Java's sorting mechanism. 
+ * It can be significantly faster when making full use of the resulting sorted list. However, it can be slower when taking only the
+ * first few elements of the resulting list, when the superior laziness of {@link sort@} comes into play.
+ * 
+ * @arg cmp the ordeirng comparison function to be used in the sort.
+ * @arg list the list to be sorted.
+ * @see sortBy
+ * @return the list, sorted.
+ */
+sortByExternal :: (a -> a -> Ordering) -> [a] -> [a];
+public sortByExternal cmp !list =  
+    let
+        externalList :: JList;
+        externalList = outputList ((unsafeCoerce list) :: [CalValue]);
+        
+        comparator :: JComparator;
+        comparator = makeComparator cmp;
+        
+        sortedExternalList :: JList;
+        sortedExternalList = seq (jSortBy externalList comparator) externalList;
+        
+        inputtedList :: [CalValue];
+        inputtedList = inputList sortedExternalList;
+     in
+        unsafeCoerce (inputtedList);
+     
+/* @example */
+sortByExternalExamples :: Boolean;   
+private sortByExternalExamples =
+    assert (sortByExternal compare [3.0, 1, 5, 1, 4, 9, 2, 7] == [1, 1, 2, 3, 4, 5, 7, 9])
+                                                  
+    //sortByExternal is a stable sort i.e. equal elements do not change their order                                                  
+    && assert (sortByExternal (\x y -> compare (fst x) (fst y)) ([(1, 'a'), (3, 'd'), (1, 'b'), (1, 'c'), (3, 'b'), (3, 'c')] :: [(Int, Char)])
+          == [(1, 'a'), (1, 'b'), (1, 'c'), (3, 'd'), (3, 'b'), (3, 'c')])
+              
+    && assert (sortByExternal compare ["Apple", "apple", "Pear", "pear", "banana", "Banana"]
+          == ["Apple", "Banana", "Pear", "apple", "banana", "pear"])
+       
+    && assert (sortByExternal (\x y -> compare (toLowerCaseString x) (toLowerCaseString y)) ["Apple", "apple", "Pear", "pear", "banana", "Banana"]
+          == ["Apple", "apple", "banana", "Banana", "Pear", "pear"])             
+    ;
+
+foreign unsafe import jvm "static method java.util.Collections.sort" private jSortBy :: JList -> JComparator -> ();
+            
+/**
+ * This function takes an element and a list and inserts the element into the
+ * list at the last position where it is still less than or equal to the next
+ * element. All order comparisons are done using the {@link Prelude.compare@} class
+ * method.
+ * 
+ * If the list is sorted before the call, the result will also be sorted.
+ * 
+ * @arg value the value to be inserted into the list.
+ * @arg list the list.
+ * @return a copy of the input list with the specified value inserted.
+ * @see insertBy
+ */
+insert :: (Ord a) => a -> [a] -> [a];
+public insert = 
+    insertBy compare;
+
+/* @example */
+insertExamples :: Boolean;
+private insertExamples = 
+    assert ((insert 'c' ['a','b','d','e','f']) == ['a','b','c','d','e','f']) &&
+    assert ((insert 20 [1, 15, 2, 40.2, 5]) == [1, 15, 2, 20, 40.2, 5])
+    ;
+
+/**
+ * This function takes an element and a list and inserts the element into the
+ * list at the last position where it is still less than or equal to the next
+ * element. All order comparisons are done using the supplied comparison
+ * function.
+ * 
+ * If the list is sorted before the call, the result will also be sorted.
+ * 
+ * @arg comparisonFunction the comparison function.
+ * @arg value the value to be inserted into the list.
+ * @arg list the list.
+ * @return a copy of the input list with the specified value inserted.
+ */
+insertBy :: (a -> a -> Ordering) -> a -> [a] -> [a];
+public insertBy comparisonFunction value !list =
+    case list of
+    [] -> [value];
+    listHead : listTail ->
+        case comparisonFunction value listHead of
+        GT -> listHead : insertBy comparisonFunction value listTail;
+        _  -> value : listHead : listTail;       
+        ;
+    ;     
+
+
+/**
+ * This function takes a comparison function and a list and returns the greatest
+ * element of the list by the comparison function. The list must be finite and
+ * non-empty.
+ * 
+ * @arg comparisonFunction the comparison function.
+ * @arg list a finite and non-empty list.
+ * @return the greatest element of the list by the comparison function.
+ */
+maximumBy :: (a -> a -> Ordering) -> [a] -> a;
+public maximumBy comparisonFunction !list =
+    if isEmpty list then
+        error "Empty list."
+    else
+        let
+            max x y =
+                case (comparisonFunction x y) of
+                GT -> x;
+                _  -> y;
+                ;
+        in            
+            foldLeft1Strict max list;
+
+
+/**
+ * This function takes a comparison function and a list and returns the least
+ * element of the list by the comparison function. The list must be finite and
+ * non-empty.
+ * 
+ * @arg comparisonFunction the comparison function.
+ * @arg list a finite and non-empty list.
+ * @return the least element of the list by the comparison function.
+ */
+minimumBy :: (a -> a -> Ordering) -> [a] -> a;
+public minimumBy comparisonFunction !list =
+    if isEmpty list then
+        error "Empty list."
+    else
+        let
+            min x y =
+                case (comparisonFunction x y) of
+                GT -> y;
+                _  -> x;
+                ;
+        in            
+            foldLeft1Strict min list; 
+
+/**
+ * {@code filterJust listOfMaybes@} filters {@code listOfMaybes@}, removing the {@link Nothing@} values, and taking the {@link Just@}
+ * off the {@em Just@} values. For example,
+ * {@code filterJust [{@link Nothing@}, {@link Just@} "Fred", {@link Nothing@}, {@link Just@} "Bob"] == ["Fred", "Bob"].@}
+ * 
+ * @arg listOfMaybes the list of Maybe values to filter.
+ * @return a list containing the {@em Just@} values in the input list, with the {@link Just@} data constructor taken off.
+ */
+//implementation note: a correct implementation is
+//filterJust !listOfMaybes = map fromJust (filter isJust listOfMaybes);
+//however, it will be slower than the implementation below since there are 2 lists constructed (one from filter, one from map) instead
+//of just one below.  
+filterJust :: [Maybe a] -> [a];
+public filterJust !listOfMaybes =
+    case listOfMaybes of
+    [] -> [];
+    headListOfMaybes : tailListOfMaybes ->
+        case headListOfMaybes of
+        Nothing -> filterJust tailListOfMaybes;
+        Just value  -> value : filterJust tailListOfMaybes;
+        ;
+    ;
+    
+/* @example */
+filterJustExamples :: Boolean;
+filterJustExamples =
+    assert (filterJust [Nothing, Just "Fred", Nothing, Just "Bob"] == ["Fred", "Bob"])
+    && assert (filterJust [] == ([] :: [Int]))
+    ;
+
+    
+/**
+ * {@code mapJust mapFunction list@} applies {@code mapFunction@} to each element of list, discarding the {@link Nothing@}
+ * values, and keeping the {@em Just@} values after removing the {@link Just@} constructor.
+ * 
+ * @arg mapFunction the mapping function.
+ * @arg list the list whose elements are to be mapped.
+ * @return the list of mapped values.
+ */
+mapJust :: (a -> Maybe b) -> [a] -> [b];
+public mapJust mapFunction !list =
+    case list of
+    [] -> [];
+    listHead : listTail ->
+        case mapFunction listHead of
+        Nothing -> mapJust mapFunction listTail;
+        Just value -> value : mapJust mapFunction listTail;
+        ;
+    ;
+    
+/* @example */
+mapJustExamples :: Boolean;
+mapJustExamples =
+    assert (mapJust Just ["apple", "banana", "fig", "guava"] == ["apple", "banana", "fig", "guava"])
+    && assert (mapJust Just [] == ([] :: [Int]))
+    && assert (mapJust (\x -> Nothing) ["apple", "banana", "fig", "guava"] == ([] :: [Int]))
+    //todoBI restore this test somewhere
+    //&& assert (mapJust (fromDynamic :: Dynamic -> Maybe Double) [toDynamic "apple", toDynamic 10.0, toDynamic "fig", toDynamic 2.0] == [10.0, 2.0])
+    ;
+
+foreign unsafe import jvm "cast" jListToJCollection :: JList -> JCollection; 
+
+/**
+ * Converts a Java collection to a CAL list.
+ * 
+ * @arg collection the Java collection.
+ * @return the corresponding CAL list.
+ */
+fromJCollection :: Inputable a => JCollection -> [a];
+public fromJCollection = 
+    Prelude.listFromJCollection;
+
+/**
+ * Converts a Java collection to a CAL list using the element mapping function {@code f@} of type {@code {@link JObject@} -> a@} 
+ * to convert elements of the Java collection (in iterator order).
+ * 
+ * @arg javaCollection the Java collection.
+ * @arg elementMappingFunction the mapping function converting elements of the Java collection to CAL values.
+ * @return the corresponding CAL list.
+ */
+fromJCollectionWith :: JCollection -> (JObject -> a) -> [a];
+public fromJCollectionWith =
+    Prelude.listFromJCollectionWith;
+
+/**
+ * Converts a Java list to a CAL list.
+ * 
+ * @arg list the Java list.
+ * @return the corresponding CAL list.
+ */
+inputList :: Inputable a => JList -> [a];
+public inputList !list = 
+    fromJCollection (jListToJCollection list);
+   
+/**
+ * Converts a Java list to a CAL list using the element mapping function {@code f@} of type {@code {@link JObject@} -> a@} 
+ * to convert elements of the Java list.
+ * 
+ * @arg javaList the Java list.
+ * @arg elementMappingFunction the mapping function converting elements of the Java list to CAL values.
+ * @return the corresponding CAL list.
+ */
+inputListWith :: JList -> (JObject -> a) -> [a];
+public inputListWith !javaList elementMappingFunction =
+    fromJCollectionWith (jListToJCollection javaList) elementMappingFunction;
+
+/**
+ * Converts a CAL list to a Java list.
+ * 
+ * @arg list the CAL list.
+ * @return the corresponding Java list.
+ */
+outputList :: Outputable a => [a] -> JList;
+public outputList = 
+    Prelude.outputList;
+
+/**
+ * Converts a CAL list to a Java list using the element mapping function {@code f@} of type {@code a -> {@link JObject@}@} 
+ * to convert elements of the CAL list.
+ * 
+ * @arg list the CAL list.
+ * @arg f the mapping function converting elements of the list to {@link JObject@} values.
+ * @return the corresponding JList.
+ */
+//implementation note: for lists of length > 7, the resulting list is in fact a java.util.ArrayList. For lists of
+//shorter length, more efficient fixed length Java lists are used. These are more efficient in both space and time
+//requirements.
+outputListWith :: [a] -> (a -> JObject) -> JList;
+public outputListWith =
+    Prelude.outputListWith;
+
+/**
+ * A CAL foreign type corresponding to the Java type {@code java.util.Iterator@}.
+ * Primarily of use for supporting the functions {@link toJIterator@} and {@link toJIteratorWith@}.
+ */
+data foreign unsafe import jvm public "java.util.Iterator"
+    public JIterator deriving Inputable, Outputable;
+
+/**
+ * Provides a view of a CAL list as a Java iterator. The CAL list can then be lazily traversed in Java
+ * client code using the method of java.util.Iterator.
+ * 
+ * The {@link output@} class method on the {@link typeConstructor = List@} type and the {@link outputList@} function output
+ * a java.util.List rather than an iterator. In particular, they will not terminate for infinite lists. 
+ * This function provides a mechanism whereby the Java client can control how much of the CAL list to explore.
+ * 
+ * Note this function is mainly intended to be used when interacting programmatically with Java client code.
+ * Within CAL itself, there is not much point in converting to a {@link JIterator@}, which is a mutable foreign
+ * value type.
+ * 
+ * @arg list the CAL list
+ * @return a Java iterator on the CAL list, where the elements of the CAL List are converted to Java objects
+ *     using the {@link output@} function. 
+ * @see toJIteratorWith, fromJIterator
+ */
+toJIterator :: Outputable a => [a] -> JIterator;
+public toJIterator !list = toJIteratorWith list Prelude.output;
+
+/**
+ * Provides a view of a CAL list as a Java iterator. The CAL list can then be lazily traversed in Java
+ * client code using the method of java.util.Iterator.
+ * 
+ * The {@link outputListWith@} function outputs a java.util.List rather than an iterator. In particular, it 
+ * will not terminate for infinite lists. This function provides a mechanism whereby the Java client can control
+ * how much of the CAL list to explore.
+ * 
+ * Note this function is mainly intended to be used when interacting programmatically with Java client code.
+ * Within CAL itself, there is not much point in converting to a {@link JIterator@}, which is a mutable foreign
+ * value type.
+ * 
+ * @arg list the CAL list
+ * @arg f the mapping function converting elements of the list to {@link JObject@} values, which are then returned
+ *      by java.util.Iterator.next().
+ * @return  a Java iterator on the CAL list, where the elements of the CAL List are converted to Java objects
+ *     using the {@code f@} function. 
+ * @see toJIterator, fromJIteratorWith
+ */
+toJIteratorWith :: [a] -> (a -> JObject) -> JIterator;
+public toJIteratorWith =
+    makeIterator;
+ 
+primitive private makeIterator :: [a] -> (a -> JObject) -> JIterator;  
+
+/**
+ * Converts a Java iterator to a CAL list.
+ * 
+ * Note this function is mainly intended to be used when interacting programmatically with Java client code.
+ *
+ * @arg iterator the Java iterator
+ * @return the corresponding CAL list.
+ * @see fromJIteratorWith, toJIterator
+ */
+fromJIterator :: Inputable a => JIterator -> [a];
+public fromJIterator !iterator = 
+    Prelude.listFromJIterator (unsafeCoerce iterator);
+
+/**
+ * Converts a Java iterator to a CAL list using the element mapping function {@code f@} of 
+ * type {@code {@link JObject@} -> a@} to convert iteration elements.
+ * 
+ * Note this function is mainly intended to be used when interacting programmatically with Java client code.
+ * 
+ * @arg iterator the Java iterator
+ * @arg elementMappingFunction the mapping function converting iteration elements to CAL values.
+ * @return the corresponding CAL list.
+ * @see fromJIterator, toJIteratorWith
+ */
+fromJIteratorWith :: JIterator -> (JObject -> a) -> [a];
+public fromJIteratorWith !iterator elementMappingFunction =
+    Prelude.listFromJIteratorWith (unsafeCoerce iterator) elementMappingFunction;  
+
+
+/**
+ * A CAL foreign type corresponding to the Java type {@code java.util.Enumeration@}.
+ * Primarily of use for supporting the functions {@link jEnumerationToJIterator@} and {@link jEnumerationToJIterator@} which
+ * convert between the 2 main interfaces representing iterators in Java.
+ */
+data foreign unsafe import jvm public "java.util.Enumeration"
+    public JEnumeration deriving Inputable, Outputable;
+
+/**
+ * Converts a Java enumeration to a Java iterator in a lazy fashion.
+ * @arg enumeration
+ * @return the corresponding iterator
+ * @see fromJIterator, fromJIteratorWith
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Prelude.PreludeSupport.enumerationToIterator"
+    public jEnumerationToJIterator :: JEnumeration -> JIterator;
+
+/**
+ * Converts a Java iterator to a Java enumeration in a lazy fashion. 
+ * @arg iterator
+ * @return the corresponding enumeration
+ * @see toJIterator, toJIteratorWith
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Prelude.PreludeSupport.iteratorToEnumeration"
+    public jIteratorToJEnumeration :: JIterator -> JEnumeration;
+
+
+//////////////////////////////////////////////////////////////////////
+// Proposed List module functions
+// this is a good place to put functions that you want to propose for
+// eventual formal inclusion in the List module.
+// Your function should be debugged before being included here!
+
+/**
+ * {@summary
+ * {@code seqList@} simply returns its input list. However, if this returned list is subsequently traversed by other clients,
+ * each element of the list is evaluated to weak-head normal form prior to visiting the next element.
+ * @}
+ *
+ * {@code seqList@} is a useful technique for controlling the space requirements of recursively defined lists in that it ensures
+ * that earlier list elements will be evaluated prior to proceeding to the next element, even if that is not required by lazy
+ * evaluation order. This can be useful if you are using a function like {@link List.subscript@} which traverses without
+ * evaluating the elements of a list to get the particular subscripted element.
+ * 
+ * @arg list
+ * @return the input list, but with each element guaranteed to be evaluated to weak-head-normal form if it is visited.
+ * @see function = seq, strictList
+ */    
+seqList :: [a] -> [a];
+public seqList !list =
+    case list of
+    [] -> [];
+    listHead : listTail ->
+        listHead 
+        `seq`
+        (listHead : seqList listTail); 
+    ;  
+    
+/**
+ * Evaluates each element of the list (to weak-head normal form) prior to returning the list itself.
+ * {@code strictList list@} is equivalent to {@code List.foldRight Prelude.seq list list@}, however, it
+ * will be faster.
+ * 
+ * The difference between {@link seqList@} and {@code strictList@} is that {@link seqList@} ensures that the
+ * elements of the list get evaluated in order as the list is traversed. However, {@code strictList@} does more, it actually
+ * traverses the list prior to returning.
+ * 
+ * @arg list the list to make strict
+ * @return the input list, however each element has been evaluated, in element order, prior to this function returning.
+ * @see function = seq, seqList
+ */    
+strictList :: [a] -> [a];
+public strictList !list =
+    let
+        //strictListHelper is tail recursive, since we recognize tail uses of seq as a special case.
+        //this is one of the main reasons (strictList list) is faster than (foldRight seq list list)        
+        strictListHelper !list2 =
+            case list2 of
+            [] -> list;
+            list2Head : list2Tail ->
+                list2Head 
+                `seq` 
+                strictListHelper list2Tail;
+            ;
+    in
+        strictListHelper list;            
+
+/**
+ * Similar to {@link List.lookup@} except it has a default specified which will be returned when the key can not be found in the
+ * map.  This avoids construction of the {@link Maybe@} object returned from {@link List.lookup@}.
+ * 
+ * @arg key the key to look up.
+ * @arg keyValuePairs the association list of key-value pairs.
+ * @arg defaultValue the default value to return when the key cannot be found.
+ * @see lookup
+ */
+lookupWithDefault :: (Eq a) => a -> [(a, b)] -> b -> b;
+public lookupWithDefault !key !keyValuePairs defaultValue = 
+    case keyValuePairs of
+    [] -> defaultValue;
+    keyValuePair : keyValuePairsTail ->
+        if (key == keyValuePair.#1) then
+            keyValuePair.#2
+        else
+            lookupWithDefault key keyValuePairsTail defaultValue;
+    ;
+
+/* @example */
+lookupWithDefaultExamples :: Boolean;
+lookupWithDefaultExamples =
+    assert ((lookupWithDefault 2.0 [(1, 'a'), (2, 'b'), (3, 'c')] (error "Key not found.")) == 'b')
+    && assert ((lookupWithDefault 5.0 [(1, 'a'), (2, 'b'), (3, 'c')] 'z') == 'z');
+
+    
+/**
+ * Chops up a list into equals sublists of length {@code chopLength@}.
+ * 
+ * @arg chopLength the length of the resulting sublists.
+ * @arg listToChop the list to be chopped.
+ * @return a list of the sublists.
+ */
+chop :: Int -> [a] -> [[a]];
+public chop !chopLength listToChop = 
+    if chopLength > 0 then
+        let 
+            reallyChop :: [a] -> [[a]];
+            reallyChop listToChop =
+                if isEmpty listToChop then
+                    []
+                else
+                    (take chopLength listToChop) : (reallyChop (drop chopLength listToChop));
+        in
+            reallyChop listToChop
+    else
+        error "The chop length must be positive.";        
+
+/* @example */
+chopExamples :: Boolean;
+chopExamples =
+    assert ((chop 3 [10.0, 20, 30, 40, 50, 60, 70, 80, 90, 100]) == [[10, 20, 30], [40, 50, 60], [70, 80, 90], [100]])
+    && assert ((chop 100 [10.0, 20, 30, 40, 50, 60, 70, 80, 90, 100]) == [[10, 20, 30, 40, 50, 60, 70, 80, 90, 100]])
+    ;      
+        
+/**
+ * Periodizes a list at the specified frequency, returning a list of lists, one for each modulo of the frequency.
+ * 
+ * @arg frequency the frequency.
+ * @arg listToPeriodize the list to be periodized.
+ * @return a list of lists, one for each modulo of the frequency.
+ */
+periodize :: Int -> [a] -> [[a]];
+public periodize !frequency listToPeriodize = 
+    if frequency > 0 then
+        transpose (chop frequency listToPeriodize)
+    else
+        error "The frequency must be positive.";
+        
+/* @example */
+periodizeExamples :: Boolean;
+periodizeExamples =
+    assert ((periodize 2 [1.0, 2, 3, 4, 5, 6, 7]) == [[1, 3, 5, 7], [2, 4, 6]])
+    && assert (equals (periodize 3 [3.0, 1, 4, 1, 5, 9, 2, 6]) [[3, 1, 2], [1, 5, 6], [4, 9]])
+    ;
+        
+/**
+ * Samples a list at the specified frequency. For example, if the frequency is 3, it will take every
+ * third element from the list (starting with the first element).
+ * 
+ * @arg frequency the sampling frequency.
+ * @arg listToSample the list to be sampled.
+ * @return a list of the samples.
+ */
+sample :: Int -> [a] -> [a];
+public sample !frequency listToSample =
+    if frequency > 0 then
+        head (periodize frequency listToSample)
+    else
+        error "The frequency must be positive.";
+        
+/* @example */
+sampleExamples :: Boolean;
+sampleExamples =
+    assert ((sample 2 [1.0, 2, 3, 4, 5, 6, 7]) == [1, 3, 5, 7])
+    && assert ((sample 3 [3.0, 1, 4, 1, 5, 9, 2, 6]) == [3, 1, 2])
+    ;  
+       
+/**
+ * Applies the predicate to each element and returns the list 
+ * where every element for which the predicate evaluated to {@link True@} is replaced by {@code replaceWithValue@}.
+ * 
+ * @arg list the list whose elements are to be checked and replaced.
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg replaceWithValue the value to replace existing elements in the list.
+ * @return a copy of the list where every element for which the predicate evaluated to {@link True@} is replaced by
+ *         {@code replaceWithValue@}.
+ */
+replaceAll :: [a] -> (a -> Boolean) -> a -> [a];
+public replaceAll !list predicate replaceWithValue =  
+    case list of
+    []     -> [];
+    listHead : listTail ->
+        let
+            rest = replaceAll listTail predicate replaceWithValue;
+        in
+            if predicate listHead then
+                replaceWithValue : rest
+            else
+                listHead : rest;
+    ;
+
+/* @example */
+replaceAllExamples :: Boolean;
+replaceAllExamples =
+    assert (equals (replaceAll [] (\x -> x == 2.0) (-2.0)) [])
+    && assert (equals (replaceAll [1.0, 2.0, 3.0] (\x -> x == 2.0) (-2.0)) [1.0, -2.0, 3.0])
+    && assert (equals (replaceAll [1.0, 2.0, 3.0, 4.0] (\x -> x >= 2.0 && x <= 3.0) 0.0) [1.0, 0.0, 0.0, 4.0])
+    && assert (equals (replaceAll ["a", "A", "b", "B"] (\x -> x == "a") "z") ["z", "A", "b", "B"])
+    ;
+
+/**
+ * Returns the list with the value at a specified offset replaced by a specified value.
+ * Specifying a negative offset, or an offset larger than the last element of the list 
+ * causes a runtime error to be signalled.
+ * 
+ * @arg index The index of the element to replace
+ * @arg value The value to replace the element with
+ * @arg list The list to replace an element of
+ * @return a copy of {@code list@} with value at {@code index@} instead of the original value.
+ */
+replaceAt :: Int -> a -> [a] -> [a];
+public replaceAt !index value !list =
+    case list of
+    [] -> error "Index out of range";
+    listHead : listTail ->
+        if index == 0 then
+            value : listTail
+        else
+            listHead : (replaceAt (index - 1) value listTail);
+    ;
+
+/* @example */
+replaceAtExamples :: Boolean;
+replaceAtExamples =
+    assert (replaceAt 0 'X' ['a', 'b', 'c'] == ['X', 'b', 'c'])
+    && assert (replaceAt 1 'X' ['a', 'b', 'c'] == ['a', 'X', 'c'])
+    && assert (replaceAt 2 'X' ['a', 'b', 'c'] == ['a', 'b', 'X'])
+    ;
+
+//
+// Convenience functions to multiplex values in a list
+//
+
+/**
+ * Constructs an empty list.
+ * 
+ * @return an empty list.
+ */
+list0 :: [a];
+public list0 = [];
+
+/**
+ * Constructs a list of one item.
+ * 
+ * @arg item the item.
+ * @return the list containing the specified item.
+ */
+list1 :: a -> [a];
+public list1 item = [item];
+
+/**
+ * Constructs a list of two items.
+ * 
+ * @arg item1 the first item.
+ * @arg item2 the second item.
+ * @return the list containing all the specified items.
+ */
+list2 :: a -> a -> [a];
+public list2 item1 item2 = [item1, item2];
+
+/**
+ * Constructs a list of three items.
+ * 
+ * @arg item1 the first item.
+ * @arg item2 the second item.
+ * @arg item3 the third item.
+ * @return the list containing all the specified items.
+ */
+list3 :: a -> a -> a -> [a];
+public list3 item1 item2 item3 = [item1, item2, item3];
+
+/**
+ * Constructs a list of four items.
+ * 
+ * @arg item1 the first item.
+ * @arg item2 the second item.
+ * @arg item3 the third item.
+ * @arg item4 the fourth item.
+ * @return the list containing all the specified items.
+ */
+list4 :: a -> a -> a -> a -> [a];
+public list4 item1 item2 item3 item4 = [item1, item2, item3, item4];
+
+/**
+ * Constructs a list of five items.
+ * 
+ * @arg item1 the first item.
+ * @arg item2 the second item.
+ * @arg item3 the third item.
+ * @arg item4 the fourth item.
+ * @arg item5 the fifth item.
+ * @return the list containing all the specified items.
+ */
+list5 :: a -> a -> a -> a -> a -> [a];
+public list5 item1 item2 item3 item4 item5 = [item1, item2, item3, item4, item5];
+
+/**
+ * Constructs a list of six items.
+ * 
+ * @arg item1 the first item.
+ * @arg item2 the second item.
+ * @arg item3 the third item.
+ * @arg item4 the fourth item.
+ * @arg item5 the fifth item.
+ * @arg item6 the sixth item.
+ * @return the list containing all the specified items.
+ */
+list6 :: a -> a -> a -> a -> a -> a -> [a];
+public list6 item1 item2 item3 item4 item5 item6 = [item1, item2, item3, item4, item5, item6];
+
+/**
+ * Constructs a list of seven items.
+ * 
+ * @arg item1 the first item.
+ * @arg item2 the second item.
+ * @arg item3 the third item.
+ * @arg item4 the fourth item.
+ * @arg item5 the fifth item.
+ * @arg item6 the sixth item.
+ * @arg item7 the seventh item.
+ * @return the list containing all the specified items.
+ */
+list7 :: a -> a -> a -> a -> a -> a -> a -> [a];
+public list7 item1 item2 item3 item4 item5 item6 item7 = [item1, item2, item3, item4, item5, item6, item7];
+    
+/**
+ * Returns a list of all the combinations of the items in the specified lists.
+ * If the firstIsFastestChanging flag is True, then this function iterates first over the earlier value lists.
+ * If firstIsFastestChanging is False, then the iteration happens first over the lists at lists at the end.
+ * For example, for the input lists {@code [[A, B, C], [1, 2, 3, 4]]@} then the combinations where firstIsFastestChanging is True would be:
+ *     {@code [[A, 1], [B, 1], [C, 1], [A, 2], [B, 2], [C, 2], [A, 3], [B, 3], [C, 3], [A, 4], [B, 4], [C, 4]]@}
+ * When firstIsFastestChanging is False, the combinations would be:
+ *     {@code [[A, 1], [A, 2], [A, 3], [A, 4], [B, 1], [B, 2], [B, 3], [B, 4], [C, 1], [C, 2], [C, 3], [C, 4]]@}
+ * (Of course the values would all need to be of the same type.)
+ * If an empty list is specified for valuesLists, then [[]] (a single empty list) will be returned.
+ * 
+ * @arg firstIsFastestChanging  a flag indicating whether iteration happens first over the earlier or later lists
+ * @arg valuesLists             a list of the lists of values
+ * @return                      a list of all the combinations of the items in the specified lists
+ */
+combinations :: Boolean -> [[a]] -> [[a]];
+public combinations !firstIsFastestChanging !valuesLists = 
+    let
+        // Iterate over the first list values first.
+        combinationsHelper1 curPath !lsts accum = 
+            case lsts of
+            [] -> curPath : accum;
+            headList : tailLists -> 
+                foldRight (\val -> combinationsHelper1 (val : curPath) tailLists) accum headList;
+            ;
+
+        // Iterate over the last list values first.
+        combinationsHelper2 curPath !lsts accum = 
+            case lsts of
+            [] -> (reverse curPath) : accum;
+            headList : tailLists -> 
+                foldRight (\val -> combinationsHelper2 (val : curPath) tailLists) accum headList;
+            ;
+    in
+        if firstIsFastestChanging then combinationsHelper1 [] (reverse valuesLists) []
+        else combinationsHelper2 [] valuesLists [];
+
+/* @example */
+combinationsExamples :: Boolean;
+private combinationsExamples =
+    assert (combinations False ([] :: [[Int]]) == [[]]) && 
+    assert (combinations False [['a', 'b', 'c', 'd']] == [['a'], ['b'], ['c'], ['d']]) && 
+    assert (combinations False [['a', 'b', 'c', 'd'], ['1', '2', '3']] == [['a', '1'], ['a', '2'], ['a', '3'], 
+                                                                           ['b', '1'], ['b', '2'], ['b', '3'], 
+                                                                           ['c', '1'], ['c', '2'], ['c', '3'], 
+                                                                           ['d', '1'], ['d', '2'], ['d', '3']]) && 
+    assert (combinations True ([] :: [[Int]]) == [[]]) && 
+    assert (combinations True [['a', 'b', 'c', 'd']] == [['a'], ['b'], ['c'], ['d']]) && 
+    assert (combinations True [['a', 'b', 'c', 'd'], ['1', '2', '3']] == [['a', '1'], ['b', '1'], ['c', '1'], ['d', '1'], 
+                                                                          ['a', '2'], ['b', '2'], ['c', '2'], ['d', '2'], 
+                                                                          ['a', '3'], ['b', '3'], ['c', '3'], ['d', '3']])
+    ;
+
+
+/**
+ * {@code spanInclusive predicate list@} breaks up list into a pair of lists. The last item in the first list is the first element
+ * of list on which predicate is {@link False@}.
+ * 
+ * e.g.
+ * {@unorderedList
+ * {@item {@code spanInclusive {@link isEven@} [1, 2] = ([1], [2])@}@}
+ * {@item {@code spanInclusive {@link isEven@} [4, 2, 1, 6] = ([4, 2, 1], [6])@}@}
+ * @}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be split.
+ * @return a pair of lists. The last item in the first list is the first element of list
+ *         on which predicate is {@link False@}. The second list contains the remaining
+ *         elements of the original list.
+ */
+spanInclusive :: (a -> Boolean) -> [a] -> ([a],[a]);
+public spanInclusive predicate !list =
+    case list of
+    [] -> ([], []);
+    listHead : listTail ->
+        if predicate listHead then
+            let
+                spanInclusiveListTail = spanInclusive predicate listTail;
+            in
+                (listHead : spanInclusiveListTail.#1, spanInclusiveListTail.#2)
+        else
+            ([listHead], listTail);
+    ;
+
+/**
+ * {@code breakAfter predicate list@} breaks up list into a pair of lists. The last item of the first list is the first element
+ * of list on which the predicate function is {@link True@}.
+ * 
+ * @arg predicate a predicate to be applied to the elements of the list.
+ * @arg list the list to be split.
+ * @return a pair of lists. The last item of the first list is the first element of list
+ *         on which the predicate function is {@link True@}. The second list contains the remaining
+ *         elements of the original list.
+ */
+breakAfter :: (a -> Boolean) -> [a] -> ([a],[a]);
+public breakAfter predicate = spanInclusive (compose not predicate);
+
+/**
+ * Returns whether a list has exactly 1 element.
+ * 
+ * Because {@link List.length@} is O(n) where n is the length of the list, it can be more efficient to
+ * call {@link Prelude.isEmpty@}, {@link List.isSingletonList@} or {@link List.lengthAtLeast@} (as appropriate) if all that
+ * is needed is a bound on the length of the list. 
+ * 
+ * @arg list the list.
+ * @return {@link True@} if the list has exactly 1 element; {@link False@} otherwise.
+ * @see Prelude.isEmpty, lengthAtLeast, length
+ */
+isSingletonList :: [a] -> Boolean;
+public isSingletonList !list = 
+    case list of
+    [] -> False;
+    _ : listTail -> 
+        case listTail of
+        [] -> True;
+        _ -> False;
+        ;
+    ;
+
+/**
+ * {@code lengthAtLeast minLength list@} returns {@link True@} if the length of the list is greater than or equal
+ * to {@code minLength@}.
+ * 
+ * Because {@link List.length@} is O(n) where n is the length of the list, it can be more efficient to
+ * call {@link Prelude.isEmpty@}, {@link List.isSingletonList@} or {@link List.lengthAtLeast@} (as appropriate) if all that
+ * is needed is a bound on the length of the list.
+ * 
+ * @arg minLength the minimum length the list must have for the function to return True.
+ * @arg list the list.
+ * @return {@link True@} if the length of the list is greater than or equal to {@code minLength@}.
+ * @see Prelude.isEmpty, isSingletonList, length
+ */  
+lengthAtLeast :: Int -> [a] -> Boolean;
+public lengthAtLeast !minLength !list =    
+        case list of
+        [] -> minLength <= 0;
+        listHead : listTail ->
+            if minLength >= 0 then
+                lengthAtLeast (minLength - 1) listTail
+            else
+                True;
+        ;
+    
+/* @example */
+lengthAtLeastExamples :: Boolean;
+lengthAtLeastExamples =
+    //an infinite list will have length at least 3!
+    assert (lengthAtLeast 3 (Prelude.upFrom 2.0))
+    && assert (lengthAtLeast 1 [10.0, 5.0])
+    && assert (lengthAtLeast 2 [10.0, 5.0])
+    && assert (not (lengthAtLeast 3 [10.0, 5.0]))
+    && assert (lengthAtLeast 4 ['a', 'b', 'c', 'd', 'e', 'f'])
+    && assert (lengthAtLeast (-1) [])
+    && assert (lengthAtLeast 0 [])
+    && assert (not (lengthAtLeast 1 []))
+    ;
+
+/**
+ * {@code composeAll [f1, f2, ... , fn] value@} is the same as {@code f1 (f2 ( ... (fn value)))...)@} which is the
+ * same as {@code f1 # f2 # ... # fn $ value@}
+ * 
+ * For a fixed set of functions, it is more efficient to directly write the composition than to use composeAll.
+ * For example, rather than writing {@code composeAll [sin, cos, sqrt] 9.0@} it is more efficient to write 
+ * {@code sin (cos (sqrt 9.0))@}. 
+ *
+ * @arg functionList list of functions to compose
+ * @arg value the value to apply the compostion to.
+ */
+composeAll :: [a -> a] -> a -> a;
+public composeAll !functionList value =
+    foldRight Prelude.apply value functionList;
+
+/* @example */
+composeAllExamples :: Boolean;
+composeAllExamples =
+    assert (composeAll [Prelude.subtract 2, Prelude.multiply 5, Prelude.add 3] 7.0 == -48)
+    && assert (composeAll [] "hello" == "hello")
+    ;
+    
+/**
+ * Removes the list item at the specified index.
+ * 
+ * @arg index the index of the item to be removed.
+ * @arg list the list from which an item is to be removed.
+ * @return the list with the item at the specified index removed.
+ */
+deleteAt :: Int -> [a] -> [a];
+public deleteAt !index !list = 
+    case list of
+    [] -> error "The specified index is invalid.";
+    x : xs -> 
+        if (index == 0) then xs
+        else x : deleteAt (index - 1) xs;
+    ;
+
+/**
+ * Inserts a value into a list at the specified index.
+ *
+ * @arg index the zero-based index. 
+ * @arg value the value to be inserted.
+ * @arg list the list to which the value is to be inserted.
+ * @return the list with the value inserted at the specified index.
+ */
+insertAt :: Int -> a -> [a] -> [a];
+public insertAt !index value !list = 
+    if index == 0 then 
+        value : list
+    else
+        case list of
+        [] -> error "The specified index is invalid.";
+        x : xs -> x : insertAt (index - 1) value xs;
+        ;
+
+/**
+ * Inserts values into a list at the specified index.
+ *
+ * @arg index the zero-based index.
+ * @arg valuesToInsert the values to be inserted. 
+ * @arg list the list to which the values are to be inserted.
+ * @return the list with the values inserted at the specified index.
+ */
+insertListAt :: Int -> [a] -> [a] -> [a];
+public insertListAt !index !valuesToInsert !list = 
+    if (index == 0) then 
+        valuesToInsert ++ list
+    else
+        case list of
+        [] -> error "The specified index is invalid.";
+        x : xs -> x : insertListAt (index - 1) valuesToInsert xs;
+        ;
+
+/**
+ * Alternate items from the 2 lists.
+ * If one lists is longer than the other, then any remaining items will appear at the end of the list.
+ * @arg list1  one of the lists to be merged
+ * @arg list2  the other list to be merged
+ * @return    a list consisting of alternating items from the input lists
+ */
+alternate :: [a] -> [a] -> [a];
+public alternate !list1 !list2 = 
+    case list1 of
+    [] -> list2;
+    list1_head : list1_tail -> 
+        case list2 of
+        [] -> list1;
+        list2_head : list2_tail ->
+            list1_head : list2_head : alternate list1_tail list2_tail;
+        ;
+    ;
+ 
+//////////////////////////////////////////////////////////////////////
+// Crystal Reports functions
+
+/**
+ * Replicates a list for a specified number of times.
+ * 
+ * @arg list the list.
+ * @arg nCopies the number of copies to make.
+ * @return a list of {@code nCopies@} of the list concatenated together.
+ */
+replicateList :: [a] -> Int -> [a];
+public replicateList list !nCopies = concat (replicate nCopies list);   
+
+
+//inListBy is very similar to inStr except that it works with polymorphic lists
+//(and does not have an ignore case optional argument)
+/**
+ * Returns the position of the first occurrence of one list within another. This
+ * position is a 0-based index of the elements in {@code searchList@}. If {@code findList@} is not
+ * found in {@code searchList@}, this function returns a call to {@link Prelude.error@}. The start
+ * argument sets the starting position for the search.
+ *
+ * @arg equalityComparisonFunction the equality comparison function to use.
+ * @arg fromIndex 0-based index of position to start searching from
+ * @arg searchList the list to be searched.
+ * @arg findList the list being sought within {@code searchList@}.
+ * @return {@link Just@} the 0-based index of the first occurrence of {@code findList@} within {@code searchList@}
+ *          if any exist, or {@link Nothing@} if {@code searchList@} does not contain {@code findList@}.
+ */
+inListBy :: (a -> b -> Boolean) -> Int -> [b] -> [a] -> Maybe Int;
+public inListBy equalityComparisonFunction fromIndex searchList findList = 
+    let
+        inListByHelper !position searchList =
+            if startsWithBy equalityComparisonFunction findList searchList then
+                Just position
+            else 
+                case searchList of
+                [] -> Nothing :: Maybe Int;
+                _ : searchListTail -> inListByHelper (position + 1) searchListTail;
+                ;
+    in
+        if fromIndex < 0 then
+            error "The start position must be non-negative."
+        else
+            inListByHelper fromIndex (drop fromIndex searchList);
+
+/* @example */
+inListByExamples :: Boolean;
+inListByExamples =
+    assert (inListBy equals 0 [3 :: Int, 1, 2] [5, 6] == Nothing) &&
+    assert (inListBy equals 0 [3 :: Int, 1, 3] [1, 3] == Just 1) &&
+    assert (inListBy equals 0 [3 :: Int, 1, 3] [3, 1] == Just 0) &&
+    assert (inListBy equals 1 [3 :: Int, 1, 3] [3, 1] == Nothing);
+    
+    
+/**
+ * Returns a portion of the argument list as a new list.
+ * 
+ * If {@code fromIndex < 0@}, {@code fromIndex > toIndex@}, or {@code toIndex > length list@}, the function
+ * terminates in an error.
+ * 
+ * If you want the list minus some number of leading elements (ie, if {@code toIndex == length list@},
+ * then you should use {@link drop@} instead, since {@link subList@} copies elements to
+ * create a new list, whereas {@link drop@} does not.
+ * 
+ * @arg list to extract a sub-list from
+ * @arg fromIndex inclusive 0-based index. 
+ * @arg toIndex exclusive 0-based index
+ * @return copy of the list from {@code fromIndex@} (inclusive) to {@code toIndex@} (exclusive).
+ */
+subList :: [a] -> Int -> Int -> [a];
+public subList list !fromIndex !toIndex =
+    if fromIndex < 0 then
+        error "fromIndex must be non-negative"
+    else if fromIndex > toIndex then
+        error "fromIndex must be no larger than toIndex"
+    else
+        let
+            endList = drop fromIndex list;
+
+            boundsCheckedTake :: Int -> [a] -> [a];
+            boundsCheckedTake !count !list =
+                if count > 0 then
+                    case list of
+                    [] -> error "toIndex must be no larger than length of list";
+                    head : tail -> head : boundsCheckedTake (count - 1) tail;
+                else
+                    [];
+        in
+            boundsCheckedTake (toIndex - fromIndex) endList;
+
+/* @example */
+subListExamples :: Boolean;
+private subListExamples =
+    assert (subList ['a','b','c','d','e','f'] 2 4 == ['c','d']) &&
+    assert (subList ['h','e','l','l','o',' ','w','o','r','l','d'] 6 11 == ['w','o','r','l','d']) &&
+    assert (subList ['h','e','l','l','o',' ','w','o','r','l','d'] 0 5 == ['h', 'e', 'l', 'l', 'o']) &&
+    assert (subList ['z','a','p'] 2 3 == ['p'])
+    ;
+
+/**
+ * Applies the function {@code mapFunction@} to each {@code #1@} field in the list or records and returns
+ * the resulting list.
+ * 
+ * @arg mapFunction 
+ *         a function to be applied to the {@code #1@} field for each record in the list
+ * @arg list 
+ *         the list of records
+ * @return 
+ *         the list obtained by applying mapFunction to the {@code #1@} field for each record in the list
+ */
+mapField1 :: (r\#1) => (a -> b) -> [{r | #1 :: a}] -> [{r | #1 :: b}];
+public mapField1 mapFunction !list = 
+    case list of
+    [] -> [];
+    listHead : listTail -> 
+        {listHead | #1 := mapFunction listHead.#1} : mapField1 mapFunction listTail;        
+    ;
+    
+/* @example */
+mapField1Examples :: Boolean;    
+mapField1Examples =
+    //works with lists of pairs
+    assert (mapField1 (multiply 2) [(10.0, "apple"), (7.0, "pear")] == [(20.0, "apple"), (14.0, "pear")])
+    //works with lists of triples as well
+    && assert (mapField1 length [([10.0, 50], "apple", True), ([], "pear", False)] == [(2, "apple", True), (0, "pear", False)])
+    ;
+
+/**
+ * Applies the function {@code mapFunction@} to each {@code #2@} field in the list or records and returns
+ * the resulting list.
+ * 
+ * @arg mapFunction 
+ *         a function to be applied to the {@code #2@} field for each record in the list
+ * @arg list 
+ *         the list of records
+ * @return 
+ *         the list obtained by applying mapFunction to the {@code #2@} field for each record in the list
+ */
+mapField2 :: (r\#2) => (a -> b) -> [{r | #2 :: a}] -> [{r | #2 :: b}];
+public mapField2 mapFunction !list = 
+    case list of
+    [] -> [];
+    listHead : listTail -> 
+       {listHead | #2 := mapFunction listHead.#2} : mapField2 mapFunction listTail; 
+    ;
+
+
+/**
+ * Returns a {@link Prelude.List@} with only the {@link Left@} values of the {@link Prelude.List@} of 
+ * {@link Either@}s passed in.
+ * 
+ * @arg list 
+ *         the {@link Prelude.List@} of eithers
+ * @return 
+ *         the {@link Prelude.List@} obtained by taking the {@link Left@} value of each 
+ *         of the {@link Either@}s in the {@link Prelude.List@}
+ */
+leftValues :: [Either a b] -> [a];
+public leftValues !list =
+    case list of
+    listHead : listTail ->
+        case listHead of
+        Left value -> value : leftValues listTail;
+        Right {} -> leftValues listTail;
+        ;
+    [] ->
+        [];
+    ;
+    
+/* @example */
+leftValuesExamples =
+    assert (leftValues ([]::[Either String Int]) == [])
+    && assert (leftValues ([Left "left", Right 2]::[Either String Int]) == ["left"]) ;
+
+/**
+ * Returns a {@link Prelude.List@} with only the {@link Right@} values of the {@link Prelude.List@} of 
+ * {@link Either@}s passed in.
+ * 
+ * @arg list 
+ *         the {@link Prelude.List@} of {@link Either@}s
+ * @return 
+ *         the {@link Prelude.List@} obtained by taking the {@link Right@} value of each of the 
+ *         {@link Either@}s in the {@link Prelude.List@}
+ */
+rightValues :: [Either a b] -> [b];
+public rightValues !list =
+    case list of
+    listHead : listTail ->
+        case listHead of
+        Left {} -> rightValues listTail;
+        Right value -> value : rightValues listTail;
+        ;
+    [] ->
+        [];
+    ;    
+
+/* @example */
+rightValuesExamples =
+    assert (rightValues ([]::[Either String Int]) == [])
+    && assert (rightValues ([Left "left", Right 2]::[Either String Int]) == [2]) ;
+
+/**
+ * Splits a {@link Prelude.List@} of {@link Either@}s into a pair of {@link Prelude.List@}s with the 
+ * first item being the {@link Left@} values and the second the {@link Right@} values.
+ * 
+ * @arg list 
+ *         the list of eithers
+ * @return 
+ *         a pair of {@link Prelude.List@}s, the first {@link Prelude.List@} contains the {@link Left@} values and the second is 
+ *         the {@link Prelude.List@} of {@link Right@} values.
+ */
+splitEither :: [Either a b] -> ([a], [b]);
+public splitEither !list =
+    case list of
+    [] -> ([],[]);
+    listHead : listTail ->
+        let
+            (leftTail, rightTail) = splitEither listTail;
+        in
+            case listHead of
+            Left left -> (left : leftTail, rightTail);
+            Right right -> (leftTail, right : rightTail);
+        ;
+    ;
+
+/* @example */
+splitEitherExamples =
+    assert (splitEither ([]::[Either String Int]) == ([],[]))
+    && assert (splitEither ([Left "left", Right 2]::[Either String Int]) == (["left"], [2]));
+
+
+/**
+ * Compares two lists lexicographically using a comparator function. 
+ * The empty list is considered less that any non-empty list.
+ * 
+ * Note that {@code {@link compareBy@} {@link compare@} == (compare :: Ord a => [a] -> [a] -> Ordering)@}.
+ * Thus {@link compareBy@} can be considered as a generalization of the class method {@link compare@}
+ * when comparing 2 lists having possibly distinct types.
+ * 
+ * @see compare
+ */
+compareBy :: (a -> b -> Ordering) -> [a] -> [b] -> Ordering;
+public compareBy comparator !list1 !list2 =
+    case list1 of
+    [] -> 
+        case list2 of
+        [] -> EQ;
+        _ -> LT;
+        ;
+    
+    head1 : tail1 ->
+        case list2 of
+        [] -> GT;
+        head2 : tail2 ->
+            (comparator head1 head2) ++ compareBy comparator tail1 tail2;
+        ;
+    ; 
+
+/* @example */
+private compareByExamples =
+    assert (compareBy compare [1::Int] [1, 0] == LT)
+    && assert (compareBy compare [1::Int, 0] [1] == GT)
+    && assert (compareBy compare [0::Int, 1] [0, 1] == EQ)
+    && assert (compareBy compare [1::Int, 0, 1] [1, 0, 0] == GT)
+    ;
+
+/* @test */
+testModule :: Boolean;
+public testModule =
+    assert allExamples
+    && assert andListExamples
+    && assert anyExamples
+    && assert chopExamples
+    && assert composeAllExamples
+    && assert endsWithExamples    
+    && assert filterIndexedExamples
+    && assert filterJustExamples
+    && assert findExamples
+    && assert findIndexExamples
+    && assert findIndicesExamples
+    && assert groupExamples
+    && assert inListByExamples
+    && assert insertExamples      
+    && assert lengthAtLeastExamples
+    && assert lookupWithDefaultExamples
+    && assert mapField1Examples
+    && assert mapIndexedExamples
+    && assert mapJustExamples
+    && assert maximumExamples
+    && assert mergeExamples
+    && assert mergeByExamples
+    && assert orListExamples
+    && assert periodizeExamples
+    && assert removeDuplicatesExamples
+    && assert removeDuplicatesByExamples
+    && assert replaceAllExamples
+    && assert replaceAtExamples
+    && assert sampleExamples
+    && assert accumulateLeftExamples
+    && assert accumulateLeft1Examples
+    && assert accumulateRightExamples    
+    && assert accumulateRight1Examples    
+    && assert sortByExamples
+    && assert sortByExternalExamples
+    && assert sortExamples    
+    && assert sortExternalExamples
+    && assert startsWithExamples    
+    && assert subListExamples
+    && assert transposeExamples
+    && assert unionExamples
+    && assert combinationsExamples
+    && assert leftValuesExamples
+    && assert rightValuesExamples
+    && assert splitEitherExamples
+    && assert breakAllExamples
+    && assert compareByExamples
+    ;
+
+//please leave testModule last!
+    

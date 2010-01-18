@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CAL_Libraries_bindings.script
+ * Created: Oct. 20, 2006 
+ * By: rcypher
+ */
+
+// This ICE script can be used to generate the Java binding
+// classes for the public members of the non-test CAL modules in
+// the CAL_Libraries project.
+// NOTE: This script should be updated when modules are added
+// or removed from the project.
+
+// Load the workspace containing all the non-test modules in CAL_Libraries
+:ldw cal.libraries.cws
+
+:javaBinding Cal.Utilities.Accumulate org.openquark.cal.module
+:javaBinding Cal.Graphics.Color org.openquark.cal.module
+:javaBinding Cal.Data.DatabaseMetadata org.openquark.cal.module
+:javaBinding Cal.Data.DataGems org.openquark.cal.module
+:javaBinding Cal.Utilities.ExpressionLexer org.openquark.cal.module
+:javaBinding Cal.IO.File org.openquark.cal.module
+:javaBinding Cal.Utilities.Format org.openquark.cal.module
+:javaBinding Cal.Utilities.Parser org.openquark.cal.module
+:javaBinding Cal.Utilities.PrettyPrinter org.openquark.cal.module
+:javaBinding Cal.Utilities.Range org.openquark.cal.module
+:javaBinding Cal.Utilities.RelativeTime org.openquark.cal.module
+:javaBinding Cal.Data.Sql org.openquark.cal.module
+:javaBinding Cal.Data.SqlBuilder org.openquark.cal.module
+:javaBinding Cal.Data.SqlParser org.openquark.cal.module
+:javaBinding Cal.Data.SqlType org.openquark.cal.module
+:javaBinding Cal.Utilities.Summary org.openquark.cal.module
+:javaBinding Cal.Utilities.Time org.openquark.cal.module
+:javaBinding Cal.Utilities.UniqueIdentifier org.openquark.cal.module
+:javaBinding Cal.Utilities.ValueType org.openquark.cal.module
+:javaBinding Cal.Utilities.XmlBuilder org.openquark.cal.module
+:javaBinding Cal.Experimental.Utilities.Encoding org.openquark.cal.module
+:javaBinding Cal.Experimental.Utilities.XmlCharacterClasses org.openquark.cal.module
+:javaBinding Cal.Experimental.Utilities.XmlParser org.openquark.cal.module
+:javaBinding Cal.Experimental.Utilities.XmlParserEngine org.openquark.cal.module
+:javaBinding Cal.Experimental.Utilities.XmlParserState org.openquark.cal.module
+:javaBinding Cal.Experimental.Utilities.XmlPrinters org.openquark.cal.module
+:javaBinding Cal.Utilities.DirectedGraph org.openquark.cal.module
+:javaBinding Cal.Data.BusinessCalendar org.openquark.cal.module
+:javaBinding Cal.Data.GregorianBusinessCalendar org.openquark.cal.module
+:javaBinding Cal.Data.FiscalBusinessCalendar org.openquark.cal.module
+:javaBinding Cal.Data.DataDictionary org.openquark.cal.module
+:javaBinding Cal.Data.DictionaryQuery org.openquark.cal.module
+:javaBinding Cal.Data.SqlDataDictionary org.openquark.cal.module
+:javaBinding Cal.Experimental.Graphics.Drawing org.openquark.cal.module
+:javaBinding Cal.Experimental.Utilities.CollectionUtilities org.openquark.cal.module

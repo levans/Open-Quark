@@ -1,0 +1,1254 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * LegacyTuple.cal
+ * Created: Dec 17, 2004
+ * By: Peter Cardwell
+ */
+
+/**
+This module contains all our (core) Prelude functions and type class instances dealing with tuples, expressed
+using non-operator notation. It exists for testing purposes for after tuples are changed to use records as their
+underlying implementation.
+
+@author Bo Ilic
+@author Peter Cardwell
+*/
+module Cal.Test.General.LegacyTuple;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Ord, Outputable;
+    typeConstructor = Boolean, Int, JList, JObject, Ordering, String;
+    dataConstructor = False, LT, EQ, GT;
+    function = concat, equals, error, input, not, output;
+    ;  
+import Cal.Core.String;          
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.LegacyTuple.FixedSizeList.make"
+    private jList_new_list2 :: JObject -> JObject -> JList;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.LegacyTuple.FixedSizeList.make"
+    private jList_new_list3 :: JObject -> JObject -> JObject -> JList;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.LegacyTuple.FixedSizeList.make"
+    private jList_new_list4 :: JObject -> JObject -> JObject -> JObject -> JList;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.LegacyTuple.FixedSizeList.make"
+    private jList_new_list5 :: JObject -> JObject -> JObject -> JObject -> JObject -> JList;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.LegacyTuple.FixedSizeList.make"
+    private jList_new_list6 :: JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JList;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.LegacyTuple.FixedSizeList.make"
+    private jList_new_list7 :: JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JList;
+
+foreign unsafe import jvm "method get" 
+    private jList_get :: JList -> Int -> JObject;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.LegacyTuple.Cast.objectToList"
+    private jCast_objectToList :: JObject -> JList;
+
+data public Tuple2 a b =
+    public Tuple2 #1::a #2::b;
+data public Tuple3 a b c =
+    public Tuple3 #1::a #2::b #3::c;
+data public Tuple4 a b c d =
+    public Tuple4 #1::a #2::b #3::c #4::d;
+data public Tuple5 a b c d e =
+    public Tuple5 #1::a #2::b #3::c #4::d #5::e;
+data public Tuple6 a b c d e f =
+    public Tuple6 #1::a #2::b #3::c #4::d #5::e #6::f;
+data public Tuple7 a b c d e f g =
+    public Tuple7 #1::a #2::b #3::c #4::d #5::e #6::f #7::g;
+
+//////////////////////////////////////////////////////////////////////
+// Operator functions
+// since CAL does not provide notation for using an operator as a function e.g. the parentheses
+// notation of Haskell, we add these functions which are used as helpers in implementing the prelude
+
+//////////////////////////////////////////////////////////////////////
+//Tuple2 instances    
+
+public pair = Tuple2;
+public triple = Tuple3;
+
+instance (Eq a, Eq b) => Eq (Tuple2 a b) where
+    equals = equalsTuple2;
+    notEquals = notEqualsTuple2;
+    ;
+    
+equalsTuple2 :: (Eq a, Eq b) => Tuple2 a b -> Tuple2 a b -> Boolean;
+private equalsTuple2 !x !y =
+    case x of
+    Tuple2 x1 x2 ->
+        case y of
+        Tuple2 y1 y2 ->
+            x1 == y1 && x2 == y2;
+        ;
+    ;
+
+private equalsTuple2Examples =
+    equalsTuple2 (Tuple2 'a' 'b') (Tuple2 'a' 'b') &&
+    not (equalsTuple2 (Tuple2 'a' 'b') (Tuple2 'b' 'a')) &&
+    equalsTuple2 (Tuple2 "hello" 10.0) (Tuple2 "hello" 10.0) ||
+    error "Prelude.equalsTuple2Examples failed.";
+                           
+notEqualsTuple2 :: (Eq a, Eq b) => Tuple2 a b -> Tuple2 a b -> Boolean;
+private notEqualsTuple2 !x !y = not (equalsTuple2 x y);
+    
+instance (Ord a, Ord b) => Ord (Tuple2 a b) where
+    lessThan = lessThanTuple2;
+    lessThanEquals = lessThanEqualsTuple2;
+    greaterThanEquals = greaterThanEqualsTuple2;
+    greaterThan = greaterThanTuple2;
+    compare = compareTuple2;
+    max = maxTuple2;
+    min = minTuple2;
+    ;   
+
+lessThanTuple2 :: (Ord a, Ord b) => Tuple2 a b -> Tuple2 a b -> Boolean;
+private lessThanTuple2 !x !y =
+    case x of
+    Tuple2 x1 x2 ->
+        case y of
+        Tuple2 y1 y2 ->
+            x1 < y1 || (x1 == y1 && x2 < y2);
+        ;
+    ;    
+
+lessThanEqualsTuple2 :: (Ord a, Ord b) => Tuple2 a b -> Tuple2 a b -> Boolean;
+private lessThanEqualsTuple2 !x !y = not (lessThanTuple2 y x);
+
+greaterThanEqualsTuple2 :: (Ord a, Ord b) => Tuple2 a b -> Tuple2 a b -> Boolean;
+private greaterThanEqualsTuple2 !x !y = not (lessThanTuple2 x y);
+
+greaterThanTuple2 :: (Ord a, Ord b) => Tuple2 a b -> Tuple2 a b -> Boolean;
+private greaterThanTuple2 !x !y = lessThanTuple2 y x;
+
+private greaterThanTuple2Examples = 
+    greaterThanTuple2 (Tuple2 1.0 'b') (Tuple2 1.0 'a') &&
+    greaterThanTuple2 (Tuple2 2.0 'a') (Tuple2 1.0 'b') &&    
+    not (greaterThanTuple2 (Tuple2 "abc" 'a') (Tuple2 "abc" 'a')) &&
+    greaterThanTuple2 (Tuple2 "zap" "arg") (Tuple2 "arg" "zap") ||
+    error "Prelude.greaterThanTuple2Examples failed.";
+
+compareTuple2 :: (Ord a, Ord b) => Tuple2 a b -> Tuple2 a b -> Ordering;
+private compareTuple2 !x !y =
+    if x < y then LT
+    else if x == y then EQ
+    else GT;
+    
+maxTuple2 :: (Ord a, Ord b) => Tuple2 a b -> Tuple2 a b -> Tuple2 a b;
+private maxTuple2 !x !y = if x <= y then y else x;
+
+minTuple2 :: (Ord a, Ord b) => Tuple2 a b -> Tuple2 a b -> Tuple2 a b;
+private minTuple2 !x !y = if x <= y then x else y;        
+ 
+tuple2Field1 :: Tuple2 a b -> a;
+public tuple2Field1 !t =
+    case t of
+    Tuple2 x _ -> x;
+    ;
+    
+tuple2Field2 :: Tuple2 a b -> b;
+public tuple2Field2 !t =
+    case t of
+    Tuple2 _ x -> x;
+    ;
+
+instance (Show a, Show b) => Show (Tuple2 a b) where
+    show = showTuple2;
+    ;
+
+showTuple2 :: (Show a, Show b) => (Tuple2 a b) -> String;
+private showTuple2 !x =
+    case x of
+    Tuple2 val1 val2 -> 
+        concat ["LegacyTuple.Tuple2 ", show val1,
+                " ", show val2];
+    ;
+        
+    
+//////////////////////////////////////////////////////////////////////
+//Tuple3 instances    
+    
+instance (Eq a, Eq b, Eq c) => Eq (Tuple3 a b c) where
+    equals = equalsTuple3;
+    notEquals = notEqualsTuple3;
+    ;
+    
+equalsTuple3 :: (Eq a, Eq b, Eq c) => Tuple3 a b c -> Tuple3 a b c -> Boolean;
+private equalsTuple3 !x !y =
+    case x of
+    Tuple3 x1 x2 x3 ->
+        case y of
+        Tuple3 y1 y2 y3 ->
+            x1 == y1 && x2 == y2 && x3 == y3;
+        ;
+    ;    
+    
+notEqualsTuple3 :: (Eq a, Eq b, Eq c) => Tuple3 a b c -> Tuple3 a b c -> Boolean;
+private notEqualsTuple3 !x !y = not (equalsTuple3 x y);    
+    
+instance (Ord a, Ord b, Ord c) => Ord (Tuple3 a b c) where
+    lessThan = lessThanTuple3;
+    lessThanEquals = lessThanEqualsTuple3;
+    greaterThanEquals = greaterThanEqualsTuple3;
+    greaterThan = greaterThanTuple3;
+    compare = compareTuple3;
+    max = maxTuple3;
+    min = minTuple3;    
+    ; 
+
+lessThanTuple3 :: (Ord a, Ord b, Ord c) => Tuple3 a b c -> Tuple3 a b c -> Boolean;
+private lessThanTuple3 !x !y =
+    case x of
+    Tuple3 x1 x2 x3 ->
+        case y of
+        Tuple3 y1 y2 y3 ->
+            x1 < y1 || (x1 == y1 && (x2 < y2 || (x2 == y2 && x3 < y3)));
+        ;
+    ;    
+
+lessThanEqualsTuple3 :: (Ord a, Ord b, Ord c) => Tuple3 a b c -> Tuple3 a b c -> Boolean;
+private lessThanEqualsTuple3 !x !y = not (lessThanTuple3 y x);
+
+greaterThanEqualsTuple3 :: (Ord a, Ord b, Ord c) => Tuple3 a b c -> Tuple3 a b c -> Boolean;
+private greaterThanEqualsTuple3 !x !y = not (lessThanTuple3 x y);
+
+greaterThanTuple3 :: (Ord a, Ord b, Ord c) => Tuple3 a b c -> Tuple3 a b c -> Boolean;
+private greaterThanTuple3 !x !y = lessThanTuple3 y x;
+
+compareTuple3 :: (Ord a, Ord b, Ord c) => Tuple3 a b c -> Tuple3 a b c -> Ordering;
+private compareTuple3 !x !y =
+    if x < y then LT
+    else if x == y then EQ
+    else GT;
+
+maxTuple3 :: (Ord a, Ord b, Ord c) => Tuple3 a b c -> Tuple3 a b c -> Tuple3 a b c;
+private maxTuple3 !x !y = if x <= y then y else x;
+
+minTuple3 :: (Ord a, Ord b, Ord c) => Tuple3 a b c -> Tuple3 a b c -> Tuple3 a b c;
+private minTuple3 !x !y = if x <= y then x else y;        
+
+tuple3Field1 :: Tuple3 a b c -> a;
+public tuple3Field1 !t =
+    case t of
+    Tuple3 x _ _ -> x;
+    ;
+    
+tuple3Field2 :: Tuple3 a b c -> b;
+public tuple3Field2 !t =
+    case t of
+    Tuple3 _ x _ -> x;
+    ;
+    
+tuple3Field3 :: Tuple3 a b c -> c;
+public tuple3Field3 !t =
+    case t of
+    Tuple3 _ _ x -> x;
+    ;
+    
+instance (Show a, Show b, Show c) => Show (Tuple3 a b c) where
+    show = showTuple3;
+    ;
+
+showTuple3 :: (Show a, Show b, Show c) => (Tuple3 a b c) -> String;
+showTuple3 !x =
+    case x of
+    Tuple3 val1 val2 val3 -> 
+        concat ["LegacyTuple.Tuple3 ", show val1,
+                " ", show val2,
+                " ", show val3];
+    ;
+    
+//////////////////////////////////////////////////////////////////////
+//Tuple4 instances    
+    
+instance (Eq a, Eq b, Eq c, Eq d) => Eq (Tuple4 a b c d) where
+    equals = equalsTuple4;
+    notEquals = notEqualsTuple4;
+    ;
+    
+equalsTuple4 :: (Eq a, Eq b, Eq c, Eq d) => Tuple4 a b c d -> Tuple4 a b c d -> Boolean;
+private equalsTuple4 !x !y =
+    case x of
+    Tuple4 x1 x2 x3 x4 ->
+        case y of
+        Tuple4 y1 y2 y3 y4 ->
+            x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4;
+        ;
+    ;    
+    
+notEqualsTuple4 :: (Eq a, Eq b, Eq c, Eq d) => Tuple4 a b c d -> Tuple4 a b c d -> Boolean;
+private notEqualsTuple4 !x !y = not (equalsTuple4 x y);    
+    
+instance (Ord a, Ord b, Ord c, Ord d) => Ord (Tuple4 a b c d) where
+    lessThan = lessThanTuple4;
+    lessThanEquals = lessThanEqualsTuple4;
+    greaterThanEquals = greaterThanEqualsTuple4;
+    greaterThan = greaterThanTuple4;
+    compare = compareTuple4;
+    max = maxTuple4;
+    min = minTuple4;
+    ; 
+
+lessThanTuple4 :: (Ord a, Ord b, Ord c, Ord d) => Tuple4 a b c d -> Tuple4 a b c d -> Boolean;
+private lessThanTuple4 !x !y =
+    case x of
+    Tuple4 x1 x2 x3 x4 ->
+        case y of
+        Tuple4 y1 y2 y3 y4 ->
+            x1 < y1 || (x1 == y1 && (x2 < y2 || (x2 == y2 && (x3 < y3 || (x3 == y3 && x4 < y4)))));
+        ;
+    ;    
+
+lessThanEqualsTuple4 :: (Ord a, Ord b, Ord c, Ord d) => Tuple4 a b c d -> Tuple4 a b c d -> Boolean;
+private lessThanEqualsTuple4 !x !y = not (lessThanTuple4 y x);
+
+greaterThanEqualsTuple4 :: (Ord a, Ord b, Ord c, Ord d) => Tuple4 a b c d -> Tuple4 a b c d -> Boolean;
+private greaterThanEqualsTuple4 !x !y = not (lessThanTuple4 x y);
+
+greaterThanTuple4 :: (Ord a, Ord b, Ord c, Ord d) => Tuple4 a b c d -> Tuple4 a b c d -> Boolean;
+private greaterThanTuple4 !x !y = lessThanTuple4 y x;
+
+compareTuple4 :: (Ord a, Ord b, Ord c, Ord d) => Tuple4 a b c d -> Tuple4 a b c d -> Ordering;
+private compareTuple4 !x !y =
+    if x < y then LT
+    else if x == y then EQ
+    else GT;
+
+maxTuple4 :: (Ord a, Ord b, Ord c, Ord d) => Tuple4 a b c d -> Tuple4 a b c d -> Tuple4 a b c d;
+private maxTuple4 !x !y = if x <= y then y else x;
+
+minTuple4 :: (Ord a, Ord b, Ord c, Ord d) => Tuple4 a b c d -> Tuple4 a b c d -> Tuple4 a b c d;
+private minTuple4 !x !y = if x <= y then x else y;
+
+tuple4Field1 :: Tuple4 a b c d -> a;
+public tuple4Field1 !t =
+    case t of
+    Tuple4 x _ _ _ -> x;
+    ;
+    
+tuple4Field2 :: Tuple4 a b c d -> b;
+public tuple4Field2 !t =
+    case t of
+    Tuple4 _ x _ _ -> x;
+    ;
+    
+tuple4Field3 :: Tuple4 a b c d -> c;
+public tuple4Field3 !t =
+    case t of
+    Tuple4 _ _ x _ -> x;
+    ;    
+    
+tuple4Field4 :: Tuple4 a b c d -> d;
+public tuple4Field4 !t =
+    case t of
+    Tuple4 _ _ _ x -> x;
+    ;    
+    
+instance (Show a, Show b, Show c, Show d) => Show (Tuple4 a b c d) where
+    show = showTuple4;
+    ;
+
+showTuple4 :: (Show a, Show b, Show c, Show d) => (Tuple4 a b c d) -> String;
+showTuple4 !x =
+    case x of
+    Tuple4 val1 val2 val3 val4 -> 
+        concat ["LegacyTuple.Tuple4 ", show val1,
+                " ", show val2,
+                " ", show val3,
+                " ", show val4];
+    ;
+    
+    
+//////////////////////////////////////////////////////////////////////
+//Tuple5 instances    
+    
+instance (Eq a, Eq b, Eq c, Eq d, Eq e) => Eq (Tuple5 a b c d e) where
+    equals = equalsTuple5;
+    notEquals = notEqualsTuple5;
+    ;
+    
+equalsTuple5 :: (Eq a, Eq b, Eq c, Eq d, Eq e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Boolean;
+private equalsTuple5 !x !y =
+    case x of
+    Tuple5 x1 x2 x3 x4 x5 ->
+        case y of
+        Tuple5 y1 y2 y3 y4 y5 ->
+            x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5;
+        ;
+    ;    
+    
+notEqualsTuple5 :: (Eq a, Eq b, Eq c, Eq d, Eq e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Boolean;
+private notEqualsTuple5 !x !y = not (equalsTuple5 x y);    
+    
+instance (Ord a, Ord b, Ord c, Ord d, Ord e) => Ord (Tuple5 a b c d e) where
+    lessThan = lessThanTuple5;
+    lessThanEquals = lessThanEqualsTuple5;
+    greaterThanEquals = greaterThanEqualsTuple5;
+    greaterThan = greaterThanTuple5;
+    compare = compareTuple5;
+    max = maxTuple5;
+    min = minTuple5;    
+    ; 
+
+lessThanTuple5 :: (Ord a, Ord b, Ord c, Ord d, Ord e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Boolean;
+private lessThanTuple5 !x !y =
+    case x of
+    Tuple5 x1 x2 x3 x4 x5 ->
+        case y of
+        Tuple5 y1 y2 y3 y4 y5 ->
+            x1 < y1 || (x1 == y1 && (x2 < y2 || (x2 == y2 && (x3 < y3 || (x3 == y3 && (x4 < y4 || (x4 == y4 && x5 < y5)))))));
+        ;
+    ;    
+
+lessThanEqualsTuple5 :: (Ord a, Ord b, Ord c, Ord d, Ord e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Boolean;
+private lessThanEqualsTuple5 !x !y = not (lessThanTuple5 y x);
+
+greaterThanEqualsTuple5 :: (Ord a, Ord b, Ord c, Ord d, Ord e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Boolean;
+private greaterThanEqualsTuple5 !x !y = not (lessThanTuple5 x y);
+
+greaterThanTuple5 :: (Ord a, Ord b, Ord c, Ord d, Ord e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Boolean;
+private greaterThanTuple5 !x !y = lessThanTuple5 y x;
+
+compareTuple5 :: (Ord a, Ord b, Ord c, Ord d, Ord e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Ordering;
+private compareTuple5 !x !y =
+    if x < y then LT
+    else if x == y then EQ
+    else GT;
+
+maxTuple5 :: (Ord a, Ord b, Ord c, Ord d, Ord e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Tuple5 a b c d e;
+private maxTuple5 !x !y = if x <= y then y else x;
+
+minTuple5 :: (Ord a, Ord b, Ord c, Ord d, Ord e) => Tuple5 a b c d e -> Tuple5 a b c d e -> Tuple5 a b c d e;
+private minTuple5 !x !y = if x <= y then x else y;
+
+tuple5Field1 :: Tuple5 a b c d e -> a;
+public tuple5Field1 !t =
+    case t of
+    Tuple5 x _ _ _ _ -> x;
+    ;
+    
+tuple5Field2 :: Tuple5 a b c d e -> b;
+public tuple5Field2 !t =
+    case t of
+    Tuple5 _ x _ _ _ -> x;
+    ;
+    
+tuple5Field3 :: Tuple5 a b c d e -> c;
+public tuple5Field3 !t =
+    case t of
+    Tuple5 _ _ x _ _ -> x;
+    ;    
+    
+tuple5Field4 :: Tuple5 a b c d e -> d;
+public tuple5Field4 !t =
+    case t of
+    Tuple5 _ _ _ x _ -> x;
+    ;
+    
+tuple5Field5 :: Tuple5 a b c d e -> e;
+public tuple5Field5 !t =
+    case t of
+    Tuple5 _ _ _ _ x -> x;
+    ;    
+    
+instance (Show a, Show b, Show c, Show d, Show e) => Show (Tuple5 a b c d e) where
+    show = showTuple5;
+    ;
+
+showTuple5 :: (Show a, Show b, Show c, Show d, Show e) => (Tuple5 a b c d e) -> String;
+showTuple5 !x =
+    case x of
+    Tuple5 val1 val2 val3 val4 val5 -> 
+        concat ["LegacyTuple.Tuple5 ", show val1,
+                " ", show val2,
+                " ", show val3,
+                " ", show val4,
+                " ", show val5];
+    ;
+    
+    
+    
+//////////////////////////////////////////////////////////////////////
+//Tuple6 instances    
+    
+instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f) => Eq (Tuple6 a b c d e f) where
+    equals = equalsTuple6;
+    notEquals = notEqualsTuple6;
+    ;
+    
+equalsTuple6 :: (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Boolean;
+private equalsTuple6 !x !y =
+    case x of
+    Tuple6 x1 x2 x3 x4 x5 x6 ->
+        case y of
+        Tuple6 y1 y2 y3 y4 y5 y6 ->
+            x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6;
+        ;
+    ;    
+    
+notEqualsTuple6 :: (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Boolean;
+private notEqualsTuple6 !x !y = not (equalsTuple6 x y);    
+    
+instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Ord (Tuple6 a b c d e f) where
+    lessThan = lessThanTuple6;
+    lessThanEquals = lessThanEqualsTuple6;
+    greaterThanEquals = greaterThanEqualsTuple6;
+    greaterThan = greaterThanTuple6;
+    compare = compareTuple6;
+    max = maxTuple6;
+    min = minTuple6;    
+    ; 
+
+lessThanTuple6 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Boolean;
+private lessThanTuple6 !x !y =
+    case x of
+    Tuple6 x1 x2 x3 x4 x5 x6 ->
+        case y of
+        Tuple6 y1 y2 y3 y4 y5 y6 ->
+            x1 < y1 || (x1 == y1 && (x2 < y2 || (x2 == y2 && (x3 < y3 || (x3 == y3 && (x4 < y4 || (x4 == y4 && (x5 < y5 || (x5 == y5 && x6 < y6)))))))));
+        ;
+    ;    
+
+lessThanEqualsTuple6 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Boolean;
+private lessThanEqualsTuple6 !x !y = not (lessThanTuple6 y x);
+
+greaterThanEqualsTuple6 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Boolean;
+private greaterThanEqualsTuple6 !x !y = not (lessThanTuple6 x y);
+
+greaterThanTuple6 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Boolean;
+private greaterThanTuple6 !x !y = lessThanTuple6 y x;
+
+compareTuple6 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Ordering;
+private compareTuple6 !x !y =
+    if x < y then LT
+    else if x == y then EQ
+    else GT;
+
+maxTuple6 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Tuple6 a b c d e f;
+private maxTuple6 !x !y = if x <= y then y else x;
+
+minTuple6 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) => Tuple6 a b c d e f -> Tuple6 a b c d e f -> Tuple6 a b c d e f;
+private minTuple6 !x !y = if x <= y then x else y;
+
+tuple6Field1 :: Tuple6 a b c d e f -> a;
+public tuple6Field1 !t =
+    case t of
+    Tuple6 x _ _ _ _ _ -> x;
+    ;
+    
+tuple6Field2 :: Tuple6 a b c d e f -> b;
+public tuple6Field2 !t =
+    case t of
+    Tuple6 _ x _ _ _ _ -> x;
+    ;
+    
+tuple6Field3 :: Tuple6 a b c d e f -> c;
+public tuple6Field3 !t =
+    case t of
+    Tuple6 _ _ x _ _ _ -> x;
+    ;    
+    
+tuple6Field4 :: Tuple6 a b c d e f -> d;
+public tuple6Field4 !t =
+    case t of
+    Tuple6 _ _ _ x _ _ -> x;
+    ;
+    
+tuple6Field5 :: Tuple6 a b c d e f -> e;
+public tuple6Field5 !t =
+    case t of
+    Tuple6 _ _ _ _ x _ -> x;
+    ;
+    
+tuple6Field6 :: Tuple6 a b c d e f -> f;
+public tuple6Field6 !t =
+    case t of
+    Tuple6 _ _ _ _ _ x -> x;
+    ;    
+    
+instance (Show a, Show b, Show c, Show d, Show e, Show f) => Show (Tuple6 a b c d e f) where
+    show = showTuple6;
+    ;
+
+showTuple6 :: (Show a, Show b, Show c, Show d, Show e, Show f) => (Tuple6 a b c d e f) -> String;
+showTuple6 !x =
+    case x of
+    Tuple6 val1 val2 val3 val4 val5 val6 -> 
+        concat ["LegacyTuple.Tuple6 ", show val1,
+                " ", show val2,
+                " ", show val3,
+                " ", show val4,
+                " ", show val5,
+                " ", show val6];
+    ;
+    
+//////////////////////////////////////////////////////////////////////
+//Tuple7 instances    
+    
+instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) => Eq (Tuple7 a b c d e f g) where
+    equals = equalsTuple7;
+    notEquals = notEqualsTuple7;
+    ;
+    
+equalsTuple7 :: (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Boolean;
+private equalsTuple7 !x !y =
+    case x of
+    Tuple7 x1 x2 x3 x4 x5 x6 x7 ->
+        case y of
+        Tuple7 y1 y2 y3 y4 y5 y6 y7 ->
+            x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6 && x7 == y7;
+        ;
+    ;    
+    
+notEqualsTuple7 :: (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Boolean;
+private notEqualsTuple7 !x !y = not (equalsTuple7 x y);    
+    
+instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Ord (Tuple7 a b c d e f g) where
+    lessThan = lessThanTuple7;
+    lessThanEquals = lessThanEqualsTuple7;
+    greaterThanEquals = greaterThanEqualsTuple7;
+    greaterThan = greaterThanTuple7;
+    compare = compareTuple7;
+    max = maxTuple7;
+    min = minTuple7;    
+    ; 
+
+lessThanTuple7 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Boolean;
+private lessThanTuple7 !x !y =
+    case x of
+    Tuple7 x1 x2 x3 x4 x5 x6 x7 ->
+        case y of
+        Tuple7 y1 y2 y3 y4 y5 y6 y7 ->
+            x1 < y1 || (x1 == y1 && (x2 < y2 || (x2 == y2 && (x3 < y3 || (x3 == y3 && (x4 < y4 || (x4 == y4 && (x5 < y5 || (x5 == y5 && (x6 < y6 || (x6 == y6 && x7 < y7)))))))))));
+        ;
+    ;    
+
+lessThanEqualsTuple7 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Boolean;
+private lessThanEqualsTuple7 !x !y = not (lessThanTuple7 y x);
+
+greaterThanEqualsTuple7 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Boolean;
+private greaterThanEqualsTuple7 !x !y = not (lessThanTuple7 x y);
+
+greaterThanTuple7 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Boolean;
+private greaterThanTuple7 !x !y = lessThanTuple7 y x;
+
+compareTuple7 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Ordering;
+private compareTuple7 !x !y =
+    if x < y then LT
+    else if x == y then EQ
+    else GT;
+
+maxTuple7 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Tuple7 a b c d e f g;
+private maxTuple7 !x !y = if x <= y then y else x;
+
+minTuple7 :: (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) => Tuple7 a b c d e f g -> Tuple7 a b c d e f g -> Tuple7 a b c d e f g;
+private minTuple7 !x !y = if x <= y then x else y;
+
+tuple7Field1 :: Tuple7 a b c d e f g -> a;
+public tuple7Field1 !t =
+    case t of
+    Tuple7 x _ _ _ _ _ _ -> x;
+    ;
+    
+tuple7Field2 :: Tuple7 a b c d e f g -> b;
+public tuple7Field2 !t =
+    case t of
+    Tuple7 _ x _ _ _ _ _ -> x;
+    ;
+    
+tuple7Field3 :: Tuple7 a b c d e f g -> c;
+public tuple7Field3 !t =
+    case t of
+    Tuple7 _ _ x _ _ _ _ -> x;
+    ;    
+    
+tuple7Field4 :: Tuple7 a b c d e f g -> d;
+public tuple7Field4 !t =
+    case t of
+    Tuple7 _ _ _ x _ _ _ -> x;
+    ;
+    
+tuple7Field5 :: Tuple7 a b c d e f g -> e;
+public tuple7Field5 !t =
+    case t of
+    Tuple7 _ _ _ _ x _ _ -> x;
+    ;
+    
+tuple7Field6 :: Tuple7 a b c d e f g -> f;
+public tuple7Field6 !t =
+    case t of
+    Tuple7 _ _ _ _ _ x _ -> x;
+    ;
+    
+tuple7Field7 :: Tuple7 a b c d e f g -> g;
+public tuple7Field7 !t =
+    case t of
+    Tuple7 _ _ _ _ _ _ x -> x;
+    ;
+    
+instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g) => Show (Tuple7 a b c d e f g) where
+    show = showTuple7;
+    ;
+
+showTuple7 :: (Show a, Show b, Show c, Show d, Show e, Show f, Show g) => (Tuple7 a b c d e f g) -> String;
+showTuple7 !x =
+    case x of
+    Tuple7 val1 val2 val3 val4 val5 val6 val7 -> 
+        concat ["LegacyTuple.Tuple7 ", show val1,
+                " ", show val2,
+                " ", show val3,
+                " ", show val4,
+                " ", show val5,
+                " ", show val6,
+                " ", show val7];
+    ;
+    
+    
+//////////////////////////////////////////////////////////////////////
+// Some standard functions 
+
+//Extracts the first component of a pair.
+fst :: Tuple2 a b -> a;
+public fst !p =
+    case p of
+    Tuple2 x _ -> x;
+    ;
+
+//Extracts the second component of a pair.
+snd :: Tuple2 a b -> b;
+public snd !p =
+    case p of
+    Tuple2 _ y -> y;
+    ;
+
+//Converts a function of a single pair argument to a function accepting 2 input arguments.
+//This function is named after the logician Haskell Curry. 
+curry :: ((Tuple2 a b) -> c) -> (a -> b -> c);
+public curry !f x y = f (Tuple2 x y);
+
+//Converts a function of 2 arguments to a function of a single pair argument.
+uncurry :: (a -> b -> c) -> (Tuple2 a b) -> c;
+public uncurry !f !p = f (fst p) (snd p);
+
+//zip converts 2 lists into a list of pairs.
+//e.g. zip [6, 3] [10, 20, 30] = [(6,10), (3, 20)]
+zip :: [a] -> [b] -> [Tuple2 a b];
+//public zip = zipWith Tuple2;
+public zip !list1 list2 =
+    case list1 of
+    a : a_s ->
+        case list2 of
+        b : bs -> (Tuple2 a b) : zip a_s bs;
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+zip3 :: [a] -> [b] -> [c] -> [Tuple3 a b c];
+//public zip3 = zipWith3 Tuple3;
+public zip3 !list1 list2 list3 =
+    case list1 of
+    a : a_s ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs -> (Tuple3 a b c) : zip3 a_s bs cs;
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+zip4 :: [a] -> [b] -> [c] -> [d] -> [Tuple4 a b c d];
+//public zip4 = zipWith4 Tuple4;
+public zip4 !list1 list2 list3 list4 =
+    case list1 of
+    a : a_s ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds -> (Tuple4 a b c d) : zip4 a_s bs cs ds;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+zip5 :: [a] -> [b] -> [c] -> [d] -> [e] -> [Tuple5 a b c d e];
+//public zip5 = zipWith5 Tuple5;
+public zip5 !list1 list2 list3 list4 list5 =
+    case list1 of
+    a : a_s ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es -> (Tuple5 a b c d e) : zip5 a_s bs cs ds es;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+zip6 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [Tuple6 a b c d e f];
+//public zip6 = zipWith6 Tuple6;
+public zip6 !list1 list2 list3 list4 list5 list6 =
+    case list1 of
+    a : a_s ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es ->
+                        case list6 of
+                        f : fs -> (Tuple6 a b c d e f) : zip6 a_s bs cs ds es fs;
+                        [] -> [];
+                        ;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+zip7 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [Tuple7 a b c d e f g];
+//public zip7 = zipWith7 Tuple7;
+public zip7 !list1 list2 list3 list4 list5 list6 list7 =
+    case list1 of
+    a : a_s ->
+        case list2 of
+        b : bs ->
+            case list3 of
+            c : cs ->
+                case list4 of
+                d : ds ->
+                    case list5 of
+                    e : es ->
+                        case list6 of
+                        f : fs ->
+                            case list7 of
+                            g : gs -> (Tuple7 a b c d e f g) : zip7 a_s bs cs ds es fs gs;
+                            [] -> [];
+                            ;
+                        [] -> [];
+                        ;
+                    [] -> [];
+                    ;
+                [] -> [];
+                ;           
+            [] -> [];
+            ;       
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+
+//todoBI it would be nice if the unzipn family of functions could be defined more functorially
+//Transforms a list of pairs into a pair of lists.
+//todoBI the Haskell Prelude defines unzip in terms of foldRight with a lazy pattern match
+unzip :: [Tuple2 a b] -> (Tuple2 [a] [b]);
+public unzip !list =
+    case list of
+    [] -> Tuple2 [] [];
+    x : xs ->
+        let 
+            //ys :: ([a], [b]);
+            ys = unzip xs;           
+        in
+            case x of
+            Tuple2 x1 x2 ->
+                Tuple2 (x1 : fst ys) (x2 : snd ys);
+            ;
+    ;
+
+unzip3 :: [Tuple3 a b c] -> (Tuple3 [a] [b] [c]);                  
+public unzip3 !list =
+    case list of
+    [] -> Tuple3 [] [] [];
+    x : xs ->    
+        let
+            //ys :: ([a], [b], [c]);
+            ys = unzip3 xs;            
+        in
+            case x of
+            Tuple3 x1 x2 x3 ->
+                //do not do a "case" on the ys, since this makes unzip3 strictly evaluate the list!
+                Tuple3 (x1 : tuple3Field1 ys) (x2 : tuple3Field2 ys) (x3 : tuple3Field3 ys);
+            ;
+    ;      
+                                
+unzip4 :: [Tuple4 a b c d] -> (Tuple4 [a] [b] [c] [d]);
+public unzip4 !list =
+    case list of
+    [] -> Tuple4 [] [] [] [];
+    x : xs -> 
+        let
+            ys = unzip4 xs;            
+        in 
+            case x of
+            Tuple4 x1 x2 x3 x4 ->
+                Tuple4 (x1 : tuple4Field1 ys) (x2 : tuple4Field2 ys) (x3 : tuple4Field3 ys) (x4 : tuple4Field4 ys);                
+            ;
+    ;
+
+unzip5 :: [Tuple5 a b c d e] -> (Tuple5 [a] [b] [c] [d] [e]);
+public unzip5 !list =
+    case list of
+    [] -> Tuple5 [] [] [] [] [];
+    x : xs -> 
+        let
+            ys = unzip5 xs;            
+        in
+            case x of
+            Tuple5 x1 x2 x3 x4 x5 ->
+                Tuple5 (x1 : tuple5Field1 ys) (x2 : tuple5Field2 ys) (x3 : tuple5Field3 ys) (x4 : tuple5Field4 ys) (x5 : tuple5Field5 ys);                
+            ;
+    ;
+
+unzip6 :: [Tuple6 a b c d e f] -> (Tuple6 [a] [b] [c] [d] [e] [f]);
+public unzip6 !list =
+    case list of
+    [] -> Tuple6 [] [] [] [] [] [];
+    x : xs ->     
+        let
+            ys = unzip6 xs;           
+        in
+            case x of
+            Tuple6 x1 x2 x3 x4 x5 x6 ->
+                Tuple6 (x1 : tuple6Field1 ys) (x2 : tuple6Field2 ys) (x3 : tuple6Field3 ys) (x4 : tuple6Field4 ys) (x5 : tuple6Field5 ys) (x6 : tuple6Field6 ys);                
+            ;
+    ;
+
+unzip7 :: [Tuple7 a b c d e f g] -> (Tuple7 [a] [b] [c] [d] [e] [f] [g]);
+public unzip7 !list =
+    case list of
+    [] -> Tuple7 [] [] [] [] [] [] [];
+    x : xs ->    
+        let
+            ys = unzip7 xs;            
+        in
+            case x of            
+            Tuple7 x1 x2 x3 x4 x5 x6 x7 ->
+                Tuple7 (x1 : tuple7Field1 ys) (x2 : tuple7Field2 ys) (x3 : tuple7Field3 ys) (x4 : tuple7Field4 ys) (x5 : tuple7Field5 ys) (x6 : tuple7Field6 ys) (x7 : tuple7Field7 ys);                
+            ;
+    ;
+
+////
+//Inputtable/Outputtable instances
+////
+    
+//  Tuple2
+
+private inputTuple2Examples = 
+    let
+        obj1 = output (Tuple2 'a' 'b');
+        obj2 = output (Tuple2 "string" 10.0);
+    in
+        equals (input obj1) (Tuple2 'a' 'b') &&
+        equals (input obj2) (Tuple2 "string" 10.0);
+        
+instance (Inputable a, Inputable b) => Inputable (Tuple2 a b) where
+    input = inputTuple2FromJObject;
+    ;
+
+inputTuple2FromJObject :: (Inputable a, Inputable b) => JObject -> Tuple2 a b;
+private inputTuple2FromJObject tuple = inputTuple2 (jCast_objectToList tuple);
+
+inputTuple2 :: (Inputable a, Inputable b) => JList -> Tuple2 a b;
+public inputTuple2 tuple =
+    inputTuple2With tuple input input;
+
+inputTuple2With :: JList -> (JObject -> a) -> (JObject -> b) -> Tuple2 a b;
+public inputTuple2With tuple field1Function field2Function =
+    Tuple2 (field1Function (jList_get tuple 0))
+           (field2Function (jList_get tuple 1));
+
+instance (Outputable a, Outputable b) => Outputable (Tuple2 a b) where
+    output = outputTuple2ToJObject;
+    ;
+
+outputTuple2ToJObject :: (Outputable a, Outputable b) => Tuple2 a b-> JObject;
+private outputTuple2ToJObject tuple = output (outputTuple2 tuple);
+
+outputTuple2 :: (Outputable a, Outputable b) => Tuple2 a b -> JList;
+public outputTuple2 tuple = outputTuple2With tuple output output;
+
+outputTuple2With :: Tuple2 a b -> (a -> JObject) -> (b -> JObject) -> JList;
+public outputTuple2With tuple field1Function field2Function =
+    case tuple of
+    Tuple2 field1 field2 -> jList_new_list2 (field1Function field1) (field2Function field2);
+    ;
+
+
+//  Tuple3
+
+instance (Inputable a, Inputable b, Inputable c) => Inputable (Tuple3 a b c) where
+    input = inputTuple3FromJObject;
+    ;
+
+inputTuple3FromJObject :: (Inputable a, Inputable b, Inputable c) => JObject -> Tuple3 a b c;
+private inputTuple3FromJObject tuple = inputTuple3 (jCast_objectToList tuple);
+
+inputTuple3 :: (Inputable a, Inputable b, Inputable c) => JList -> Tuple3 a b c;
+public inputTuple3 tuple =
+    inputTuple3With tuple input input input;
+
+inputTuple3With :: (Inputable a, Inputable b, Inputable c) => JList -> (JObject -> a) -> (JObject -> b) -> (JObject -> c) -> Tuple3 a b c;
+public inputTuple3With tuple field1Function field2Function field3Function =
+    Tuple3 (field1Function (jList_get tuple 0))
+           (field2Function (jList_get tuple 1))
+           (field3Function (jList_get tuple 2));
+
+instance (Outputable a, Outputable b, Outputable c) => Outputable (Tuple3 a b c) where
+    output = outputTuple3ToJObject;
+    ;
+
+outputTuple3ToJObject :: (Outputable a, Outputable b, Outputable c) => Tuple3 a b c-> JObject;
+private outputTuple3ToJObject tuple = output (outputTuple3 tuple);
+
+outputTuple3 :: (Outputable a, Outputable b, Outputable c) => Tuple3 a b c -> JList;
+public outputTuple3 tuple = outputTuple3With tuple output output output;
+
+outputTuple3With :: Tuple3 a b c -> (a -> JObject) -> (b -> JObject) -> (c -> JObject) -> JList;
+public outputTuple3With tuple field1Function field2Function field3Function =
+    case tuple of
+    Tuple3 field1 field2 field3 -> jList_new_list3 (field1Function field1) (field2Function field2) (field3Function field3);
+    ;
+    
+
+//  Tuple4
+
+instance (Inputable a, Inputable b, Inputable c, Inputable d) => Inputable (Tuple4 a b c d) where
+    input = inputTuple4FromJObject;
+    ;
+
+inputTuple4FromJObject :: (Inputable a, Inputable b, Inputable c, Inputable d) => JObject -> Tuple4 a b c d;
+private inputTuple4FromJObject tuple = inputTuple4 (jCast_objectToList tuple);
+
+inputTuple4 :: (Inputable a, Inputable b, Inputable c, Inputable d) => JList -> Tuple4 a b c d;
+public inputTuple4 tuple =
+    inputTuple4With tuple input input input input;
+
+inputTuple4With :: (Inputable a, Inputable b, Inputable c, Inputable d) => JList -> (JObject -> a) -> (JObject -> b) -> (JObject -> c) -> (JObject -> d) -> Tuple4 a b c d;
+public inputTuple4With tuple field1Function field2Function field3Function field4Function =
+    Tuple4 (field1Function (jList_get tuple 0))
+           (field2Function (jList_get tuple 1))
+           (field3Function (jList_get tuple 2))
+           (field4Function (jList_get tuple 3));
+
+instance (Outputable a, Outputable b, Outputable c, Outputable d) => Outputable (Tuple4 a b c d) where
+    output = outputTuple4ToJObject;
+    ;
+
+outputTuple4ToJObject :: (Outputable a, Outputable b, Outputable c, Outputable d) => Tuple4 a b c d-> JObject;
+private outputTuple4ToJObject tuple = output (outputTuple4 tuple);
+
+outputTuple4 :: (Outputable a, Outputable b, Outputable c, Outputable d) => Tuple4 a b c d -> JList;
+public outputTuple4 tuple = outputTuple4With tuple output output output output;
+
+outputTuple4With :: Tuple4 a b c d -> (a -> JObject) -> (b -> JObject) -> (c -> JObject) -> (d -> JObject) -> JList;
+public outputTuple4With tuple field1Function field2Function field3Function field4Function=
+    case tuple of
+    Tuple4 field1 field2 field3 field4 -> jList_new_list4 (field1Function field1) (field2Function field2) (field3Function field3) (field4Function field4);
+    ;
+    
+
+//  Tuple5
+
+instance (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e) => Inputable (Tuple5 a b c d e) where
+    input = inputTuple5FromJObject;
+    ;
+
+inputTuple5FromJObject :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e) => JObject -> Tuple5 a b c d e;
+private inputTuple5FromJObject tuple = inputTuple5 (jCast_objectToList tuple);
+
+inputTuple5 :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e) => JList -> Tuple5 a b c d e;
+public inputTuple5 tuple =
+    inputTuple5With tuple input input input input input;
+
+inputTuple5With :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e) => JList -> (JObject -> a) -> (JObject -> b) -> (JObject -> c) -> (JObject -> d) -> (JObject -> e) -> Tuple5 a b c d e;
+public inputTuple5With tuple field1Function field2Function field3Function field4Function field5Function =
+    Tuple5 (field1Function (jList_get tuple 0))
+           (field2Function (jList_get tuple 1))
+           (field3Function (jList_get tuple 2))
+           (field4Function (jList_get tuple 3))
+           (field5Function (jList_get tuple 4));
+
+instance (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e) => Outputable (Tuple5 a b c d e) where
+    output = outputTuple5ToJObject;
+    ;
+
+outputTuple5ToJObject :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e) => Tuple5 a b c d e-> JObject;
+private outputTuple5ToJObject tuple = output (outputTuple5 tuple);
+
+outputTuple5 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e) => Tuple5 a b c d e -> JList;
+public outputTuple5 tuple = outputTuple5With tuple output output output output output;
+
+outputTuple5With :: Tuple5 a b c d e -> (a -> JObject) -> (b -> JObject) -> (c -> JObject) -> (d -> JObject) -> (e -> JObject) -> JList;
+public outputTuple5With tuple field1Function field2Function field3Function field4Function field5Function =
+    case tuple of
+    Tuple5 field1 field2 field3 field4 field5 -> jList_new_list5 (field1Function field1) (field2Function field2) (field3Function field3) (field4Function field4) (field5Function field5);
+    ;
+    
+
+//  Tuple6
+    
+instance (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f) => Inputable (Tuple6 a b c d e f) where
+    input = inputTuple6FromJObject;
+    ;
+
+inputTuple6FromJObject :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f) => JObject -> Tuple6 a b c d e f;
+private inputTuple6FromJObject tuple = inputTuple6 (jCast_objectToList tuple);
+
+inputTuple6 :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f) => JList -> Tuple6 a b c d e f;
+public inputTuple6 tuple =
+    inputTuple6With tuple input input input input input input;
+
+inputTuple6With :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f) => JList -> (JObject -> a) -> (JObject -> b) -> (JObject -> c) -> (JObject -> d) -> (JObject -> e) -> (JObject -> f) -> Tuple6 a b c d e f;
+public inputTuple6With tuple field1Function field2Function field3Function field4Function field5Function field6Function =
+    Tuple6 (field1Function (jList_get tuple 0))
+           (field2Function (jList_get tuple 1))
+           (field3Function (jList_get tuple 2))
+           (field4Function (jList_get tuple 3))
+           (field5Function (jList_get tuple 4))
+           (field6Function (jList_get tuple 5));
+
+instance (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f) => Outputable (Tuple6 a b c d e f) where
+    output = outputTuple6ToJObject;
+    ;
+
+outputTuple6ToJObject :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f) => Tuple6 a b c d e f-> JObject;
+private outputTuple6ToJObject tuple = output (outputTuple6 tuple);
+
+outputTuple6 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f) => Tuple6 a b c d e f -> JList;
+public outputTuple6 tuple = outputTuple6With tuple output output output output output output;
+
+outputTuple6With :: Tuple6 a b c d e f -> (a -> JObject) -> (b -> JObject) -> (c -> JObject) -> (d -> JObject) -> (e -> JObject) -> (f -> JObject) -> JList;
+public outputTuple6With tuple field1Function field2Function field3Function field4Function field5Function field6Function =
+    case tuple of
+    Tuple6 field1 field2 field3 field4 field5 field6 -> jList_new_list6 (field1Function field1) (field2Function field2) (field3Function field3) (field4Function field4) (field5Function field5) (field6Function field6);
+    ;
+    
+
+//  Tuple7
+
+instance (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f, Inputable g) => Inputable (Tuple7 a b c d e f g) where
+    input = inputTuple7FromJObject;
+    ;
+
+inputTuple7FromJObject :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f, Inputable g) => JObject -> Tuple7 a b c d e f g;
+private inputTuple7FromJObject tuple = inputTuple7 (jCast_objectToList tuple);
+
+inputTuple7 :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f, Inputable g) => JList -> Tuple7 a b c d e f g;
+public inputTuple7 tuple =
+    inputTuple7With tuple input input input input input input input;
+
+inputTuple7With :: (Inputable a, Inputable b, Inputable c, Inputable d, Inputable e, Inputable f, Inputable g) => JList -> (JObject -> a) -> (JObject -> b) -> (JObject -> c) -> (JObject -> d) -> (JObject -> e) -> (JObject -> f) -> (JObject -> g) -> Tuple7 a b c d e f g;
+public inputTuple7With tuple field1Function field2Function field3Function field4Function field5Function field6Function field7Function =
+    Tuple7 (field1Function (jList_get tuple 0))
+           (field2Function (jList_get tuple 1))
+           (field3Function (jList_get tuple 2))
+           (field4Function (jList_get tuple 3))
+           (field5Function (jList_get tuple 4))
+           (field6Function (jList_get tuple 5))
+           (field7Function (jList_get tuple 6));
+
+instance (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f, Outputable g) => Outputable (Tuple7 a b c d e f g) where
+    output = outputTuple7ToJObject;
+    ;
+
+outputTuple7ToJObject :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f, Outputable g) => Tuple7 a b c d e f g-> JObject;
+private outputTuple7ToJObject tuple = output (outputTuple7 tuple);
+
+outputTuple7 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f, Outputable g) => Tuple7 a b c d e f g -> JList;
+public outputTuple7 tuple = outputTuple7With tuple output output output output output output output;
+
+outputTuple7With :: Tuple7 a b c d e f g -> (a -> JObject) -> (b -> JObject) -> (c -> JObject) -> (d -> JObject) -> (e -> JObject) -> (f -> JObject) -> (g -> JObject) -> JList;
+public outputTuple7With tuple field1Function field2Function field3Function field4Function field5Function field6Function field7Function =
+    case tuple of
+    Tuple7 field1 field2 field3 field4 field5 field6 field7-> jList_new_list7 (field1Function field1) (field2Function field2) (field3Function field3) (field4Function field4) (field5Function field5) (field6Function field6) (field7Function field7);
+    ;
+    
+
+checkForInputOutputIdentity :: (Eq a, Outputable a, Inputable a) => a -> Boolean; 
+private checkForInputOutputIdentity val =
+    equals val (input (output val));
+    
+private testInputOutputIdentity =
+    checkForInputOutputIdentity ('a', 'b') 
+    && checkForInputOutputIdentity ('a', 'b', 'c') 
+    && checkForInputOutputIdentity ('a', 'b', 'c', 'd') 
+    && checkForInputOutputIdentity ('a', 'b', 'c', 'd', 'e') 
+    && checkForInputOutputIdentity ('a', 'b', 'c', 'd', 'e', 'f') 
+    && checkForInputOutputIdentity ('a', 'b', 'c', 'd', 'e', 'f', 'g') 
+    && checkForInputOutputIdentity ("string", 'b') 
+    && checkForInputOutputIdentity ("string", 'b', (12 :: Int)) 
+    && checkForInputOutputIdentity ("string", 'b', (12 :: Int), (17 :: Prelude.Integer)) 
+    && checkForInputOutputIdentity ("string", 'b', (12 :: Int), (17 :: Prelude.Integer), 127.9) 
+    && checkForInputOutputIdentity ("string", 'b', (12 :: Int), (17 :: Prelude.Integer), 127.9, ['a','b','c']) 
+    && checkForInputOutputIdentity ("string", 'b', (12 :: Int), (17 :: Prelude.Integer), 127.9, ['a','b','c'], False); 
+    
+public testLegacyTupleModule =
+    equalsTuple2Examples
+    && greaterThanTuple2Examples
+    && testInputOutputIdentity
+    || error "LegacyTuple.testLegacyTupleModule failed.";
+

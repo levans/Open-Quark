@@ -1,0 +1,1425 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+ 
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ 
+    * Neither the name of Business Objects nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    EffectiveCAL.xml
+    Creation date: Mar 1, 2007.
+    By: Edward Lam
+-->
+<!DOCTYPE article [
+<!ENTITY % sgml.features "IGNORE">
+<!ENTITY % xml.features "INCLUDE">
+<!ENTITY euro "&#8364;">
+<!ENTITY % dbcent PUBLIC "-//OASIS//ENTITIES DocBook Character Entities V4.4//EN" "http://www.oasis-open.org/docbook/xml/4.4/dbcentx.mod">
+%dbcent;
+
+<!ENTITY legal SYSTEM "LegalNotice.xml">
+]>
+<article class="techreport" version="5.0" xmlns="http://docbook.org/ns/docbook"
+         xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xi="http://www.w3.org/2001/XInclude"
+         xmlns:svg="http://www.w3.org/2000/svg" xmlns:mml="http://www.w3.org/1998/Math/MathML"
+         xmlns:html="http://www.w3.org/1999/xhtml" xmlns:db="http://docbook.org/ns/docbook">
+  <title>Effective CAL</title>
+
+  <info>
+    <releaseinfo>Last modified: August 24, 2007</releaseinfo>
+
+    <author>
+      <personname>Bo Ilic</personname>
+    </author>
+  </info>
+
+  <simplesect>
+    <title>Introduction</title>
+
+    <para>What follows is a series of essays describing particular topics of interest in writing
+    readable, maintainable, extensible and efficient CAL programs. They are intended to be in the
+    spirit of the Effective C++ and Effective Java books - intermediate in level, but useful general
+    information for pragmatic programming. These essays assume that you are familiar with the basics
+    of CAL such as could be obtained by reading the CAL User's Guide, learning to use the
+    Interactive CAL Environment (ICE) and the GemCutter, reading through some of the code in the
+    standard CAL modules, and writing a bit of CAL for yourself. The essays are not self-contained,
+    so don't worry if you don't understand everything at first. Hopefully things will become clearer
+    as you read on. Please send feedback, including suggestions for new "Effective CAL" essays to
+    the CAL Language Discussion forum on Google Groups <link
+    xlink:href="http://groups.google.com/group/cal_language" />.</para>
+  </simplesect>
+
+  <section>
+    <title>What is Weak Head Normal Form and why is it useful?</title>
+
+    <para>CAL is a lazy language, so by default, when asked to evaluate an expression it does as
+    little work as possible before stopping the evaluation and allowing the client to do something
+    else. This smallest unit of work is called evaluating the expression to <emphasis>weak head
+    normal form</emphasis> (or <abbrev>WHNF</abbrev> for short). Understanding WHNF is important for
+    understanding the operational semantics of CAL, that is, the actual steps that CAL takes in
+    evaluating an expression. For example, to evaluate a case expression, <code>case conditionExpr
+    of ...</code> the first thing that CAL will do is evaluate <code>conditionExpr</code> to WHNF.
+    At that point it will be able to choose which branch of the case to continue evaluating.</para>
+
+    <para>What WHNF means depends on the particular form of the expression.</para>
+
+    <para>Literal values and literal functions are in WHNF. For example, the following expressions
+    are in WHNF: <informalexample>
+        <para>
+          <screen>2.0
+'m'
+"apple"
+Math.cos
+List.head
+Prelude.equals</screen>
+        </para>
+      </informalexample></para>
+
+    <para>Values of a foreign type that are actual Java objects of the corresponding implementation
+    type are in WHNF. For example, the CAL type JList corresponds to the Java type java.util.List.
+    If a JList value is an actual java.util.List object, as opposed to a computation that results in
+    a java.util.List object, then that value is in WHNF.</para>
+
+    <para>Any time a function or class method has been supplied with enough arguments to be
+    evaluated, then that expression is not in WHNF. For example, the following expressions are
+    listed in pairs, the first is not in WHNF, the second is the first after having been evaluated
+    to WHNF:</para>
+
+    <informalexample>
+      <literallayout><userinput>id 99.0</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>99.0</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>2.0 + 5.0</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>7.0</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>(2.0 + 1.0) * 5.0</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>15.0</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>List.outputList [3 :: Int, 1, 4]</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <returnvalue>a java.util.List object holding 3 java.lang.Integer values 3, 1 and 4.</returnvalue></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>"help" ++ "ful"</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>"helpful"</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>Math.cos 0</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>1.0</computeroutput></literallayout>
+    </informalexample>
+
+    <para>Note that <code>+</code>, <code>*</code> and <code>++</code> are the operator forms of the
+    class methods <code>Prelude.add</code>, <code>Prelude.multiply</code> and
+    <code>Prelude.append</code>.</para>
+
+    <para>It is important to note that the above rule does not apply to <emphasis>data
+    constructors</emphasis> that have been supplied with enough arguments to be evaluated. In fact,
+    this is one of the major differences between data constructors and functions or class methods.
+    Luckily, data constructor names always start with a capital letter while function or class
+    method names start with a lower case letter so it is easy to distinguish these cases.</para>
+
+    <para>A data constructor is always in WHNF, regardless of the form of its arguments. For example
+    the following are examples of expressions in WHNF.<screen>Left ("aard" ++ "vark")
+Just (2.0 + 9.0)
+[sin 0, cos 0, 3 + 5]
+[] 
+GT
+True</screen></para>
+
+    <para>Note, in the case of the list<screen><code>[sin 0, cos 0, 3 + 5]</code></screen>this is
+    shorthand notation for<screen><code>(sin 0) : (cos 0) : (3 + 5) : []</code></screen>which using
+    the textual form for the <code>:</code> and <code>[]</code> operators (<code>Cons</code> and
+    <code>Nil</code>) is just<screen>Cons (sin 0) (Cons (cos 0) (Cons (3 + 5) Nil))</screen></para>
+
+    <para>This is just a data constructor applied to 2 arguments, so it is by definition in
+    WHNF.</para>
+
+    <para>Record values and tuple values (which are just a special kind of record value) are
+    automatically in WHNF. For example, the following expressions are in WHNF:<informalexample>
+        <screen>(2.0, 'm', "pear")</screen>
+      </informalexample><informalexample>
+        <screen>(2.0 + 5.0, "this" ++ "that")</screen>
+      </informalexample><informalexample>
+        <screen>{name = "Anton", age = 1.0 + 1.0, occupation = String.fromList ['b', 'a', 'b', 'y']}</screen>
+      </informalexample></para>
+
+    <para>Expressions which are function calls for which not enough arguments have been supplied are
+    in WHNF. For example, the following expressions are in WHNF:<informalexample>
+        <programlisting>//power takes 2 arguments, only 1 supplied
+power (2.0 + 3.0)</programlisting>
+      </informalexample><informalexample>
+        <programlisting>//add takes 2 arguments, only 1 supplied
+add (sin 0)</programlisting>
+      </informalexample></para>
+
+    <para>Expressions which are lambda expressions for which not enough arguments have been supplied
+    are in WHNF. For example the following are in WHNF:<informalexample>
+        <screen>(\x y -&gt; x + y) 2.0
+(\x -&gt; head [x])
+(\x y -&gt; cos 0 + x - y) 100.0</screen>
+      </informalexample>let expressions are in WHNF if the expression following the "in" is in
+    WHNF.</para>
+
+    <para>Expressions in forms other than mentioned above are not in WHNF. In particular, the
+    following are not in WHNF:<itemizedlist spacing="compact">
+        <listitem>
+          <para>applications, other than those forms explicitly mentioned above</para>
+        </listitem>
+
+        <listitem>
+          <para>lambda expressions with enough arguments supplied</para>
+        </listitem>
+
+        <listitem>
+          <para>if-then-else expressions</para>
+        </listitem>
+
+        <listitem>
+          <para>case expressions</para>
+        </listitem>
+
+        <listitem>
+          <para>data constructor field selection expressions</para>
+        </listitem>
+
+        <listitem>
+          <para>record field selection expressions</para>
+        </listitem>
+
+        <listitem>
+          <para>record extension expressions</para>
+        </listitem>
+      </itemizedlist></para>
+
+    <para>The following expressions are listed in pairs. The first is not in WHNF and the second is
+    the evaluation to WHNF:</para>
+
+    <informalexample>
+      <literallayout><userinput>fromJust (Just (2.0 + 9.0))</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>11.0</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>(2.0 + 5.0, "this" ++ "that").#2</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>"thisthat"</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>tail [sin 0, cos 0, 3 + 5]</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>[cos 0, 3 + 5]</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>head [add (2.0 + 3.0)]</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>5.0</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>(\x y -&gt; x + y) 3.0 7.0</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>10.0</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>(\r -&gt; {r | name = "Anton"}) {occupation = "baby", age = 1.0 + 1.0}</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>{name = "Anton", occupation = "baby", age = 1.0 + 1.0}</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>if True then Just (cos 0) else Nothing</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>Just (cos 0)</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>case compare 10.0 20.0 of LT -&gt; Left (2.0 + 5.0); _ -&gt; Right (6.0 + 8.0);</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>Left (2.0 + 5.0)</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>case compare 10.0 20.0 of LT -&gt; 2.0 + 5.0; _ -&gt; 6.0 * 8.0;</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>7.0</computeroutput></literallayout>
+    </informalexample>
+
+    <informalexample>
+      <literallayout><userinput>(Just (Left ("abc" ++ "def"))).Just.value</userinput>
+<emphasis role="bold-italic">WHNF</emphasis> <computeroutput>Left ("abc" ++ "def")</computeroutput></literallayout>
+    </informalexample>
+  </section>
+
+  <section>
+    <title>How are expressions in CAL evaluated?</title>
+
+    <para>To evaluate an expression in CAL means to evaluate an expression to weak-head normal form
+    or WHNF. CAL will always stop at that point, and allow clients, such as an enclosing context, to
+    determine what to do next.</para>
+
+    <para>This may seem surprising because of the behavior of ICE.</para>
+
+    <para>For example, if on the ICE command line you type the following expression, which is
+    already in WHNF:</para>
+
+    <para>
+      <userinput>Just (2.0 + 3.0)</userinput>
+    </para>
+
+    <para>ICE returns:</para>
+
+    <screen><computeroutput>(Prelude.Just 7.0)</computeroutput></screen>
+
+    <para>The reason for this is that expressions on the ICE command line are automatically prefixed
+    by Prelude.output to convert them to a Java object. What is really being run is
+    <code>Prelude.output (Just (2.0 + 3.0)) :: JObject</code></para>
+
+    <para>The behavior of the output class method on the Maybe Double type is defined by the
+    Outputable Maybe and Outputable Double instances. In this case they will output to a java value
+    of type org.openquark.cal.foreignsupport.module.Prelude.MaybeValue. This Java object then has
+    the toString() Java method called on it which produces the output above.</para>
+
+    <para>To evaluate a case expression, <code>case conditionExpr of ...</code>, the
+    <code>conditionExpr</code> is evaluated to WHNF. <code>conditionExpr</code> will then be either
+    a data constructor application, a literal Int, a literal Char, or a record value. At this point,
+    CAL can decide which branch of the case expression to follow, and it evaluates that branch to
+    WHNF. Note that even if the case expression has only 1 branch, the conditionExpr will first be
+    evaluated to WHNF.</para>
+
+    <para><screen>case (Just (2.0 + 7.0)) of Nothing -&gt; "bad"; Just x -&gt; "good";</screen>returns
+    "<computeroutput>good</computeroutput>", without ever evaluating 2.0 + 7.0, since <code>Just
+    (2.0 + 7.0)</code> is already in WHNF.</para>
+
+    <para>How can we tell that 2.0 + 7.0 is not evaluated? The main techniques here involves using
+    the trace, error and seq functions to modify the expression such that a failure of some sort
+    (either a message to the console when using trace, or terminating execution using error) is
+    triggered if the offending expression is evaluated. For example, the following expressions typed
+    into the ICE console also just return "<computeroutput>good</computeroutput>", without logging a
+    message or an exception: <informalexample>
+        <screen>case (Just (trace "we have a problem" (2.0 + 7.0))) of Nothing -&gt; "bad"; Just x -&gt; "good";</screen>
+      </informalexample> <informalexample>
+        <screen>case (Just (error "we have a problem" `seq` (2.0 + 7.0))) of Nothing -&gt; "bad"; Just x -&gt; "good";</screen>
+      </informalexample></para>
+
+    <para>You can alter the original expression in a variety of ways. These still return
+    "<computeroutput>good</computeroutput>":<informalexample>
+        <screen>case (Just (error "we have a problem")) of Nothing -&gt; "bad"; Just x -&gt; "good";</screen>
+      </informalexample><informalexample>
+        <screen>case (Just ((error "we have a problem") + 7.0)) of Nothing -&gt; "bad"; Just x -&gt; "good";</screen>
+      </informalexample></para>
+
+    <para>As mentioned above, even if the case expression has only one branch, the conditionExpr is
+    still evaluated. You can see this in ICE for example with the expression:<screen>case (error "will stop here") of {name, age} -&gt; "hello";</screen>This
+    will terminate in an error displaying the message "<computeroutput>will stop
+    here</computeroutput>".</para>
+
+    <para>Evaluating an if-then-else expression is similar to evaluating a case-expression. The
+    conditionExpr is evaluated to WHNF. Since the conditionExpr in an if-then-else has type Boolean,
+    this must be either the value True or False. Then the appropriate branch is selected, and
+    evaluated to WHNF.</para>
+
+    <para>In the functional programming literature, the evaluation algorithm of CAL is said to
+    evaluate expressions in <emphasis>leftmost-outermost</emphasis> order. What this means is that,
+    first of all, outermost expressions are evaluated prior to inner expressions being evaluated.
+    For example, in expressions such as "f expr1 (g expr2)", the application of f to the 2 arguments
+    expr1 and (g expr2) is performed prior to the application of g to its argument expr2. The
+    leftmost order means that for a function application (f expr1 expr2), expr1 is evaluated prior
+    to expr2 i.e. in left-to-right order. This is true for many functions, for example, all foreign
+    functions evaluate their arguments to WHNF in left-to-right order. However, it is not true in
+    general of all CAL functions, but rather it is a property of the individual function f.</para>
+
+    <para>For example, the function <screen>f x y = "hello";</screen> will not evaluate either of
+    its arguments to WHNF, since it ignores its arguments.</para>
+
+    <para>The function <screen>f :: Int -&gt; Int -&gt; Int;
+f x y = y - x;</screen> will evaluate y to WHNF first, followed by evaluating x to WHNF.</para>
+
+    <para>The function <screen>iff :: Boolean -&gt; a -&gt; a -&gt; a;
+iff b x y = if b then x else y;</screen> will evaluate b to WHNF first, followed by evaluating x to
+    WHNF if b is TRUE and y to WHNF if b is false.</para>
+
+    <para>So for example, both expressions below return "<computeroutput>OK</computeroutput>":
+    <screen>iff True "OK" (error "we have a problem")</screen> <screen>iff False (error "we have a problem") "OK"</screen></para>
+
+    <para>Evaluating an application expression first evaluates the left-hand-side of the application
+    to WHNF, and then attempts to apply the resulting function. For example, the application<screen>expr1 expr2 expr3</screen>with
+    parentheses inserted to account for the left ascociativity of application is: <screen>(expr1 expr2) expr3</screen></para>
+
+    <para>So to evaluate this, we first must evaluate (expr1 expr2) to WHNF, which means first
+    evaluating expr1 to WHNF.</para>
+
+    <para>For example,<screen>(head [power]) (1.0 + 1.0) (2.0 + 1.0)</screen>will first evaluate
+    (head [power]) to WHNF getting <screen>power</screen></para>
+
+    <para>It will then evaluate "power (1.0 + 1.0)" to WHNF. This is already in WHNF since power is
+    a function that takes 2 arguments, and only 1 is supplied. So it now can apply the function
+    power on its 2 arguments, power (1.0 + 1.0) (2.0 + 1.0). Since power is a foreign function, the
+    arguments are evaluated to WHNF in left-to-right order:<screen>power 2.0 (2.0 + 1.0)
+power 2.0 3.0
+8.0</screen></para>
+
+    <para>Here is another example of reducing applications:<screen>(head [fst]) (cos, sin) (5.0 - 5.0)
+//fst is in WHNF, but fst (cos, sin) is not
+//so we reduce this first.
+fst (cos, sin) (5.0 - 5.0) 
+cos (5.0 - 5.0)
+cos 0.0
+1.0</screen></para>
+  </section>
+
+  <section>
+    <title>What is the seq function and what is it good for?</title>
+
+    <para>The seq function is a useful function for controlling the order in which reduction to WHNF
+    occurs i.e. sequencing reductions. When an expression "seq expr1 expr2" is evaluated to WHNF,
+    seq will first evaluate expr1 to WHNF, and then evaluate expr2 to WHNF, and then return the
+    evaluated expr2.</para>
+
+    <para>For example, running<screen>(error "will call") `seq` "apple"</screen>in ICE results in an
+    error with "<computeroutput>will call</computeroutput>" displayed on the console.</para>
+
+    <para>Running<screen>(Debug.sleep 5000 "sad") `seq` ("hap" ++ "py")</screen>will result in a
+    delay of 5 seconds, followed by the console displaying the returned value of
+    "<computeroutput>happy</computeroutput>".</para>
+
+    <para>It is important to note that seq expressions are not guaranteed to be evaluated. It forces
+    <emphasis>sequencing</emphasis> of evaluations. For example,<screen>snd (error "will not call" `seq` "apple", "pear")</screen>returns
+    "<computeroutput>pear</computeroutput>" while<screen>fst (error "will call" `seq` "apple", "pear")</screen>terminates
+    in an error, displaying "<computeroutput>will call</computeroutput>" on the console.</para>
+
+    <para>In the first example, since the expression<screen>error "will not call" `seq` "apple"</screen>was
+    never evaluated to WHNF, the first argument of seq never needed to be evaluated to WHNF, and so
+    the error never happened.</para>
+
+    <para>seq is used mainly for two different purposes. <orderedlist numeration="loweralpha">
+        <listitem>
+          <para>writing code that makes use of side-effects, in which the order of execution of
+          operations is important.</para>
+        </listitem>
+
+        <listitem>
+          <para>controlling space (memory) usage.</para>
+        </listitem>
+      </orderedlist></para>
+  </section>
+
+  <section>
+    <title>What does strictness mean?</title>
+
+    <para>First I'll give the official definition, and then show what it really means by examples. A
+    function "f x1 x2 ... xn = expression;" of n arguments is said to be <emphasis>strict in its jth
+    argument xj</emphasis> if for all possible choices of expressions e1, e2, ... en, reducing "f e1
+    e2 ... en " to WHNF will always result in either <orderedlist>
+        <listitem>
+          <para>reducing ej to WHNF</para>
+        </listitem>
+
+        <listitem>
+          <para>not succeeding in reducing "f e1 e2 ... en" to WHNF because the evaluation hangs or
+          terminates in an error</para>
+        </listitem>
+      </orderedlist></para>
+
+    <para>In other words, when CAL evaluates any fully saturated application of f, it will end up
+    evaluating the jth argument, or die trying. A function f not strict in its argument xj is said
+    to be <emphasis>lazy in xj</emphasis>.</para>
+
+    <para>It is important to note that strictness is a more inclusive notion that plinging i.e. if
+    the jth argument of f is plinged, f is strict in xj, but the converse is not true. I'll explain
+    more about plinging in another point.</para>
+
+    <para>Here are some examples:<informalexample>
+        <para><screen>tuple2 :: a -&gt; b -&gt; (a, b);
+tuple2 x y = (x, y);</screen>tuple2 is not strict in any of its arguments x, y.</para>
+      </informalexample><informalexample>
+        <para><screen>list3 :: a -&gt; a -&gt; a -&gt; [a];
+list3 x y z = [x, y, z];</screen>list3 is not strict in any of its arguments x, y, z.</para>
+      </informalexample><informalexample>
+        <para>For example, to see non-strictness of list3 we can type in ICE:<screen>list3 (error "x") (error "y") (error "z") `seq` "OK"</screen>This
+        will return "<computeroutput>OK</computeroutput>".</para>
+      </informalexample></para>
+
+    <para>By the definition of the seq function, the expression<screen>list3 (error "x") (error "y") (error "z")</screen>was
+    evaluated to WHNF. Since it evaluating the whole expression returns
+    "<computeroutput>OK</computeroutput>" successfully, we know that condition b) above does not
+    hold. If any of the arguments of list3 were evaluated to WHNF, the corresponding error function
+    would be called. Since we didn't get an error exception, condition a) did not occur. Thus list3
+    is not strict in any of its arguments.</para>
+
+    <para>Intuitively, list3 constructs a 3-element list. Until the actual elements of the list are
+    examined, the arguments x, y and z do not need to be evaluated. For example, client code that
+    simply wanted to compute the length of the list would never need to evaluate the arguments. That
+    is why<screen>List.length (list3 (error "x") (error "y") (error "z"))</screen>returns
+    <computeroutput>3</computeroutput>.</para>
+
+    <para>Foreign functions are strict in all of their arguments. Indeed, if f is a foreign
+    function, then the expression<screen>f e1 ... en</screen>is evaluated by evaluating e1, e2, ...,
+    en each to WHNF in left-to-right order to obtain Java object values, and then calling the Java
+    function corresponding to f with the Java argument values. The only way this can fail is if
+    exceptions or non-termination (hanging) happens.</para>
+
+    <para>Functions are commonly lazy in some arguments and strict in some arguments. For example,
+    the function fromMaybe is strict in the maybeValue argument but lazy in the defaultValue
+    argument.<informalexample>
+        <programlisting>fromMaybe :: a -&gt; Maybe a -&gt; a;
+public fromMaybe defaultValue maybeValue =
+    case maybeValue of
+    Just value -&gt; value;
+    Nothing -&gt; defaultValue;
+    ;</programlisting>
+      </informalexample></para>
+
+    <para>To see this, note that:<screen>fromMaybe (error "defaultValue evaluated") (Just 2.0)</screen>returns
+    <computeroutput>2.0</computeroutput>. Thus, fromMaybe is lazy in the defaultValue
+    argument.</para>
+
+    <para>The defining expression of fromMaybe starts with a "case maybeValue of ...". Evaluating a
+    case expression to WHNF first evaluates the conditionExpr to WHNF. In this case this means
+    maybeValue is evaluated to WHNF. Thus, fromMaybe is strict in the maybeValue argument.</para>
+
+    <para>As a side note, the actual definition of Prelude.fromMaybe plings the maybeValue argument.
+    This does not affect the strictness of the maybeValue argument- it is still strict even without
+    this plinging.</para>
+
+    <para>Thinking about what a function does is a good way to guess at what its strictness is
+    likely to be. For example, fromMaybe defaultValue maybeValue, checks if maybeValue is a Just
+    value, and if so returns the underlying value, and otherwise returns the defaultValue. Clearly
+    to see if maybeValue is a Just or a Nothing, maybeValue must always be evaluated to WHNF. Also,
+    defaultValue is only ever needed in the Nothing case, so there will be situations when it is not
+    evaluated i.e. fromMaybe should be lazy in defaultValue. This approach to deducing strictness is
+    not rigorous, but it can be helpful when designing a new function, or creating unit tests. In
+    general, all things being equal, it is a good thing for a function to be lazy in an argument, if
+    this is possible. This is because not evaluating an argument is a potential efficiency gain for
+    clients when using the function.</para>
+  </section>
+
+  <section>
+    <title>What is plinging? Part 1: plinging of function arguments</title>
+
+    <para>Plinging can be done in 2 contexts: for algebraic function definitions and for algebraic
+    data declarations.</para>
+
+    <para>For an algebraic function definition, such as<screen>f x !y z !w !t = expression;</screen>in
+    which the y, w and t arguments are plinged, this has exactly the same operational meaning
+    as<screen>f x y z w t = y `seq` w `seq` t `seq` expression;</screen>or alternatively,<screen>f x y z w = seq (seq (seq y w) t) expression;</screen>notice
+    that only the plinged arguments in the original are sequenced. x and z are not sequenced. Also,
+    the sequencing is in argument order y, w and t.</para>
+
+    <para>In other words, when evaluating a fully saturated application of f to WHNF, the plinged
+    arguments are evaluated to WHNF, in the order in which they are plinged, prior to the defining
+    expression itself being evaluated to WHNF.</para>
+
+    <para>In particular, if a function has a plinged argument, then that argument is automatically a
+    strict argument of the function.</para>
+
+    <para>Plinging can alter the lazy reduction order of a function. For example, the functions sub1
+    and sub2 are both strict in their arguments x and y:<programlisting>sub1 x y = y - x :: Double;
+sub2 !x y = y - x :: Double;</programlisting></para>
+
+    <para>Evaluating the expression:<screen>sub1 (error "arg x") (error "arg y")</screen>will
+    terminate in an error and display "arg y".</para>
+
+    <para>However, evaluating the expression:<screen>sub2 (error "arg x") (error "arg y")</screen>will
+    terminate in an error and display "arg x".</para>
+
+    <para>Here are 4 separate functions for making pairs. They differ in their strictness due only
+    to plinging.<informalexample>
+        <programlisting>//lazy in x and y
+pair x y = (x, y);</programlisting>
+      </informalexample> <informalexample>
+        <programlisting>//strict in x and y
+pairStrict !x !y = (x, y);</programlisting>
+      </informalexample> <informalexample>
+        <programlisting>//strict in x, lazy in y
+pairFstStrict !x y = (x, y);</programlisting>
+      </informalexample> <informalexample>
+        <programlisting>//lazy in x, strict in y
+pairSndStrict x !y = (x, y);</programlisting>
+      </informalexample></para>
+
+    <para>So for example,<informalexample>
+        <para><screen>(pair 2.0 (error "arg y evaluated")).#1</screen>returns
+        <computeroutput>2.0</computeroutput></para>
+      </informalexample> <informalexample>
+        <para><screen>(pairSndStrict 2.0 (error "arg y evaluated")).#1</screen>terminates in an
+        error and prints "arg y evaluated" to the console.</para>
+      </informalexample></para>
+
+    <para>Note that plinging can be applied to any function argument. This includes local functions
+    and lambda expressions e.g. <code>\!x !y -&gt; x*x + y*y</code>.</para>
+  </section>
+
+  <section>
+    <title>What is plinging? Part 2: plinging of data constructor arguments</title>
+
+    <para>Another place where plinging is used is in algebraic type definitions. This is a more
+    fundamental concept than plinging of function arguments because plinging of data constructor
+    arguments, unlike plinging of function arguments, can not be inferred by the compiler - it
+    expresses something about the design intent of the type. For example, Haskell supports plinging
+    of data constructor arguments, but not plinging of function arguments (although Haskell
+    indirectly supports the semantic effects of plinging of function arguments via the seq
+    function). Plinging of data constructor arguments is a useful technique for controlling both the
+    space usage of programs during evaluation, as well as the in-memory footprint of already
+    evaluated values.</para>
+
+    <para>Each field of each data constructor within a type can be either plinged or unplinged. For
+    example, in LazyPair, none of the fields are plinged, in StrictPair both fields are plinged, and
+    in FirstStrictPair only the fst field is plinged. <programlisting>data LazyPair a b =
+    LP
+        fst :: a
+        snd :: b
+    ;
+
+data StrictPair a b =
+    SP
+        fst :: !a
+        snd :: !b
+    ;
+
+data FirstStrictPair a b =
+    FSP
+        fst :: !a
+        snd :: b
+    ;</programlisting></para>
+
+    <para>Plinging of the fields of a data constructor affects how that data constructor is reduced
+    to WHNF. In particular, when evaluating a data constructor to WHNF, the plinged fields will
+    first themselves be evaluated to WHNF, in the order in which they are declared in the data
+    constructor's definition.</para>
+
+    <para>For example, evaluating<screen>(LP 7.0 (error "pear")).LP.fst</screen>returns the value
+    7.0 while evaluating<screen>(SP 7.0 (error "pear")).SP.fst</screen>terminates in an error and
+    displays "<computeroutput>pear</computeroutput>" on the console. This is because in the LazyPair
+    case, evaluating the data constructor field selection first causes<screen>LP 7.0 (error "pear")</screen>to
+    be evaluated to WHNF. It is already in WHNF, and so evaluation can proceed with returning the
+    value of the fst field. However, in the StrictPair case, evaluating<screen>SP 7.0 (error "pear")</screen>to
+    WHNF first involves evaluating 7.0 to WHNF and then (error "pear") to WHNF. At this point
+    evaluation terminates with the error call.</para>
+
+    <para>Note that if the SP expression above is itself never evaluated to WHNF, then the error
+    call will not occur. For example, the following expression returns 3.0:<screen>(3.0, SP 7.0 (error "pear")).#1</screen></para>
+
+    <para>One consequence is that when a plinged data constructor is in WHNF, then its plinged
+    fields are also in WHNF. This has the semantic effect that types with plinged fields have fewer
+    values than a similar type with unplinged fields. Plinging data constructor fields is a useful
+    technique for controlling the space usage of a program. For example, it is impossible for an
+    evaluated value of type StrictPair Int Int to hold onto a bulky unevaluated computation in one
+    of its fields, since they must be evaluated to WHNF, which in the case of Int means a simple Int
+    literal value. A similar effect can be had with LazyPair by always constructing its values using
+    a helper function such as lazyPair: <programlisting>lazyPair !x !y = LazyPair x y;</programlisting>Since
+    the x and y arguments of lazyPair are plinged, this will do the trick.</para>
+
+    <para>The LazyPair type is very similar to the standard CAL tuple type (a, b). Tuple and record
+    types in CAL always have lazy fields. A similar technique of controlling space usage when
+    constructing CAL tuples is to use a function such as pairStrict, discussed in the previous
+    essay:<programlisting>pairStrict !x !y = (x, y);</programlisting></para>
+
+    <para>When a field is plinged, and the declared type of the field is a foreign type (or an
+    enumeration type, which is internally represented as an int), then the storage requirements for
+    evaluated values of the field are much less than if the field were not plinged.</para>
+
+    <para>For example, an evaluated StrictWidget internally holds onto 4 field values with Java
+    types: java.lang.String, int, double, java.lang.Object. An evaluated LazyWidget holds onto 4
+    field values all of Java type org.openquark.cal.machine.CalValue, which is the Java
+    implementation type of the CAL type Prelude.CalValue. If the field values of a LazyWidget value
+    are eventually reduced to WHNF then there will be one level of indirection to values of the
+    underlying Java types mentioned above.<programlisting>data StrictWidget =
+    SWidget
+        name :: !String
+        id :: !Int
+        price :: !Double
+        other :: !JObject
+    ;
+
+data LazyWidget =
+    LWidget
+        name :: String
+        id :: Int
+        price :: Double
+        other :: JObject
+    ;</programlisting></para>
+
+    <para>I mentioned above how plinging can affect the set of values that a type can represent.
+    This is especially pronounced in the case of recursively defined algebraic types. For example,
+    shown below are four different list types, varying in their strictness
+    constraints:<programlisting>data LazyList a = 
+    LNil | 
+    LCons 
+        head :: a
+        tail :: (LazyList a) 
+    deriving Eq, Ord;
+
+data HeadStrictList a =
+    HSNil | 
+    HSCons 
+        head :: !a
+        tail :: (HeadStrictList a) 
+    deriving Eq, Ord;
+
+data TailStrictList a =
+    TSNil | 
+    TSCons 
+        head :: a
+        tail :: !(TailStrictList a) 
+    deriving Eq, Ord;
+
+data StrictList a =
+    SNil | 
+    SCons 
+        head :: !a
+        tail :: !(StrictList a) 
+    deriving Eq, Ord;</programlisting></para>
+
+    <para>LazyList is essentially identical to CAL's standard list type, Prelude.List. LazyList and
+    Prelude.List perform no evaluation unless needed by a client, and can be used to represent
+    infinite data structures, such as a stream of generated outputs with no preset termination.
+    However, they can be more inefficient if sooner or later all the list elements are
+    evaluated.</para>
+
+    <para>StrictList is similar (but not identical to) CAL's Array type. The similarity lies in that
+    whenever an Array, or StrictList is evaluated to WHNF, then all of its elements are first
+    evaluated to WHNF. In particular, a StrictList can not be used to represent an infinite list in
+    a useful way i.e. such that reduction to WHNF succeeds.</para>
+
+    <para>For example, here are the definitions of 4 infinite lists alternating the elements 1.0 and
+    (error "apple"):<informalexample>
+        <programlisting>lazyList1 = LCons 1.0 (LCons (error "apple") lazyList1);</programlisting>
+      </informalexample><informalexample>
+        <programlisting>headStrictList1 = HSCons 1.0 (HSCons (error "apple") headStrictList1);</programlisting>
+      </informalexample><informalexample>
+        <programlisting>tailStrictList1 = TSCons 1.0 (TSCons (error "apple") tailStrictList1);</programlisting>
+      </informalexample><informalexample>
+        <programlisting>strictList1 = SCons 1.0 (SCons (error "apple") strictList1);</programlisting>
+      </informalexample></para>
+
+    <para>Evaluating an expression to extract the first element of lazyList1 or
+    headStrictList1:<screen>lazyList1.LCons.head
+headStrictList1.HSCons.head
+</screen>both return <computeroutput>1.0</computeroutput>.</para>
+
+    <para>Evaluating the third element of lazyList1:<screen>lazyList1.LCons.tail.LCons.tail.LCons.head</screen>also
+    returns <computeroutput>1.0</computeroutput>.</para>
+
+    <para>However, evaluating the third element of headStrictList1:<screen>headStrictList1.HSCons.tail.HSCons.tail.HSCons.head</screen>terminates
+    in an error, displaying "apple" on the console. This is because during the list traversal, when
+    unpacking the second HSCons node, the head field is evaluated, resulting in the call to error
+    since the second element is (error "apple").</para>
+
+    <para>Evaluating an expression to extract the first element of strictList1:<screen>strictList1.TSCons.head</screen>terminates
+    in an error at the reduction point when the second element value is evaluated, displaying
+    "apple" on the console.</para>
+
+    <para>However, evaluating an expression to extract the first element of tailStrictList<screen>tailStrictList1.TSCons.head</screen>does
+    not terminate in an error, since elements of the list itself are never evaluated. However, it
+    does hang (eventually resulting in a java.lang.StackOverflowError). This is because the infinite
+    list must be fully expanded out (without its values being evaluated) before the head value can
+    be returned.</para>
+  </section>
+
+  <section>
+    <title>What is the accumulating parameters coding pattern, and why do I need it?</title>
+
+    <para>You may have noticed that many functions in CAL's standard libraries are implemented by
+    calling local helper functions with more arguments. These extra arguments are called
+    accumulating parameters and are used to store partial results required for the
+    computation.</para>
+
+    <para>For example, the definition of the length function is (essentially):<programlisting>length !list =
+    let
+        lengthHelper :: Int -&gt; [a] -&gt; Int;
+        lengthHelper !acc !list =
+            case list of
+            [] -&gt; acc;
+            listHead : listTail -&gt; 
+                lengthHelper (acc + 1) listTail;
+            ;
+    in  
+        lengthHelper 0 list;</programlisting></para>
+
+    <para>The <parameter class="function">acc</parameter> argument of lengthHelper represents the
+    number of elements of the original list traversed so far while the <parameter
+    class="function">list</parameter> argument represents the remaining elements of the list yet to
+    be visited. In a sense, these arguments can be considered as the partial results of the
+    computation of the length of the original list. Since the <parameter
+    class="function">acc</parameter> argument is plinged, it will be a literal Int value at each
+    reduction of lengthHelper. The standard definition of length is O(1) in space and O(n) in time.
+    It is a key fact here that the accumulating parameter acc get evaluated to WHNF at each
+    iteration. Sometimes this is accomplished by plinging, and sometimes through other means, such
+    as the function naturally being strict in a given argument.</para>
+
+    <para>As an aside, the recursive call to lengthHelper is <emphasis>tail-recursive</emphasis>.
+    From a performance point of view this is a good thing in that the lecc runtime will not use any
+    heap in making the recursive call. At the java byte code level it is implemented as a goto.
+    However, even without the tail-recursion optimization, length will be O(1) in space and O(n) in
+    time, so the existence of the tail-recursion optimization is not a key point in understanding
+    why length is implemented as it is. However, the tail-recursion optimization is an important
+    topic in its own right and will be covered in another Effective CAL essay. A point to note now
+    though is that it does not fundamentally affect asymptotic performance characteristics of your
+    algorithm, but only the proportionality constant. (It can have a rather dramatic improvement on
+    the proportionality constant though, since a goto instruction is much faster than allocating
+    memory on the heap).</para>
+
+    <para>An alternative definition of length that does not use an accumulating parameters helper
+    would be:<programlisting>//warning- this is an example of how not to write length
+lengthAlt :: [a] -&gt; Int;
+lengthAlt !list = 
+   case list of
+   [] -&gt; 0;
+   listHead : listTail -&gt;
+       1 + lengthAlt listTail;
+   ;</programlisting></para>
+
+    <para>Although this definition is O(n) in time, it is also O(n) in space. Moreover, it is also
+    O(n) in stack! To verify this, running an expression such as:<screen>lengthAlt (upFromTo (1::Int) 10000)</screen>on
+    the ICE console will result in a java.lang.StackOverflowError being reported.</para>
+
+    <para>The first hint that a problem will occur is that reducing an application of lengthAlt to
+    WHNF results in a literal Int. However, to return a literal Int from the recursion step of
+    <screen>1 + lengthAlt listTail</screen>requires that the second argument of the <code>+</code>
+    operator, namely lengthAlt listTail be itself evaluated to WHNF. This requires a recursive call
+    on the stack to obtain the result before the addition can be done. Eventually he function
+    application will reduce to an intermediate computation of (1 + (1 + (1 + (..... )))) which when
+    evaluated will run out of stack.</para>
+
+    <para>The solution in this particular case is to do the additions of 1 in an incremental
+    fashion, one list element traversal at a time, rather than wait until the list is entirely
+    traversed.</para>
+
+    <para>A general principle here is that it is bad to write directly recursive functions that
+    perform computations in their returned value expression.</para>
+
+    <para>Listed below is essentially the definition of the List.reverse function. It uses a local
+    recursive helper function reverseHelper, which has accumulating parameters source and result. At
+    each recursive call, an element of source is moved to result. So result can be considered to be
+    the partially reversed list, and source can be considered to be the part of the original list
+    that still needs to be reversed.<programlisting>reverse :: [a] -&gt; [a];
+reverse !list =
+    let
+        reverseHelper :: [a] -&gt; [a] -&gt; [a];
+        reverseHelper !source result =
+            case source of
+            [] -&gt;
+                result;
+            headSource : tailSource -&gt;
+                reverseHelper
+                    tailSource (headSource : result);
+            ;
+    in
+        reverseHelper list [];</programlisting></para>
+
+    <para>reverse is an interesting contrast to the previous example of length, since its result
+    type, [a] is a lazy type. However, the reverse function itself will return a list whose spine is
+    fully evaluated, even though the elements themselves are not evaluated. It is O(n) in time and
+    O(n) in space, where n is the length of the list to reverse. If the argument list is an infinite
+    list, reverse not terminate.</para>
+
+    <para>Here is a more direct definition of reverse that does not use accumulating parameters.
+    <programlisting>//warning- this is an example of how not to write reverse
+reverseAlt :: [a] -&gt; [a];   
+reverseAlt !list = 
+   case list of
+   [] -&gt; [];
+   listHead : listTail -&gt;
+       reverseAlt listTail ++ [listHead];
+   ;</programlisting></para>
+
+    <para>This definition is still O(n) in space, but it is O(n^2) in time. To see this, note that
+    the reduction to WHNF of<screen>reverseAlt [1 :: Int, 2, 3, 4, 5]</screen>eventually reaches the
+    step:<screen>(((([] ++ [5]) ++ [4]) ++ [3]) ++ [2]) ++ [1]</screen></para>
+
+    <para>Now, <code>++</code>, the append class method on List, is O(n) in time, where n is the
+    length of its first argument list. It doesn't take any time at all handling its second argument
+    list. This is because <code>++</code> only needs to copy (the spine) of its first argument list,
+    and not the second argument list- it can just reuse that value. (For details see the
+    implementation of Prelude.appendList).</para>
+
+    <para>Thus, we can see the reason for the O(n^2) time behavior of reverseAlt- it is applying the
+    append operator in a left associative way, when the work is being done in the first argument.
+    This is precisely the wrong way to do it! As an aside, this is why the <code>++</code> operator
+    is right-associate so that an expression like:<screen>[] ++ [5] ++ [4] ++ [3] ++ [2] ++ [1]</screen>in
+    fact parses as:<screen>[] ++ ([5] ++ ([4] ++ ([3] ++ ([2] ++ [1]))))</screen>and thus can be
+    evaluated without excessive copying of intermediate lists.</para>
+
+    <para>Note that the accumulating parameters pattern is also useful for accumulating several
+    partial results. The Tutorial_Fibonacci module has several different examples and a discussion
+    on creating efficient functions for computing the Fibonacci numbers. One of those efficient
+    functions, fib2, uses three accumulating parameters. This makes sure that the state needed to
+    efficiently perform the computation is available at each recursive step, and in a sufficiently
+    evaluated form. It is analogous to how such a Fibonacci function would be efficiently
+    implemented in Java, except that the use of mutable local state variables in Java is replaced by
+    the accumulating parameters. The CAL version is much more declarative and equally as efficient
+    as the Java version.<programlisting>fib2 :: Int -&gt; Integer;       
+fib2 !n =
+    let
+        /**
+         * Computes the nth fibonacci number
+         * (where n is defined in the enclosing scope
+         *  as the argument to fib2).
+         * @arg i an index (will be &lt;= n)
+         * @arg fib_i_minus_1 the (i-1)th fibonacci number
+         * @arg fib_i the ith fibonacci number
+         * @return the nth fibonacci number
+         */
+        fibHelper :: Int -&gt; Integer -&gt; Integer -&gt; Integer;
+        fibHelper !i !fib_i_minus_1 !fib_i =
+            if i == n then
+                fib_i
+            else
+                fibHelper
+                    (i + 1) fib_i (fib_i_minus_1 + fib_i);
+    in
+        fibHelper 1 0 1;</programlisting></para>
+  </section>
+
+  <section>
+    <title>What is the Prelude.eager function and when would I use it?</title>
+
+    <para>Expressions in CAL can be compiled in one of two ways: strictly or lazily.</para>
+
+    <para>Compiling an expression strictly happens when the compiler determines that the expression
+    needs to be evaluated to Weak Head Normal form when its enclosing expression is evaluated to
+    WHNF. If this is not the case, then the expression will be compiled lazily, which means that a
+    suspension or thunk will be created encapsulating the state required to evaluate the expression
+    to WHNF later if this is needed as a result of subsequent evaluation.</para>
+
+    <para>The Prelude.eager function causes the compiler to compile its argument expression
+    strictly, overriding the default behavior described above. In the case where the expression
+    would be compiled strictly anyways, it has no effect whatsoever.</para>
+
+    <para>There are a variety of situations in which it is handy to use the Prelude.eager function:
+    <orderedlist>
+        <listitem>
+          <para>If an expression will certainly be evaluated to WHNF it is more efficient to compile
+          the expression strictly, rather than compile the expression lazily, and then later
+          evaluate the lazy suspension to WHNF. This is because when the suspension is eventually
+          evaluated, it will, at best, require the same amount of work as evaluating the expression
+          to WHNF would in a strict compilation scheme in the first place. So the cost of creating
+          the lazy suspension itself represents an extra overhead. This cost can be thought of as
+          basically the cost of allocating memory for an object representing the suspension, and
+          initializing its fields.</para>
+        </listitem>
+
+        <listitem>
+          <para>If an expression may or may not be evaluated to WHNF, but the cost of actually doing
+          the work of evaluating the expression, even if the result is not used, is less than the
+          cost of allocating a suspension to compute the expression lazily, then one might as well
+          evaluate the expression eagerly.</para>
+        </listitem>
+      </orderedlist>In both these cases, it is important to take into account the fact that
+    evaluating an expression eagerly changes the order of evaluation, so special care must be taken
+    if this issue is important, such as if the expression being evaluated has side effects or may
+    terminate in an exception.</para>
+  </section>
+
+  <section>
+    <title>How do I create an abstract data type in CAL?</title>
+
+    <para>An <emphasis>abstract data type</emphasis> is one whose internal representation can be
+    changed without needing to modify the source code of client modules that make use of that type.
+    For software maintainability, it is a good idea to make a type that is subject to change or
+    enhancement into an abstract data type. Another reason to create an abstract data type is to
+    enforce invariants for values of the type that can only be ensured by using
+    <emphasis>constructor functions</emphasis> (i.e. functions that return values of that
+    type).</para>
+
+    <para>In principle it is simple to create an abstract data type in CAL. For an algebraic data
+    type, make the type constructor public and all data constructors private. For a foreign data
+    type, make the type constructor public and the implementation scope private. If a scope
+    qualifier is omitted, the scope is taken to be private.</para>
+
+    <para>For example, the <code>Map</code> algebraic data type has the public type constructor
+    <code>Map</code> and the data constructors <code>Tip</code> and <code>Bin</code> are each
+    private, so it is an abstract data type.</para>
+
+    <programlisting>/** A map from keys (of type {@code k@}) to values
+   (of type {@code a@}). */
+data public Map k a =
+    private Tip |
+    private Bin
+        size      :: !Int
+        key       :: !k
+        value     :: a
+        leftMap   :: !(Map k a)
+        rightMap  :: !(Map k a);
+</programlisting>
+
+    <para>There are a number of invariants of this type: the <code>size</code> field represents the
+    number of elements in the map represented by its <code>Bin</code> value. The keys in
+    <code>leftMap</code> are all less than <code>key</code>, which in turn is less than all the keys
+    in <code>rightMap</code>. In particular, non-empty Map values can only be created if the key
+    parameter type is a member of the <code>Ord</code> type class.</para>
+
+    <para>Values of the <code>Map</code> type can be created outside the
+    <code>Cal.Collections.Map</code> module only by using constructor functions such as
+    <code>fromList</code> and <code>insert</code>:<programlisting>fromList :: Ord k =&gt; [(k,a)] -&gt; Map k a;
+public fromList !list = ...
+
+insert :: Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a;
+public insert !key value !map = ...
+</programlisting></para>
+
+    <para>The owner of the <code>Cal.Collections.Map</code> module must ensure that all invariants
+    of the <code>Map</code> type are satisfied, but if this is done, then it will automatically hold
+    for clients using these functions.</para>
+
+    <para>Some examples of foreign abstract data types are <code>Color</code>,
+    <code>StringNoCase</code> and <code>RelativeDate</code>:<informalexample>
+        <screen>data foreign unsafe import jvm private "java.awt.Color"
+    public Color;
+</screen>
+      </informalexample><informalexample>
+        <screen>data foreign unsafe import jvm private "java.lang.String"
+    public StringNoCase;
+</screen>
+      </informalexample><informalexample>
+        <screen>data foreign unsafe import jvm private "int"
+    public RelativeDate;
+</screen>
+      </informalexample></para>
+
+    <para>The private implementation scope for <code>Color</code> means that a foreign function
+    whose type involves <code>Color</code> can only be declared in the
+    <code>Cal.Graphics.Color</code> module where the <code>Color</code> type is defined. A foreign
+    function declaration involving the <code>Color</code> type relies on the compiler knowing that
+    the <code>Color</code> type corresponds to <code>java.awt.Color</code> to resolve the
+    corresponding Java entity i.e. it must know about the implementation of the <code>Color</code>
+    type. Having a private implementation scope means that the <code>Color</code> type can be
+    changed to correspond to a different Java class, or indeed to be an algebraic type, without the
+    risk of breaking client code.</para>
+
+    <para>In all these three cases there are useful, and different, design reasons to adopt a
+    private implementation scope:</para>
+
+    <para>For <code>RelativeDate</code>, the Java implementation type <code>int</code> represents a
+    coded Gregorian date value in the date scheme used by Crystal Reports. Not all <code>int</code>
+    values correspond to valid dates, and the algorithm to map an <code>int</code> to a
+    year/month/day equivalent is fairly complicated, taking into account things like Gregorian
+    calendar reform. Thus, it is desirable to hide the implementation of this type.</para>
+
+    <para>For <code>StringNoCase</code>, the implementation is more straightforward as a
+    <code>java.lang.String</code>. The reason to adopt a private implementation scope is to ensure
+    that all functions involving <code>StringNoCase</code> preserve the semantics of
+    <code>StringNoCase</code> as representing a case-insensitive string value. Otherwise it is very
+    easy for clients to declare a function such as:<informalexample>
+        <screen>foreign unsafe import jvm "method replace"
+    replaceChar :: StringNoCase -&gt; Char -&gt; Char -&gt; StringNoCase;
+</screen>
+      </informalexample>which does not handle case-insensitivity correctly, but is a perfectly valid
+    declaration. This declaration results in a compilation error when it is placed outside the
+    module in which <code>StringNoCase</code> is defined because of the private implementation scope
+    of <code>StringNoCase</code>.</para>
+
+    <para>For <code>Color</code>, the issue is somewhat more subtle. The <code>java.awt.Color</code>
+    implementation type is semantically the same as the CAL <code>Color</code> type. The problem is
+    that <code>java.awt.Color</code> is mutable (since it can be sub-classed to create a mutable
+    type). It is preferable for a first-class CAL type to not be mutable, so we simply make the
+    implementation scope private to ensure that this will be the case.</para>
+
+    <para>A somewhat less encapsulated kind of abstract data type can be created using
+    <emphasis>friend modules</emphasis> and <emphasis>protected</emphasis> scope. For example, if an
+    algebraic type is public, and all its data constructors are protected, then the data
+    constructors can be accessed in the friend modules of the module in which the type is defined.
+    Effectively this means that the implementation of the semantics of the type stretches over the
+    module in which the type is defined, and all of its friend modules. These must all be checked if
+    the implementation of the type is modified.</para>
+
+    <para>Given the merits of abstract data types discussed above, it is perhaps surprising that
+    most of the core types defined in the Prelude module are not abstract data types. For example:
+    <code>Boolean</code>, <code>Char</code>, <code>Int</code>, <code>Double</code>,
+    <code>String</code>, <code>List</code>, <code>Maybe</code>, <code>Either</code>,
+    <code>Ordering</code>, <code>JObject</code>, <code>JList</code>, and all record and tuple types
+    are non-abstract types.</para>
+
+    <para>There are different reasons for this, depending on the particular type involved.</para>
+
+    <para>For example, <code>Boolean</code>, <code>List</code>, <code>Maybe</code>,
+    <code>Either</code> and <code>Ordering</code> are all rather canonical algebraic data types with
+    a long history in functional languages, with many standard functions using them. They are thus
+    guaranteed never to change. In addition, their values have no particular design invariants that
+    need to be enforced via constructor functions. Exposing the data constructors gives clients some
+    additional syntactic flexibility in using values of the type. For example, they can pattern
+    match on the values using case expressions or let patterns.</para>
+
+    <para>Essentially the same explanation holds for record and tuple types. Although non-tuple
+    record types are less canonical, they do correspond to the fundamental notion of an anonymous
+    named-field product type. The "anonymous" here simply means that the programmer can create an
+    entirely new record type simply by creating a value; the type does not have to be declared
+    anywhere prior to use.</para>
+
+    <para><code>Char</code>, <code>Int</code>, <code>Double</code>, <code>String</code>,
+    <code>JObject</code> and <code>JList</code> are foreign types where in fact part of the
+    semantics of the type is that we want clients to know that the type is a foreign type. For
+    example, we want clients to know that <code>Prelude.Int</code> is essentially the Java primitive
+    unboxed <code>int</code> type, and has all the semantics you would expect of the Java
+    <code>int</code> type i.e. this is quite different from <code>RelativeDate</code> which is using
+    <code>int</code> as its implementation type in a very tactical way that we may choose to change.
+    One can think of a public foreign type declaration with public implementation scope as simply
+    introducing the Java type into the CAL namespace.</para>
+
+    <para>One interesting point here is with CAL's naming convention for public foreign types. We
+    prefix a type name by "J" (for "Java") for foreign types with public implementation type such
+    that the underlying Java type is mutable. This is intended as mnemonic that the type is not a
+    pure functional type and thus some caution needs to be taken when using it. For example,
+    <code>Prelude.JObject</code> has public Java implementation type
+    <code>java.lang.Object</code>.</para>
+
+    <para>In the case where the underlying Java type is not mutable, we do not use the prefix, since
+    even though the type is foreign; it is basically a first class functional type and can be freely
+    used without concern. For example, <code>Prelude.String</code> has public Java implementation
+    type <code>java.lang.String</code>.</para>
+
+    <para>In the case where the implementation type is private, then the fact that the type is a
+    foreign type, whether mutable or not, is an implementation detail and we do not hint at that
+    detail via the name. Thus <code>Color.Color</code> has as its private Java implementation type
+    the mutable Java type <code>java.awt.Color</code>.</para>
+
+    <para>When creating abstract data types it is important to not inadvertently supply public API
+    functions that conflict with the desired public semantics of the type. For example, if the type
+    is publicly a pure-functional (i.e. immutable) type such as <code>Color</code>, it is important
+    not to expose functions that mutate the internal Java representation.</para>
+
+    <para>A more subtle case of inadvertently exposing the implementation of a type can occur with
+    derived instances. For example, deriving the <code>Prelude.Outputable</code> and
+    <code>Prelude.Inputable</code> type classes on a foreign type, whose implementation type is a
+    mutable Java reference type, allows the client to gain access to the underlying Java value and
+    mutate it (by calling <code>Prelude.output</code>, mutating, and then calling
+    <code>Prelude.input</code>). The solution in this case is to not derive <code>Inputable</code>
+    and <code>Outputable</code> instances, but rather to define a custom <code>Inputable</code> and
+    <code>Outputable</code> instance that copies the underlying values.</para>
+  </section>
+
+  <section>
+    <title>CAL programming tips</title>
+
+    <para>What follows is a list of CAL programming tips in note form. Some of these tips will be
+    expanded into full essays as above in the future. In the meantime, hopefully they will be of
+    some use even in this short form. <itemizedlist>
+        <listitem>
+          <para>follow the CAL code formatting conventions</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>JEdit makes this particularly nice</para>
+            </listitem>
+
+            <listitem>
+              <para>setting Eclipse's Java editor to recognize .cal files as Java also works
+              OK.</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>avoid the use of un-encapsulated mutable foreign types</para>
+        </listitem>
+
+        <listitem>
+          <para>don't use a record or tuple type when an algebraic type will work <itemizedlist>
+              <listitem>
+                <para>the algebraic type offers better abstraction (the name of the type) better
+                encapsulation, better performance characteristics and better control</para>
+              </listitem>
+            </itemizedlist></para>
+        </listitem>
+
+        <listitem>
+          <para>be aware of what derived instances mean- both when to use them, and when not to use
+          them</para>
+        </listitem>
+
+        <listitem>
+          <para>document your code using CALDoc<itemizedlist>
+              <listitem>
+                <para>it is important to provide CALDoc for modules, types and instances.</para>
+              </listitem>
+            </itemizedlist></para>
+        </listitem>
+
+        <listitem>
+          <para>unit test your functions<itemizedlist>
+              <listitem>
+                <para>create examples functions</para>
+              </listitem>
+
+              <listitem>
+                <para>unit test for correctness as well as performance (speed, space usage,
+                scalability)</para>
+              </listitem>
+
+              <listitem>
+                <para>follow existing examples in the libraries for how to do this.</para>
+              </listitem>
+            </itemizedlist></para>
+        </listitem>
+
+        <listitem>
+          <para>provide top-level type declarations, and type declarations for local functions
+          whenever possible</para>
+        </listitem>
+
+        <listitem>
+          <para>practice good code encapsulation</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>make data constructors private</para>
+            </listitem>
+
+            <listitem>
+              <para>make the implementation type of foreign types private</para>
+            </listitem>
+
+            <listitem>
+              <para>provide constructor functions that validate arguments e.g. if a certain Int
+              field needs to be positive.</para>
+            </listitem>
+
+            <listitem>
+              <para>comment on the invariants of the type in its definition.</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>understand the operational evaluation semantics of CAL- lazy reduction order</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>understand the seq function</para>
+            </listitem>
+
+            <listitem>
+              <para>understand plinging</para>
+
+              <itemizedlist>
+                <listitem>
+                  <para>plinging of data constructor fields</para>
+                </listitem>
+
+                <listitem>
+                  <para>plinging of function arguments</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>understand the accumulating parameter coding pattern</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>use extra arguments to cache partial computations or intermediate results</para>
+            </listitem>
+
+            <listitem>
+              <para>when writing a directly recursive function, don't perform the computation in the
+              returned value; use an argument instead</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>be aware of the performance characteristics of the library data structures you are
+          using</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>List, String, Map, IntMap, Set, records/tuples, ...</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>learn and use the functions from the libraries.</para>
+        </listitem>
+
+        <listitem>
+          <para>keep things as simple as possible</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>create types to increase abstraction and encapsulation</para>
+            </listitem>
+
+            <listitem>
+              <para>avoid writing overly long functions</para>
+
+              <itemizedlist>
+                <listitem>
+                  <para>they are harder to understand and unit test</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>avoid the overuse of deep levels of nesting (i.e. many levels of local function
+              definitions)</para>
+            </listitem>
+
+            <listitem>
+              <para>avoid writing overly long modules</para>
+
+              <itemizedlist>
+                <listitem>
+                  <para>break up into several modules and take advantage of the friend module
+                  pattern and separate compilation to organize your code into comprehensible
+                  chunks.</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>consider defining instances for the standard type classes if they make sense</para>
+        </listitem>
+
+        <listitem>
+          <para>look for examples in the existing CAL code for how a problem was solved.</para>
+        </listitem>
+
+        <listitem>
+          <para>to provide extensibility to a module's functionality,</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>use higher order functions</para>
+            </listitem>
+
+            <listitem>
+              <para>use abstract data types in the api (can later add new constructors for the data
+              types)</para>
+            </listitem>
+
+            <listitem>
+              <para>use type classes</para>
+            </listitem>
+
+            <listitem>
+              <para>favour the use of higher order functions over type classes</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>consult the existing resources on CAL</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>CAL User's Guide</para>
+            </listitem>
+
+            <listitem>
+              <para>the source code for the existing CAL modules, especially non-test modules in CAL
+              Platform and CAL Libraries.</para>
+            </listitem>
+
+            <listitem>
+              <para>the Tutorial* .cal modules</para>
+            </listitem>
+
+            <listitem>
+              <para>generated CAL doc (this is easily generated from the GemCutter)</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>be aware of the tools available for CAL development</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>GemCutter</para>
+            </listitem>
+
+            <listitem>
+              <para>ICE</para>
+            </listitem>
+
+            <listitem>
+              <para>-etc.</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>learn Haskell and study well-known and respected Haskell libraries</para>
+        </listitem>
+
+        <listitem>
+          <para>understand how to mutate</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>when writing functions that must manipulate state within their implementation,
+              try to encapsulate them so that the publicly exposed version is a pure stateless
+              function.</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+      </itemizedlist></para>
+
+    <para>other advice: <itemizedlist spacing="compact">
+        <listitem>
+          <para>know how to generate lecc Java source code. Study the source of functions you
+          create. Are they reasonable?</para>
+        </listitem>
+
+        <listitem>
+          <para>learn the various ICE diagnostic tools such as call counts, logging, etc</para>
+        </listitem>
+
+        <listitem>
+          <para>understand the Prelude.eager function and when to use it.</para>
+        </listitem>
+
+        <listitem>
+          <para>don't get discouraged!</para>
+        </listitem>
+      </itemizedlist></para>
+  </section>
+
+  <!-- 
+    This is a bit of a hack.  
+    DocBook really wants the legal notice to appear in the info for the article, 
+    ie. at the beginning of the document.
+    We work around this by making it the info for a section with empty section content.
+    -->
+
+  <section>
+    <info>
+      <title>Legal Notice</title>
+
+      &legal;
+    </info>
+
+    <para />
+  </section>
+</article>

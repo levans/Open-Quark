@@ -1,0 +1,996 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Summary.cal
+ * Created: May 2005
+ * By: James Wright
+ */
+
+/**
+ * This is the CAL Summary module.  The Summary module provides mathematical functions
+ * for summarizing sets of data (eg, {@link average@}, {@link populationStandardDeviation@}, etc.).
+ *
+ * @author Bo Ilic
+ * @author James Wright
+*/
+module Cal.Utilities.Summary;
+import Cal.Core.Prelude using
+    typeClass = Enum, Eq, Num, Ord;
+    typeConstructor = Boolean, Double, Int, Integer, Maybe, Ordering;
+    dataConstructor = False, True, Nothing, Just, LT, EQ, GT;
+    function = 
+        abs, assert, compare, field1, field2, field3, fromJust, isEmpty, isNotANumber, not, notANumber, toDouble, 
+        truncate;
+    ;
+import Cal.Collections.List using
+    function = head, length, map, maximum, minimum, subscript, sum, tail;
+    ;      
+import Cal.Utilities.Math using
+    function = power, roundToNPlaces, sqrt;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+
+/**    
+ * Computes the average value of a list by first converting all elements of the list to {@link Double@}
+ * values and then averaging them. It return {@link Prelude.notANumber@} for an empty list.
+ * {@code 
+ * average [x1, x2, ..., xn] == (({@link toDouble@} x1) + ({@link toDouble@} x2)... + ({@link toDouble@} xn)) / ({@link toDouble@} n)
+ * @}
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */ 
+average :: Num a => [a] -> Double;
+public average !values =
+    let
+        averageHelper :: Num a => [a] -> Double -> Int -> Double;
+        averageHelper !xs !partialSum !partialLength =
+            case xs of
+            [] ->
+                if (partialLength == 0) then
+                    notANumber
+                else
+                    partialSum / toDouble partialLength;
+            xsHead : xsTail ->
+                averageHelper xsTail (partialSum + toDouble xsHead) (partialLength + 1);
+            ;
+    in
+        averageHelper values 0 0;
+
+/* @example */
+private averageExamples =
+    assert (average [70.0, 130.0, 80.0, 120.0] == 100.0) &&
+    assert (average [70 :: Int, 130, 80, 120] == 100.0) &&
+    assert (average [70 :: Integer, 130, 80, 120] == 100.0) &&
+    assert (isNotANumber (average [1, notANumber, 3]))  &&
+    assert (isNotANumber (average ([] :: [Double])))
+    ;
+
+/**
+ * Calculates the population variance of a list of numbers by first converting all of the
+ * elements to {@link Double@}s and then finding the sample variance of the resulting set of values.
+ * Returns 0.0 for an empty list.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+populationVariance :: Num a => [a] -> Double;
+public populationVariance !values =
+    let
+        varianceHelper :: Num a => [a] -> Double -> Double -> Int -> Double;
+        varianceHelper !xs !partialSum !partialSumSquares !partialLength =
+            case xs of
+            [] -> 
+                if partialLength == 0 then
+                    0.0
+                else
+                    let
+                        // Convert length to Double before using it in calculations, 
+                        // because otherwise we are in danger of overflowing for lists
+                        // of length greater than (sqrt maxBoundInt), which is not actually
+                        // all that long.
+                        n :: Double;
+                        n = toDouble partialLength;
+                        
+                        squaredSum :: Double;
+                        squaredSum = partialSum * partialSum;
+                    in
+                        abs (n * partialSumSquares - squaredSum) / (n * n);
+            xsHead : xsTail ->
+                let 
+                    x = toDouble xsHead;
+                    x2 = x * x;
+                in
+                    varianceHelper xsTail (partialSum + x) (partialSumSquares + x2) (partialLength + 1);
+            ;
+    in
+        varianceHelper values 0 0 0;
+
+/* @example */
+private populationVarianceExamples =
+    assert (populationVariance [70.0, 130.0, 80.0, 120.0] == 650.0) &&
+    assert (populationVariance [70 :: Int, 130, 80, 120] == 650) &&
+    assert (populationVariance [70 :: Integer, 130, 80, 120] == 650) && 
+    assert (isNotANumber (populationVariance [1.0, notANumber])) &&
+    assert (populationVariance ([] :: [Int]) == 0.0)
+    ;
+
+/**
+ * Finds the population standard deviation of a list of numbers by first
+ * converting each element to a {@link Double@} and then finding the standard deviation
+ * of the result.  Returns 0.0 for an empty list.
+ */
+populationStandardDeviation :: Num a => [a] -> Double;
+public populationStandardDeviation !values = sqrt (populationVariance values);
+
+/* @example */
+private populationStandardDeviationExamples =
+    assert (truncate (populationStandardDeviation [70.0, 130.0, 80.0, 120.0]) == 25) &&
+    assert (truncate (populationStandardDeviation [(70 :: Integer), 130, 80, 120]) == 25)  
+    ;
+
+/**
+ * Calculates the sample variance of a list of numbers by first converting all of the
+ * elements to {@link Double@}s and then finding the sample variance of the resulting set of values.
+ * Returns 0.0 for lists of 0 or 1 elements.
+ *  
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+sampleVariance :: Num a => [a] -> Double;
+public sampleVariance !values =
+    let
+        varianceHelper :: Num a => [a] -> Double -> Double -> Int -> Double;
+        varianceHelper !xs !partialSum !partialSumSquares !partialLength =
+            let
+                square :: Double -> Double;
+                square !x = x * x;
+            in
+                case xs of
+                [] -> 
+                    if partialLength <= 1 then
+                        0.0
+                    else
+                        let
+                            // Convert length to Double before using it in calculations, 
+                            // because otherwise we are in danger of overflowing for lists
+                            // of length greater than (sqrt maxBoundInt), which is not actually
+                            // all that long.
+                            n :: Double;
+                            n = toDouble partialLength;
+                            
+                            squaredSum :: Double;
+                            squaredSum = (square partialSum);
+                        in
+                            abs (n * partialSumSquares - squaredSum) / (n * (n-1));
+                xsHead : xsTail ->
+                    varianceHelper xsTail (partialSum + (toDouble xsHead)) (partialSumSquares + (square (toDouble xsHead))) (partialLength + 1);
+                ;
+    in
+        varianceHelper values 0 0 0;
+
+/* @example */
+private sampleVarianceExamples =
+    assert (sampleVariance [60.0, 120.0, 80.0, 120.0] == 900.0) &&
+    assert (sampleVariance [60 :: Int, 120, 80, 120] == 900) &&
+    assert (sampleVariance [60 :: Integer, 120, 80, 120] == 900) &&
+    assert (isNotANumber (sampleVariance [notANumber, 12.0])) &&
+    assert (sampleVariance ([] :: [Integer]) == 0.0)
+    ;
+
+sampleStandardDeviation :: Num a => [a] -> Double;
+public sampleStandardDeviation !values = sqrt (sampleVariance values);
+
+/* @example */
+private sampleStandardDeviationExamples =
+    assert (truncate (sampleStandardDeviation [60.0, 120.0, 80.0, 120.0]) == 30) &&
+    assert (truncate (sampleStandardDeviation [(60 :: Int), 120, 80, 120]) == 30)
+    ;
+
+/**
+ * Returns the weighted average of values weighted by weights.
+ * The ith value is weighted by the ith weight.
+ * Values and weights are both converted to {@link Double@}s before calculations begin.
+ * 
+ * If there are more weights than values, the extra weights are ignored.
+ * If there are fewer weights than values, then the weights are cycled.  e.g.,
+ * {@code weightedAverage [6,10,11,8] [1,2]@} is equivalent to {@code weightedAverage [6,10,11,8] [1,2,1,2]@}
+ * Returns {@link notANumber@} for empty lists.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+weightedAverage :: (Num a, Num b) => [a] -> [b] -> Double;
+public weightedAverage !values !weights =
+    let
+        waHelper :: (Num a, Num b) => [a] -> [b] -> [b] -> Boolean -> Double -> Double -> Double;
+        waHelper !values !weights !origWeights !encounteredNumber !partialSum !partialWeightSum =
+            case values of
+            [] -> 
+                if encounteredNumber then
+                    partialSum / partialWeightSum
+                else
+                    notANumber;
+            vHead : vTail ->
+                case weights of
+                [] -> 
+                    waHelper (vHead : vTail) origWeights origWeights encounteredNumber partialSum partialWeightSum;
+                wHead : wTail ->
+                    waHelper vTail wTail origWeights True (toDouble vHead * toDouble wHead + partialSum) (toDouble wHead + partialWeightSum);
+                ;
+            ;
+    in
+        if isEmpty weights then
+            notANumber
+        else
+            waHelper values weights weights True 0 0;
+  
+/* @example */
+private weightedAverageExamples =
+    assert (weightedAverage [10.0, 5.0, -90000.0] [1.0, 3.0, 0.0] == 6.25) &&
+    assert (weightedAverage [(10 :: Integer), 5, -90000, 5] [(1 :: Int), 2, 0, 1] == 6.25) && 
+    assert (weightedAverage [6.0,10,11,8] [1.0,2] == weightedAverage [6.0,10,11,8] [1.0,2,1,2]) &&
+    assert (isNotANumber (weightedAverage [6.0,10,11,8] ([] :: [Double]))) &&
+    assert (isNotANumber (weightedAverage ([] :: [Integer]) ([] :: [Integer]))) &&
+    assert (isNotANumber (weightedAverage ([] :: [Integer]) ([1,3,5] :: [Integer])))
+    ;
+
+/**
+ * Returns the number of distinct values that occur in values.
+ * 
+ * Runtime performce is O(n(lg n))
+ */
+distinctCount :: Ord a => [a] -> Int;
+public distinctCount !values = 
+    let
+        //sortedVals :: Ord a => [a]    // same 'a' as in distinctCount declaration
+        sortedVals = List.sort values;
+
+        distinctCountHelper :: Eq a => [a] -> a -> Int -> Int;
+        distinctCountHelper !xs !prevVal !accCount =
+            case xs of
+            [] -> accCount;
+            x : xs ->
+                if x == prevVal then
+                    distinctCountHelper xs prevVal accCount
+                else
+                    distinctCountHelper xs x (accCount + 1);
+            ;
+    in
+        case sortedVals of
+        [] -> 0;
+        x : xs ->
+            distinctCountHelper xs x 1;
+        ;
+
+/* @example */
+distinctCountExamples =
+    assert (distinctCount ([] :: [Int]) == 0) &&
+    assert (distinctCount [1.0] == 1) &&
+    assert (distinctCount [1.5, 1.5, 1.5, 1.5] == 1) &&
+    assert (distinctCount [1.5, 1.5, 1.5, 1.6, 1.5, 1.6] == 2) &&
+    assert (distinctCount ["str", "string", "str", "STRRRING!"] == 3)
+    ;
+
+/**
+ * Returns {@code {@link Just@} x@}, where {@code x@} is the value that occurs {@code number@}-th most frequently
+ * in values.  Eg, {@code nthMostFrequent [1,2,3,3,3,9,9] 2@} returns {@code {@link Just@} 9@}, since 9 is
+ * the 2nd most frequently occurring number in the given list.
+ * 
+ * If two numbers have the same frequency, then we return them smallest-number-first.
+ * Ex; {@code nthMostFrequent [2,2,1,1] 1 == {@link Just@} 1@} and {@code nthMostFrequent [2,2,1,1] 2 == {@link Just@} 2@}.
+ * Returns {@link Nothing@} if number is <= 0 or >= the number of distinct values in the list.
+ * 
+ * Runtime performance is O(n(lg n))
+ */
+//todoBI Is O(n(lg n)) the best we can do here?  
+nthMostFrequent :: Ord a => [a] -> Int -> Maybe a;
+public nthMostFrequent !values !number =
+    if isEmpty values then 
+        Nothing
+    else
+        let
+            groupAndCount :: Eq a => [a] -> a -> Int -> [(a, Int)] -> [(a, Int)];
+            groupAndCount !xs !currentX !currentCount !acc =
+                case xs of
+                [] -> (currentX, currentCount) : acc;
+                x : xTail ->
+                    if x == currentX then
+                        groupAndCount xTail currentX (currentCount + 1) acc
+                    else
+                        groupAndCount xTail x 1 ((currentX, currentCount) : acc);
+                ;
+
+            countSorter :: Ord a => (a, Int) -> (a, Int) -> Ordering;
+            countSorter !x !y = 
+                if x.#2 == y.#2 then
+                    compare x.#1 y.#1     // Sort in increasing numeric order for equal frequencies
+                else
+                    compare y.#2 x.#2;    // Sort in decreasing order of frequency
+        
+            //sortedValues :: Ord a => [a];         // same 'a' as in nthMostFrequent declaration
+            sortedValues = List.sort values;
+
+            //valueCounts :: Ord a => [(a, Int)];   // same 'a' as in nthMostFrequent declaration
+            valueCounts = groupAndCount (tail sortedValues) (head sortedValues) 1 [];
+            
+            //sortedCounts :: Ord a => [(a, Int)];  // same 'a' as in nthMostFrequent declaration
+            sortedCounts = List.sortBy countSorter valueCounts;
+        in
+            if number > 0 && number <= length sortedCounts then
+                Just ((subscript sortedCounts (number - 1)).#1)
+            else
+                Nothing;
+
+/* @example */
+nthMostFrequentExamples =
+    assert (nthMostFrequent [EQ, LT, GT, EQ, LT, EQ] 1 == Just EQ) &&
+    assert (nthMostFrequent [EQ, LT, GT, EQ, LT, EQ] 2 == Just LT) &&
+    assert (nthMostFrequent [EQ, LT, GT, EQ, LT, EQ] 3 == Just GT) &&
+    assert (nthMostFrequent [EQ, LT, GT, EQ, LT, EQ] 4 == Nothing) &&
+    assert (nthMostFrequent [EQ, LT, GT, EQ, LT, EQ] 0 == Nothing) &&
+    assert (nthMostFrequent [1.0,2,1,2] 1 == Just 1) &&
+    assert (nthMostFrequent [1.0,2,1,2] 2 == Just 2) &&
+    assert (nthMostFrequent ([] :: [Int]) 1 == Nothing)
+    ;
+
+/**
+ * Mode returns {@link Just@} (the most-frequently-occurring element) for a list of values,
+ * or Nothing for the empty list.  {@code mode xs@} and {@code {@link nthMostFrequent@} xs 1@} are semantically
+ * equivalent, but mode is more efficient.
+ * 
+ * Runtime performance is O(n(lg n)).
+ */
+mode :: Ord a => [a] -> Maybe a;
+public mode !values =
+    let
+        //sortedValues :: Ord a => [a];     // same 'a' as in mode declaration
+        sortedValues = List.sort values;
+
+        modeHelper :: Ord a => [a] -> a -> Int -> a -> Int -> a;
+        modeHelper !values !currentMode !currentCount !prevValue !prevCount =
+            case values of
+            [] ->
+                currentMode;
+            vHead : vTail ->
+                let
+                    newCount = 
+                        if vHead == prevValue then 
+                            prevCount + 1 
+                        else 
+                            1;
+                in
+                    if newCount > currentCount then
+                        modeHelper vTail vHead newCount vHead newCount
+                    else
+                        modeHelper vTail currentMode currentCount vHead newCount;
+            ;
+    in
+        case sortedValues of
+        [] -> Nothing;
+        sortedHead : sortedTail -> Just (modeHelper sortedTail sortedHead 1 sortedHead 1);
+        ;
+        
+/* @example */
+modeExamples =
+    assert (mode [1.0, 2, 2, 2, 1, 1, 2, 1, 0, 9, 1] == Just 1) &&
+    assert (mode [1.0, 2, 2, 2, 1, 1, 2, 2, 1, 0, 9] == Just 2) &&
+    assert (mode [EQ, EQ, LT, GT, LT, GT, GT] == Just GT) &&
+    assert (mode ([] :: [Int]) == Nothing)
+    ;
+
+/**
+ * {@link selectNthRankedElement@} uses a randomized algorithm to attain average O(n) performance
+ */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Summary.Math.random" 
+    private random :: Double;
+
+/**
+ * A simpler but less-efficient version of {@link selectNthRankedElement@}.
+ * Used as a helper function by {@code selectNthRankedElement@}, and also for testing.
+ * 
+ * Runtime performance is O(n(lg n)).
+ */
+simpleSelect :: Ord a => [a] -> Int -> Maybe a;
+simpleSelect !values !n =
+    let
+        sortedGroup = List.sort values;
+    in
+        Just (subscript sortedGroup (n-1));
+
+/**
+ * Returns the element that would be ranked {@code n@} if values were sorted.
+ * {@code n@} must be between 1 and {@code {@link length@} values@}, inclusive.
+ * 
+ * {@code selectNthRankedElement xs 1@} is equivalent to {@code {@link minimum@} xs@} and
+ * {@code selectNthRankedElement xs ({@link length@} xs)@} is equivalent to {@code {@link maximum@} xs@}, 
+ * although minimum and maximum are more efficient.
+ * 
+ * Average-case runtime performance is O(n), worst-case (extremely unlikely) is O(n^2).
+ */
+selectNthRankedElement :: Ord a => [a] -> Int -> Maybe a;
+public selectNthRankedElement !values !n =
+    let
+        len :: Int;
+        len = length values;
+
+        partition3 :: Ord a => [a] -> a -> [a] -> [a] -> [a] -> ([a], [a], [a]);
+        partition3 !values !pivot !acc1 !acc2 !acc3 =
+            case values of 
+            [] -> (acc1, acc2, acc3);
+            vHead : vTail ->
+                if vHead < pivot then
+                    partition3 vTail pivot (vHead : acc1) acc2 acc3
+                else if vHead > pivot then
+                    partition3 vTail pivot acc1 acc2 (vHead : acc3)
+                else
+                    partition3 vTail pivot acc1 (vHead : acc2) acc3;
+            ;
+    in
+        if n <= 0 || n > len then
+            Nothing
+        else if len <= 5 then
+            simpleSelect values n
+        else
+            let
+                r :: Int;
+                r = truncate (random * toDouble len);
+                
+                pivotIdx :: Int;
+                pivotIdx = if r <= 1 then 1 else r-1; 
+                
+                //pivot :: Ord a => a; // Same 'a' as in selectNthRankedElement defn
+                pivot = (subscript values pivotIdx);
+                
+                //partitionedValues :: Ord a => ([a], [a], [a]); // Same 'a' as in selectNthRankedElement defn
+                partitionedValues = partition3 values pivot [] [] [];
+                
+                leftLen :: Int;
+                leftLen = length (field1 partitionedValues);
+                
+                midLen :: Int;
+                midLen = length (field2 partitionedValues);
+            in
+                if n <= leftLen then
+                    (selectNthRankedElement (field1 partitionedValues) n)
+                else if n > (leftLen + midLen) then
+                    (selectNthRankedElement (field3 partitionedValues) (n - (leftLen + midLen)))
+                else
+                    Just pivot;
+    
+/* @example */
+selectNthRankedElementExamples =
+    assert (selectNthRankedElement [1.0,5,2,3,4] 1 == Just 1.0) &&
+    assert (selectNthRankedElement [(1 :: Int),5,2,3,4] 2 == Just 2) &&
+    assert (selectNthRankedElement [(1 :: Integer),5,2,3,4] 3 == Just 3) &&
+    assert (selectNthRankedElement [(1 :: Integer),5,2,3,4] 4 == Just 4) &&
+    assert (selectNthRankedElement [(1 :: Integer),5,2,3,4] 5 == Just 5) &&
+    assert (selectNthRankedElement [EQ, EQ, EQ, LT, GT] 1 == Just LT) &&
+    assert (selectNthRankedElement [EQ, EQ, EQ, LT, GT] 2 == Just EQ) &&
+    assert (selectNthRankedElement [EQ, EQ, EQ, LT, GT] 3 == Just EQ) &&
+    assert (selectNthRankedElement [EQ, EQ, EQ, LT, GT] 4 == Just EQ) &&
+    assert (selectNthRankedElement [EQ, EQ, EQ, LT, GT] 5 == Just GT) &&
+    assert (selectNthRankedElement [5.0] (-1) == Nothing) &&
+    assert (selectNthRankedElement [5.0] 1 == Just 5.0) &&
+    assert (selectNthRankedElement [5.0] 2 == Nothing) &&
+    assert (selectNthRankedElement ([] :: [Int]) 0 == Nothing)
+    ;
+            
+/**
+ * Returns the percentile for values using interpolation.
+ * Eg, the 0.6 (60%) percentile for a 5-element list of values
+ * may differ from the 0.7 (70%) percentile for the same list.
+ * 
+ * Average-case runtime performance is O(n). (See {@link selectNthRankedElement@})
+ */
+percentile :: Num a => [a] -> Double -> Double;
+public percentile !values !rank =
+    let
+        len = length values;
+        idx = toDouble (len - 1) * rank;
+        idxIntPart = truncate idx;
+        idxFracPart = idx - (toDouble idxIntPart); 
+    in
+        if idxIntPart < 0 || idxIntPart >= len then
+            notANumber
+        else if idxFracPart == 0 then
+            toDouble (fromJust (selectNthRankedElement values (idxIntPart + 1)))
+        else
+            let
+                left = toDouble (fromJust (selectNthRankedElement values (idxIntPart + 1)));
+                right = toDouble (fromJust (selectNthRankedElement values (idxIntPart + 2)));
+                diff = right - left;
+            in
+                left + (idxFracPart * diff);
+
+//These examples have been checked against Excel
+/* @example */
+percentileExamples =
+    assert (percentile [10.0, 25.0, 30.0] 0.5 == 25.0) &&
+    assert (percentile [40.0, 20, 35, 10] 0.5 == 27.5) &&
+    assert (percentile [40.0, 25, 30, 10] 0.86 == 35.8) &&
+    assert (percentile [2.0, 4, 6, 1, 8, 3] 0.39 == 2.95) &&
+    assert (percentile [2.0, 4, 6, 1, 8, 3] 0 == 1) &&
+    assert (percentile [2.0, 4, 6, 1, 8, 3] 1 == 8) &&
+    assert (percentile [13.0, 8.0, 12.0, 6.0, 6.0, 8.0] 0.5 == 8.0) &&
+    assert (percentile [13.0, 8.0, 12.0, 6.0, 6.0, 8.0] 0.6 == 8.0) &&
+    assert (percentile [13.0, 8.0, 12.0, 6.0, 6.0, 8.0] 0.75 == 11.0) &&
+    assert (percentile [13.0, 8.0, 12.0, 6.0, 6.0, 8.0] 0.85 == 12.25) &&
+    assert (percentile [13.0, 8.0, 12.0, 6.0, 6.0, 8.0] 1.0 == 13.0) &&
+    assert (isNotANumber(percentile [13.0, 8.0, 12.0, 6.0, 6.0, 8.0] (-1.0))) &&
+    assert (isNotANumber(percentile [13.0, 8.0, 12.0, 6.0, 6.0, 8.0] 1.5)) &&
+    assert (percentile [100.0] 0.0 == 100.0) &&
+    assert (percentile [100.0] 0.5 == 100.0) &&
+    assert (percentile [100.0] 1.0 == 100.0) &&
+    assert (isNotANumber (percentile ([] :: [Double]) 0.5))
+    ;
+            
+/**
+ * Returns the median of values, using interpolation when the number of values
+ * is even.  eg, {@code median [1,2,3,4,5,6]@} is 3.5.
+ */
+median :: Num a => [a] -> Double;
+public median !values =
+    percentile values 0.5;
+
+/* @example */
+medianExamples =
+    assert (median [(2 :: Integer), 12, 2, 5, 5, 3] == 4) && 
+    assert (median [14.0, 5, 6, 5, 0, 13] == 5.5) &&
+    assert (median [(11 :: Int), 7, 4, 6, 13] == 7) &&
+    assert (median [1.5] == 1.5) &&
+    assert (isNotANumber (median ([] :: [Int])))
+    ;
+
+quartile :: Num a => [a] -> Quartile -> Double;
+public quartile !list !q =
+    percentile list (quartileEnumToPercentileRank q);
+
+/* @example */
+quartileExamples =
+    assert (quartile [10.0, 25.0, 30.0] Median_50thPercentile == 25.0)
+    ;
+
+quartileEnumToPercentileRank :: Quartile -> Double;    
+quartileEnumToPercentileRank !q =
+    case q of
+    Minimum_0thPercentile -> 0;
+    FirstQuartile_25thPercentile -> 0.25;
+    Median_50thPercentile -> 0.5;
+    ThirdQuartile_75thPercentile -> 0.75;
+    Maximum_100thPercentile -> 1.0;
+    ;
+        
+data public Quartile =
+    public Minimum_0thPercentile |
+    public FirstQuartile_25thPercentile |
+    public Median_50thPercentile |
+    public ThirdQuartile_75thPercentile |
+    public Maximum_100thPercentile
+    deriving Eq, Ord, Enum, Show
+    ;
+
+/**
+ * Returns the covariance between lists {@code list1@} and {@code list2@}.  The return value is not bounded in
+ * either the positive or negative directions.  The lists should be of equal length.  If
+ * one list is longer than the other, then the extra values will be ignored.
+ * Each list must contain at least 2 elements.  Empty or singleton lists will return
+ * {@link notANumber@}.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+covariance :: (Num a, Num b) => [a] -> [b] -> Double;
+public covariance !list1 !list2 =
+    let
+        covarianceHelper :: (Num a, Num b) => [a] -> [b] -> Int -> Double -> Double -> Double -> Double;
+        covarianceHelper !xs !ys !accLength !accSumX !accSumY !accSumXY =
+            case xs of
+            [] ->
+                let
+                    n :: Double;
+                    n = toDouble accLength;
+
+                    numerator :: Double;
+                    numerator = n * accSumXY - accSumX * accSumY;
+                in
+                    if accLength <= 1 then
+                        notANumber
+                    else
+                        numerator/ (n * n);
+            xHead : xTail ->
+                case ys of
+                [] ->
+                    // Ignore the additional x data
+                    covarianceHelper [] ys accLength accSumX accSumY accSumXY;
+                yHead : yTail ->
+                    let
+                        x :: Double;
+                        x = toDouble xHead;
+                        
+                        y :: Double;
+                        y = toDouble yHead;
+                    in
+                        covarianceHelper xTail yTail (accLength + 1) (accSumX + x) (accSumY + y) (accSumXY + x*y);
+                ;
+            ;
+    in
+        covarianceHelper list1 list2 0 0 0 0;
+
+// Two randomly-generated lists of numbers between 0 and 15 for testing
+testData1 = [5.0, 0.0, 12.0, 13.0, 5.0, 14.0, 8.0, 5.0, 2.0, 9.0, 0.0, 9.0, 1.0, 13.0, 1.0, 3.0, 0.0, 4.0, 1.0, 9.0, 7.0, 3.0, 13.0, 10.0, 7.0, 10.0, 5.0, 13.0, 1.0, 13.0, 12.0, 2.0, 8.0, 10.0, 14.0, 9.0, 8.0, 5.0, 2.0, 2.0, 9.0, 14.0, 12.0, 0.0, 4.0, 13.0, 7.0, 12.0, 12.0, 3.0, 2.0, 9.0, 7.0, 2.0, 2.0, 12.0, 10.0, 10.0, 1.0, 7.0, 0.0, 6.0, 7.0, 10.0, 13.0, 8.0, 12.0, 8.0, 3.0, 8.0, 2.0, 10.0, 6.0, 11.0, 8.0, 2.0, 1.0, 7.0, 6.0, 12.0, 14.0, 7.0, 7.0, 0.0, 7.0, 10.0, 7.0, 10.0, 5.0, 3.0, 5.0, 13.0, 14.0, 7.0, 12.0, 11.0, 4.0, 14.0, 14.0, 8.0];
+testData2 = [7.0, 13.0, 14.0, 3.0, 0.0, 3.0, 9.0, 14.0, 9.0, 8.0, 3.0, 6.0, 1.0, 3.0, 11.0, 0.0, 11.0, 2.0, 11.0, 13.0, 2.0, 4.0, 13.0, 9.0, 2.0, 11.0, 11.0, 6.0, 14.0, 9.0, 0.0, 7.0, 14.0, 13.0, 7.0, 12.0, 11.0, 6.0, 14.0, 11.0, 10.0, 2.0, 10.0, 10.0, 6.0, 0.0, 11.0, 8.0, 5.0, 3.0, 5.0, 4.0, 4.0, 0.0, 6.0, 2.0, 1.0, 4.0, 5.0, 9.0, 4.0, 11.0, 6.0, 10.0, 7.0, 14.0, 3.0, 2.0, 5.0, 11.0, 12.0, 1.0, 11.0, 4.0, 7.0, 11.0, 13.0, 10.0, 3.0, 7.0, 1.0, 9.0, 2.0, 11.0, 13.0, 6.0, 5.0, 10.0, 13.0, 4.0, 9.0, 6.0, 12.0, 5.0, 3.0, 6.0, 7.0, 3.0, 2.0, 4.0];
+    
+/* @example */
+covarianceExamples =     
+    assert (covariance [1.0, 2, 3, 4] [10.0, 20, 30, 40] == 12.5) &&
+    assert (covariance [1.0, 2, 3, 4, 5] [-10.0, -20, -30, -40, -50] == -20.0) &&
+    assert (covariance [1.0, 1, 1, 5, 5, 5] [6.0, 7, 8, 6, 7, 8] == 0.0) &&
+    assert (covariance [1.0, 2, 3] [1.0, 2, 3, 4, 5, 6] == covariance [1.0, 2, 3] [1.0, 2, 3]) &&
+    assert (covariance [1.0, 2, 3, 4, 5, 6] [1.0, 2, 3] == covariance [1.0, 2, 3] [1.0, 2, 3]) &&
+    assert (covariance testData1 testData2 == -3.554) &&
+    assert (isNotANumber (covariance [1.0] [1.0])) &&
+    assert (isNotANumber (covariance ([] :: [Int]) ([] :: [Int])))
+    ;
+
+/**
+ * Returns the correlation coefficient between lists {@code list1@} and {@code list2@}.  The return value ranges 
+ * from -1.0 (for perfect negative correlation) to 1.0 (for perfect positive correlation), 
+ * with perfectly uncorrelated lists returning 0.0.  The lists should be of equal length.
+ * If one list is longer than the other, then the extra values will be ignored.
+ * Each list must contain at least 2 elements; Empty or singleton lists will return {@link notANumber@}.
+ * Values from both lists are converted to Doubles before calculations begin.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+correlation :: (Num a, Num b) => [a] -> [b] -> Double;
+public correlation !list1 !list2 =
+    let
+        correlationHelper :: (Num a, Num b) => [a] -> [b] -> Int -> Double -> Double -> Double -> Double -> Double -> Double;
+        correlationHelper !xs !ys !partialLength !partialSumX !partialSumSquareX !partialSumY !partialSumSquareY !partialProductXY =
+            case xs of
+            [] ->
+                let
+                    n :: Double;
+                    n = toDouble partialLength;
+
+                    numerator :: Double;
+                    numerator = (n * partialProductXY - partialSumX * partialSumY);
+                    
+                    lowerProduct :: Double;
+                    lowerProduct = ((n * partialSumSquareX - partialSumX * partialSumX)) *
+                                   ((n * partialSumSquareY - partialSumY * partialSumY));
+                in
+                    numerator / (sqrt lowerProduct);
+            xHead : xTail ->
+                case ys of
+                [] -> 
+                    // Ignore the additional x data
+                    correlationHelper [] ys partialLength partialSumX partialSumSquareX partialSumY partialSumSquareY partialProductXY;
+                yHead : yTail ->
+                    let
+                        x = toDouble xHead;
+                        y = toDouble yHead;
+                    in
+                        correlationHelper xTail yTail (partialLength + 1) (partialSumX + x) (partialSumSquareX + (x*x)) 
+                                                                          (partialSumY + y) (partialSumSquareY + (y*y)) (partialProductXY + (x*y));
+                ;
+            ;
+    in
+        correlationHelper list1 list2 (0 :: Int) 0 0 0 0 0;
+
+// These examples have been checked against Excel
+/* @example */
+correlationExamples = 
+    assert (correlation [1.0, 2, 3, 4] [10.0, 20, 30, 40] == 1.0) &&
+    assert (correlation [1.0, 2, 3, 4, 5] [-10.0, -20, -30, -40, -50] == -1.0) &&
+    assert (correlation [1.0, 1, 1, 5, 5, 5] [6.0, 7, 8, 6, 7, 8] == 0.0) &&
+    assert (correlation [1.0, 2, 3] [1.0, 2, 3, 4, 5, 6] == correlation [1.0, 2, 3] [1.0, 2, 3]) &&
+    assert (correlation [1.0, 2, 3, 4, 5, 6] [1.0, 2, 3] == correlation [1.0, 2, 3] [1.0, 2, 3]) &&
+    assert (roundToNPlaces (correlation testData1 testData2) 10 == -0.1966214605) &&
+    assert (isNotANumber (correlation [1.0] [1.0])) &&
+    assert (isNotANumber (correlation ([] :: [Int]) ([] :: [Int])))
+    ;
+
+/**
+ * Calculates the {@code n@}th moment about the mean of values
+ * 
+ * Runtime performace is O(n).  Requires three passes over the data.
+ */
+nthMoment :: Num a => [a] -> Int -> Double;
+public nthMoment !values !n =
+    let
+        mean :: Double;
+        mean = average values;
+        
+        diff :: Num a => Double -> a -> Double; 
+        diff n x = power (toDouble x - mean) n;
+    in
+        sum (map (diff (toDouble n)) values) / toDouble (length values);
+    
+/* @example */
+private nthMomentExamples =
+    assert (roundToNPlaces (nthMoment [1,2,3,4,4.0] 0) 4 == 1.0) &&
+    assert (roundToNPlaces (nthMoment [1,2,3,4,4.0] 1) 4 == 0.0) &&
+    assert (roundToNPlaces (nthMoment [1,2,3,4,4.0] 2) 4 == 1.36) &&
+    assert (roundToNPlaces (nthMoment [1,2,3,4,4.0] 3) 4 == -0.576) &&
+    assert (isNotANumber (nthMoment ([] :: [Int]) 4))
+    ;
+
+////////////////////////////////////////////////////////////////////////
+// Custom summary functions that ignore NaN values
+
+/**
+ * A custom version of {@link sum@} that ignores NaN values.  The NaN values in the list will not contribute
+ * to the summation and will have no effect on the result.  If the list is empty, or contains only NaN
+ * values, then NaN is returned.
+ *
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+sumIgnoreNaN :: [Double] -> Double;
+public sumIgnoreNaN !values =
+    let
+        sumHelper :: [Double] -> Boolean -> Double -> Double;
+        sumHelper !xs !encounteredNumber !partialSum =
+            case xs of
+            [] -> 
+                if encounteredNumber then
+                    partialSum
+                else
+                    notANumber;
+            xsHead : xsTail ->
+                if isNotANumber xsHead then
+                    sumHelper xsTail encounteredNumber partialSum
+                else
+                    sumHelper xsTail True (partialSum + xsHead);
+            ;
+    in
+        sumHelper values False 0.0;
+
+/* @example */
+private sumIgnoreNaNExamples =
+    assert (sumIgnoreNaN [1.0, 2.0, notANumber, notANumber] == 3) &&
+    assert (sumIgnoreNaN [-1.0, 1.0, 5.10] == 5.10) &&
+    assert (isNotANumber (sumIgnoreNaN [])) &&
+    assert (isNotANumber (sumIgnoreNaN [notANumber, notANumber, notANumber]))
+    ;
+    
+/**
+ * A custom version of {@link average@} that ignores NaN values.  The NaN values in the list will not contribute
+ * to either the summation or the count and will have no effect on the result.  If the list is empty, or
+ * contains only NaN values, then NaN is returned.
+ *
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+averageIgnoreNaN :: [Double] -> Double;
+public averageIgnoreNaN !values =
+    let
+        averageHelper :: [Double] -> Double -> Int -> Double;
+        averageHelper !xs !partialSum !partialLength =
+            case xs of
+            [] ->
+                if partialLength == 0 then
+                    notANumber
+                else
+                    partialSum / toDouble partialLength;
+            xsHead : xsTail ->
+                if isNotANumber xsHead then
+                    averageHelper xsTail partialSum partialLength 
+                else
+                    averageHelper xsTail (partialSum + xsHead) (partialLength + 1);
+            ;
+    in
+        averageHelper values 0.0 0;
+    
+/* @example */
+private averageIgnoreNaNExamples =
+    assert (averageIgnoreNaN [1.0, notANumber, 2.0, notANumber, 3.0, notANumber] == 2.0) &&
+    assert (isNotANumber (averageIgnoreNaN [])) &&
+    assert (isNotANumber (averageIgnoreNaN [notANumber, notANumber]))
+    ;
+
+/**
+ * A custom version of {@link weightedAverage@} that ignores NaN values.  Any child whose value or weight is NaN
+ * is ignored and will have no effect on the result.  If the list is empty, or contains only NaN values, then
+ * NaN is returned.  If no weights are provided, NaN is returned.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+weightedAverageIgnoreNaN :: [Double] -> [Double] -> Double;
+public weightedAverageIgnoreNaN !values !weights =
+    let
+        waHelper :: [Double] -> [Double]-> [Double] -> Boolean -> Double -> Double -> Double;
+        waHelper !values !weights !origWeights !encounteredNumber !partialSum !partialWeightSum =
+            case values of
+            [] -> 
+                if encounteredNumber then
+                    partialSum / partialWeightSum
+                else
+                    notANumber;
+            vHead : vTail ->
+                case weights of
+                [] -> 
+                    waHelper (vHead : vTail) origWeights origWeights encounteredNumber partialSum partialWeightSum; 
+                wHead : wTail ->
+                    if (isNotANumber vHead) || (isNotANumber wHead) then
+                        waHelper vTail wTail origWeights encounteredNumber partialSum partialWeightSum
+                    else
+                        waHelper vTail wTail origWeights True (vHead * wHead + partialSum) (wHead + partialWeightSum);
+                ;
+            ;
+    in
+        if isEmpty weights then
+            notANumber
+        else
+            waHelper values weights weights False 0.0 0.0;
+
+/* @example */
+private weightedAverageIgnoreNaNExamples =
+    assert (weightedAverageIgnoreNaN [10.0, 5.0, -90000.0] [1.0, 3.0, 0.0] == 6.25) &&
+    assert (weightedAverageIgnoreNaN [10.0, -20000, 5, notANumber, -90000, 5, notANumber] [1, notANumber, 2, notANumber, 0, 1, 90] == 6.25) &&
+    assert (weightedAverageIgnoreNaN [10.0, 10, 30] [2.0, 1.0] == 18) &&
+    assert (isNotANumber (weightedAverageIgnoreNaN [] [])) &&
+    assert (isNotANumber (weightedAverageIgnoreNaN [notANumber, notANumber] [1, 2])) &&
+    assert (isNotANumber (weightedAverageIgnoreNaN [1, 2, 3] [notANumber, notANumber, notANumber])) &&
+    assert (isNotANumber (weightedAverageIgnoreNaN [notANumber] [notANumber])) &&
+    assert (isNotANumber (weightedAverageIgnoreNaN [] [1.0]))
+    ;
+ 
+/**
+ * Counts the number of non-NaN values in a list.  Any child whose value is NaN is ignored and will have
+ * no effect on the result.  If the list is empty, or contains only NaN values, then 0.0 is returned.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+countIgnoreNaN :: [Double] -> Double;
+public countIgnoreNaN !values =
+    let
+        countHelper :: [Double] -> Int -> Int;
+        countHelper !xs !partialCount =
+            case xs of
+            [] -> partialCount;
+            xsHead : xsTail ->
+                if isNotANumber xsHead then
+                    countHelper xsTail partialCount
+                else
+                    countHelper xsTail (partialCount + 1);
+            ;
+    in
+        toDouble (countHelper values 0);
+
+/* @example */
+private countIgnoreNaNExamples =
+    assert (countIgnoreNaN [1.0, 1.0, 1.0] == 3.0) &&
+    assert (countIgnoreNaN [1.0, 2, notANumber, notANumber, 3, 4, notANumber, 5] == 5) &&
+    assert (countIgnoreNaN [] == 0.0) &&
+    assert (countIgnoreNaN [notANumber, notANumber] == 0.0)
+    ;
+    
+/**
+ * A custom version of {@link maximum@} that ignores NaN values.  The NaN values in the list will not contribute
+ * to either the summation or the maximum and will have no effect on the result.  If the list is empty, or
+ * contains only NaN values, then NaN is returned.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+maximumIgnoreNaN :: [Double] -> Double;
+public maximumIgnoreNaN !values =
+    let
+        maximumHelper :: [Double] -> Boolean -> Double -> Double;
+        maximumHelper !xs !encounteredNumber !currentMax = 
+            case xs of
+            [] -> 
+                if encounteredNumber then 
+                    currentMax
+                else
+                    notANumber;
+            xsHead : xsTail ->
+                if isNotANumber xsHead then
+                    maximumHelper xsTail encounteredNumber currentMax
+                else
+                    if (not encounteredNumber) || xsHead > currentMax then
+                        maximumHelper xsTail True xsHead
+                    else
+                        maximumHelper xsTail True currentMax;
+            ;
+    in
+        maximumHelper values False 0.0;
+
+/* @example */
+private maximumIgnoreNaNExamples =
+    assert (maximumIgnoreNaN [8.0, 4.0, 3.0, 9.9, -30] == 9.9) &&
+    assert (maximumIgnoreNaN [101.0, 1.0, notANumber, 3.0, notANumber, 100] == 101.0) &&
+    assert (isNotANumber (maximumIgnoreNaN [notANumber, notANumber])) &&
+    assert (isNotANumber (maximumIgnoreNaN []))
+    ;
+    
+/**
+ * A custom version of {@link minimum@} that ignores NaN values.  The NaN values in the list will not contribute
+ * to either the summation or the minimum and will have no effect on the result.  If the list is empty, or
+ * contains only NaN values, then NaN is returned.
+ * 
+ * Runtime performance is O(n).  Only one pass over the data is required.
+ */
+minimumIgnoreNaN :: [Double] -> Double;
+public minimumIgnoreNaN !values =
+    let
+        minimumHelper :: [Double] -> Boolean -> Double -> Double;
+        minimumHelper !xs !encounteredNumber !currentMin = 
+            case xs of
+            [] -> 
+                if encounteredNumber then 
+                    currentMin
+                else
+                    notANumber;
+            xsHead : xsTail ->
+                if isNotANumber xsHead then
+                    minimumHelper xsTail encounteredNumber currentMin
+                else
+                    if (not encounteredNumber) || xsHead < currentMin then
+                        minimumHelper xsTail True xsHead
+                    else
+                        minimumHelper xsTail True currentMin;
+            ;
+    in
+        minimumHelper values False 0.0;
+
+/* @example */
+private minimumIgnoreNaNExamples =
+    assert (minimumIgnoreNaN [8.0, 4.0, 3.0, 9.9, -30] == -30) &&
+    assert (minimumIgnoreNaN [101.0, 1.0, notANumber, 3.0, notANumber, 100] == 1.0) &&
+    assert (isNotANumber (minimumIgnoreNaN [notANumber, notANumber])) &&
+    assert (isNotANumber (minimumIgnoreNaN []))
+    ;
+
+/* @test */
+testSummaryModule :: Boolean;
+public testSummaryModule = 
+    assert averageExamples
+    && assert weightedAverageExamples
+    && assert populationVarianceExamples
+    && assert sampleVarianceExamples
+    && assert populationStandardDeviationExamples
+    && assert sampleStandardDeviationExamples
+    && assert nthMostFrequentExamples
+    && assert modeExamples
+    && assert selectNthRankedElementExamples
+    && assert percentileExamples
+    && assert medianExamples
+    && assert quartileExamples
+    && assert correlationExamples
+    && assert nthMomentExamples
+    && assert distinctCountExamples
+    && assert covarianceExamples
+    && assert minimumIgnoreNaNExamples
+    && assert maximumIgnoreNaNExamples
+    && assert countIgnoreNaNExamples
+    && assert averageIgnoreNaNExamples
+    && assert weightedAverageIgnoreNaNExamples
+    && assert sumIgnoreNaNExamples
+    ;

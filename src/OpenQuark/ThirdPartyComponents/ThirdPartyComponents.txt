@@ -1,0 +1,85 @@
+This product includes software developed by the Apache Software Foundation (http://www.apache.org/).
+
+The following is a list of the third-party components used by the Quark Platform.
+
+1. antlr 2.7.6
+Website: http://www.antlr.org/
+Resource: lib/Resources/External/java/antlr/antlr.jar
+License: ThirdPartyComponents/antlr-2.7.6/LICENSE.txt
+
+2. ObjectWeb asm 3.0
+Website: http://asm.objectweb.org/
+Resource: lib/Resources/External/java/asm-all-3.0.jar
+License: ThirdPartyComponents/asm-3.0/LICENSE.txt
+
+3. Jakarta Commons Collections 3.1
+Website: http://jakarta.apache.org/commons/collections/
+Resource: lib/Resources/External/java/commons-collections-3.1.jar
+License: ThirdPartyComponents/commons-collections-3.1/LICENSE.txt
+
+4. IBM ICU for Java 2.6
+Website: http://icu.sourceforge.net/
+Resource: lib/Resources/External/java/icu4j.jar
+License: ThirdPartyComponents/icu4j-2.6/license.html
+
+ICU uses Unicode Data Files.
+License: ThirdPartyComponents/icu4j-2.6/ucdterms.txt
+
+5. JavaHelp 2.0_02
+Website: http://java.sun.com/products/javahelp/
+Resource: lib/Resources/External/Sun/JavaHelp/2.0_02/jh.jar
+License: ThirdPartyComponents/javahelp-2.0_02/LICENSE.html
+
+6. JUnit 3.8.1
+Website: http://www.junit.org/
+Resource: lib/Resources/External/java/junit.jar
+License: ThirdPartyComponents/junit-3.8.1/cpl-v10.html
+
+7. Apache Log4J 1.2.6
+Website: http://logging.apache.org/
+Resource: lib/Resources/External/java/log4j.jar
+License: ThirdPartyComponents/log4j-1.2.6/LICENSE.txt
+
+8. Apache Xerces 2.6.2
+Website: http://xerces.apache.org/xerces2-j/
+Resources:
+    lib/Resources/External/java/xercesImpl.jar
+    lib/Resources/External/java/xmlParserAPIs.jar
+License: ThirdPartyComponents/xerces-2.6.2/LICENSE
+
+Xerces includes DOM and SAX.
+Licenses: ThirdPartyComponents/xerces-2.6.2/LICENSE.dom-software.txt
+          ThirdPartyComponents/xerces-2.6.2/LICENSE.sax.txt
+
+9. DData
+Website: http://www.cs.uu.nl/~daan/ddata.html
+Resources:   
+    various CAL modules contain derived work including:
+    bin/cal/debug/CAL/Cal/Collections/Map.cal
+    bin/cal/debug/CAL/Cal/Collections/IntMap.cal
+    bin/cal/debug/CAL/Cal/Collections/LongMap.cal
+    bin/cal/debug/CAL/Cal/Collections/Set.cal
+    bin/cal/debug/CAL/Cal/Collections/Sequence.cal
+    bin/cal/debug/CAL/Cal/Collections/Queue.cal   
+License: ThirdPartyComponents/ddata/LICENSE
+
+10. Parsec
+Website: http://www.cs.uu.nl/~daan/parsec.html
+Resource:
+    various CAL modules contain derived work including:
+    bin/cal/debug/CAL/Cal/Utilities/Parser.cal
+License: ThirdPartyComponents/parsec/LICENSE
+
+11. Hugs
+Website: http://www.haskell.org/hugs/
+Resource: 
+    various CAL modules contain derived work including:
+    bin/cal/debug/CAL/Cal/Core/Prelude.cal
+License: ThirdPartyComponents/hugs/LICENSE
+
+12. Glasgow Haskell Compiler
+Website: http://www.haskell.org/ghc/
+Resource: 
+    various CAL modules contain derived work including:
+    bin/cal/debug/CAL/Cal/Core/Prelude.cal
+License: ThirdPartyComponents/ghc/LICENSE

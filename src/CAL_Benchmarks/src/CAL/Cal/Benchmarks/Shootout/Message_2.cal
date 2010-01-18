@@ -1,0 +1,235 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * Messages benchmark implementation for the internet bechmark shootouts see: {@url
+ * http://shootout.alioth.debian.org@}
+ *
+ * This is a second version of the {@link module =
+ * "Cal.Benchmarks.Shootout.Message"@} benchmark that uses mutable variables
+ * instead of a BoundedQueue. This may have better performance in some cases.
+ *
+ * This code is based on and inspired by the entries in the The Great Computer
+ * Language Shootout {@url http://shootout.alioth.debian.org/@}.
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.Message_2;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, String, JObject, Boolean;
+    function =
+        eager, error, intToString, seq, stringToInt, unsafeFromCalValue,
+        toCalValue, input, output;
+    ;
+
+import Cal.IO.Console using
+    function = printLine;
+    ;
+
+import Cal.Collections.List using
+    function = head;
+    ;
+
+import Cal.Experimental.Concurrent.Parallel using
+    function = par;
+    ;
+
+import Cal.Core.System using
+    function = concurrentRuntime;
+    ;
+
+/** this value is used to tell the workers to end */
+end :: Int;
+end = -1;
+
+/**
+ * an indivual worker which takes values from the upstream queue, adds one, and
+ * puts them on the downstream queue.
+ */
+worker :: MutableVariable Int -> MutableVariable Int -> ();
+worker !inq !outq =
+    let
+        input :: Int;
+        input = eager $ takeMutableVariable inq;
+    in
+        if (input == end) then
+            putMutableVariable outq end
+            `seq`
+            ()
+        else
+            (
+                putMutableVariable outq (input + 1)
+                `seq`
+                worker inq outq
+            )
+    ;
+
+/**
+ * create a chain of worker functions running in parallel this is done using
+ * the par function.
+ */
+createChain :: Int -> MutableVariable Int -> MutableVariable Int;
+createChain !length !input =
+    if (length == 0) then
+        input
+    else
+        (
+            let
+                output :: MutableVariable Int;
+                output = makeMutableVariable ();
+            in
+                worker input output
+                `par`
+                createChain (length - (1 :: Int)) output
+        )
+    ;
+
+main :: [String] -> ();
+public main !args =
+    let
+        n :: Int;
+        n = eager $ stringToInt (head args);
+
+        inq :: MutableVariable Int;
+        inq = eager $ makeMutableVariable ();
+
+        outq :: MutableVariable Int;
+        outq = eager $ createChain (500 :: Int) inq;
+
+        /** this feeds n 0's into the first queue */
+        feedQueue :: Int -> ();
+        feedQueue n =
+            if (n == 0) then
+                putMutableVariable inq end
+            else
+                putMutableVariable inq (0 :: Int)
+                `seq`
+                feedQueue (n - 1)
+            ;
+
+        /** this collects n values from the last queue */
+        sumResult :: Int -> Int -> Int;
+        sumResult !n !sum =
+            if (n == 0) then
+                sum
+            else
+                sumResult (n - 1) (sum + (takeMutableVariable outq))
+            ;
+    in
+        if concurrentRuntime then
+            feedQueue n 
+            `par` 
+            printLine (intToString $ sumResult n 0)
+        else
+            error
+                "You must define the VM arg org.openquark.cal.machine.lecc.concurrent_runtime to run this program"
+    ;
+
+//////////////////////////////////////////////////////////////////////
+// This implements MutableVariable, similar to m-structures in Id.
+
+/**
+ * MutableVariable represent a value that can be passed between threads using
+ * put and take. It has the same semantics as a BlockableQueue of length 1.
+ */
+data public MutableVariable a =
+    private MutableVariable atomicRef :: !AtomicReference
+    ;
+
+/** make a new mutable variable */
+makeMutableVariable :: () -> MutableVariable a;
+public makeMutableVariable !unused = MutableVariable createAtomicReference;
+
+/**
+ * Put a value into a mutable variable. If the variable is not empty this
+ * function will block.
+ */
+putMutableVariable :: MutableVariable a -> a -> ();
+public putMutableVariable !mutable !value =
+    let
+        put :: AtomicReference -> JObject -> ();
+        put !ref !value =
+            if compareAndSet ref null value then
+                ()
+            else
+                yield
+                `seq`
+                put ref value
+            ;
+    in
+        case mutable of
+        MutableVariable {atomicRef} ->
+            put atomicRef (output (toCalValue value));
+    ;
+
+/**
+ * take a value from a mutable variable, if the there is no value in the
+ * variable this will block.
+ */
+takeMutableVariable :: MutableVariable a -> a;
+public takeMutableVariable !mutable =
+    let
+        take :: AtomicReference -> JObject;
+        take !atomicRef =
+            let
+                value = eager $ getAndSet atomicRef null;
+            in
+                if isNull value then
+                    yield
+                    `seq`
+                    take atomicRef
+                else
+                    value
+            ;
+    in
+        case mutable of
+        MutableVariable {atomicRef} ->
+            unsafeFromCalValue $ input $ take atomicRef;
+    ;
+
+data foreign unsafe import jvm "java.util.concurrent.atomic.AtomicReference"
+    private AtomicReference;
+
+foreign unsafe import jvm "constructor"
+    private createAtomicReference :: AtomicReference;
+
+foreign unsafe import jvm "method weakCompareAndSet"
+    private compareAndSet :: AtomicReference -> JObject -> JObject -> Boolean;
+
+foreign unsafe import jvm "method getAndSet"
+    private getAndSet :: AtomicReference -> JObject -> JObject;
+
+foreign unsafe import jvm "static method java.lang.Thread.yield"
+    private yield :: ();
+
+foreign unsafe import jvm "isNull" private isNull :: JObject -> Boolean;
+
+foreign unsafe import jvm "null" private null :: JObject;

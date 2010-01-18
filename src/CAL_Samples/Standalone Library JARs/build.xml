@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<!--
+    Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+    All rights reserved.
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+    
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+     
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+     
+        * Neither the name of Business Objects nor the names of its contributors
+          may be used to endorse or promote products derived from this software
+          without specific prior written permission.
+     
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    build.xml
+    Creation date: Oct 23, 2007.
+    By: Joseph Wong
+-->
+    
+<!-- ================================================================================================= -->
+<!-- build.xml                                                                                         -->
+<!--                                                                                                   -->
+<!-- The ant file to rebuild the directedgraph.jar and directedgraph.src.zip                           -->
+<!--                                                                                                   -->
+<!-- In Eclipse:                                                                                       -->
+<!--   This file may be executed by invoking a context menu on this file, then:                        -->
+<!--      Run As... -> Ant Build                                                                       -->
+<!--                                                                                                   -->
+<!--   Run target configuration:                                                                       -->
+<!--     Automatically refresh the import project when done:                                           -->
+<!--       On the Refresh tab, ensure "Refresh resources upon completion." is checked.                 -->
+<!--       Select the radio button: "The project containing the selected resource"                     -->
+<!--                                                                                                   -->
+<!--     Do not build before launch:                                                                   -->
+<!--       On the Build tab, ensure "Build before launch" is unchecked.                                -->
+<!--                                                                                                   -->
+<!-- ================================================================================================= -->
+
+<project name="buildDirectedGraphLibrary" default="main">
+    <target name="main" depends="buildStandaloneJar" description="The default target." />
+    
+    <!-- The folder which contains the JAR and the source zip file. -->
+    <property name="destFolder" location="${basedir}"/>
+    
+    <target name="buildStandaloneJar" description="Build the standalone JAR.">
+        <java classname="org.openquark.cal.services.StandaloneJarTool"
+              fork="false"
+              failonerror="true"
+              maxmemory="256m">
+            <arg value="cal.samples.base.cws"/>
+            <arg value="-verbose"/>
+            <arg value="-lib"/>
+            <arg value="Cal.Samples.DirectedGraphLibrary"/>
+            <arg value="public"/>
+            <arg value="org.openquark.cal.samples.directedgraph.DirectedGraphLibrary"/>
+            <arg value="${destFolder}/directedgraph.jar"/>
+            <arg value="-src"/>
+            <arg value="${destFolder}/directedgraph.src.zip"/>
+        </java>
+    </target>
+    
+</project>

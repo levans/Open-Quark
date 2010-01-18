@@ -1,0 +1,108 @@
+<?xml version="1.0"?>
+<!--
+    Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+ 
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+ 
+        * Neither the name of Business Objects nor the names of its contributors
+          may be used to endorse or promote products derived from this software
+          without specific prior written permission.
+ 
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    ant.rules.research.xml
+    Creation date: Jul 11, 2007.
+    By: Edward Lam
+-->
+    
+<!-- ================================================================================================= -->
+<!-- ant.rules.research.xml                                                                            -->
+<!--                                                                                                   -->
+<!-- Common properties for all research build files.                                                   -->
+<!--                                                                                                   -->
+<!-- ================================================================================================= -->
+
+<project name="ant.rules.research">
+    <!-- 
+      Load environment.
+      -->
+    <property environment="env"/>
+
+    <dirname property="ant.rules.research.basedir" file="${ant.file.ant.rules.research}"/>
+
+    <property file="${ant.rules.research.basedir}/build-common.properties"/>
+    
+    <!--
+      Init properties which correspond to env variables set by the calling build system.
+      If not set by calling build system, use reasonable defaults.
+      -->       
+    
+    <!-- src.dir: The source base dir. -->
+    <!-- Normally: the great-grandparent folder -->
+    <condition property="src.dir" value="${env.SRC_DIR}" else="${ant.rules.research.basedir}/../../../..">
+        <isset property="env.SRC_DIR" />
+    </condition>
+    <property name="env.SRC_DIR" value="${src.dir}" />
+
+    <!-- out.dir: The output base dir. -->
+    <!-- Normally: $(SRC_DIR)/../$(PLATFORM) -->
+    <condition property="out.dir" value="${env.OUT_DIR}" else="${basedir}">
+        <isset property="env.OUT_DIR" />
+    </condition>
+    <property name="env.OUT_DIR" value="${out.dir}" />
+    
+    <!-- output.dir: The output dir. -->
+    <condition property="output.dir" value="${env.OUTPUT_DIR}" else="${out.dir}/release">
+        <isset property="env.OUTPUT_DIR" />
+    </condition>
+    
+    <!-- outbin.dir: Final binaries. -->
+    <condition property="outbin.dir" value="${env.OUTBIN_DIR}" else="${output.dir}/bin">
+        <isset property="env.OUTBIN_DIR" />
+    </condition>
+    <property name="env.OUTBIN_DIR" value="${outbin.dir}" />
+    
+    <!-- obj.dir: Intermediate files. -->
+    <condition property="obj.dir" value="${env.OBJ_DIR}" else="${output.dir}/obj">
+        <isset property="env.OBJ_DIR" />
+    </condition>
+
+    <!-- outlog.dir: Log files. -->
+    <condition property="outlog.dir" value="${env.OUTLOG_DIR}" else="${output.dir}/logs">
+        <isset property="env.OUTLOG_DIR" />
+    </condition>
+
+    <!-- javadocs.out.dir: Javadoc output. -->
+    <condition property="javadocs.out.dir" value="${env.JAVADOC_DIR}" else="${output.dir}/doc/javadoc">
+        <isset property="env.JAVADOC_DIR" />
+    </condition>
+    
+    <!-- caldoc.out.dir: CALDoc output. -->
+    <condition property="caldoc.out.dir" value="${env.CALDOC_DIR}" else="${output.dir}/doc/caldoc">
+        <isset property="env.CALDOC_DIR" />
+    </condition>
+    
+    <!-- Branch-specific properties. -->
+    <property file="${ant.rules.research.basedir}/build-Main.properties" />
+
+</project>

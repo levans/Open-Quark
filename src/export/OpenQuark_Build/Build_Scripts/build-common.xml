@@ -1,0 +1,569 @@
+<?xml version="1.0"?>
+<!--
+    Copyright (c) 2005 BUSINESS OBJECTS SOFTWARE LIMITED
+    All rights reserved.
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+    
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+     
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+     
+        * Neither the name of Business Objects nor the names of its contributors
+          may be used to endorse or promote products derived from this software
+          without specific prior written permission.
+     
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    build-common.xml
+    Creation date: Jan 20, 2005.
+    By: Edward Lam
+-->
+
+<!-- 
+================================================================================================= 
+
+Imported build file for Quark build scripts.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is a library of ant definition tasks which are shared among various ant build
+scripts for Quark and its dependents.
+                                                                                                                                                                                                   
+================================================================================================= 
+-->
+
+<project name="build-common" basedir="." default="main">
+
+    <!--
+        The default target.
+    -->
+    <target name="main" description="The default build process.">
+        <echo level="error">This file has no default target.</echo>
+    </target>
+
+    
+    <!-- Set the "jarsToTest.dir" property to the directory containing the project files to test. 
+         This will be set based on whether the "testDebugJars" property is set.
+      -->
+    <target name="initJarsToTest">
+        <condition property="jarsToTest.dir" value="${java.debug.out.dir}">
+            <isset property="testDebugJars"/>
+        </condition>
+        <condition property="jarsToTest.dir" value="${java.release.out.dir}">
+            <not>
+                <isset property="testDebugJars"/>
+            </not>
+        </condition>
+        
+    </target>
+    
+    <!-- Common pattern sets. -->
+    <import file="./patternsets.xml" />
+
+    <!-- Target which initializes some project-specific properties.  This target can be overridden in project files. -->
+    <target name="initProperties" depends="initJarsToTest">
+        <!-- The folder where the debug .jar for the project goes. -->
+        <property name="java.debug.out.jar.dir" value="${java.debug.out.dir}" />
+    </target>
+        
+    <!--
+        Initialization target 
+          - setup directory names etc.
+          - should be overridden/called by subclasses...
+     -->
+    <target name="init" depends="initProperties,initCalResourcesPattern,defMyJavac">
+        
+        <!-- The default (empty) build paths. -->
+        <!-- This may be overridden by extending project build files. -->
+        <patternset id="eclipse.buildpath" includes="empty"/>
+        <patternset id="depot2.buildpath" includes="empty"/>
+        <patternset id="import.buildpath" includes="empty"/>
+        <patternset id="temp.depot2.buildpath" includes="empty"/>
+        
+        <!--
+            "Path-like structures" (ant terminology).
+         -->
+
+        <patternset id="jarResources">
+            <!-- Properties. -->
+            <include name="**/*.properties"/>
+
+            <!-- General resources. -->   
+            <!--include name="Resources/**"/-->
+         
+            <!-- Images. -->
+            <include name="**/*.gif"/>
+            <include name="**/*.jpg"/>
+            <include name="**/*.png"/>
+            
+            <!-- Text files. -->
+            <include name="**/*.txt"/>
+         
+            <!-- XML Schema.  Are these accessible within a .jar? -->
+            <include name="**/*.xsd"/>
+            
+            <!-- Value type registries. -->
+            <include name="**/*.gvr"/>
+            
+            <!-- Gem factories..-->
+            <include name="**/gemGenerators.ini"/>
+            
+            <!-- Html resources which aren't package comments. -->
+            <include name="**/*.css"/>
+            <include name="**/*.html"/>
+            <exclude name="**/package.html"/>
+            
+            <!-- Include Oracle scripts. -->
+            <include name="**/*.dml"/>
+            <include name="**/dml.program.directory"/>
+            
+            <!-- Exclude CAL resources - this should be the same as the "calResources" pattern below. -->
+            <exclude name="CAL/**"/>
+            <exclude name="Metadata/**"/>
+            <exclude name="Designs/**"/>
+            <exclude name="CAL_Resources/**"/>
+            <exclude name="Workspace*Declarations/**"/>
+        </patternset>
+    </target>
+
+    <!-- Initialize the pattern specifying CAL resources.-->
+    <target name="initCalResourcesPattern">       
+        <patternset id="calResources">
+            <include name="CAL/**"/>
+            <include name="Metadata/**"/>
+            <include name="Designs/**"/>
+            <include name="CAL_Resources/**"/>
+            <include name="Workspace*Declarations/**"/>
+        </patternset>
+    </target>
+    
+    <!-- Initialize the my.javac presetdef.
+        This is a custom javac definition with some options preset.
+        - other options to set: srcdir, destdir, classpath.
+        - would like to set: includeAntRuntime="no"
+          but need to include to be able to compile new tasks.
+    -->
+    <target name="defMyJavac" depends="defMyJavacBase,defMyJavacOpen"/>
+    <target name="defMyJavacBase">
+        <presetdef name="my.javac.base">
+            <javac source="${source.level}" memoryMaximumSize="1024m"
+                   debug="on"
+                   deprecation="off"
+                   fork="true"
+                   includeJavaRuntime="no"
+                   optimize="on"/>
+        </presetdef>
+    </target>
+    
+    <!-- Use bootclasspath etc. for whatever jdk is used to run ant. -->
+    <target name="defMyJavacOpen">
+        <presetdef name="my.javac">
+            <my.javac.base/>
+        </presetdef>
+    </target>
+    
+    <macrodef name="compile-java-def">
+        <attribute name="srcdir"/>
+        <attribute name="destdir"/>
+        <element name="precedingPathElements" optional="yes"/>
+        <sequential>
+            <my.javac srcdir="@{srcdir}" destdir="@{destdir}" memoryMaximumSize="1024m">
+                <classpath>
+                    <precedingPathElements/>
+                    <fileset dir="${outbin.dir}">
+                        <patternset refid="import.buildpath"/>
+                    </fileset>
+                    <fileset dir="${depot2.src.dir}">
+                        <patternset refid="depot2.buildpath"/>
+                        <patternset refid="temp.depot2.buildpath"/>
+                    </fileset>
+                    <fileset dir="${eclipse.plugins.dir}">
+                        <patternset refid="eclipse.buildpath"/>
+                    </fileset>
+                    <fileset dir="${java.debug.out.dir}" includes="*.jar"/>
+                    <fileset dir="${java.debug.out.jar.dir}" includes="*.jar"/>
+                    <fileset file="${outbin.dir}/${junit.jar}"/>
+                </classpath>
+                <classpath refid="dependeeGroup.path"/>
+            </my.javac>
+        </sequential>
+    </macrodef>
+
+    <!--
+        Target to run the standalone jar builder.
+        Attributes:
+          standaloneJar.workspaceFileName  - eg. my.workspace.cws
+          standaloneJar.moduleName         - eg. My.Module.Name
+          standaloneJar.libClassScope      - eg. public
+          standaloneJar.libClassName       - eg. com.businessname.ClassName
+          standaloneJar.archiveBaseName    - eg. myStandaloneJar
+                                                 output .jar will be ${archiveBaseName}.jar
+                                                 output src zip will be ${archiveBaseName}.src.zip
+    -->
+    <target name="buildStandaloneJar" description="Build the standalone JAR." if="standaloneJar.libClassName">
+        <buildStandaloneJar-def
+            workspaceFileName="${standaloneJar.workspaceFileName}"
+            moduleName       ="${standaloneJar.moduleName}"
+            libClassScope    ="${standaloneJar.libClassScope}"
+            libClassName     ="${standaloneJar.libClassName}"
+            archiveBaseName  ="${standaloneJar.archiveBaseName}"
+         />
+    </target>
+
+    <macrodef name="buildStandaloneJar-def">
+        <attribute name="workspaceFileName"/>
+        <attribute name="moduleName"/>
+        <attribute name="libClassScope"/>
+        <attribute name="libClassName"/>
+        <attribute name="archiveBaseName"/>
+        <sequential>
+            <java classname="org.openquark.cal.services.StandaloneJarTool"
+                  fork="true"
+                  failonerror="true"
+                  maxmemory="256m">
+                <classpath>
+                    <fileset dir="${outbin.dir}">
+                        <patternset refid="import.buildpath"/>
+                    </fileset>
+                    <fileset dir="${depot2.src.dir}">
+                        <patternset refid="depot2.buildpath"/>
+                    </fileset>
+                    <fileset dir="${eclipse.plugins.dir}">
+                        <patternset refid="eclipse.buildpath"/>
+                    </fileset>
+                    <fileset dir="${java.debug.out.dir}" includes="*.jar"/>
+                    <fileset dir="${java.debug.out.jar.dir}" includes="*.jar"/>
+                    <fileset file="${outbin.dir}/${junit.jar}"/>
+                    
+                    <pathelement location="${cal.debug.out.dir}"/>
+                </classpath>
+                <classpath refid="dependeeGroup.path"/>
+                <arg value="@{workspaceFileName}"/>
+                <arg value="-verbose"/>
+                <arg value="-lib"/>
+                <arg value="@{moduleName}"/>
+                <arg value="@{libClassScope}"/>
+                <arg value="@{libClassName}"/>
+                <arg value="${java.debug.out.dir}/@{archiveBaseName}.jar"/>
+                <arg value="-src"/>
+                <arg value="${java.debug.out.dir}/@{archiveBaseName}.src.zip"/>
+            </java>
+        </sequential>
+    </macrodef>
+
+    <!-- 
+        Build this project.
+        Precondition: sources in ${src.dir}
+    -->   
+    <target name="Build" depends="compile-java,compile-junit,createDebugJars,copyResources,buildStandaloneJar"/>
+
+    <!-- Compile Java non-test files. -->       
+    <target name="compile-java" depends="compile-java-1,compile-java-2"/>
+    <target name="compile-java-1" depends="init,mkDebugDir" if="src.project.dir">
+        <compile-java-macro srcdir="${src.project.dir}"/>
+    </target>
+    <target name="compile-java-2" depends="init,mkDebugDir" if="src2.project.dir">
+        <compile-java-macro srcdir="${src2.project.dir}"/>
+    </target>
+    <macrodef name="compile-java-macro">
+        <attribute name="srcdir"/>
+        <sequential>
+            <echo level="info">Building: ${ant.project.name}</echo>
+        
+            <mkdir dir="${project.classes.dest}" />
+        
+            <!-- Compile the .java files. -->
+            <compile-java-def srcdir="@{srcdir}"
+                              destdir="${project.classes.dest}"/>
+        </sequential>
+    </macrodef>
+       
+    <!-- Build the JUnit test classes. -->
+    <target name="compile-junit" depends="init,mkDebugDir" if="test.project.dir">
+        <mkdir dir="${project.testclasses.dest}" />
+    
+        <!-- Compile the .java files. -->
+        <compile-java-def srcdir="${test.project.dir}"
+                          destdir="${project.testclasses.dest}">
+            <precedingPathElements>
+                <pathelement path="${project.classes.dest}"/>   
+            </precedingPathElements>
+        </compile-java-def>
+    </target>
+
+    <!-- Copy the build-support files to the build target directory -->
+    <!-- Precondition: build-support files in srcpath dirs -->
+    <target name="copyResources" depends="init,echoCopyResources,mkReleaseDir,copySrcResources,copyTestResources,copyCppOutput"/>
+    
+    <!-- Echo the message that resources are being copied. -->
+    <target name="echoCopyResources" depends="init">
+        <echo level="info">Copying resources for: ${ant.project.name}</echo>
+    </target>
+    
+    <!-- Make the debug folder. -->
+    <target name="mkDebugDir" depends="init">
+        <mkdir dir="${java.debug.out.jar.dir}" />
+    </target>
+    
+    <!-- Make the release folder. -->
+    <target name="mkReleaseDir" depends="init">
+        <mkdir dir="${java.release.out.dir}" />
+    </target>
+
+    <!-- Note: for some reason, this form of the Ant copy task cannot handle the cases where a space is in the includes pattern.
+         Attempted: %20, and enclosing parts of the path with &quot;
+         
+         An alternative is separate calls for each space-containing folder such as:
+         <copy todir="${java.release.out.dir}/CAL">
+             <fileset dir="${project.dir}/src/CAL"/>
+         </copy>
+      -->
+    <!-- Copy the build-support files from the src/ folder -->
+    <target name="copySrcResources" depends="init,copySrcJavaResources,copySrcCALResources"/>
+        
+    <target name="copySrcJavaResources" if="src.project.dir">
+        <copy todir="${java.lib.dir}/Resources">
+            <fileset dir="${outbin.dir}">
+                <patternset refid="import.buildpath"/>
+            </fileset>   
+            <fileset dir="${depot2.src.dir}">
+                <patternset refid="depot2.buildpath"/>
+            </fileset>
+            <fileset dir="${eclipse.plugins.dir}">
+                <patternset refid="eclipse.buildpath"/>
+            </fileset>
+            <mapper>
+                <filtermapper>
+                    <replaceregex pattern="Main[/\\]PI[/\\]"/>
+                    <replaceregex pattern="Main[/\\]Research[/\\]([^/\\]+)[/\\]Resources"/>
+                </filtermapper>
+            </mapper>
+        </copy>
+    </target>
+    
+    <target name="copySrcCALResources" depends="copySrcCALResources-1,copySrcCALResources-2"/>
+    <target name="copySrcCALResources-1" depends="init,mkDebugDir" if="src.project.dir">
+        <copySrcCALResources-macro srcdir="${src.project.dir}"/>
+    </target>
+    <target name="copySrcCALResources-2" depends="init,mkDebugDir" if="src2.project.dir">
+        <copySrcCALResources-macro srcdir="${src2.project.dir}"/>
+    </target>
+    <macrodef name="copySrcCALResources-macro">
+        <attribute name="srcdir"/>
+        <sequential>
+            <copy todir="${cal.debug.out.dir}">
+                <fileset dir="@{srcdir}" casesensitive="no">
+                    <patternset refid="calResources"/>
+                </fileset>
+            </copy>
+        </sequential>
+    </macrodef>
+
+    <!-- Copy the build-support files from the test/ folder, if any. -->
+    <target name="copyTestResources" depends="init,copyTestCALResources"/>
+
+    <target name="copyTestCALResources" if="test.project.dir">
+        <copy todir="${cal.debug.out.dir}">
+            <fileset dir="${test.project.dir}" casesensitive="no">
+                <patternset refid="calResources"/>
+            </fileset>
+        </copy>
+    </target>
+       
+
+
+    <!-- 
+        Copy the .exe, .dll and .pdb files for C++ projects.
+      -->
+    <target name="copyCppOutput" depends="init" if="cpp.project.dir">
+        <!-- 
+          Should be:
+            Perform copy from cpp.debug.out.dir to group.outbin.dir if in debug mode.
+            Perform copy from cpp.release.out.dir to group.outbin.dir if in release mode.
+          This will be fixed when responsibility for c++ compilation is moved to the make files.
+          -->
+        <copy todir="${group.outbin.dir}">
+            <fileset dir="${cpp.debug.out.dir}" casesensitive="no">
+                <include name="**/*.exe"/>
+                <include name="**/*.dll"/>
+                <include name="**/*.pdb"/>
+                <exclude name="**/vc70.pdb"/>                
+            </fileset>
+        </copy>
+    </target>
+
+    <!-- Create the .jar files -->
+    <target name="createDebugJars">
+        <antcall target="createDebugBaseJar"/>
+        <antcall target="createDebugTestJar"/>
+    </target>   
+
+    <!-- 
+        Create the .jar file for the project classes.
+      -->
+    <target name="createDebugBaseJar" depends="createDebugBaseJarWithProvidedManifest,createDebugBaseJarWithDefaultManifest"/>
+    <target name="createDebugBaseJarWithProvidedManifest" depends="init,initSrc2JarFileSets,mkDebugDir" if="plugin.name">
+        <jar destfile="${java.debug.out.jar.dir}/${project.simplename}.jar" manifest="${java.build.dir}/${project.simplename}/META-INF/MANIFEST.MF">
+            <fileset 
+                dir="${project.classes.dest}"
+                includes="**/*.class"/>
+
+            <fileset dir="${src.project.dir}">
+                <patternset refid="jarResources"/>
+                <exclude name="about.*"/>
+                <exclude name="plugin.*"/>
+                <exclude name="toc.xml"/>
+            </fileset>
+            <fileset refid="src2.jarWithProvidedManifest.fileset"/>
+            <fileset dir="${project.dir}">
+                <include name="about.*"/>
+                <include name="plugin.*"/>
+                <include name="toc.xml"/>
+            </fileset>
+            
+            <!-- Icons for Eclipse projects. -->
+            <fileset dir="${project.dir}">
+                <include name="icons/**"/>
+            </fileset>
+        </jar>
+    </target>
+    
+    <!--
+      Handling for a second source folder.
+      -->
+    <target name="initSrc2JarFileSets" depends="initSrc2JarFileSets1,initSrc2JarFileSets2"/>
+    <target name="initSrc2JarFileSets1" unless="src2.project.dir">
+        <fileset id="src2.jarWithProvidedManifest.fileset" dir="." includes="dummyxxx"/>
+        <fileset id="src2.jarWithDefaultManifest.fileset" dir="." includes="dummyxxx"/>
+    </target>
+    <target name="initSrc2JarFileSets2" if="src2.project.dir">
+        <fileset id="src2.jarWithProvidedManifest.fileset" dir="${src2.project.dir}">
+            <patternset refid="jarResources"/>
+            <exclude name="about.*"/>
+            <exclude name="plugin.*"/>
+            <exclude name="toc.xml"/>
+        </fileset>
+        <fileset id="src2.jarWithDefaultManifest.fileset" dir="${src2.project.dir}">
+            <patternset refid="jarResources"/>
+        </fileset>
+    </target>
+    
+    <target name="createDebugBaseJarWithDefaultManifest" depends="init,initSrc2JarFileSets,mkDebugDir" if="src.project.dir" unless="plugin.name">
+        <jar destfile="${java.debug.out.jar.dir}/${project.simplename}.jar">
+            <fileset dir="${project.dir}" includes="plugin.*,toc.xml" />
+            <fileset 
+                dir="${project.classes.dest}"
+                includes="**/*.class"/>
+
+            <fileset dir="${src.project.dir}">
+                <patternset refid="jarResources"/>
+            </fileset>
+            <fileset refid="src2.jarWithDefaultManifest.fileset"/>
+
+            <!-- Icons for Eclipse projects. -->
+            <fileset dir="${project.dir}">
+                <include name="icons/**"/>
+            </fileset>
+        </jar>
+    </target>
+    
+    <!-- 
+        Create the .jar file for the unit tests.
+      -->
+    <target name="createDebugTestJar" depends="init,mkDebugDir" if="test.project.dir">
+        <property name="projectTestJar" value="${java.debug.out.jar.dir}/${project.simplename}_test.jar"/>
+        <jar destfile="${projectTestJar}">
+            <fileset 
+                dir="${project.testclasses.dest}"
+                includes="**/*.class"/>
+
+            <fileset dir="${test.project.dir}">
+                <patternset refid="jarResources"/>
+            </fileset>   
+        </jar>
+    </target>
+    
+    <!-- Run the JUnit tests for the this project -->
+    <!-- Output will be put in the ${junit.dir} directory.-->
+    <!-- Precondition: sources in ${src.dir} -->
+    <target name="junit" depends="junit-test" if="junit.testclass"/>
+
+    <!-- Run the JUnit tests for the this project -->
+    <!-- Output will be put in the ${junit.dir} directory.-->
+    <!-- Precondition: sources in ${src.dir} -->
+    <!-- Precondition: build files in ${jarsToTest.dir} -->
+    <!-- Precondition: test class files jarred -->
+    <target name="junit-test" depends="init" if="junit.testclass">
+        <junit-test-macro testClass="${junit.testclass}" />
+    </target>
+
+    <macrodef name="junit-test-macro">
+        <attribute name="testClass"/>
+        <sequential>
+            <mkdir dir="${junit.dir}"/>
+            
+            <!-- It is necessary to fork and start a new environment to ensure that nothing in the environment
+                 messes up the CAL initialization.  I'm not entirely sure why this is, but it causes problems
+                 with CAL failing to find and compile the modules properly if this isn't done. -->
+            <junit printsummary="yes"
+                   haltonfailure="no"
+                   showoutput="yes"
+                   errorproperty="junit-Failed"
+                   failureproperty="junit-Failed"
+                   fork="yes"
+                   maxmemory="384m"
+                   newenvironment="yes">
+                <!-- Some of the JUnit tests require increased perm gen size, due to the number of classes they load.
+                     Note that these args only work for Sun JVMs. -->
+                <jvmarg value="-XX:PermSize=128m"/>
+                <jvmarg value="-XX:MaxPermSize=128m"/>
+                
+                <classpath>
+                    <pathelement path="${cal.debug.out.dir}" />
+                    <pathelement path="${java.lib.dir}" />
+                    <fileset dir="${jarsToTest.dir}" includes="**/*.jar"/>
+                    
+                    <!--
+                        jaxrpc.jar and xmlparserv2.jar contain old versions of various xml APIs (eg. the javax.xml.namespace.QName class).
+                        The order in which .jars from a fileset are added to a path-like structure is undefined.
+                        Ensure these come after other .jars (which include the newer versions of the api) by separating out filesets.
+                      -->
+                    <fileset dir="${java.lib.dir}" includes="**/*.jar" excludes="**/xmlparserv2.jar,**/jaxrpc.jar"/>
+                    <fileset dir="${java.lib.dir}" includes="**/xmlparserv2.jar,**/jaxrpc.jar"/>
+                    <fileset dir="${java.debug.out.dir}" includes="**/*_test.jar"/>
+                    
+                    <!--
+                      It would be better to include the particular jars which are relevant.
+                      However, the classpath property is only relevant for building a project, not running a target within it.
+                    <fileset dir="${src.dir}">
+                        <patternset refid="import.buildpath"/>
+                    </fileset>
+                    <fileset dir="${depot2.src.dir}">
+                        <patternset refid="depot2.buildpath"/>
+                    </fileset>
+                    -->
+                    
+                </classpath>
+                <classpath refid="dependeeGroup.path"/>
+                <formatter type="${junit.formatter.type}"/>
+                <test name="@{testClass}" todir="${junit.dir}"/>
+            </junit>
+        </sequential>
+    </macrodef>
+
+</project>

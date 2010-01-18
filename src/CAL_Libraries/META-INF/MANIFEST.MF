@@ -1,0 +1,21 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: %pluginName
+Bundle-SymbolicName: org.openquark.cal.libraries
+Bundle-Version: 1.2.0.113v20060501
+Bundle-Localization: plugin
+Bundle-Vendor: %providerName
+Require-Bundle: org.openquark.cal.platform,
+ org.openquark.cal.runtime,
+ org.openquark.util
+Eclipse-RegisterBuddy: 
+ org.openquark.cal.platform
+Import-Package: com.ibm.icu.text; quark_icu="true",
+ com.ibm.icu.util; quark_icu="true"
+Export-Package: org.openquark.cal.foreignsupport.module.DataGems,
+ org.openquark.cal.foreignsupport.module.UniqueIdentifier,
+ org.openquark.cal.module.Cal.Data,
+ org.openquark.cal.module.Cal.Graphics,
+ org.openquark.cal.module.Cal.IO,
+ org.openquark.cal.module.Cal.Utilities
+

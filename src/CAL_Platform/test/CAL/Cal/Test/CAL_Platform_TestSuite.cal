@@ -1,0 +1,138 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CAL_Platform_TestSuite.cal
+ * Creation date: Mar 21, 2007.
+ * By: Magnus Byne
+ */
+
+/**
+ * this module must contain all the CAL platform tests.
+ * Running testModule in this module will run all the CAL platform tests.
+ */
+module Cal.Test.CAL_Platform_TestSuite;
+
+import Cal.Core.Prelude using
+    function = assert, error;
+    ;
+
+import Cal.Core.Char;    
+import Cal.Core.Dynamic;
+import Cal.Test.General.M2;
+import Cal.Collections.List;
+import Cal.Core.String;
+import Cal.Test.Core.Debug_Tests;    
+import Cal.Utilities.Decimal;
+import Cal.Test.General.RecordTests;
+import Cal.Test.General.LegacyTuple;
+import Cal.Test.General.RuntimeRegression;
+import Cal.Test.General.Shape_Tests;
+import Cal.Collections.Array;
+import Cal.Test.Core.Prelude_Tests;
+import Cal.Test.Core.String_Tests;
+import Cal.Test.Collections.List_Tests;
+import Cal.Test.Core.Array_Tests;
+import Cal.Test.Core.Bits_Tests;
+import Cal.Test.Core.Char_Tests;
+import Cal.Test.Utilities.Decimal_Tests;
+import Cal.Test.Utilities.QuickCheck_Tests;
+import Cal.Test.Core.Dynamic_Tests;
+import Cal.Test.Core.Memoize_Tests;
+import Cal.Test.Utilities.Random_Tests;    
+import Cal.Test.Collections.IntMap_Tests;
+import Cal.Test.Collections.LongMap_Tests;
+import Cal.Test.Collections.Map_Tests;
+import Cal.Test.Collections.Set_Tests;
+import Cal.Test.Core.Monad_Tests;
+import Cal.Test.Core.Functor_Tests;
+import Cal.Test.Core.System_Tests;
+import Cal.Test.Utilities.Locale_Tests;
+import Cal.Test.Utilities.MessageFormat_Tests;
+import Cal.Test.Core.Exception_Tests;
+import Cal.Test.Core.Record_Tests;
+import Cal.Test.General.LocalPatternMatch;
+import Cal.Test.General.DerivedInstance;
+import Cal.Test.JUnitSupport.StandaloneJarBuilder_Test_Support;
+
+/** An entry point for running {@link testModule@} that can be packaged up and deployed with the StandaloneJarBuilder. */
+public main =
+    StandaloneJarBuilder_Test_Support.makeMain testModule;
+
+public testModule =
+    assert M2.mainM2
+    && assert QuickCheck_Tests.testModule
+    && assert Exception_Tests.testModule
+    && assert Prelude_Tests.testModule    
+    && assert Record_Tests.testModule
+    && assert List.testModule
+    && assert List_Tests.testModule    
+    && assert String.testModule
+    && assert String_Tests.testModule                 
+    && assert Array.testModule
+    && assert Array_Tests.testModule    
+    && assert Bits_Tests.testModule    
+    && assert Char.testModule
+    && assert Char_Tests.testModule
+    && assert Debug_Tests.testModule     
+    && assert Decimal.testModule
+    && assert Decimal_Tests.testModule
+    && assert Dynamic.testModule
+    && assert Dynamic_Tests.testModule
+    && assert RuntimeRegression.exerciseLetVars
+    && assert RuntimeRegression.exerciseAliases
+    && assert RuntimeRegression.exercise64KLimit
+    && assert RuntimeRegression.exercisePartialApplications
+    && assert RuntimeRegression.exerciseUnboxedFieldExtraction
+    && assert RuntimeRegression.exerciseLetVarScoping
+    && assert RuntimeRegression.exerciseSeq
+    && assert RuntimeRegression.exerciseUnoptimizedApplications
+    && assert RuntimeRegression.exerciseUnboxedReturns
+    && assert Memoize_Tests.testModule
+    && assert Random_Tests.testModule
+    && assert Map_Tests.testModule
+    && assert LongMap_Tests.testModule
+    && assert IntMap_Tests.testModule
+    && assert Set_Tests.testModule   
+    && assert Functor_Tests.testModule
+    && assert Monad_Tests.testModule
+    && assert System_Tests.testModule
+    && assert Locale_Tests.testModule
+    && assert MessageFormat_Tests.testModule
+    && assert Shape_Tests.testShapeTestsModule 
+    && assert RecordTests.testModule
+    && assert Debug_Tests.testModule
+    && assert LegacyTuple.testLegacyTupleModule
+    && assert LocalPatternMatch.testModule
+    && assert DerivedInstance.testModule
+    || error "CAL_Platorm_TestSuite failed.";
+

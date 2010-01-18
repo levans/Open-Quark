@@ -1,0 +1,802 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * GregorianBusinessCalendar.cal
+ * Creation date: Apr 24, 2006.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains an implementation of a {@link typeConstructor =
+ * BusinessCalendar@} based on the Gregorian calendar. Here, the periods have
+ * their usual Gregorian values and names.
+ *
+ * @author Richard Webster
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+module Cal.Data.GregorianBusinessCalendar;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, Maybe, String;
+    dataConstructor = True, Nothing, Just;
+    function =
+        add, error, field2, fromJust, fromMaybe, intToString, isEmpty, isJust, 
+        max, not, truncate, upFromTo;
+    ;
+import Cal.Collections.List using
+    function = map, subscript;
+    ;      
+import Cal.Utilities.Range using
+    typeConstructor = Range;
+    function = makeBetweenIncludingLeftEndpointRange, makeEntireRange;
+    ;
+import Cal.Utilities.TimeZone;
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    function = makeTimeValue;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Data.BusinessCalendar using
+    typeConstructor = BusinessCalendar, Period, PeriodType;
+    dataConstructor =
+        NoPeriod, YearPeriod, QuarterPeriod, MonthPeriod, WeekOfYearPeriod, 
+        DayOfYearPeriod, DayOfMonthPeriod, DayOfWeekPeriod;
+    function =
+        getBasePeriod, getPeriodValue, getPeriodValues, makeBusinessCalendar;
+    ;
+import Cal.Data.DictionaryQuery using
+    typeConstructor = Expr;
+    function = untypedFunctionExpr;
+    ;
+import Cal.Data.Sql;
+
+
+/**
+ * An instance of BusinessCalendar based on the Gregorian calendar.
+ * Uses American conventions when displaying dates.
+ */
+defaultBusinessCalendar :: BusinessCalendar;
+public defaultBusinessCalendar = 
+    makeBusinessCalendar 
+        gregorian_periodValueRange 
+        gregorian_periodDisplayName 
+        gregorian_periodTimeRange 
+        gregorian_periodValueFromTime 
+        gregorian_timePartExpr;
+
+/**
+ * An instance of BusinessCalendar based on the Gregorian calendar.
+ * Uses a more generic, easily parseable display format:
+ * {@unorderedList
+ *   {@item Periods are always listed from longest to shortest@}
+ *   {@item Format is purely numerical except for separators and period type indicators
+ *    (e.g. 'Q' for quarters).@}
+ * @}
+ *    
+ * @see function=gregorian_periodDisplayName_localizable
+ */
+localizableDisplayNameBusinessCalendar :: BusinessCalendar;
+public localizableDisplayNameBusinessCalendar = 
+    makeBusinessCalendar 
+        gregorian_periodValueRange 
+        gregorian_periodDisplayName_localizable 
+        gregorian_periodTimeRange 
+        gregorian_periodValueFromTime 
+        gregorian_timePartExpr;
+
+/**
+ * Returns an array that contains the maximum number of days in a month.
+ */
+maxDaysInMonth :: Array Int;
+private maxDaysInMonth = 
+    Array.fromList [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/**
+ * Returns {@link True@} if the given year is a leap year.
+ */
+isLeapYear :: Int -> Boolean;
+private isLeapYear !year = 
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+
+/**
+ * Returns the number of weeks in the given year.  This function is based on the ISO 8601 standard.
+ * Weeks start on Monday, and the first week of the year is the first week that has a Thursday in it.
+ */
+getWeeksInYear :: Int -> Int;
+private getWeeksInYear !year =
+    let
+        // TODO a rather hack-ish way to compute the number weeks in a year.  Get the week number
+        // from one week prior to the end of the year, and also get the week number of the last
+        // day of the year and return the maximum.  (Double check: if week1 equals 1, can we
+        // assume that week0 is 52?)
+        week0 = field2 (gregorianDateToISO8601WeekDate (year, 12, 24));
+        week1 = field2 (gregorianDateToISO8601WeekDate (year, 12, 31));
+    in
+        max week0 week1;
+        
+/**
+ * Converts a Gregorian date (year-month-day_of_month) to the ISO-8601 week
+ * date format (year-week-day_of_week). 
+ */
+gregorianDateToISO8601WeekDate :: (Int, Int, Int) -> (Int, Int, Int);
+private gregorianDateToISO8601WeekDate gregorianDate =
+    let
+        // Convert input to Y M D
+        (y, m, d) = gregorianDate;
+        
+        // Find if Y is a leap year
+        yearIsLeapYear = isLeapYear y;
+        
+        // Find if Y-1 is a leap year
+        prevYearIsLeapYear = isLeapYear (y - 1);
+        
+        // Find the Day of Year Number for Y M D
+        dayOfYearNumber = 
+            let 
+                day = d + Array.sum (Array.take (m - 1) maxDaysInMonth);
+            in
+                if (not yearIsLeapYear) && (m > 2) then day - 1 
+                else day;
+        
+        // Find the Jan1Weekday for Y (Monday=1, Sunday=7)
+        yy = (y - 1) % 100;
+        c = (y - 1) - yy;
+        g = yy + (yy / 4);
+        jan1Weekday = 1 + (((((c / 100) % 4) * 5) + g) % 7);
+        
+        // Find the WeekDay for Y M D
+        h = dayOfYearNumber + (jan1Weekday - 1);
+        weekday = 1 + ((h - 1) % 7);
+
+        // Find if Y M D falls in YearNumber Y-1, WeekNumber 52 or 53
+        fallsInPreviousYear = ((dayOfYearNumber <= (8-jan1Weekday)) && jan1Weekday > 4);
+        yearNumber0 = if fallsInPreviousYear then y - 1 else y;        
+        weekNumber0 :: Int;
+        weekNumber0 =  if (jan1Weekday == 5) || ((jan1Weekday == 6) && prevYearIsLeapYear) then 53
+                      else 52;
+
+        // Find if Y M D falls in YearNumber Y+1, WeekNumber 1
+        fallsInNextYear = ((yearNumber0 == y) && (((getDaysInYear y) - dayOfYearNumber) < (4 - weekday)));
+        yearNumber1 = if fallsInNextYear then y + 1 else yearNumber0;        
+        weekNumber1 = if fallsInNextYear then 1 else weekNumber0;
+        
+        // Finds if Y M D falls in YearNumber Y, WeekNumber 1 through 53
+        fallsInThisYear = (yearNumber1 == y);
+        j = dayOfYearNumber + (7 - weekday) + (jan1Weekday - 1);
+        weekNumber2 =
+            if fallsInThisYear then
+                if jan1Weekday > 4 then ((j / 7) - 1) else (j / 7)
+            else
+                weekNumber1;  
+    in
+        (yearNumber1, weekNumber2, weekday);
+
+/**
+ * Returns the number of days in a given year.
+ */
+getDaysInYear :: Int -> Int;
+private getDaysInYear !year = if isLeapYear year then 366 else 365;
+
+/**
+ * Returns the number of days in a given year and month.
+ */
+getDaysInYearMonth :: Int -> Int -> Int;
+private getDaysInYearMonth !year !month =
+    if month != 2 then getDaysInMonth month
+    else if isLeapYear year then 29
+    else 28;
+
+/**
+ * Returns the number of days in a given year and month.
+ */
+getDaysInMonth :: Int -> Int;
+private getDaysInMonth !month = Array.subscript maxDaysInMonth (month - 1);
+
+/**
+ * Returns the range of valid values for the specified period type, given the parent period.
+ * If no parent period is available, then a maximal default range will be returned
+ * (e.g. (1, 31) for DayOfMonthPeriod).
+ */
+gregorian_periodValueRange :: Period -> PeriodType -> (Int, Int);
+private gregorian_periodValueRange parentPeriod !periodType = 
+    let
+        hasParentPeriod :: Boolean;
+        hasParentPeriod = not $ isEmpty $ getPeriodValues parentPeriod;
+
+        parentPeriodVals :: [(PeriodType, Int)];
+        parentPeriodVals = getPeriodValues parentPeriod;
+
+        (parentPeriodType, parentPeriodValue) = getBasePeriod parentPeriod;
+
+        // Year period
+        maybeYear = getPeriodValue parentPeriod YearPeriod;
+        hasYearPeriod = isJust maybeYear;
+        year = fromJust maybeYear;
+
+        // Month period
+        maybeMonth = getPeriodValue parentPeriod MonthPeriod;
+        hasMonthPeriod = isJust maybeMonth;
+        month = fromJust maybeMonth;
+
+        // Default values for various PeriodType
+        defaultQuarterOfYear = (1, 4);
+        defaultMonthOfYear   = (1, 12);
+        defaultWeekOfYear    = (1, 53);
+        defaultDayOfYear     = (1, 366);
+        defaultDayOfMonth    = (1, 31);
+        defaultDayOfWeek     = (1, 7);
+    in
+        case periodType of
+        NoPeriod -> error "Invalid period type";
+
+        YearPeriod -> 
+            // TODO: there really doesn't need to be any restriction here (unless there is eventually a larger
+            // period:  decade, century, etc...)...
+            // What would be appropriate here?
+            (1, 9999);
+
+        QuarterPeriod -> 
+            // There are always 4 quarters in a year.
+            defaultQuarterOfYear;
+
+        MonthPeriod ->
+            // If the months are rolling up to years (or to nothing) then there should be month values 1 through 12.
+            // If months are rolling up to quarters, then certain months will go into each quarter.
+            if hasParentPeriod then
+                case parentPeriodType of
+                YearPeriod -> defaultMonthOfYear;
+                QuarterPeriod ->
+                    // For now, just assign the months to the quarters as follows...
+                    //      Q1: 1 -> 3
+                    //      Q2: 4 -> 6
+                    //      Q3: 7 -> 9
+                    //      Q4: 10 -> 12
+                    // TODO: account for the accounting period start here...
+                    (parentPeriodValue * 3 - 2, parentPeriodValue * 3);
+                _ -> error "Invalid parent period type";
+            else defaultMonthOfYear;
+
+        WeekOfYearPeriod -> 
+            // If weeks are not rolling up into any parent, then assume 53 weeks in the period.
+            if hasParentPeriod then
+                if hasYearPeriod then (1, getWeeksInYear year)
+                else defaultWeekOfYear
+            else defaultWeekOfYear;
+
+        DayOfYearPeriod  ->
+            // If days are not rolling up into any parent, then assume 366 days in the period (although this
+            // probably isn't a very useful case).
+            if hasParentPeriod then
+                if hasYearPeriod then (1, getDaysInYear year)
+                else defaultDayOfYear
+            else defaultDayOfYear;
+
+        DayOfMonthPeriod ->
+            // Rules:
+            // 1. If there is no parent period, then assume 31 days in the period;
+            // 2. If there is no year or month period, then assume 31 days in the period;
+            // 3. If there is no year, but there is a month period, then return the maximum days in that month;
+            // 4. If there is a year period without a month period, then assume 31 days in the period;
+            // 5. If both year and month periods exist, take leap year into account and return the appropriate
+            //    number of days in the period.  
+            if hasParentPeriod then
+                if hasYearPeriod then
+                    if hasMonthPeriod then (1, getDaysInYearMonth year month) else defaultDayOfMonth
+                else
+                    if hasMonthPeriod then (1, getDaysInMonth month) else defaultDayOfMonth
+            else defaultDayOfMonth;
+
+        DayOfWeekPeriod  -> 
+            // If days are not rolling up into any parent, then assume 7 days in the period.
+            // TODO: take into account active weekdays from the business calendar in this case...
+            if hasParentPeriod then
+                // TODO: implement this...
+                error "Case not implemented"
+            else defaultDayOfWeek;
+        ;
+
+/**
+ * Returns the display name for the specified period value.
+ * For example, for the DayOfWeek period type, this might return {@code "Monday"@}.
+ * For example, for the Quarter period type, this might return {@code "Q1 98"@}.
+ */
+gregorian_periodDisplayName :: Period -> PeriodType -> Int -> String;
+private gregorian_periodDisplayName parentPeriod !periodType !periodValue = 
+    let
+        maybeParentYear  = getPeriodValue parentPeriod YearPeriod;
+        maybeParentMonth = getPeriodValue parentPeriod MonthPeriod;
+        
+        /**
+         * Returns a display name for the specified year.
+         */
+        formatYear :: Int -> String;
+        formatYear !yearValue = 
+            intToString yearValue;
+        
+        /**
+         * Returns a display name for the specified quarter.
+         */
+        formatQuarter :: Maybe Int -> Int -> String;
+        formatQuarter maybeYearValue quarterValue = 
+            let
+                quarterName = "Q" ++ intToString quarterValue;
+                yearSuffix = 
+                    case maybeYearValue of
+                    Nothing -> "";
+                    Just yearValue -> " " ++ formatYear yearValue;
+                    ;
+            in
+                quarterName ++ yearSuffix;
+        
+        /**
+         * Returns a display name for the specified month.
+         */
+        formatMonth :: Maybe Int -> Int -> String;
+        formatMonth maybeYearValue monthValue = 
+            let
+                monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                monthName = subscript monthNames (monthValue - 1);
+                yearSuffix = 
+                    case maybeYearValue of
+                    Nothing -> "";
+                    Just yearValue -> " " ++ formatYear yearValue;
+                    ;
+            in
+                monthName ++ yearSuffix;
+        
+        /**
+         * Returns a display name for the specified week.
+         */
+        formatWeek :: Maybe Int -> Int -> String;
+        formatWeek maybeYearValue weekValue = 
+            let
+                weekName = "Week" ++ intToString weekValue;
+                yearSuffix = 
+                    case maybeYearValue of
+                    Nothing -> "";
+                    Just yearValue -> " " ++ formatYear yearValue;
+                    ;
+            in
+                weekName ++ yearSuffix;
+        
+        /**
+         * Returns a display name for the specified day.
+         */
+        formatDayOfYear :: Maybe Int -> Int -> String;
+        formatDayOfYear maybeYearValue dayValue = 
+            let
+                dayName = "Day" ++ intToString dayValue;
+                yearSuffix = 
+                    case maybeYearValue of
+                    Nothing -> "";
+                    Just yearValue -> " " ++ formatYear yearValue;
+                    ;
+            in
+                dayName ++ yearSuffix;
+        
+        /**
+         * Returns a display name for the specified day.
+         */
+        formatDayOfMonth :: Maybe Int -> Maybe Int -> Int -> String;
+        formatDayOfMonth maybeYearValue maybeMonthValue dayValue = 
+            let
+                dayName = intToString dayValue;
+                yearSuffix = 
+                    case maybeYearValue of
+                    Nothing -> "";
+                    Just yearValue -> " " ++ formatYear yearValue;
+                    ;
+                monthPrefix = 
+                    case maybeMonthValue of
+                    Nothing -> "";
+                    Just monthValue -> formatMonth Nothing monthValue ++ " ";
+                    ;
+            in
+                monthPrefix ++ dayName ++ yearSuffix;
+        
+        /** The display names of the weekdays. */
+        weekdayNames :: Array String;
+        weekdayNames = Array.fromList ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        
+        /**
+         * Returns a display name for the specified day.
+         */
+        formatDayOfWeek :: Int -> String;
+        formatDayOfWeek dayValue = 
+            Array.subscript weekdayNames (dayValue - 1);
+    in
+        case periodType of
+        NoPeriod         -> "";
+        YearPeriod       -> formatYear periodValue;
+        QuarterPeriod    -> formatQuarter maybeParentYear periodValue;
+        MonthPeriod      -> formatMonth maybeParentYear periodValue;
+        WeekOfYearPeriod -> formatWeek maybeParentYear periodValue;
+        DayOfYearPeriod  -> formatDayOfYear maybeParentYear periodValue;
+        DayOfMonthPeriod -> formatDayOfMonth maybeParentYear maybeParentMonth periodValue;
+        DayOfWeekPeriod  -> formatDayOfWeek periodValue;
+        ;
+
+/**
+ * Returns the display name for the specified period value.
+ * For example, for the DayOfWeek period type, this might return {@code "Monday"@}.
+ * For example, for the Quarter period type, this might return {@code "1998-Q1"@}.
+ * 
+ * @see function=gregorian_periodDisplayName_localizable_examples
+ */
+gregorian_periodDisplayName_localizable :: Period -> PeriodType -> Int -> String;
+private gregorian_periodDisplayName_localizable parentPeriod !periodType !periodValue = 
+    let
+        maybeParentYear  = getPeriodValue parentPeriod YearPeriod;
+        maybeParentMonth = getPeriodValue parentPeriod MonthPeriod;
+        
+        /**
+         * Returns a display name for the specified year.
+         */
+        formatYear :: Int -> String;
+        formatYear !yearValue = 
+            intToString yearValue;
+        
+        /**
+         * Returns a prefix for a date that may or may not have a year value.
+         */
+        makeMaybeYearPrefix :: Maybe Int -> String;
+        makeMaybeYearPrefix maybeYearValue =
+            case maybeYearValue of
+            Nothing -> "";
+            Just yearValue -> formatYear yearValue ++ "-";
+            ;
+        
+        /**
+         * Returns a display name for the specified quarter.
+         */
+        formatQuarter :: Maybe Int -> Int -> String;
+        formatQuarter maybeYearValue quarterValue = 
+            let
+                quarterName = "Q" ++ intToString quarterValue;
+            in
+                makeMaybeYearPrefix maybeYearValue ++ quarterName;
+        
+        /**
+         * Returns a display name for the specified month.
+         */
+        formatMonth :: Maybe Int -> Int -> String;
+        formatMonth maybeYearValue monthValue = 
+            let
+                monthName = 
+                    case maybeYearValue of
+                    Nothing -> "M" ++ padWithZero monthValue;
+                    Just yearValue -> padWithZero monthValue;
+                    ;
+            in
+                makeMaybeYearPrefix maybeYearValue ++ monthName;
+        
+        /**
+         * Returns a display name for the specified week.
+         */
+        formatWeek :: Maybe Int -> Int -> String;
+        formatWeek maybeYearValue weekValue = 
+            let
+                weekName = "W" ++ intToString weekValue;
+            in
+                makeMaybeYearPrefix maybeYearValue ++ weekName;
+        
+        /**
+         * Returns a display name for the specified day.
+         */
+        formatDayOfYear :: Maybe Int -> Int -> String;
+        formatDayOfYear maybeYearValue dayValue = 
+            let
+                //there is no example for this case, but prepending "D"
+                //seems like a reasonable extrapolation
+                dayName = "D" ++ intToString dayValue;
+            in
+                makeMaybeYearPrefix maybeYearValue ++ dayName;
+        
+        /**
+         * Returns a display name for the specified day.
+         */
+        formatDayOfMonth :: Maybe Int -> Maybe Int -> Int -> String;
+        formatDayOfMonth maybeYearValue maybeMonthValue dayValue = 
+            let
+                daySuffix = padWithZero dayValue;
+            in
+                case maybeYearValue of
+                Nothing -> 
+                    case maybeMonthValue of
+                    Nothing ->
+                        //TODO: there is no example for this case
+                        //(and it should not generally occur), but
+                        //this will at least distinguish it from
+                        //the other cases
+                        "????-??-" ++ daySuffix;
+                    Just monthValue -> 
+                        padWithZero monthValue ++ "-" ++ daySuffix;
+                    ;
+                Just yearValue ->
+                    case maybeMonthValue of
+                    Nothing ->
+                        //TODO: there is no example for this case
+                        //(and it should not generally occur), but
+                        //this will at least distinguish it from
+                        //the other cases
+                        makeMaybeYearPrefix maybeYearValue ++ "??-" ++ daySuffix;
+                    Just monthValue -> 
+                        makeMaybeYearPrefix maybeYearValue ++ padWithZero monthValue ++ "-" ++ daySuffix;
+                    ;
+                ;
+        
+        /**
+         * Returns a display name for the specified day.
+         */
+        formatDayOfWeek :: Int -> String;
+        formatDayOfWeek dayValue = 
+            let
+                weekdayNames :: Array String;
+                weekdayNames = Array.fromList ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            in
+                Array.subscript weekdayNames (dayValue - 1);
+        
+        /**
+         * Converts an int to a string, padding it with a zero if it is less than 10.
+         * Intended to pad day and month numbers out to two places.
+         */
+        padWithZero :: Int -> String;
+        padWithZero val =
+            if val < 10 then
+                "0" ++ intToString val
+            else
+                intToString val;
+    in
+        case periodType of
+        NoPeriod         -> "";
+        YearPeriod       -> formatYear periodValue;
+        QuarterPeriod    -> formatQuarter maybeParentYear periodValue;
+        MonthPeriod      -> formatMonth maybeParentYear periodValue;
+        WeekOfYearPeriod -> formatWeek maybeParentYear periodValue;
+        DayOfYearPeriod  -> formatDayOfYear maybeParentYear periodValue;
+        DayOfMonthPeriod -> formatDayOfMonth maybeParentYear maybeParentMonth periodValue;
+        DayOfWeekPeriod  -> formatDayOfWeek periodValue;
+        ;
+
+/**
+ * Provides examples of the expected output of gregorian_periodDisplayName_localizable
+ * and verifies that the function behaves as expected.
+ */
+gregorian_periodDisplayName_localizable_examples :: Boolean;
+private gregorian_periodDisplayName_localizable_examples =
+    let
+        disp = gregorian_periodDisplayName_localizable;
+        period = BusinessCalendar.makePeriod;
+    in
+        Prelude.assert (disp (period []) YearPeriod 2000 == "2000") &&
+        
+        Prelude.assert (disp (period [(YearPeriod, 2000)]) QuarterPeriod 2 == "2000-Q2") &&
+        Prelude.assert (disp (period []) QuarterPeriod 2 == "Q2") &&
+        
+        Prelude.assert (disp (period [(YearPeriod, 2000), (QuarterPeriod, 2)]) MonthPeriod 6 == "2000-06") &&
+        Prelude.assert (disp (period [(YearPeriod, 2000)]) MonthPeriod 6 == "2000-06") &&
+        Prelude.assert (disp (period []) MonthPeriod 6 == "M06") &&
+        
+        Prelude.assert (disp (period [(YearPeriod, 2000), (QuarterPeriod, 2), (MonthPeriod, 6)]) WeekOfYearPeriod 3 == "2000-W3") &&
+        Prelude.assert (disp (period [(YearPeriod, 2000), (QuarterPeriod, 2)]) WeekOfYearPeriod 3 == "2000-W3") &&
+        Prelude.assert (disp (period [(YearPeriod, 2000)]) WeekOfYearPeriod 3 == "2000-W3") &&
+        Prelude.assert (disp (period []) WeekOfYearPeriod 3 == "W3") &&
+        
+        Prelude.assert (disp (period [(YearPeriod, 2000), (QuarterPeriod, 2), (MonthPeriod, 6)]) DayOfYearPeriod 4 == "2000-D4") &&
+        Prelude.assert (disp (period [(YearPeriod, 2000), (QuarterPeriod, 2)]) DayOfYearPeriod 4 == "2000-D4") &&
+        Prelude.assert (disp (period [(YearPeriod, 2000)]) DayOfYearPeriod 4 == "2000-D4") &&
+        Prelude.assert (disp (period []) DayOfYearPeriod 4 == "D4") &&
+        
+        Prelude.assert (disp (period [(YearPeriod, 2000), (QuarterPeriod, 2), (MonthPeriod, 6)]) DayOfMonthPeriod 5 == "2000-06-05") &&
+        Prelude.assert (disp (period [(YearPeriod, 2000), (QuarterPeriod, 2)]) DayOfMonthPeriod 5 == "2000-??-05") &&
+        Prelude.assert (disp (period [(YearPeriod, 2000)]) DayOfMonthPeriod 5 == "2000-??-05") &&
+        Prelude.assert (disp (period []) DayOfMonthPeriod 5 == "????-??-05") &&
+        Prelude.assert (disp (period [(MonthPeriod, 6)]) DayOfMonthPeriod 5 == "06-05") &&
+        
+        True;
+    
+/**
+ * Given a year and a day of the year, returns the corresponding month and day-of-month.
+ * Throws an error if the day is not valid for the specified year.
+ */
+dayOfYearToDayOfMonth :: Int -> Int -> (Int, Int);
+private dayOfYearToDayOfMonth year dayOfYear =
+    let
+        monthDayCountPairs = map (\month -> (month, getDaysInYearMonth year month)) (upFromTo 1 12);
+        
+        testMonth :: (Int, Maybe (Int, Int)) -> (Int, Int) -> (Int, Maybe (Int, Int)); 
+        testMonth accum monthPair =
+            case accum of
+            (daysSoFar, maybeMonthDay) ->
+                case maybeMonthDay of
+                Nothing ->
+                    case monthPair of
+                    (monthNum, daysInMonth) ->
+                        let
+                            newDaysSoFar = daysSoFar + daysInMonth;
+                            
+                            computedMonth = monthNum;
+                            computedDayOfMonth = dayOfYear - daysSoFar;
+                        in
+                            if dayOfYear <= newDaysSoFar then
+                                (error "Not used", Just (computedMonth, computedDayOfMonth))
+                            else
+                                (newDaysSoFar, Nothing);
+                    ;
+                _ -> accum;
+                ;
+            ;
+        
+        (month, dayOfMonth) =
+            let
+                testResult = List.foldLeftStrict testMonth (0, Nothing) monthDayCountPairs;
+                errorMessage = "Unable to find month for day " ++ intToString dayOfYear ++ " of year " ++ intToString year;
+            in
+                fromMaybe (error errorMessage) $ field2 $ testResult;
+    in
+        (month, dayOfMonth);
+
+/**
+ * Returns the range of time covered by the specified period.
+ * 
+ * NB: If this cannot be determined (esp. if no Year period value is specified),
+ * then the range will be unbounded in both directions.
+ */
+gregorian_periodTimeRange :: Period -> Range Time;
+private gregorian_periodTimeRange period = 
+    let
+        tz = TimeZone.currentTimeZone;
+
+        maybeYear = getPeriodValue period YearPeriod;
+        maybeQuarter = getPeriodValue period QuarterPeriod;
+        maybeMonth = getPeriodValue period MonthPeriod;
+        maybeWeekOfYear = getPeriodValue period WeekOfYearPeriod;
+        maybeDayOfYear = getPeriodValue period DayOfYearPeriod;
+        maybeDayOfMonth = getPeriodValue period DayOfMonthPeriod;
+        maybeDayOfWeek = getPeriodValue period DayOfWeekPeriod;
+
+        hasYear = isJust maybeYear;
+        hasQuarter = isJust maybeQuarter;
+        hasMonth = isJust maybeMonth;
+        hasWeekOfYear = isJust maybeWeekOfYear;
+        hasDayOfYear = isJust maybeDayOfYear;
+        hasDayOfMonth = isJust maybeDayOfMonth;
+        hasDayOfWeek = isJust maybeDayOfWeek;
+
+        year = fromJust maybeYear;
+        quarter = fromJust maybeQuarter;
+        month = fromJust maybeMonth;
+        weekOfYear = fromJust maybeWeekOfYear;
+        dayOfYear = fromJust maybeDayOfYear;
+        dayOfMonth = fromJust maybeDayOfMonth;
+        dayOfWeek = fromJust maybeDayOfWeek;
+    in
+        if not hasYear then makeEntireRange
+        else if hasDayOfYear then
+            let
+                (computedMonth, computedDayOfMonth) = dayOfYearToDayOfMonth year dayOfYear;
+                startTime = makeTimeValue year computedMonth computedDayOfMonth 0 0 0 0 tz;
+                endTime = Time.addDurationToTime startTime (Time.nDaysDuration 1);
+            in
+                makeBetweenIncludingLeftEndpointRange startTime endTime
+        else if hasDayOfMonth then
+            if hasMonth then
+                let
+                    startTime = makeTimeValue year month dayOfMonth 0 0 0 0 tz;
+                    endTime = Time.addDurationToTime startTime (Time.nDaysDuration 1);
+                in
+                    makeBetweenIncludingLeftEndpointRange startTime endTime
+            else
+                makeEntireRange
+        else if hasDayOfWeek && hasWeekOfYear then
+            // TODO: extract the month and day of month from the year, week, and day of week info...
+            error "Case not implemented"
+        else if hasWeekOfYear then
+            // TODO: extract the month and day of month from the year and week of year info...
+            error "Case not implemented"
+        else if hasMonth then
+            let
+                endMonth = if (month == 12) then 1 else month + 1;
+                endYear = if (month == 12) then year + 1 else year;
+                startTime = makeTimeValue year month 1 0 0 0 0 tz;
+                endTime = makeTimeValue endYear endMonth 1 0 0 0 0 tz;
+            in
+                makeBetweenIncludingLeftEndpointRange startTime endTime
+        else if hasQuarter then
+            let
+                endQuarter = if (quarter == 4) then 1 else quarter + 1;
+                endYear = if (quarter == 4) then year + 1 else year;
+
+                startMonth = ((quarter - 1) * 3) + 1;
+                endMonth = ((endQuarter - 1) * 3) + 1;
+
+                startTime = makeTimeValue year startMonth 1 0 0 0 0 tz;
+                endTime = makeTimeValue endYear endMonth 1 0 0 0 0 tz;
+            in
+                makeBetweenIncludingLeftEndpointRange startTime endTime
+        else
+            let
+                startTime = makeTimeValue year 1 1 0 0 0 0 tz;
+                endTime = makeTimeValue (year + 1) 1 1 0 0 0 0 tz;
+            in
+                // Include the entire year.
+                makeBetweenIncludingLeftEndpointRange startTime endTime;
+
+
+/**
+ * Returns the value of the specified period for the time value.
+ */
+gregorian_periodValueFromTime :: Time -> PeriodType -> Int;
+private gregorian_periodValueFromTime time !periodType = 
+    let
+        tz = TimeZone.currentTimeZone;    // TODO: is this ok?
+        timeParts = Time.timeParts tz time;
+    in
+        case periodType of
+        NoPeriod         -> 0;
+        YearPeriod       -> timeParts.year;
+        QuarterPeriod    -> ((timeParts.month - 1) / 3) + 1;
+        MonthPeriod      -> timeParts.month;
+        WeekOfYearPeriod -> error "Case not implemented";   // TODO: implement this...
+        DayOfYearPeriod  -> 
+            let
+                firstDayOfYear = makeTimeValue timeParts.year 1 1 0 0 0 0 tz;
+                timeDiff = Time.subtractTimeFromTime time firstDayOfYear;
+            in
+                truncate (Time.durationToDays timeDiff) + 1;
+        DayOfMonthPeriod -> timeParts.day;
+        DayOfWeekPeriod  -> error "Case not implemented";   // TODO: implement this...
+        _ -> error "Unexpected period type";
+        ;
+
+/**
+ * Returns a database expression to extract a time part from a time value.
+ */
+gregorian_timePartExpr :: Expr -> PeriodType -> Expr;
+private gregorian_timePartExpr baseExpr !periodType = 
+    case periodType of
+    BusinessCalendar.NoPeriod         -> baseExpr;
+    BusinessCalendar.YearPeriod       -> untypedFunctionExpr Sql.YearFunction [baseExpr];
+    BusinessCalendar.QuarterPeriod    -> untypedFunctionExpr Sql.QuarterFunction [baseExpr];
+    BusinessCalendar.MonthPeriod      -> untypedFunctionExpr Sql.MonthFunction [baseExpr];
+    BusinessCalendar.WeekOfYearPeriod -> untypedFunctionExpr Sql.WeekFunction [baseExpr];
+    BusinessCalendar.DayOfYearPeriod  -> untypedFunctionExpr Sql.DayOfYearFunction [baseExpr];
+    BusinessCalendar.DayOfMonthPeriod -> untypedFunctionExpr Sql.DayOfMonthFunction [baseExpr];
+    BusinessCalendar.DayOfWeekPeriod  -> untypedFunctionExpr Sql.DayOfWeekFunction [baseExpr];
+    //BusinessCalendar.HourLevelType    -> untypedFunctionExpr Sql.HourFunction [baseExpr];
+    //BusinessCalendar.MinuteLevelType  -> untypedFunctionExpr Sql.MinuteFunction [baseExpr];
+    //BusinessCalendar.SecondLevelType  -> untypedFunctionExpr Sql.SecondFunction [baseExpr];
+    ;

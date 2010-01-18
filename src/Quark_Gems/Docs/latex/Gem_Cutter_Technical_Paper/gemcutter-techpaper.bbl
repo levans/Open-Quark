@@ -1,0 +1,72 @@
+\begin{thebibliography}{9}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Achten et~al.(2005)Achten, van Eekelen, Plasmeijer, and van
+  Weelden]{achten-afp04}
+Peter Achten, Marko van Eekelen, Rinus Plasmeijer, and Arjen van Weelden.
+\newblock {GEC}: a toolkit for generic rapid prototyping of type safe
+  interactive applications.
+\newblock In Varmo Vene and Tarmo Uustalu, editors, \emph{Adv. Functional
+  Programming, $5^{th}$ Int. Summer School, AFP 2004, U. of Tartu, Revised
+  Lectures}, volume 3622 of \emph{LNCS}, pages 210--244, Tartu, Estonia, August
+  2005. Springer.
+
+\bibitem[{Business Objects}(2006)]{quarkLabsSite_withNoteOnVideos}
+{Business Objects}.
+\newblock {The Open Quark Framework for Java and the CAL Language}.
+\newblock Website, 2006.
+\newblock URL \url{http://labs.businessobjects.com/cal/}.
+\newblock The introductory videos ``Introduction to Gems and the Gem Cutter
+  (Parts 1 and 2)'' and ``Walkthrough of some Developer Tools Features'' are
+  available on the website.
+
+\bibitem[Cox et~al.(1989)Cox, Giles, and Pietrzykowski]{cox89}
+P.~Cox, F.~Giles, and T.~Pietrzykowski.
+\newblock Prograph: A step towards liberating programming from textual
+  conditioning.
+\newblock In \emph{Proc. of the 1989 IEEE Workshop on Visual Languages}, Rome,
+  Italy, 1989.
+
+\bibitem[Dami and Vallet(1996)]{dami96}
+Laurent Dami and Didier Vallet.
+\newblock Higher-order functional composition in visual form.
+\newblock In D.~Tsichritzis, editor, \emph{Object Applications}, pages
+  139--154. U. of Geneva, 1996.
+
+\bibitem[Hanna(2002)]{hanna02}
+Keith Hanna.
+\newblock Interactive visual functional programming.
+\newblock In \emph{ICFP '02: Proc. of the $7^{th}$ ACM SIGPLAN Int. Conf. on
+  Functional Programming}, pages 145--156, New York, NY, USA, 2002. ACM Press.
+
+\bibitem[Kelso(2002)]{kelso02}
+Joel Kelso.
+\newblock \emph{A Visual Functional Programming Environment}.
+\newblock PhD thesis, Murdoch U., Perth, Australia, 2002.
+\newblock URL \url{http://www.csse.uwa.edu.au/\~{}joel/vfpe/index.html}.
+
+\bibitem[Peyton~Jones(2003)]{haskell98}
+Simon Peyton~Jones, editor.
+\newblock \emph{Haskell 98 Language and Libraries: the Revised Report}.
+\newblock Cambridge U. Press, Cambridge, U.K., 2003.
+\newblock URL \url{http://haskell.org/definition/haskell98-report.pdf}.
+
+\bibitem[Poswig et~al.(1994)Poswig, Vrankar, and Morara]{poswig94}
+J\"org Poswig, Guido Vrankar, and Claudio Morara.
+\newblock {VisaVis}: a higher-order functional visual programming language.
+\newblock \emph{Journal of Visual Languages and Computing}, 5:\penalty0
+  83--111, March 1994.
+
+\bibitem[Reekie(1995)]{reekie95}
+Hideki~John Reekie.
+\newblock \emph{Realtime Signal Processing: Dataflow, Visual, and Functional
+  Programming}.
+\newblock PhD thesis, School of Electrical Engineering, U. of Technology at
+  Sydney, 1995.
+\newblock URL \url{http://www.eecs.berkeley.edu/\~{}johnr/papers/thesis.html}.
+
+\end{thebibliography}

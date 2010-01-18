@@ -1,0 +1,392 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Time.cal
+ * Created: 3 Nov 2003
+ * By: Rick Cameron
+ */
+ 
+/**
+ * This module defines types and functions for working with absolute time values. 
+ * 
+ * @author Rick Cameron
+ */
+module Cal.Utilities.Time;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Ord, Outputable;
+    typeConstructor = Double, Int, JList, Long, String;
+    function = input, output;
+    ;       
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+import Cal.Utilities.Locale using
+    typeConstructor = Locale;
+    ;
+import Cal.Utilities.TimeZone using
+    typeConstructor = TimeZone;
+    ;
+
+
+//////////////////////////////////////////////////////////////////////
+// Standard time types
+
+/**
+ * The type {@link typeConstructor=Time@} represents a point on the time dimension of our universe. The range of time that can be represented
+ * is approximately 29,000 years before and after the base time, 00:00:00 UTC 1 Jan 1970. The resolution of measurement
+ * is 100 ns - this is called 1 tick.
+ */
+data foreign unsafe import jvm public "org.openquark.util.time.Time" 
+    public Time deriving Inputable, Outputable, Eq, Ord;
+
+/**
+ * @arg year
+ * @arg month
+ * @arg day
+ * @arg hour
+ * @arg min
+ * @arg sec
+ * @arg ticks
+ * @arg timeZone
+ * @return a {@link typeConstructor=Time@} value from a year, month, day, hour, minute, second, ticks and time zone.
+ */
+foreign unsafe import jvm "constructor"
+    public makeTimeValue :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> TimeZone -> Time;
+
+/**
+ * @arg ticks
+ * @return a {@link typeConstructor=Time@} value from an absolute number of ticks.
+ */
+foreign unsafe import jvm "constructor"
+    public makeTimeFromTicks :: Long -> Time;
+
+/**
+ * @arg year
+ * @arg month
+ * @arg day
+ * @arg hour
+ * @arg min
+ * @arg sec
+ * @arg ticks
+ * @return a {@link typeConstructor=Time@} value from year, month, day, hour, minute, second and tick in the UTC time zone.
+ */
+foreign unsafe import jvm "constructor"
+    public makeUTCTimeValue :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Time;
+
+foreign unsafe import jvm "static method org.openquark.util.time.Time.now"
+    public now :: Time;
+
+/**
+ * @arg time1
+ * @arg time2
+ * @return the {@link Duration@} that represents the difference between two {@link typeConstructor=Time@}s.
+ */
+foreign unsafe import jvm "method subtract"
+    public subtractTimeFromTime :: Time -> Time -> Duration;
+
+/**
+ * @arg time
+ * @arg duration
+ * @return the {@link typeConstructor=Time@} that results from adding a {@link Duration@} to a {@link typeConstructor=Time@}.
+ */
+foreign unsafe import jvm "method add"
+    public addDurationToTime :: Time -> Duration -> Time;
+
+/**
+ * Construct a {@link typeConstructor=Time@} value from year, month, day, hour, minute, second and tick in the UTC time zone.
+ */
+makeUTCTimeFromTuple :: (Int, Int, Int, Int, Int, Int, Int) -> Time;
+public makeUTCTimeFromTuple !ymdhmst =
+    case ymdhmst of
+    (year, month, day, hour, min, sec, ticks) ->
+        makeUTCTimeValue year month day hour min sec ticks;
+    ;
+
+foreign unsafe import jvm "method timePartsList"
+    private jTimePartList :: Time -> TimeZone -> JList;
+
+/**
+ * Extract the components of a {@link typeConstructor=Time@}.
+ */
+timeParts :: TimeZone -> Time -> { year :: Int, month :: Int, day :: Int, hours :: Int, minutes :: Int, seconds :: Int, ticks :: Int };
+public timeParts !timeZone !time = 
+    case input (output (jTimePartList time timeZone)) of
+    (year, month, day, hours, minutes, seconds, ticks) ->
+        {year = year, month = month, day = day, hours = hours, minutes = minutes, seconds = seconds, ticks = ticks};
+    ;
+          
+/**
+ * {@link DayOfWeek@} is an enumeration that represents the days of the week in the Gregorian calendar.
+ * It implements {@link Eq@}, but other common type classes, such as {@link Prelude.Ord@} and {@link Prelude.Enum@}, are not implemented
+ * because {@link DayOfWeek@} has a circular ordering
+ */
+data public DayOfWeek =
+    public Monday |
+    public Tuesday |
+    public Wednesday |
+    public Thursday |
+    public Friday |
+    public Saturday |
+    public Sunday
+    deriving Eq, Show;
+
+foreign unsafe import jvm "method getDayOfWeek"
+    private jTime_getDayOfWeek :: Time -> TimeZone -> Int;
+
+/**
+ * Returns the {@link DayOfWeek@} for a {@link typeConstructor=Time@} in a specified {@link typeConstructor=TimeZone@}. 
+ */
+getDayOfWeek :: Time -> TimeZone -> DayOfWeek;
+public getDayOfWeek !time !timeZone =
+    //jTime_getDayOfWeek returns an integer in 0..6, where 0 indicates Monday
+    case jTime_getDayOfWeek time timeZone of
+    0 -> Monday;
+    1 -> Tuesday;
+    2 -> Wednesday;
+    3 -> Thursday;
+    4 -> Friday;
+    5 -> Saturday;
+    6 -> Sunday;
+    ;   
+
+/**
+ * Returns the number of days since the most recent Monday.
+ */
+nDaysSinceMonday :: DayOfWeek -> Int;
+public nDaysSinceMonday !dow = 
+    case dow of
+    Monday    -> 0;
+    Tuesday   -> 1;
+    Wednesday -> 2;
+    Thursday  -> 3;
+    Friday    -> 4;
+    Saturday  -> 5;
+    Sunday    -> 6;
+    ;        
+
+/**
+ * A {@link Duration@} represents the difference between two {@link typeConstructor=Time@} values. It may be positive or negative. 
+ * As with {@link typeConstructor=Time@}, its quantum is 1 tick.
+ */
+data foreign unsafe import jvm public "org.openquark.util.time.Duration" 
+    public Duration deriving Inputable, Outputable, Eq, Ord, Show;
+
+/**
+ * @arg duration1
+ * @arg duration2
+ * @return he difference between two {@link Duration@}s.
+ */
+foreign unsafe import jvm "method subtract"
+    public subtractDurationFromDuration :: Duration -> Duration -> Duration;
+
+/**
+ * @arg duration1
+ * @arg duration2
+ * @return the sum of two {@link Duration@}s.
+ */
+foreign unsafe import jvm "method add" 
+    public addDurationToDuration :: Duration -> Duration -> Duration;
+
+/**
+ * Converts a {@link Duration@} to a number of ticks, as a {@link Long@}.
+ * @arg duration
+ * @return ticks
+ */
+foreign unsafe import jvm "method getTicks"
+    public durationToTicks :: Duration -> Long;
+
+/**
+ * @arg duration
+ * @return converts a {@link Duration@} to a number of seconds, as a {@link Double@}.
+ */
+foreign unsafe import jvm "method getSeconds" 
+    public durationToSeconds :: Duration -> Double;
+
+/**
+ * Converts a number of ticks to a {@link Duration@}.
+ * @arg ticks
+ * @return duration
+ */
+foreign unsafe import jvm "static method org.openquark.util.time.Duration.fromTicks"
+    public ticksToDuration:: Long -> Duration;
+
+/**
+ * Converts an integer number of seconds to a {@link Duration@}.
+ * @arg nSeconds An integer number of seconds
+ * @return duration
+ */
+foreign unsafe import jvm "static method org.openquark.util.time.Duration.fromSeconds"
+    public nSecondsAsLongToDuration :: Long -> Duration;
+
+/**
+ * Converts a number of seconds to a {@link Duration@}.
+ * @arg nSeconds A number of seconds (which can have a fractional part)
+ * @return duration
+ */
+foreign unsafe import jvm "static method org.openquark.util.time.Duration.fromSeconds"
+    public nSecondsDuration :: Double -> Duration;
+
+/**
+ * Converts a {@link Duration@} to a number of minutes, as a {@link Double@}.
+ */
+durationToMinutes :: Duration -> Double;
+public durationToMinutes !duration = 
+    let
+        nSecondsPerMinute :: Double;
+        nSecondsPerMinute = 60;
+    in
+        durationToSeconds duration / nSecondsPerMinute;
+
+/**
+ * Converts a {@link Duration@} to a number of days, as a {@link Double@}.
+ */
+durationToDays :: Duration -> Double;
+public durationToDays !duration = 
+    let
+        nSecondsPerDay :: Double;
+        nSecondsPerDay = 86400;
+    in
+        (durationToSeconds duration) / nSecondsPerDay;
+
+/**
+ * Returns a {@link Duration@} of 0 ticks.
+ */
+zeroDuration :: Duration;
+public zeroDuration = ticksToDuration 0;
+
+/**
+ * Converts a number of days to a {@link Duration@}.
+ */
+nDaysDuration :: Double -> Duration;
+public nDaysDuration !nDays = 
+    let
+        //the inferred type of nSecondsPerDay is Num a => a, so the type declaration is needed for efficiency.       
+        nSecondsPerDay :: Double;
+        nSecondsPerDay = 86400;
+    in
+        nSecondsDuration (nSecondsPerDay * nDays);
+
+/**
+ * The type {@link Calendar@} represents a kind of calendar - Gregorian, Japanese Emperor, Chinese, Buddhist, Hebrew or Islamic.
+ * It is much like an enumeration, but it is implemented as a Java class.
+ */
+data foreign unsafe import jvm public "org.openquark.util.time.Calendar"
+    public Calendar deriving Eq, Inputable, Outputable, Show;
+
+/**
+ * The Gregorian calendar, introduced by Pope Gregory in 1582.
+ */
+foreign unsafe import jvm "static field org.openquark.util.time.Calendar.GREGORIAN_CALENDAR"
+    public gregorianCalendar :: Calendar;
+
+/**
+ * The Japanese Emperor calendar. The months and days are equivalent to those in the Gregorian calendar,
+ * but the years are counted from the beginning of the reign of the emperor.
+ */
+foreign unsafe import jvm "static field org.openquark.util.time.Calendar.JAPANESE_CALENDAR"
+    public japaneseCalendar  :: Calendar;
+
+/**
+ * The Chinese calendar. 
+ */
+foreign unsafe import jvm "static field org.openquark.util.time.Calendar.CHINESE_CALENDAR" 
+    public chineseCalendar   :: Calendar;
+
+/**
+ * The Buddhist calendar is a lunisolar calendar, and is sometimes used in Thailand and other south-east Asian countries.
+ */
+foreign unsafe import jvm "static field org.openquark.util.time.Calendar.BUDDHIST_CALENDAR" 
+    public buddhistCalendar  :: Calendar;
+
+/**
+ * The Hebrew calendar is a lunisolar calendar. 
+ */
+foreign unsafe import jvm "static field org.openquark.util.time.Calendar.HEBREW_CALENDAR"
+    public hebrewCalendar    :: Calendar;
+
+/**
+ * The Islamic calendar is a lunar calendar. It is also called the Hijri calendar.
+ */
+foreign unsafe import jvm "static field org.openquark.util.time.Calendar.ISLAMIC_CALENDAR" 
+    public islamicCalendar   :: Calendar;
+
+
+/**
+ * Formats a {@link typeConstructor = Time@} value as a string.
+ * 
+ * @arg time the Time value to be formatted
+ * @arg timeZone the time zone to use
+ * @arg calendar the calendar to use
+ * @arg pattern the pattern string used to format the Time value. It follows the JDK conventions.
+ * @arg locale the locale to use for text elements such as day of the week or month name 
+ */
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.formatTime"
+    public formatTime :: Time -> TimeZone -> Calendar -> String -> Locale -> String;
+
+/**
+ * Parses a time value from a string using the specified pattern.
+ * 
+ * @arg timeString  a time string to be parsed
+ * @arg timeZone    the time zone to use
+ * @arg calendar    the calendar to use
+ * @arg pattern     the pattern string used to format the Time value. It follows the JDK conventions.
+ * @arg locale      the locale to use for text elements such as day of the week or month name 
+ */
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.parseTime"
+    public parseTime :: String -> TimeZone -> Calendar -> String -> Locale -> Time;
+
+/**
+ * @arg time
+ * @return a string representing the serialized form of the {@link typeConstructor = Time@} value.
+ */
+foreign unsafe import jvm "method toSerializedForm"
+    public serializeTimeValue :: Time -> String;
+
+/**
+ * @arg serializedTimeValue
+ * @return a {@link typeConstructor = Time@} value based on the serialized value provided.
+ */
+foreign unsafe import jvm "static method org.openquark.util.time.Time.fromSerializedForm"
+    public deserializeTimeValue :: String -> Time;
+
+
+/**
+ * Default display of time values. This uses the fixed format yyyy/MM/dd HH:mm:ss z (where z represents the time zone).
+ */
+instance Show Time where
+    show = showTime;
+    ;
+
+showTime :: Time -> String;
+showTime timeValue = formatTime timeValue TimeZone.currentTimeZone Time.gregorianCalendar "yyyy/MM/dd HH:mm:ss z" Locale.defaultLocale;
+

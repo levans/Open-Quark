@@ -1,0 +1,2080 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Optimizer_Test.cal
+ * Created: January 12, 2006
+ * By: Greg McClement
+ */
+
+/**
+ * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WAR 
+ * 
+ * This file is part of the compiler and not to be modified. 
+ * 
+ * ING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+ *
+ * Contains the code to unit test the optimizer.
+ * 
+ * @author Greg McClement
+ */
+
+module Cal.Test.Internal.Optimizer_Test;
+
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable;
+    typeConstructor =
+        Boolean, Maybe, String, JObject, AlgebraicValue, Int, Byte, Long,
+        Double, Char;
+    dataConstructor = Cons, False, True, Nothing, Just;
+    function =
+        isJust, uncurry, error, assert, isEmpty, output, input, upFromTo, id,
+        seq;
+    ;
+
+import Cal.Collections.List using
+    function = length, find, andList, map, zip;
+;
+
+import Cal.Internal.Optimizer_Type using
+    typeConstructor = Type;
+;
+
+import Cal.Internal.Optimizer_Expression using
+    typeConstructor = QualifiedName, CoreFunction, Expression, JQualifiedName, Alt, Literal;
+    dataConstructor = FNOrdinal, Alt, Alts, CoreFunction,
+        Var, Literal, App, Lambda, Let, Switch, RecordCase, 
+        Opaque, RecordSelection, RecordExtensionLiteral, 
+        RecordExtensionPolymorphic, DataConsSelection, DataConstructor, 
+        LetInlinable, ErrorInfo, QN, LitInteger,
+        LitString, LitInt, LitBoolean, LitDouble, LitChar, LitOpaque, LitByte, LitLong, LitFloat, LitShort,
+        CaseLiteral, CaseDataCons, DataCons;
+    function = outputQualifiedName, alt_getExpr, showExpressionStructure, expressionIsomorphic;
+;
+
+import Cal.Core.String using
+    function = toLowerCase, toList;
+;
+
+import Cal.Internal.Optimizer_State using
+    typeConstructor = JPreludeTypeConstants;
+    function = system_currentTimeMillis;
+;
+
+import Cal.Internal.Optimizer_Traversers using
+    function = transformOnly;
+;
+
+import Cal.Internal.Optimizer using
+    function = optimize;
+;
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = trace, show;
+;
+
+//import QuickCheck using
+//    typeConstructor = Gen;
+//    function = 
+//        mapGen, chooseOneOf, arbitrary, coarbitrary, zipWithGen, makeChooseOneOfGen,
+//        makeDefaultGenParams, generateNInstances;
+//;    
+    
+//import Cal.Utilities.Parser using
+//function = pOrT;
+//;
+
+data foreign unsafe import jvm "org.openquark.cal.services.WorkspaceManager"
+JWorkspaceManager deriving Inputable, Outputable;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getTestInput"
+optimizerHelper_getTestInput :: JWorkspaceManager -> JQualifiedName -> AlgebraicValue;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getCoreFunction"
+optimizerHelper_getCoreFunction :: JWorkspaceManager -> JQualifiedName -> AlgebraicValue;
+
+/**
+ * The input for the optimizer used to get the optimized version of a given function.
+ */
+
+data TestInput =
+    /**
+     * The input for the optimizer used to get the optimized version of a given function.
+     * 
+     * @arg nameToTypeList Maps symbol name to the type of the symbol.
+     * @arg coreFunctions List of the core functions used by this expression.
+     * @arg nonCALFunctions A list of functions that are foreign or primitive.
+     * @arg formalParameters The parameters of the function being optimized.
+     * @arg parameterStrictness The strictness of the parameters.
+     * @arg expression The expression that is to be optimized.
+     */
+    TestInput 
+        nameToTypeList::[(QualifiedName, [Type], [Boolean])]
+        coreFunctions::[CoreFunction]
+        nonCALFunctions::[QualifiedName]
+        formalParameters::[QualifiedName]
+        parameterStrictness::[Boolean]
+        expression::Expression
+    deriving Inputable, Show;
+
+/**
+ * Run the unit test for the optimizer.
+ * @arg workspace The workspace containing this file.
+ * @arg ptc The prelude type constance object.
+ * @return True iff the unit tests pass otherwise the function will fail with an error. 
+ */
+unitTests :: JWorkspaceManager -> JPreludeTypeConstants -> Boolean;
+protected unitTests workspace ptc =
+    Optimizer.unitTests ptc &&
+    andList
+         (
+             map 
+                 (\n ->
+                     if skipTest n then
+                         True
+                     else
+                         unitTest workspace ptc ("test" ++ show n) ("answer" ++ show n) (newFunctionNames n)
+                 ) 
+                 (upFromTo startWithTest numberOfTests) 
+         );
+
+/**
+ * Read the given algebraic into a test input data structure.
+ * @arg jtestInput The test input as an algebraic value.
+ * @return A TestData object corresponding to the given test data java value.
+ */
+inputTestInput :: AlgebraicValue -> TestInput;
+inputTestInput jtestInput =
+    input (output jtestInput);
+
+/**
+ * Run the unit test for a given pair of functions.
+ * @arg workspaceManager The workspace that contains this file.
+ * @arg ptc The prelude type constants for this module.
+ * @arg testName The name of the function to optimizer
+ * @arg answerName The name of the function that should result from optimizing testName. 
+ */
+unitTest :: JWorkspaceManager -> JPreludeTypeConstants -> String -> String -> [String] -> Boolean;
+unitTest workspaceManager ptc testName answerName newFunctionNames =
+    let
+        input :: TestInput;
+        input = inputTestInput (optimizerHelper_getTestInput workspaceManager (outputQualifiedName (QN "Cal.Test.Internal.Optimizer_Test" testName)));
+        
+        expected :: TestInput;
+        expected = 
+            case inputTestInput (optimizerHelper_getTestInput workspaceManager (outputQualifiedName (QN "Cal.Test.Internal.Optimizer_Test" answerName))) of 
+            TestInput nameToTypeList coreFunctions formalParameters parameterStrictness nonCALFunctions expression ->            
+                TestInput nameToTypeList coreFunctions formalParameters parameterStrictness nonCALFunctions (transformOnly expression addModuleName);
+            ;
+
+    in
+        case input of
+        TestInput nameToTypeList coreFunctions nonCalFunctions arguments strictness expr ->
+            let
+                result :: ([CoreFunction], [Boolean], Expression); 
+                result = optimize (QN "Cal.Test.Internal.Optimizer_Test" testName) arguments strictness system_currentTimeMillis ptc nameToTypeList coreFunctions nonCalFunctions expr;
+            in
+                case result of
+                (coreFunctions, strictness, optimizedExpr) ->
+                    checkCoreFunctions workspaceManager coreFunctions newFunctionNames &&
+                    (
+                        case expected of
+                        TestInput _ _ _ _ expectedStrictness expectedExpr ->
+                            if
+                                expressionIsomorphic optimizedExpr expectedExpr && strictness == expectedStrictness then
+                                True
+                            else
+                                error (
+                                    "Test " ++ testName ++ " failed.\n" ++
+                                    "    input: " ++ show expr ++ "\n" ++
+                                    "    result: " ++ show optimizedExpr ++ "\n" ++
+                                    "    newFunctions: " ++ show coreFunctions ++ "\n" ++
+                                    "    expected: " ++ show expectedExpr ++ "\n" ++  
+                                    "    strictness: " ++ show strictness ++ "\n" ++ 
+                                    "    expected: " ++ show expectedStrictness ++ "\n"
+                                );
+                    ); 
+                ;
+        ;
+
+/**
+ * Assumes that the functions are in a given in the correct order.
+ */               
+checkCoreFunctions :: JWorkspaceManager -> [CoreFunction] -> [String] -> Boolean;
+checkCoreFunctions workspaceManager coreFunctions newFunctionNames =
+    andList (map (uncurry (checkCoreFunction workspaceManager)) (zip coreFunctions newFunctionNames));
+
+/**
+ * Add the Optimizer_Test module name to any let variables with an empty module name. This
+ * function is to be called by a transformOnly.
+ */
+
+addModuleName :: Expression -> Expression;
+addModuleName expr =
+    let
+        exprOuter = expr;
+        updateModuleName :: QualifiedName -> QualifiedName;
+        updateModuleName name = 
+            case name of
+            QN moduleName functionName ->
+                if moduleName == "" then
+                    QN "Cal.Test.Internal.Optimizer_Test" functionName
+                else
+                    name;
+            ;
+    in        
+        case expr of
+        Var name inliningContext entity type -> Var (updateModuleName name) inliningContext entity type;
+        Let variable isNew isKeepable isTopLevel type letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+            Let (updateModuleName variable) isNew isKeepable isTopLevel type letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt False;
+        Switch expr alts ->
+            let
+                addModuleNameFNQN fnqn =
+                    case fnqn of
+                    (fieldName, qualifiedName, type) -> (fieldName, updateModuleName qualifiedName, type);
+                    ;
+                
+                addModuleNameAlt alt =
+                    case alt of
+                    Alt caseConst isPositional vars expr ->
+                        Alt caseConst isPositional (map addModuleNameFNQN vars) expr;
+                    Alts caseConst isPositional vars expr ->
+                        Alts caseConst isPositional (map addModuleNameFNQN vars) expr;
+                    ;
+            in
+                Switch expr (map addModuleNameAlt alts);
+
+        _ -> expr;
+        ;
+
+/**
+ * Check if the given core functions are isomorphic.
+ */
+checkCoreFunction :: JWorkspaceManager -> CoreFunction -> String -> Boolean;
+checkCoreFunction workspaceManager cf1 nameOfCf2 =
+    let
+        cf2 :: CoreFunction;
+        cf2 =
+            case (input (output (optimizerHelper_getCoreFunction workspaceManager (outputQualifiedName (QN "Cal.Test.Internal.Optimizer_Test" nameOfCf2))))) of
+            CoreFunction name args expr type strictness argIsWHNF ->
+                CoreFunction name args (transformOnly expr addModuleName) type strictness argIsWHNF;
+            ;    
+
+    in
+//        trace (
+//            "cf1: " ++ show cf1 ++ "\n" ++
+//            "cf2: " ++ show cf2 ++ "\n"
+//            )
+//        
+        (length cf1.CoreFunction.args == length cf2.CoreFunction.args) &&   
+        (expressionIsomorphic cf1.CoreFunction.expr cf2.CoreFunction.expr);
+            
+/*
+ * All of the test cases for the optimizer. 
+ * 
+ * test<N> is the expression that will be optimized.
+ * answer<N> is the expression that should result from optimizing test<n>
+ * newFunctionNames<N> is a list of names of functions that should be created as part of the optimization.  
+ */    
+    
+// Test 1 
+    
+test1 = 
+    case True of
+    True -> 1.0;
+    False -> 2.0;
+    ;
+    
+answer1 = 1.0;
+    
+// Test 2
+
+test2 =
+    let
+        f x = x ++ "a";
+    in
+        f "b";
+    
+answer2 = "b" ++ "a";
+
+// Test 3
+
+test3 = andList (map noStrictId [True]);
+
+answer3 = answer3_helper1 [True];
+
+answer3_helper1 list =
+    case list of
+        []  -> Prelude.True;
+        listHead : listTail ->
+            if listHead then
+                answer3_helper1 listTail
+            else
+                False;
+    ;
+    
+//  Test X. TODO Make This work since it should but currently doesn't.
+    
+test4 =
+    let
+        f x = x ++ x;
+    in
+        f ("a" ++ "b");
+    
+answer4 =
+    let
+        f x = x ++ x;
+    in
+        f ("a" ++ "b");
+
+test5 :: [Int];
+test5 =
+    map noStrictId (map noStrictId (map noStrictId [1]));
+
+answer5 :: [Int];
+answer5 = answer5_mapmapmap [1];
+
+/*
+ * The id function is not inlined because the strictness would be lost.
+ */
+
+noStrictId x = x;
+
+answer5_mapmapmap local4 =
+    case local4 of 
+    []  -> []; 
+    listHead : listTail -> listHead : answer5_mapmapmap listTail;
+    ;
+
+// Test 6.
+
+test6 = 
+    case [] of
+    [] -> True;
+    _ -> False;
+    ;
+    
+answer6 = True;
+
+// Test 7
+
+test7 :: Int -> Int -> Boolean;
+test7 start end = 
+    case 
+        case start > end of 
+            True -> []; 
+            False -> [start]; 
+        of 
+    [] -> True; 
+    listHead : listTail -> False;
+    ;
+
+answer7 :: Int -> Int -> Boolean;
+answer7 start end = start > end;
+
+// Test 8
+
+test8 :: Int -> Int -> Boolean;
+test8 start end = 
+    case 
+        case start > end of 
+            True -> []; 
+            False ->    
+                case start == end of 
+                True -> [start]; 
+                False -> [start, end];
+                ;
+        of 
+    [] -> True; 
+    listHead : listTail -> False;
+    ;
+
+answer8 :: Int -> Int -> Boolean;
+answer8 start end = 
+    if start > end then
+        True
+    else    
+        if start == end then
+            False
+        else
+            False;
+
+    
+//test6 :: Boolean;
+//test6 = Prelude.isNothing (List.find (\x -> x == 1) [1::Int]);
+
+/*
+ * This one is off until I fix the problem of adding type information to constants embedded in functions.
+answer6 :: Boolean;
+answer6 = answer6_isNothingFind (\x -> x == 1) [1::Int];
+
+//answer6_isNothingFind :: 
+answer6_isNothingFind pred list = 
+    case list of 
+    [] -> True; 
+    listHead : listTail -> 
+        if pred listHead then
+            False 
+        else
+            answer6_isNothingFind pred listTail;
+    ;    
+*/
+
+// Test 9
+
+test9 :: Int -> Int -> Boolean;
+test9 start end = 
+    case 
+        case start > end of 
+            True -> []; 
+            False ->    
+                let
+                    dude :: Int;
+                    dude = start + end;
+                in
+                    case start > dude of 
+                    True -> [start]; 
+                    False -> [start, dude];
+                    ;
+        of 
+    [] -> True; 
+    listHead : listTail -> False;
+    ;
+
+answer9 :: Int -> Int -> Boolean;
+answer9 start end = 
+    if start > end then
+        True
+    else    
+        if  start > (start + end) then
+            False
+        else
+            False;        
+
+nonMultiple :: Int -> Int -> Boolean;
+private nonMultiple arg arg_1 = (arg % arg_1) != (0 :: Int);
+
+test10 = test10_andListMap noStrictId [];
+
+test10_andListMap nToTest !list =
+    case list of
+    [] -> True;
+    head : tail -> nToTest head && test10_andListMap nToTest tail;
+    ;
+
+answer10 = True;
+
+test11 =
+    case [] of 
+    []  -> True; 
+    _ -> False; 
+    ;
+    
+answer11 = True;    
+
+test12 :: Int -> Int -> Int -> Boolean;
+public test12 arg start end =
+    let
+        nToTest = arg;
+    in
+        List.andList (List.map (nonMultiple nToTest) (Prelude.upFromTo start end));
+
+answer12 :: Int -> Int -> Int -> Boolean;
+answer12 nToTest start end = test12_andListMapUpFromByUpToInt start end nToTest;
+
+test12_andListMapUpFromByUpToInt :: Int -> Int -> Int -> Boolean;
+test12_andListMapUpFromByUpToInt !start !end nToTest = 
+    if start > end then
+        True 
+    else    
+        let
+            next :: Int;
+            next = start + 1;
+        in
+            if next > end then
+                nToTest % start != 0
+            else if next < start then
+                nToTest % start != 0
+            else if nToTest % start != 0 then
+                test12_andListMapUpFromByUpToInt next end nToTest
+            else
+                False; 
+
+test13 arg = (\x -> True) arg;
+
+answer13 arg = True;
+
+data Test14_Whatever =
+    Test14_Thing1 age::Int |
+    Test14_Thing2 age::Int;
+
+test14 =
+    case Test14_Thing1 23 of
+    Test14_Thing1 {age} -> age;
+    Test14_Thing2 _ -> 23;
+    ;
+
+answer14 :: Int;
+answer14 =  23;
+//    case Test14_Thing1 23 of
+//    Test14_Thing1 age -> age;
+//    Test14_Thing2 _ -> 23;
+//    ;
+
+data Test15_Whatever =
+    Test15_Thing1 age::Int |
+    Test15_Thing2 age::Int;
+
+test15 whatever = 
+    case
+        case whatever of
+        Test15_Thing1 {age} -> Test15_Thing1 age;
+        _ -> Test15_Thing2 23;
+    of
+    Test15_Thing1 {age} -> age;
+    Test15_Thing2 {age} -> age;
+    ;
+    
+answer15 whatever = 
+    case whatever of
+    Test15_Thing1 {age} -> age;
+    _ -> 23;
+    ;
+     
+data Test16_Whatever =
+    Test16_Thing1 age::Int |
+    Test16_Thing2 age::Int;
+
+test16 whatever = 
+    case
+        case whatever of
+        Test16_Thing1 {age} -> Test16_Thing1 age;
+        _ -> Test16_Thing2 23;
+    of
+    (Test16_Thing1 | Test16_Thing2) {age} -> age;
+    ;
+    
+answer16 whatever = 
+    case whatever of
+    Test16_Thing1 age -> age;
+    _ -> 23;
+    ;
+
+test17 x = (Just x).Just.value;
+answer17 x = x;
+
+data Maybe18 a = 
+    Just18 value :: !a; 
+
+test18 x = (Just18 x).Just18.value;
+answer18 x = x;
+
+data Maybe19 a = 
+    Just19
+        value1 :: !a
+        value2 :: a 
+        value3 :: !a;
+
+test19 x y z = (Just19 x y z).Just19.value1;
+answer19 !x y !z = x;
+          
+test20 x y z = (Just19 x y z).Just19.value2;
+answer20 !x y !z = y;
+
+test21 x y z = (Just19 x y z).Just19.value3;
+answer21 !x y z = z;
+
+data Test22_Whatever =
+    Test22_Thing1 age::!Int |
+    Test22_Thing2 age::Int;
+
+test22 x =
+    case Test22_Thing1 x of
+    Test22_Thing1 {age} -> age;
+    Test22_Thing2 _ -> 22;
+    ;
+
+answer22 :: Int -> Int;
+answer22 x = x;
+
+test23 x =
+    case Test22_Thing2 x of
+    Test22_Thing1 {age} -> age;
+    Test22_Thing2 {age} -> age;
+    ;
+
+answer23 :: Int -> Int;
+answer23 x = x;
+
+test24 x =
+    case Test22_Thing2 x of
+    Test22_Thing1 {age} -> age;
+    ;
+
+answer24 :: Int -> Int;
+answer24 x = 
+    case Test22_Thing2 x of
+    Test22_Thing1 {age} -> age;
+    ;
+
+test25 :: Boolean;
+test25 =
+    case 1::Int of
+    1 -> True;
+    2 -> False;
+    _ -> False;
+    ;
+
+answer25 :: Boolean;    
+answer25 = True;
+
+test26 :: Boolean;
+test26 =
+    case 'a' of
+    'a' -> True;
+    'b' -> False;
+    _ -> False;
+    ;
+
+answer26 :: Boolean;    
+answer26 = True;
+
+test27 :: Int -> Int -> Int -> Int;
+test27 x y z = 
+    case (Just19 x y z) of
+    Just19 {value2} -> value2;
+    ;
+    
+answer27 !x y !z = y;
+
+test28 :: Int -> Int -> Int -> Int;
+test28 x y z = 
+    case (Just19 x y z) of
+    Just19 {value2} -> value2;
+    ;
+    
+answer28 !x y !z = x;
+
+test29 :: Int -> Int -> Int -> Int;
+test29 x y z = 
+    case (Just19 x y z) of
+    Just19 {value3} -> value3;
+    ;
+    
+answer29 !x y z = z;
+
+test30 :: Int -> Int;
+test30 x = x `seq` x;
+
+answer30 :: Int -> Int;
+answer30 x = x;
+
+test31 :: Int -> Maybe Int;
+test31 x = (Just x) `seq` (Just x);
+
+answer31 :: Int -> Maybe Int;
+answer31 x = (Just x) `seq` (Just x);
+
+test32 :: Int -> Int -> Int;
+test32 x y = (case x of 1 -> noStrictId; 2 -> noStrictId; _ -> noStrictId;) y;
+
+answer32 :: Int -> Int -> Int;
+answer32 x y = case x of 1 -> y; 2 -> y; _ -> y;;
+
+//data Test7_Whatever =
+//    Test7_Thing1 age::Int |
+//    Test7_Thing2 age::Int;
+//
+// This test doesn't work because of a bug in the isomorphic checker. In answer age is age$1 and age$2 but
+// in the optimized version age is age$1.
+//
+//test7 :: Int;
+//test7 =
+//    case Test7_Thing1 23 of
+//    (Test7_Thing1 | Test7_Thing2) {age} -> 23;
+//    ;
+//
+//answer7 :: Int;
+//answer7 = 
+//    case Test7_Thing1 23 of
+//    Test7_Thing1 age -> 23;
+//    Test7_Thing2 age -> 23;
+//    ;
+    
+// BEGIN FIX THIS
+test33 = (10::Int) < (0::Int);
+answer33 = False;
+
+test34 = (10::Int) <= (0::Int);
+answer34 = False;
+
+test35 = (10::Int) == (0::Int);
+answer35 = False;
+
+test36 = (10::Int) > (0::Int);
+answer36 = True;
+
+test37 = (10::Int) >= (0::Int);
+answer37 = True;
+
+test38 = (10::Int) != (0::Int);
+answer38 = True;
+
+test39 =
+    let 
+        f :: Int -> Int;
+        f x = 
+            let
+                g :: Int;
+                g = x;
+            in
+                g;
+    in
+        f 23;
+
+answer39 :: Int;
+answer39 = 23;
+                
+test40 = Prelude.not Prelude.True;
+answer40 = Prelude.False;
+
+test41 = List.iterate Prelude.not Prelude.True;
+answer41 = answer41_helper Prelude.True;
+
+answer41_helper initialValue = initialValue : answer41_helper (if initialValue then False else True);
+
+test42 :: Double -> Double;
+test42 x = 0.0 + x;
+
+answer42 :: Double -> Double;
+answer42 x = x;
+
+test43 :: Double -> Double;
+test43 x = x + 0.0;
+
+answer43 :: Double -> Double;
+answer43 x = x;
+
+test44 x = 1.0 `seq` x;
+answer44 x = x;
+
+test45 x = "hi" `seq` x;
+answer45 x = x;
+
+test46 x = True `seq` x;
+answer46 x = x;
+
+test47 x = 'a' `seq` x;
+answer47 x = x;
+
+test48 :: Int -> Int -> Int;
+test48 x y =
+    let
+        t :: Int -> Int;
+        t = (\z -> 0);
+    in
+        t (x - y);
+answer48 :: Int -> Int -> Int;        
+answer48 x y = 0;        
+
+test49 :: Boolean -> Boolean;
+test49 x =
+    case x of
+    True -> True;
+    False -> False;
+    ;
+answer49 :: Boolean -> Boolean;    
+answer49 x = x;
+    
+test50 pred = map pred [];
+answer50 pred = [];
+
+test51 :: Double;
+test51 = 1.0 + 2.0;
+
+answer51 :: Double;
+answer51 = 3.0;
+
+test52 :: Double;
+test52 = 1.0 - 2.0;
+
+answer52 :: Double;
+answer52 = -1.0;
+
+test53 :: Double;
+test53 = 2.0 * 2.0;
+
+answer53 :: Double;
+answer53 = 4.0;
+
+test54 :: Double;
+test54 = 4.0 / 2.0;
+
+answer54 :: Double;
+answer54 = 2.0;
+
+test55 :: Double;
+test55 = 4.0 / 0.0;
+
+answer55 :: Double;
+answer55 = 4.0 / 0.0;
+
+test56 :: Int;
+test56 = 1 + 2;
+
+answer56 :: Int;
+answer56 = 3;
+
+test57 :: Int;
+test57 = 1 - 2;
+
+answer57 :: Int;
+answer57 = -1;
+
+test58 :: Int;
+test58 = 2 * 2;
+
+answer58 :: Int;
+answer58 = 4;
+
+test59 :: Int;
+test59 = 4 / 2;
+
+answer59 :: Int;
+answer59 = 2;
+
+test60 :: Int;
+test60 = 4 / 0;
+
+answer60 :: Int;
+answer60 = 4 / 0;
+
+test61 :: Int -> Int;
+test61 x = 
+    let
+        f :: Int -> Int;
+        f x = x * 0;
+    in
+        f x;
+
+answer61 :: Int -> Int;
+answer61 x = 0;
+
+test62 :: Int -> Int;
+test62 x = x + 0;
+
+answer62 :: Int -> Int;
+answer62 x = x;
+
+test63 :: Int -> Int;
+test63 x = x - 0;
+
+answer63 :: Int -> Int;
+answer63 x = x;
+
+test64 :: Int -> Int;
+test64 x = 
+    let
+        f :: Int -> Int;
+        f x = 0 * x;
+    in
+        f x;
+
+answer64 :: Int -> Int;
+answer64 x = 0;
+
+test65 :: Int -> Int;
+test65 x = 0 + x;
+
+answer65 :: Int -> Int;
+answer65 x = x;
+
+test66 :: Int -> Int;
+test66 x = 
+    let
+        f :: Int -> Int;
+        f x = 0 / x;
+    in
+        0;
+
+
+answer66 :: Int -> Int;
+answer66 x = 0;
+
+test67 :: Double -> Double;
+test67 x = 
+    let
+        f :: Double -> Double;
+        f x = x * 0.0;
+    in
+        f x;
+
+answer67 :: Double -> Double;
+answer67 x = 0.0;
+
+test68 :: Double -> Double;
+test68 x = x + 0.0;
+
+answer68 :: Double -> Double;
+answer68 x = x;
+
+test69 :: Double -> Double;
+test69 x = x - 0.0;
+
+answer69 :: Double -> Double;
+answer69 x = x;
+
+test70 :: Double -> Double;
+test70 x = 
+    let
+        f :: Double -> Double;
+        f x = 0.0 * x;
+    in
+        f x;
+
+answer70 :: Double -> Double;
+answer70 x = 0.0;
+
+test71 :: Double -> Double;
+test71 x = 0.0 + x;
+
+answer71 :: Double -> Double;
+answer71 x = x;
+
+test72 :: Double -> Double;
+test72 x = 
+    let
+        f :: Double -> Double;
+        f x = 0.0 / x;
+    in
+        0.0;
+
+
+answer72 :: Double -> Double;
+answer72 x = 0.0;
+
+//test52 :: Int;
+//test52 = 1 + 3;
+//
+//answer52 :: Int;
+//answer52 = 4;
+    
+//test44 :: Double -> Double;
+//test44 x = 0.0 * x;
+//
+//answer44 :: Double -> Double;
+//answer44 x = 0.0;
+//
+//test45 :: Double -> Double;
+//test45 x = x * 0.0;
+//
+//answer45 :: Double -> Double;
+//answer45 x = 0.0;
+//
+
+test73_helper :: String -> String;
+test73_helper x = x ++ x;
+
+test73 :: String;
+test73 = (test73_helper `seq` test73_helper) "hi";
+
+answer73 :: String;
+answer73 = "hi" ++ "hi";
+
+data Test74_Data = Test74_Data_Value1;    
+test74 :: Test74_Data -> Boolean;
+test74 v =
+    case v of
+    Test74_Data_Value1 {} ->
+        case v of
+        Test74_Data_Value1 {} ->
+            True;
+        ;
+    ;
+    
+answer74 :: Test74_Data -> Boolean;
+answer74 v =
+    case v of
+    Test74_Data_Value1 {} ->
+        True;
+    ;
+
+//test53 :: Int -> Int;
+//test53 x = 
+//    case x of
+//    1 -> 
+//        let 
+//            r :: Int -> Int;
+//            r y = y + y;
+//        in
+//            r (x+1);
+//    ;
+//    
+//answer53 = True;    
+//
+data Data_Test75 =
+    Value1 arg1::Int |
+    Value2 arg1::Int;
+    
+test75 :: Data_Test75 -> Boolean;    
+test75 value = 
+    case value of
+    Value1 {} ->
+        case value of
+        Value1 {} -> True;
+        ;
+    ;
+
+answer75 :: Data_Test75 -> Boolean;    
+answer75 value = 
+    case value of
+    Value1 {} -> True;
+    ;
+
+test76 :: Int -> Boolean;
+test76 value =
+    case value of
+    1 -> 
+        case value of
+        1 -> True;
+        ;
+    ;
+    
+answer76 :: Int -> Boolean;
+answer76 value = 
+    case value of
+    1 -> True;
+    ;
+
+test77 :: Char -> Boolean;
+test77 value =
+    case value of
+    'a' -> 
+        case value of
+        'a' -> True;
+        ;
+    ;
+    
+answer77 :: Char -> Boolean;
+answer77 value = 
+    case value of
+    'a' -> True;
+    ;
+    
+test78 :: Boolean -> Boolean;
+test78 value =
+    case value of
+    True -> 
+        case value of
+        True -> True;
+        ;
+    ;
+    
+answer78 :: Boolean -> Boolean;
+answer78 value = 
+    case value of
+    True -> True;
+    ;
+    
+test79 :: Data_Test75 -> Boolean;    
+test79 value = 
+    case value of
+    Value1 {} ->
+        case value of
+        Value1 {arg1} -> arg1 == 7;
+        ;
+    ;
+
+answer79 :: Data_Test75 -> Boolean;    
+answer79 value = 
+    case value of
+    Value1 {arg1} -> arg1 == 7;
+    ;
+
+test80 :: Data_Test75 -> Boolean;    
+test80 value = 
+    case value of
+    Value1 {arg1=arg2} ->
+        case value of
+        Value1 {arg1=arg3} -> arg3 == 7;
+        ;
+    ;
+
+answer80 :: Data_Test75 -> Boolean;    
+answer80 value = 
+    case value of
+    Value1 {arg1=arg2} -> arg2 == 7;
+    ;
+    
+test81 :: Data_Test75 -> Boolean;    
+test81 value = 
+    case value of
+    Value2 {arg1=arg2} ->
+        case value of
+        Value1 {arg1=arg3} -> arg3 == 7;
+        _ -> True;
+        ;
+    ;
+
+answer81 :: Data_Test75 -> Boolean;    
+answer81 value = 
+    case value of
+    Value2 {arg1=arg2} -> True;
+    ;
+    
+data Test82_Data = Number1 | Number2;
+
+test82 :: Boolean;
+test82 = 
+    case Number1 of
+    Number1 -> True;
+    ;
+
+answer82 :: Boolean;    
+answer82 = True;
+
+//test61 :: Int -> Int;
+//test61 x = 
+//    case x of
+//    1 -> 
+//        let 
+//            t y = y + 1;
+//        in
+//            t x;
+//    2 ->
+//        let
+//            s u = u + 1;
+//        in
+//            s x;
+//    ;
+//    
+//answer61 :: Int -> Int;
+//answer61 x = 
+//    let
+//        z p = p + 1;
+//    in
+//        case x of
+//        1 -> z x;
+//        2 -> z x;
+//        ;
+
+data Test83_Data = 
+    Test83_Value1 value::Int |
+    Test83_Value2 value::Int;
+
+test83 :: Test83_Data;
+test83 = 
+    let
+        r :: Test83_Data;
+        r = Test83_Value1 1;
+    in
+        case r of
+        Test83_Value1 _ -> r;
+        _ -> r;
+        ;
+        
+answer83 :: Test83_Data;
+answer83 = Test83_Value1 1;
+            
+test84 :: Test83_Data -> Test83_Data;
+test84 x = 
+    case x of
+    Test83_Value1 {} ->
+        case x of
+        Test83_Value1 {value} -> x;
+        Test83_Value2 {} -> x;
+        ;
+    ;
+        
+answer84 :: Test83_Data -> Test83_Data;
+answer84 x =
+    case x of
+    Test83_Value1 {} -> x;
+    ;
+
+test85 :: Int -> Boolean;
+test85 x = 
+    case x of
+    _ -> True;
+    ;
+
+answer85 :: Int -> Boolean;
+answer85 !x = True;
+
+test86 :: Test83_Data -> Test83_Data;
+test86 x = 
+    case x of
+    Test83_Value1 {} -> x;
+    _ ->
+        case x of
+        Test83_Value1 {} -> x;
+        _ -> x;
+        ;
+    ;
+
+answer86 :: Test83_Data -> Test83_Data;
+answer86 x =
+    case x of
+    Test83_Value1 {} -> x;
+    _ -> x;
+    ;
+
+test87 :: Int -> Int;
+test87 x = 
+    x `seq` (
+        case x of
+        1 -> 2;
+        );
+
+answer87 :: Int -> Int;
+answer87 x =
+    case x of
+    1 -> 2;
+    ;
+
+data Test88_Data = 
+    Test88_Value1 value::Int |
+    Test88_Value2 value::Int;
+
+// test for transform_evaluateCase 
+
+test88 :: Test88_Data -> Int;
+test88 x = 
+    case x of
+    Test88_Value1 {} -> 23;
+    _ ->
+        case x of
+        Test88_Value2 {} -> 12;
+        _ -> 33;
+        ;
+    ;
+
+answer88 :: Test88_Data -> Int;
+answer88 x = 
+    case x of
+    Test88_Value1 {} -> 23;
+    _ -> 12;
+    ;
+
+//test for transform_evaluateCase 
+
+data Test89_Data = 
+    Test89_Value1 value::Int |
+    Test89_Value2 value::Int;
+
+test89 :: Test89_Data -> Int;
+test89 x = 
+    case x of
+    Test89_Value1 {} -> 23;
+    _ ->
+        case x of
+        Test89_Value2 {} -> 12;
+        _ -> 33;
+        ;
+    ;
+
+answer89 :: Test89_Data -> Int;
+answer89 x = 
+    case x of
+    Test89_Value1 {} -> 23;
+    _ -> 12;
+    ;
+
+// test for ...
+
+test90 :: Int -> Int;
+test90 x =
+    case x of
+    1 -> x `seq` x;
+    ;
+
+answer90 :: Int -> Int;
+answer90 x =
+    case x of
+    1 -> x;
+    ;
+
+test91 :: Int -> Int;
+test91 !x = x `seq` x;
+
+answer91 :: Int -> Int;
+answer91 !x = x;
+
+test92 :: Int -> [Int];
+test92 x =
+    map noStrictId [];
+
+answer92 :: Int -> [Int];
+answer92 x = [];
+ 
+test93_helper1 :: Int -> Int -> Int;
+test93_helper1 x y = x + y + 1;
+
+test93_helper2 :: Int -> Int;
+test93_helper2 x = x + 1;
+
+test93 :: [Int] -> [Int] -> [Int];
+test93 l1 l2 = List.zipWith test93_helper1 l1 (map test93_helper2 l2);
+
+answer93 :: [Int] -> [Int] -> [Int];
+answer93 l1 l2 = answer93_helper l1 l2;
+
+answer93_helper :: [Int] -> [Int] -> [Int];
+answer93_helper list1 list2 =
+    case list1 of
+    a : as -> 
+        case list2 of
+        [] -> []; 
+        listHead : listTail -> 
+            (a + (listHead + 1)) + 1 : (answer93_helper as listTail);
+        ; 
+    [] -> [];
+    ;
+
+// the names refers to theoretically could have side effect rather than actually having one.
+// the optimizer cannot tell the difference because of the definition of '+'.
+hasSideEffect :: Int -> Int;
+hasSideEffect x = x + x;
+
+test94 :: Int -> Int;
+test94 x = 
+    case Just19 (hasSideEffect x) (hasSideEffect x) (hasSideEffect x) of
+    Just19 a b c -> a + b + c;
+    ;
+
+answer94 :: Int -> Int;
+answer94 x = test94_helper (x + x) (x + x) x;
+
+test94_helper :: Int -> Int -> Int -> Int;
+test94_helper !a !c x = (a + (x + x)) + c;
+
+test95_helper :: Int -> Int -> Int;
+test95_helper x y = test95_helper x y;
+
+test95 :: Int -> Int -> Int;
+test95 x y = x `seq` y `seq` (test95_helper x y);
+
+// + is strict in x and y in the same order so the seq's can be eliminated
+answer95 :: Int -> Int -> Int;
+answer95 !x !y = test95_helper x y;
+
+test96_helper :: Int -> Int -> Int;
+test96_helper x y = test96_helper x y;
+                    
+test96 :: Int -> Int -> Int;
+test96 x y = (x `seq` y) `seq` (test96_helper x y);
+
+answer96 :: Int -> Int -> Int;
+answer96 !x !y = test96_helper x y;
+
+test97_helper :: Int -> Int -> Int;
+test97_helper x y = test97_helper x y;
+
+test97 :: Int -> Int -> Int;
+test97 x y = x `seq` (test97_helper (y `seq` x) y);
+
+answer97 :: Int -> Int -> Int;
+answer97 !x !y = test97_helper x y;
+
+test98_helper :: Int -> Int -> Int;
+test98_helper x y = test98_helper x y;
+
+test98 :: Int -> Int -> Int;
+test98 x y = test98_helper (x `seq` y `seq` x) y;
+
+answer98 :: Int -> Int -> Int;
+answer98 !x !y = test98_helper x y;
+
+test99 :: Int -> Int -> Int;
+test99 x y = x `seq` y `seq` x;
+
+answer99 :: Int -> Int -> Int;
+answer99 !x !y = x;
+
+test100_helper :: Int -> Int -> Int;
+test100_helper x y = test100_helper x y;
+
+test100 :: Int -> Int -> Int;
+test100 x y = y `seq` x `seq` test100_helper x y;
+
+answer100 :: Int -> Int -> Int;
+answer100 x !y = x `seq` test100_helper x y;
+
+test101_helper :: Int -> Int -> Int;
+//test101_helper s t = s `seq` t;
+test101_helper !s t = t;
+
+test101 :: Int -> Int -> Int;
+test101 x y = test101_helper x y;
+
+answer101 :: Int -> Int -> Int;
+answer101 !x y = y;
+
+test102_helper :: Int -> Int -> Int;
+test102_helper !x !y = test102_helper x y;
+
+test102 :: Int -> Int -> Int;
+test102 x y = x + (seq x (seq y (test102_helper x y)));
+
+answer102 :: Int -> Int -> Int;
+answer102 x y = x + (test102_helper x y);
+    
+test103_helper :: Int -> Int -> Int -> Int;
+test103_helper !x constArg !y = test103_helper (x+1) (constArg+1) (y+1);
+
+test103 :: Int -> Int -> Int;
+test103 x y = x + (seq x (seq y (test103_helper x 1 y)));
+
+answer103 :: Int -> Int -> Int;
+answer103 x y = x + (test103_helper x 1 y);
+
+test104 :: Int -> Int -> Int;
+test104 x !y = x `seq` y;     
+
+answer104 :: Int -> Int -> Int;
+answer104 x !y = x `seq` y;
+
+test105 :: Int -> Int;
+test105 x =
+    let
+        a = x;
+    in
+        a + a;
+
+answer105 :: Int -> Int;
+answer105 x = x + x;
+
+test106_f :: Int -> Int -> Int;
+test106_f x y = test106_f x y;
+
+test106 :: Int -> Int -> Boolean;
+test106 x y = 
+    case x `seq` y `seq` test106_f x y of
+    1 -> True;
+    ;
+
+answer106 :: Int -> Int -> Boolean;
+answer106 x y = 
+    case test106_f x y of
+    1 -> True;
+    ;
+
+answer106_helper :: Int -> Int -> Int;
+answer106_helper !x !y = test106_f x y;
+
+test107 :: Int -> Int -> Int;
+test107 x y = 
+    let
+        temp1 :: Int;
+        temp1 = Prelude.eager x;
+        
+        temp2 :: Int;
+        temp2 = Prelude.eager y;        
+    in
+        temp1 `seq` temp2 `seq` (temp2 + temp1);
+
+answer107 :: Int -> Int -> Int;
+answer107 x y = answer107_helper (Prelude.eager x) y;
+
+answer107_helper :: Int -> Int -> Int;
+answer107_helper !arg1 arg2 =
+    seq arg1 (Prelude.eager arg2 + arg1);
+
+test108 :: [Int] -> Int;
+test108 qs = 
+    let
+        q = List.head qs; 
+        
+        test :: Int -> Int -> Int;
+        test a b = test (a+q) (b+q);
+    in
+        test 1 2;
+
+answer108 qs =
+    let
+        test :: Int -> Int -> Int -> Int;
+        test q a b = test q (a+q) (b+q);
+    in
+        test (answer108_testLambda qs) 1 2;
+
+answer108_testLambda :: [a] -> a;    
+answer108_testLambda list =
+    case list of
+    listHead : _ -> listHead; 
+    [] -> Prelude.error "Empty list.";
+    ;
+
+//test109_f !x = test109_f x;
+//test109 x = x `seq` test109_f x;
+//answer109 x = test109_f x;
+
+test109_f x1 !x2 x3 !x4 = test109_f x1 x2 x3 x4;
+test109 x1 x2 x3 x4 = x2 `seq` x4 `seq` test109_f x1 x2 x3 x4;
+answer109 x1 x2 x3 x4 = test109_f x1 x2 x3 x4;
+
+test110_f x1 !x2 x3 !x4 x5 = test110_f x1 x2 x3 x4 x5;
+test110 x1 x2 x3 x4 x5 = x2 `seq` x4 `seq` test110_f x1 x2 x3 x4 x5;
+answer110 x1 x2 x3 x4 x5 = test110_f x1 x2 x3 x4 x5;
+
+test111_f !x1 x2 x3 !x4 x5 = test111_f x1 x2 x3 x4 x5;
+test111 x1 x2 x3 x4 x5 = x1 `seq` x4 `seq` test111_f x1 x2 x3 x4 x5;
+answer111 x1 x2 x3 x4 x5 = test111_f x1 x2 x3 x4 x5;
+
+test112_f !x1 x2 x3 !x4 x5 = test112_f x1 x2 x3 x4 x5;
+test112 x1 x2 x3 x4 x5 = x4 `seq` x1 `seq` test112_f x1 x2 x3 x4 x5;
+answer112 x1 x2 x3 !x4 x5 = test112_f x1 x2 x3 x4 x5;
+
+test113_helper !x y = y;
+
+test113 :: Int -> Int;
+test113 y = (List.head [1::Int,3]);
+
+answer113 :: Int -> Int;
+answer113 y = [1::Int,3] `seq` 1::Int;
+
+test114 :: Prelude.Int -> Prelude.Boolean;
+test114 !arg = 
+    let
+        nToTest = arg;
+    in
+        List.andList (List.map (nonMultiple nToTest)
+            (Prelude.upFromTo ((2 :: Prelude.Int)) (Prelude.round (Prelude.fromInt nToTest))));
+
+answer114 :: Int -> Boolean;
+answer114 nToTest = True;
+
+test115 = (Prelude.Left False :: Prelude.Either Boolean Boolean).Prelude.Right.value;
+answer115 = (Prelude.Left False :: Prelude.Either Boolean Boolean).Prelude.Right.value;
+
+test116 = (Prelude.Left False :: Prelude.Either Boolean Boolean).Prelude.Left.value;
+answer116 = False;
+
+test117 :: [Int] -> [Int];
+test117 list = 
+    let
+        plusOne :: Int -> Int;
+        plusOne x = x + 1;
+    in
+        map plusOne (map plusOne (map plusOne list));
+
+answer117 :: [Int] -> [Int];
+answer117 list = answer117_helper list;
+
+answer117_helper :: [Int] -> [Int];
+protected answer117_helper !list =
+    case list of
+    []     -> [];
+    listHead : listTail -> ((listHead + 1) + 1) + 1: answer117_helper listTail;
+    ;
+
+test118_helper :: Int -> Int -> Int;
+test118_helper !x !y = test118_helper x y;
+
+test118 :: Int -> Int -> Int;
+test118 x y =
+    case test118_helper x y of
+    1 -> x `seq` y `seq` 23;
+    ;
+
+answer118 :: Int -> Int -> Int;
+answer118 x y =
+    case test118_helper x y of
+    1 -> 23;
+    ;
+
+test119_helper :: Int -> Int -> Int;
+test119_helper x y = test119_helper x y;
+
+test119 :: Int -> Int -> Int;
+test119 x y =
+    case test119_helper x y of
+    1 -> x `seq` y `seq` 23;
+    ;
+
+answer119 :: Int -> Int -> Int;
+answer119 x y =
+    case test119_helper x y of
+    1 -> (seq x (seq y 23));
+    ;
+
+test120 :: Boolean;
+test120 = 
+    case error "hi" of
+    True -> True;
+    ;
+
+answer120 :: Boolean;
+answer120 = error "hi";
+
+data Test121_Type =
+    Type121_Type 
+        y :: !()
+    ;
+
+data foreign unsafe import jvm "java.lang.StringBuilder" 
+    private JStringBuilder;
+
+foreign unsafe import jvm "constructor" private stringBuilder_new0 :: JStringBuilder;
+
+foreign unsafe import jvm "method append"
+    private stringBuilder_appendChar :: JStringBuilder -> Char -> JStringBuilder;  
+
+appendChar buffer char = stringBuilder_appendChar buffer char `seq` ();
+
+test121 =
+    let
+        buffer = stringBuilder_new0;
+        bar = appendChar buffer 'b';
+        pattern = (Type121_Type bar);        
+        y = (pattern).Type121_Type.y;
+    in
+        y == ();
+
+answer121 = (Type121_Type (seq (stringBuilder_appendChar stringBuilder_new0 'b') ())).Type121_Type.y == ();
+
+test122 list = 
+    isEmpty 
+           (case list of
+               Cons _ listTail -> listTail; 
+               [] -> error "Empty list.";
+           );
+
+answer122 list = 
+    case list of 
+    Cons _ listTail -> 
+        case listTail of
+        [] -> True;
+        _ : _ -> False;
+        ;
+    
+    [] -> error "Empty list.";
+    ;
+
+//test114_andListMapUpFromByUpToInt :: Int -> Int -> Int -> Boolean;
+//test114_andListMapUpFromByUpToInt nToTest !end !start = 
+//    if start > end then
+//        True 
+//    else    
+//        let
+//            next :: Int;
+//            next = start + 1;
+//        in
+//            if next > end || next < start then
+//                Prelude.mod nToTest start != 0
+////            else if next < start then
+////                Prelude.mod nToTest start != 0
+//            else if Prelude.mod nToTest start != 0 then
+//                test114_andListMapUpFromByUpToInt nToTest end next
+//            else
+//                False; 
+
+//helper106 :: Int -> Int -> Int;
+//helper106 x y = helper106 x y;
+//
+//test106 :: Int -> Int -> Int;
+//test106 x y =
+//    x + (x `seq` y `seq` (helper106 x y));
+//
+//answer106 :: Int -> Int -> Int;
+//answer106 x y = x + plingedWrapper106 x y;
+//
+//plingedWrapper106 :: Int -> Int -> Int;
+//plingedWrapper106 !x !y = helper106 x y;
+//
+//test107_helper :: Int -> Int -> Int;
+//test107_helper !x !y = test107_helper x y;
+//
+//test107 :: Int -> Int -> Int;
+//test107 x y = x + (seq y (seq x (test107_helper x y)));
+//
+//answer107 :: Int -> Int -> Int;
+//answer107 x y = x + plingedWrapper107 y x;
+//
+//plingedWrapper107 :: Int -> Int -> Int;
+//plingedWrapper107 !y !x = test107_helper y x;
+//
+//f :: Int -> Int -> Int;
+//f x y = f x y;
+//
+//test108 :: Int -> Int;
+//test108 x = f x (case f x (42::Int) of 23 -> (4::Int););
+//
+//answer108 :: Int -> Int;
+//answer108 x = f x (answer108_helper (f x 42));
+//
+//answer108_helper :: Int -> Int;
+//answer108_helper !arg =
+//    case arg of 
+//    23 -> arg;
+//    ;
+//
+//test109 :: Int -> Int -> Int -> Int;
+//test109 x y z = 
+//    case x of
+//    1 -> y `seq` z `seq` x;
+//    ;
+//
+//answer109 :: Int -> Int -> Int -> Int;
+//answer109 x y z = 1;
+              
+//test109 = List.last (List.take 6000000 (Prelude.upFrom 1.0));
+//
+//answer109 = 'a';
+
+//opt1 = sumIntBoxes (
+//    case (buildIntBoxTree 14) of
+//        IntBox ints -> makeIntBox (List.take (List.length ints) (Prelude.upFrom (((List.subscript ints 0)+1) :: Prelude.Int)));
+//        BoxesBox boxes -> makeBoxesBox (List.map incrementIntBoxes boxes);
+//    );
+
+
+//test106_helper :: Int -> Int -> Int;
+//test106_helper !x !y = test106_helper x y;
+//
+//test106 :: Int -> Int -> Int;
+//test106 x y = seq y (test106_helper x y);
+//
+//answer106 :: Int -> Int -> Int;
+//answer106 x y = 1;
+
+//test106 :: Int -> (Int -> Int -> Int);
+//test106 x = (\y -> (\!z -> seq y x));
+//
+//answer106 :: Int -> (Int -> Int -> Int);
+//answer106 x = (\y -> (\!z -> seq y x));
+
+//test105 :: Int -> Int -> Int;
+//test105 x y = x `seq` y `seq` x + y;
+////test105 x y = (seq x (seq y (x + y)));
+//
+//// + is strict in x and y in the same order so the seq's can be eliminated
+//answer105 :: Int -> Int -> Int;
+//answer105 x y = x + y;
+
+//test105_helper :: Int -> Int -> Int;
+//test105_helper !x y = test105_helper x y;
+//
+//test105 :: Int -> Int -> Int;
+//test105 x y =
+//    let
+//        z = x + y;
+//    in
+//        (seq z (test105_helper z)) y;
+//
+//answer105 :: Int -> Int -> Int;
+//answer105 x y = test105_helper x y;
+
+//test103_helper :: Int -> Int;
+//test103_helper !x = x + x;
+//
+//test103 :: Int -> Int;
+//test103 x = x + (test103_helper (x+x));
+//
+//answer103 :: Int -> Int;
+//answer103 x = x;
+//
+//test101 :: Int -> Int -> Int;
+//test101 x y = (seq y (seq x (seq y (x + y))));
+//
+//answer101 :: Int -> Int -> Int;
+//answer101 x y = (seq y (seq x (x + y)));
+
+
+//test95_helper :: Int -> Int -> Int;
+//test95_helper !a !b = a + b + b;
+//
+//test95 !x !y = x `seq` y `seq` test95_helper x y;
+//answer95 !x !y = x + y + y;
+
+// TODO (Prelude.compose List.tail Prelude.concat)
+//test93 :: Int -> Int -> Boolean;
+//test93 x y =
+//    let
+////        helper = SD2 (Prelude.seq (jStringAccumulator_AddString accumulator "intArg") 1) (Cal.Core.Prelude.seq (jStringAccumulator_AddString accumulator "boolArg") Cal.Core.Prelude.True);
+//        helper = (Prelude.seq x (Prelude.seq y Prelude.True));
+//        fun f = f || f;
+//    in
+//        fun helper;
+//        
+//answer93 = True;         
+
+//test16 = 0.0 * 12 
+//answer16 = 0.0;
+//test17 = 1 * x;
+//answer17 = 1;
+
+// The parser test
+
+//test14 parser1 parser2 parser3 state =
+//    (pOrT (pOrT parser1 parser2) parser3) state;
+//    parser1 `pOrT`
+//    parser2 `pOrT`
+//    parser3;
+
+//answer14 = True;
+
+// END FIX THIS
+//test44 :: Double -> Double;
+//test44 x = 0.0 * x;
+//
+//answer44 :: Double -> Double;
+//answer44 x = 0.0
+//
+//test45 :: Double -> Double;
+//test45 x = x * 0.0;
+//
+//answer45 :: Double -> Double;
+//answer45 x = 0.0;
+//
+
+//test16 = 0.0 * 12 
+//answer16 = 0.0;
+//test17 = 1 * x;
+//answer17 = 1;
+
+// The parser test
+
+//test14 parser1 parser2 parser3 state =
+//    (pOrT (pOrT parser1 parser2) parser3) state;
+//    parser1 `pOrT`
+//    parser2 `pOrT`
+//    parser3;
+
+//answer14 = True;
+
+//data Test14_Whatever =
+//    Test14_Thing1 age::Int |
+//    Test14_Thing2 age::Int;
+//
+//test14 =
+//case Test14_Thing1 23 of
+//Test14_Thing1 {age} -> age;
+////(Test14_Thing1 | Test14_Thing2) {age} -> age;
+//;
+//
+//answer14 :: Int;
+//answer14 = 23;
+//test14 =
+//    test14_helper "a";
+//
+//test14_helper arg = test14_helper arg;
+//
+//answer14 = test14_helper "a";
+
+//test14 :: Boolean;
+//test14 =
+//    let
+//        f = case True of True -> True;;
+//    in
+//        if f == True then True else False;
+//    
+//answer14 = True;
+
+//test14 :: (Int -> Boolean) -> Int -> Int -> Int -> Boolean;
+//test14 arg1 start step end = 
+//    if start > end then
+//        Prelude.True
+//    else
+//        let
+//            next = start + end;
+//        in
+//            if next > end || next < start then
+//                arg1 start && (\var -> Prelude.True) arg1
+//            else 
+//                arg1 start && test14 arg1 next step end; 
+//
+//answer14 = True;
+
+//test7_andListMap nToTest !list =
+//    case list of
+//    [] -> True;
+//    listHead : listTail -> (test7_nonMultiple nToTest listHead) && (test7_andListMap nToTest listTail);
+//    ;
+//
+//test7_nonMultiple :: Int -> Int -> Boolean;
+//private test7_nonMultiple !arg !arg_1 = (Prelude.mod arg arg_1) != (0 :: Int);    
+//
+//test7 nToTest start7 end7 = test7_andListMap nToTest (Prelude.upFromTo start7 end7);
+//
+//answer7 = True;
+
+
+// Test 7
+//
+//test7 :: Boolean -> Boolean;
+//test7 x = x && True;
+//
+//answer7 :: Boolean -> Boolean;
+//answer7 x = x;
+
+// TODO Fix these test cases after the framework is checked in.
+    
+//// Test 5. 
+//    
+//test5 x =
+//    case (
+//            case x of
+//            True -> False;
+//            False -> True;
+//            ) of
+//        False -> True;
+//        True -> False;
+//    ;
+//    
+//answer5 x =
+//    if x then
+//        True
+//    else
+//        False;
+//    
+//// Test X. TODO Make This work since it should but currently doesn't.
+//    
+//testToDo1 =
+//    let
+//        f x = x ++ x;
+//    in
+//        f "a";
+//    
+//answerToDo1 = "a" ++ "a";
+
+/**
+ * Get a list of the new functions that should be created for a given test.
+ */
+newFunctionNames :: Int -> [String];    
+newFunctionNames testNumber =
+    case testNumber of
+    3 -> ["answer3_helper1"];
+    5 -> ["answer5_mapmapmap"];
+    12 -> ["test12_andListMapUpFromByUpToInt"];
+    41 -> ["answer41_helper"];
+    93 -> ["answer93_helper"];
+    94 -> ["test94_helper"];
+    _ -> [];
+    ;
+
+skipTest :: Int -> Boolean;
+skipTest testNumber =
+    isJust (find (\n -> n == testNumber) [93, 106, 113, 114, 117, 108]);
+
+/**
+ * The number of tests.
+ */    
+numberOfTests :: Int;
+numberOfTests = 122;
+
+/**
+ * The test to start with. This is mainly for debugging
+ */
+
+// 93 101 108 -> change couldHaveSideEffects so that is has an arg for selecting where or not to remove app
+// 12 93 101 -> remove app from couldHaveSideEffects + fix 
+// 93 101 108 -> have the app test in always.
+startWithTest :: Int;
+startWithTest = 1;
+
+//// ===== QUICK CHECKS =====
+//
+//arbitraryLiteral :: Gen Literal;
+//arbitraryLiteral =
+//    chooseOneOf [
+//        mapGen (\value -> LitString value) arbitrary,
+//        mapGen (\value -> LitInt value) arbitrary,
+//        mapGen (\value -> LitShort value) arbitrary,
+//        mapGen (\value -> LitFloat value) arbitrary,
+//        mapGen (\value -> LitBoolean value) arbitrary,
+//        mapGen (\value -> LitDouble value) arbitrary,
+//        mapGen (\value -> LitChar value) arbitrary,
+//        mapGen (\value -> LitLong value) arbitrary
+//    ];
+//
+//coarbitraryLiteral :: Literal -> Gen b -> Gen b;
+//coarbitraryLiteral literal =
+//    case literal of
+//    LitString value -> coarbitrary literal.LitString.value;
+//    LitInt value -> coarbitrary literal.LitInt.value;
+//    LitShort value -> coarbitrary literal.LitShort.value;
+//    LitFloat value -> coarbitrary literal.LitFloat.value;
+//    LitBoolean value -> coarbitrary literal.LitBoolean.value;
+//    LitDouble value -> coarbitrary literal.LitDouble.value;
+//    LitChar value -> coarbitrary literal.LitChar.value;
+//    LitLong value -> coarbitrary literal.LitLong.value;
+//    ;
+//
+//instance QuickCheck.Arbitrary Literal where
+//    arbitrary = arbitraryLiteral;
+//    coarbitrary = coarbitraryLiteral;
+//    ;
+//
+//arbitraryModuleName :: Gen String;
+//arbitraryModuleName = makeChooseOneOfGen ["Cal.Core.Prelude", "List", "M2", "String"];
+//
+//arbitraryFunctionName :: Gen String;
+//arbitraryFunctionName =
+//    mapGen (\value -> toLowerCase value) arbitrary;
+////    Gen(\genParams -> String.fromList ((generateInstance genParams)::[Char]) )
+//    
+///arbitraryLetter :: Gen Char;
+////arbitraryLetter = chooseOneOf (toList "abcdefghijklmnopqrstuvwxyz");
+//
+//
+//arbitraryQualifiedName :: Gen QualifiedName;
+//arbitraryQualifiedName =
+//    zipWithGen 
+//        (\moduleName functionName -> QN moduleName functionName)
+//        arbitraryModuleName
+//        arbitraryFunctionName;
+//
+//coarbitraryQualifiedName :: QualifiedName -> Gen b -> Gen b;
+//coarbitraryQualifiedName qualifiedName = 
+//    coarbitrary qualifiedName.QN.moduleName # coarbitrary qualifiedName.QN.functionName;
+//    
+//instance QuickCheck.Arbitrary QualifiedName where
+//    arbitrary = arbitraryQualifiedName;
+//    coarbitrary = coarbitraryQualifiedName;
+//    ;
+//
+//arbitraryExpression :: Gen Expression;
+//arbitraryExpression =
+//    chooseOneOf [
+//        mapGen (\name -> Var name [] Nothing Nothing) arbitrary,
+//        mapGen (\literal -> Literal literal) arbitrary,
+//        zipWithGen 
+//            (\expr1 expr2 -> App expr1 expr2)
+//            arbitraryExpression
+//            arbitraryExpression
+//    ];
+//
+//showEm :: String;
+//showEm = generateNInstances 10 makeDefaultGenParams arbitraryFunctionName;
+
+    

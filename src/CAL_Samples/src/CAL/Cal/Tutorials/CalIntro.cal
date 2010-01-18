@@ -1,0 +1,1170 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+//Comments in CAL follow the format from Java. Namely, there are multi-line
+//comments of the form /* .. */, such as with the copyright statement above
+//and single line comments starting with //. 
+
+//Comments delimited by /** .. */ are CALDoc comments. These are used by the 
+//documentation generator to generate HTML based documentation for the module.
+
+/**
+ * This module contains a basic tutorial on the CAL language.
+ * It is structured to be read in a sequential fashion but you can also
+ * skip around if you prefer.
+ * 
+ * CAL is a strongly typed lazy functional language supporting close interaction
+ * with Java. This tutorial does not assume that you know what a strongly 
+ * typed lazy functional language is. If you do, then the {@em CAL for Haskell 
+ * programmers@} document may be a faster route to an overview of CAL's
+ * features.
+ * 
+ * For a more in-depth and complete treatment of CAL's features please see the
+ * {@em CAL User's Guide@}. This is more intended as a quick taster, and many
+ * topics and features are not mentioned.
+ * 
+ * @author Bo Ilic
+ */
+//the module declaration is the first non-comment statement in the module
+module Cal.Tutorials.CalIntro; 
+
+//all modules must import the Prelude module (except the Prelude itself).
+//The Prelude module contains the definitions of some core types and functions
+//essential to the basic operation of CAL.
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Num, Ord, Outputable;
+    typeConstructor =
+        Boolean, Char, Double, Int, Integer, JObject, Long, Maybe, String;
+    dataConstructor = False, True, Nil, Cons, Nothing, Just;
+    function =
+        add, assert, field1, input, isEmpty, isNotANumber, not, output, seq, 
+        upFromTo;
+    ;
+//using clauses indicate the entities that can be used unqualified within a
+//module. For example, the function length means List.length within this module
+//and not String.length. To use String.length, you need to explicitly
+//qualify it.
+import Cal.Collections.List using
+    function =
+        concatMap, filter, length, map, reverse, subscript, sum, tail, take, 
+        zip, zipWith;
+    ;
+//the String module import does not have a using clause so all entities
+//used from it must be fully qualified.
+import Cal.Core.String;
+import Cal.Utilities.Math using
+    function = cos, sin, sqrt, tan;
+    ;
+import Cal.Graphics.Color using
+    typeConstructor = Color;
+    function = aqua, black, blue, green, red, yellow;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Core.Record;
+
+
+//CAL supports various kinds of literal values:
+
+/**
+ * CAL {@link typeConstructor = String@}s correspond to the Java object type
+ * java.lang.String and are not lists of characters (although they can be easily
+ * converted to and from lists of characters). The usual escape sequences apply
+ * such as \n for newline and \u0020 for the Unicode character with hex value 20
+ * i.e. the space character.
+ */
+quickBrownFox = "The quick brown fox jumps over the lazy dog";
+
+stringExamples :: Boolean;
+stringExamples =   
+    
+    //the length of the String "apple" is 5
+    assert (String.length "apple" == 5) 
+    
+    &&       
+    
+    //using the String.toUpperCase function
+    assert (String.toUpperCase "Mt. Fuji" == "MT. FUJI")
+        
+    && 
+    
+    //reversing quickBrownFox, which is defined above as 
+    //"The quick brown fox jumps over the lazy dog"
+    assert
+    (
+        String.reverse quickBrownFox 
+        == "god yzal eht revo spmuj xof nworb kciuq ehT"
+    )  
+    
+    &&
+    
+    //Strings are not themselves lists, but can easily be converted to
+    //lists using the String.toList function
+    assert 
+    (
+        String.toList "Sarabande"
+        == ['S', 'a', 'r', 'a', 'b', 'a', 'n', 'd', 'e']
+    )
+    
+    &&
+    
+    //Strings can be created from lists of characters using String.fromList
+    assert 
+    (
+        String.fromList ['Z', 'a', 'p', 'h', 'o', 'd']
+        == "Zaphod"
+    )
+    
+    && 
+    
+    //breaking up quickBrownFox into individual words.
+    //The result is a list of String values.
+    assert
+    (
+        String.words quickBrownFox 
+        == 
+        ["The", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog"]
+    ) 
+    
+    &&
+    
+    //the ++ operator can be used to concatenate Strings
+    assert
+    (
+        "cinnamon" ++ " " ++ "raisin"
+        == "cinnamon raisin"
+    )    
+    
+    &&
+    
+    //any function can be surrounded by backquotes and then used as an infix 
+    //operator. In this example, we use String.subscript in infix form.
+    assert 
+    (
+        "alphabet" `String.subscript` 5
+        == 'b'
+    )
+        
+    && 
+    
+    //filtering out the vowels from quickBrownFox. Note that the first argument
+    //of String.filter is a function from Char to Boolean indicating what 
+    //characters to keep. The expression:
+    //(\c -> String.indexOf c "aeiou" < 0) 
+    //is a lambda expression defining an anonymous function of a single formal
+    //parameter c. String.filter is an example of a higher-order function.
+    //This is simply a function that has an argument that is itself a function.
+    assert
+    (
+        String.filter (\c -> String.indexOf c "aeiou" < 0) quickBrownFox
+         == "Th qck brwn fx jmps vr th lzy dg"
+    )
+    ;
+    
+
+/** 
+ * CAL {@link typeConstructor = Char@}s correspond to the primitive Java
+ * character type "char". The usual escape sequences apply such as \n for
+ * newline and \u0020 for the Unicode character with hex value 20
+ * i.e. the space character.
+ */
+charLiteral = 'a';
+
+/**
+ * Numbers with a decimal point are used to represent {@link Double@} values
+ * in CAL. These correspond to the Java primitive type "double".
+ */
+doubleLiteral = 123.123;
+
+/** {@link Int@} corresponds to the Java primitive type "int" */
+intLiteral = 123 :: Int; 
+
+/** {@link Long@} corresponds to the Java primitive type "long" */
+longLiteral = 3210000 :: Long;
+
+/** {@link Integer@} corresponds to the Java object type java.lang.BigInteger */
+integerLiteral = 1230000000000000000000000000000000 :: Integer; 
+
+/** 
+ * Numbers without a decimal point can represent a value of any numeric type.
+ * The actual type is resolved polymorphically depending upon the context
+ * in which the literal is used.
+ */
+numLiteral :: Num a => a;
+numLiteral = 999;
+
+/**
+ *{@link Boolean@} values are either {@link True@} or {@link False@}.
+ */
+booleanLiteral = True;
+
+
+//Here are some examples of List literals.
+//Lists in CAL are immutable singly linked lists of values of a single type.
+
+    
+/**
+ * list of 4 Color values.
+ */
+colors :: [Color];
+colors = [red, green, yellow, blue];
+
+colorsExamples =
+    
+    //colors is a list of length 4. length here is List.length since length
+    //appears in the list of "using" functions for the import of the
+    //Length module. We could also have explicitly written List.length
+    assert (length colors == 4)
+    
+    && 
+    
+    //reversing colors
+    assert (reverse colors == [blue, yellow, green, red])
+    
+    && 
+    
+    //taking the first 2 elements of the list of colors
+    assert (take 2 colors == [red, green])
+       
+    &&
+    
+    //subscripting the list of colors using the infix form of the
+    //List.subscript function
+    assert (colors `subscript` 2 == yellow)
+    
+    && 
+        
+    //colorToRGB is a function that take a Color value and returns a triple
+    //of Int values. In CAL notation,
+    //colorToRGB :: Color -> (Int, Int, Int).
+    //map applies its function first argument to each element of the list
+    //supplied as the second argument.
+    assert
+    (
+        map Color.colorToRGB colors 
+        == [(255, 0, 0), (0, 128, 0), (255, 255, 0), (0, 0, 255)]
+    )
+    
+    &&
+    
+    //the ++ operator also works for list concatenation
+    assert 
+    (
+        [red, green] ++ [aqua, yellow, black]
+        == [red, green, aqua, yellow, black]
+    )
+    
+    ;                
+
+/**
+ * list of 5 String values.
+ */
+fruits :: [String];
+fruits = ["apple", "pear", "banana", "mango"];
+
+fruitsExamples =
+    
+    //lists can also be built up using the : and [] data constructors.
+    //the : data constructor appends an element to a list,
+    //and the [] data constructor represents the empty list.
+    assert
+    (
+        fruits
+        == "apple" : "pear" : "banana" : "mango" : []
+    )
+    
+    &&
+    
+    //the : data constructor has the textual form Prelude.Cons
+    //the [] data constructor has the textual form Prelude.Nil 
+    //whereas operators have specially defined precedence and associativity
+    //(essentially the natural and typical ones common to Java and other
+    //languages), backquoted textual operators always are left associative,
+    //so the parentheses below are needed.
+    assert
+    (
+        fruits
+        == "apple" `Cons` ("pear" `Cons` ("banana" `Cons`("mango" `Cons` Nil)))
+    )    
+    
+    &&
+    
+    //the Cons data constructor has 2 fields: head and tail.
+    //this is an example of data constructor field selection
+    assert (fruits.Cons.head == "apple")
+    
+    &&
+    
+    //using data constructor field selection to traverse fruits to its
+    //third element.
+    assert (fruits.Cons.tail.Cons.tail.Cons.head == "banana")
+    
+    &&
+    
+    //using a case expression to extract the first element of fruits
+    assert
+    (
+        (
+            case fruits of
+            fruitsHead : _ -> fruitsHead;
+        )
+        == "apple"
+    )
+    
+    
+    &&
+    
+    //using a field-name based case expression to extract the first element
+    //of fruits. The "head = fruitsHead" part binds the head field of the
+    //Cons data constructor to the fruitHead variable.
+    assert 
+    (
+        (
+            case fruits of
+            Cons {head = fruitsHead} -> fruitsHead;
+        )
+        == "apple"
+    )
+
+    
+    &&
+    
+    //using a field-name based case expression to extract the first element
+    //of fruits. This uses "punning" which is a shorthand notation where the
+    //field-name is used as the name of the introduced local variable 
+    //i.e. it is equivalent to writing Cons {head = head} below.
+    assert 
+    (
+        (
+            case fruits of
+            Cons {head} -> head;
+        )
+        == "apple"
+    )
+
+       
+    ;
+
+/**
+ * list of 3 trigonometric functions. Each element of the list is a function
+ * of type Double -> Double.
+ */
+trigs :: [Double -> Double];
+trigs = [sin, cos, tan];
+
+/**
+ * list of 3 lists of Color values. 
+ * The first list has 1 Color. The second 3 Color values. The third is an
+ * empty list (with no Color values).
+ * 
+ * Note that [] denotes the empty list.
+ */
+colors2 :: [[Color]];
+colors2 = [[red], [green, yellow, blue], []];
+
+/**
+ * maybeColors is a list of 6 {@link Maybe@} values.
+ * Values of the Maybe type are used to extend a type with an additional
+ * {@link Nothing@} value.
+ */
+maybeTrigs :: [Maybe (Double -> Double)];
+maybeTrigs = [Just sin, Nothing, Just cos, Nothing, Nothing, Just tan];
+
+
+moreListExamples =
+    
+    //sum up the values in a list
+    assert (sum [3 :: Int, 1, 4, 1, 5] == 14)
+    
+    &&
+    
+    //zip combines 2 lists into a list of pairs
+    assert
+    (
+        zip ["apple", "pear", "cherry"] [green, yellow, red, aqua] 
+        == [("apple", green), ("pear", yellow), ("cherry", red)]
+    )
+    
+    &&
+    
+    //verification of a fact know to the five year old Gauss:
+    //1 + 2 + 3 + ... + 1000
+    //== (1 + 1000) + (2 + 999) +  (3 + 998) + ... + (500 + 501) == 1001 * 500
+    assert
+    (
+        sum (upFromTo (1 :: Long) 1000) 
+        == (1000 + 1) * 1000 / 2
+    )
+
+    &&
+    
+    //mapping the String.words function to produce a list of list of strings.
+    //In CAL notation this has type [[String]].
+    assert
+    (
+        map
+            String.words
+            [
+                "vine maple",
+                "lily of the valley",
+                "golden false acacia",
+                "huckleberry"
+            ]
+        ==
+        [
+            ["vine", "maple"],
+            ["lily", "of", "the", "valley"],
+            ["golden", "false", "acacia"],
+            ["huckleberry"]
+        ]
+    )
+    
+    &&
+    
+    //# is the composition operator.
+    //$ is the low-precedence application operator.
+    //Essentially this example is computing the length of each of the plant
+    //name tokens of the previous example however preserving the list of list
+    //structure of the tokenization e.g. "vine" is a String of length 4.
+    assert
+    (
+        (
+            (map $ map String.length) # (map String.words)
+            $
+            [
+                "vine maple",
+                "lily of the valley",
+                "golden false acacia",
+                "huckleberry"
+            ]
+        )
+        == [[4, 5], [4, 2, 3, 6], [6, 5, 6], [11]]
+    )
+    
+    ;
+
+/**
+ * An infinite list of ones. CAL is a lazy language so this sort of thing works.
+ */
+ones :: [Int];
+ones = 1 : ones;
+
+/**
+ * The Fibonacci numbers. Another infinite list.
+ */
+fibs :: [Integer];
+fibs = 1 : 1 : zipWith add fibs (tail fibs);
+
+lazyListExamples =
+    
+    //can evaluate the first 4 elements of ones without hanging due to laziness
+    assert (take 4 ones == [1, 1, 1, 1])
+    
+    &&
+    
+    //can evaluate the first 17 elements of fibs without hanging due to laziness
+    assert
+    (
+        take 17 fibs
+        == 
+        [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597]
+    )
+    ;
+
+//CAL supports records. Records are basically sets of name value pairs.
+//They differ from lists in that each field value of a record may have
+//a different type.
+
+/** 
+ * A record with 3 fields: field #1 has type String, field #2 has type 
+ * Maybe Boolean and field #3 has type [Double]. 
+ * It is expressed using tuple notation. 
+ */
+tupleRecord1 :: (String, Maybe Boolean, [Double]);
+tupleRecord1 = ("apple", Just True, [2.0, 3.0, -5]);
+    
+/** 
+ * This record actually has the same value as tupleRecord1, but it includes
+ * field names explicitly, and thus uses braces rather than parentheses.
+ * When using explicit field names, the ordering of the fields does not matter.
+ */
+tupleRecord2 :: {#1 :: String, #3 :: [Double], #2 :: Maybe Boolean};
+tupleRecord2 = {#3 = [2.0, 3.0, -5], #1 = "apple", #2 = Just True};
+
+/** 
+ * Here is a record with both textual and ordinal fields.
+ */
+mixedRecord1 ::
+    {#1 :: Maybe [Int], #2 :: Boolean, age :: Double, name :: String};
+mixedRecord1 =
+    {name = "Anton", age = 3.0, #1 = Just [10 :: Int, 20], #2 = False};
+
+
+recordExamples =
+    //the 2 tuples have the same value even though one was expressed in 
+    //tuple notation and one was expressed using record notation
+    assert (tupleRecord1 == tupleRecord2)
+    
+    &&
+    
+    //the field1 function extracts the #1 field of a record. It works with all
+    //records having a #1 field and not just pairs or even tuples.
+    //This is technically called "structural polymorphism".
+    assert
+    (
+        field1 tupleRecord1 == "apple"
+        &&
+        field1 mixedRecord1 == Just [10, 20]
+    )
+    
+    &&
+    
+    //the . operator can also be used to extract fields from records.
+    assert
+    (
+        mixedRecord1.name == "Anton"
+        && mixedRecord1.#2 == False
+        && tupleRecord2.#3 == [2, 3, -5]     
+    )
+    
+    &&
+    
+    //the fieldNames function gives the field names in a record in field-name
+    //order, namely ordinal fields first in ordinal order
+    //followed by textual fields in alphabetical order
+    assert
+    (
+        Record.fieldNames mixedRecord1 == ["#1", "#2", "age", "name"]    
+    )
+    
+    &&
+    
+    //records can be updated (:=) and extended (=). Note that in the original
+    //mixedRecord1 the age field has type Double, but in the updated record
+    //the age field has type Maybe Double. Also, note that this is a
+    //non-destructive update- the original mixedRecord1 is not modified.
+    assert
+    (
+        {mixedRecord1 | age := Just 3.5, favoriteFood = "chocolate"}
+        ==
+        {
+            name = "Anton",
+            age = Just 3.5,
+            #1 = Just [10 :: Int, 20],
+            #2 = False,
+            favoriteFood = "chocolate"
+        }
+    )
+   
+    &&
+    
+    //records can be unpacked using case expressions as well. For example, 
+    //here we extract the name and age field from mixedRecord1, and construct
+    //the tuple (age, name).
+    assert
+    (
+        (
+            case mixedRecord1 of
+            {_ |  name, age} -> (age, name);
+        )
+        == (3.0, "Anton")
+    )
+    
+    ;
+                           
+     
+          
+
+/** 
+ * totalPrice is a CAL function taking two arguments, price and shipping.
+ * It calculates the totalPrice by multiplying the price by the tax rate
+ * (in this example, 14%) and then adding the shipping costs.
+ * 
+ * Of note in this example are that: 
+ * {@unorderedList
+ *   {@item the formal parameters to the function are simply separated by
+ *          spaces i.e. it is not written as totalPrice (price, shipping) @}
+ *   {@item CAL follows the typical rules of operator precedence so that
+ *          the multiplication is done first @}
+ *   {@item the type of the totalPrice function is inferred by the
+ *          CAL compiler @}
+ * @}
+ */
+//this type declaration is not necessary, the type is inferred 
+//totalPrice :: Double -> Double -> Double;
+totalPrice price shipping = 1.14 * price + shipping; 
+
+/*
+what follows is a short Interactice CAL Environment (ICE) session making use
+of the totalPrice function. First, we set the module in which to evaluate
+expressions to be this module (Tutorial_CalIntro). Then we type "totalPrice 5 3"
+on the command prompt and hit return. ICE outputs the result of "8.7",
+and then waits for the next command.
+
+////////////////////////////////////////////////////////////////////////////////
+
+GemCutterSaveModule>:sm Tutorial_CalIntro
+ 
+Tutorial_CalIntro>totalPrice 5 3
+
+running: totalPrice 5 3
+Run Time:        0 ms
+
+Output:
+8.7
+ 
+ 
+Tutorial_CalIntro>
+*/
+
+/**
+ * quadraticEquationSolver finds the roots of the quadratic equation
+ * a*x*x + b*x + c == 0 
+ * using the quadratic formula.
+ * 
+ * Some points to note:
+ * {@unorderedList
+ *    {@item this function takes 3 arguments, each of type Double, representing
+ *           the coefficients of the quadratic equation, and returns a pair of
+ *           Double values, for the 2 roots.@}
+ *    {@item it uses a "let expression" to declare a local variable to compute
+ *           the discriminant which is then used in the "in" part of the let
+ *           expression.@}
+ *    {@item a type declaration is given in this case for clarity. It is not
+ *           required, but can be handy as a method of asserting the 
+ *           programmer's intent and documenting the code.@}
+ * @}
+ */
+quadraticEquationSolver :: Double -> Double -> Double -> (Double, Double); 
+quadraticEquationSolver a b c =
+    let
+        //the local variable disc computes the discriminant. It can then be
+        //used in the "in" part of the let expression to avoid needing to
+        //recompute the value for the 2 roots of the quadratic equation.
+        disc = sqrt (b*b - 4*a*c);
+    in
+        (
+            (-b + disc) / (2*a), //the expression defining the first component
+                                 //of the pair, followed by a comma
+            (-b - disc) / (2*a)  //the expression defining the second component of the pair
+        );
+
+/*
+Here is an ICE session running quadraticEquationSolver for 3 different inputs.
+
+Even though the result is a tuple of Double values, the output displays as a
+list of Double values (using square brackets). The reason for this is that every
+expression typed into ICE is run by converting it to a value of a Java type. 
+In this case, the Java type is java.lang.List. The output displayed is then 
+the result of calling the java.util.List.toString() method. The technical
+reason for this is that expressions run in ICE are automatically composed with
+the Prelude.output function. In the case of the (Double, Double) type, this will
+produce a Java object that is a java.util.List where each element of the
+list is a java.lang.Double object.
+
+In order to see more of the underlying CAL types, one way is to compose the 
+expression with the Debug.show function as in the last example in the ICE
+session below. This will display the tuple value using parentheses notation.
+
+Another interesting point is that when typing in -15 it was necessary to use
+parentheses. This is because the function application operator
+(i.e. whitespace), is very high in precedence so that
+quadraticEquation 1 2 -15
+parses as
+(quadraticEquation 1 2) - 15
+i.e. the - would end up being parsed as the subtract operator, and we would get
+a type-checking error since the first argument, which is of type
+Double -> (Double, Double) is not something that can be subtracted.
+
+As a final point, notice that in the case when the quadratic equation has
+complex roots, that an exception is not thrown, but we just default to Java's 
+behavior for floating point e.g. in this case not-a-number values are returned.
+Note that CAL can handle such results specially if desired, but this is
+not done here.
+
+////////////////////////////////////////////////////////////////////////////////
+
+Tutorial_CalIntro>quadraticEquationSolver 3 9 6
+
+running: quadraticEquationSolver 3 9 6
+Run Time:        31 ms
+
+Output:
+[-1.0, -2.0]
+ 
+ 
+Tutorial_CalIntro>quadraticEquationSolver 1 2 (-15)
+
+running: quadraticEquationSolver 1 2 (-15)
+Run Time:        31 ms
+
+Output:
+[3.0, -5.0]
+ 
+ 
+Tutorial_CalIntro>quadraticEquationSolver 1 0 9
+
+running: quadraticEquationSolver 1 0 9
+Run Time:        31 ms
+
+Output:
+[NaN, NaN]
+
+
+Tutorial_CalIntro>show (quadraticEquationSolver 3 9 6)
+
+running: Debug.show (quadraticEquationSolver 3 9 6)
+Run Time:        0 ms
+
+Output:
+(-1.0, -2.0)
+*/
+
+quadraticEquationSolverExamples =
+    
+    assert (quadraticEquationSolver 3 9 6 == (-1, -2))
+    
+    &&
+    
+    assert (quadraticEquationSolver 1 2 (-15) == (3, -5))
+    
+    &&
+    
+    //verifies that both roots of x*x + 9 == 0 are NaN i.e. not Double values
+    assert 
+    (
+        let 
+            roots = quadraticEquationSolver 1 0 9;
+        in
+            isNotANumber roots.#1
+            && isNotANumber roots.#2
+    )
+    ;
+
+
+/**
+ * Here is a simple implementation of the quicksort algorithm for lists in CAL.
+ * 
+ * Note: it is not the most efficient implementation, since it filters the list
+ * twice to partition. It is used here as an illustration. The production 
+ * implementation of sorting on lists is {@link List.sort@}. 
+ * 
+ * The type of quicksort is constrained by the {@link Ord@} type class.
+ * This means that quicksort can sort lists of any orderable type.
+ */
+quicksort :: Ord a => [a] -> [a];
+quicksort list =
+    let  
+        //partition_min is a local function of 1 argument        
+        partition_min pivot = filter (\x -> x < pivot); 
+        partition_max pivot = filter (\x -> x >= pivot);
+    in
+        case list of
+        [] -> [];
+        pivot : tail ->
+            quicksort (partition_min pivot tail)                       
+            ++ (pivot : (quicksort (partition_max pivot tail)));
+        ;
+
+/**
+ * Here is a sorting implementation that makes use of a Java destructive
+ * in-place sort to actually do the sorting. The algorithm is simply to 
+ * marshall the CAL list to a Java list, sort the Java list in-place,
+ * and then marshall the Java list back to a CAL list.
+ *
+ * This kind of strategy can be done more generally and work with arbitrary 
+ * orderable CAL lists. This is done in the {@link List.sortExternal@} function.
+ * 
+ * The main point of this example is to show how CAL can conveniently make use
+ * of logic implemented within Java, even in the case of destructively 
+ * updating functions such as java.util.Collections.sort.
+ */
+sortExternal :: [Int] -> [Int];
+sortExternal list =    
+    //input the java.util.List to get a CAL [Int]
+    (input :: JObject -> [Int])            
+    # 
+    //upcast to a JObject 
+    (output :: JavaList -> JObject)      
+    # 
+    //sort the java.util.List in-place using the java.util.Collections.sort 
+    (\list -> javaSort list `seq` list)      
+    #
+    //downcast the JObject to a JavaList
+    (input :: JObject -> JavaList)       
+    #
+    //output the [Int] to a JObject, which is a java.util.List
+    (output :: [Int] -> JObject)         
+    $
+    //the original argument [Int]
+    list                                 
+    ;
+
+/** 
+ * foreign data declaration that makes the Java type java.util.List useable
+ * in CAL as the CAL type JavaList.
+ */
+data foreign unsafe import jvm "java.util.List" JavaList 
+    //the deriving clause provides default definitions of Prelude.output and
+    //Prelude.input for the JavaList type.
+    //In the case of Prelude.input :: JObject -> JavaList, 
+    //this is a Java downcast
+    //In the case of Prelude.output :: JavaList -> JObject,
+    //this is a Java upcast
+    deriving Inputable, Outputable;
+
+/** 
+ * foreign function declaration that makes the java.util.Collections.sort 
+ * method accessible in CAL  as the CAL function javaSort.
+ */
+foreign unsafe import jvm "static method java.util.Collections.sort"
+    javaSort :: JavaList -> ();
+
+sortingExamples =
+
+    //applying quicksort to a list of type [Long].
+    assert 
+    (
+        quicksort [3 :: Long, 1, 4, 1, 5, 9, 2, 6]
+        == [1, 1, 2, 3, 4, 5, 6, 9]
+    )
+    
+    &&
+    
+    //applying quicksort to a list of type [(Char, Double)].
+    assert
+    (
+        quicksort [('b', 2.0), ('a', 3.0), ('b', 1.0), ('a', -1)]
+        == [('a', -1.0), ('a', 3.0), ('b', 1.0), ('b', 2.0)]
+    )
+    
+    &&
+    
+    //using the external sort also works
+    assert
+    (
+        sortExternal [3, 1, 4, 1, 5, 9, 2, 6]
+        == [1, 1, 2, 3, 4, 5, 6, 9]
+    )
+    ;
+                                          
+                                          
+//CAL provides the ability to create new types using data declarations. 
+//There are 2 types of data declarations: algebraic data declarations and 
+//foreign data declarations. We saw an example of a foreign data declaration
+//above with the JavaList type. Here is an illustrative algebraic
+//data declaration.
+
+/**
+ * The Employee data type is an example of a CAL algebraic data type. It has one
+ * data constructor, RegularEmployee. The RegularEmployee data constructor has
+ * 3 fields: name, manager and directReports. 
+ * 
+ * The firstName and lastName fields have type String. The manager field has 
+ * type Maybe Employee. This reflects the fact that an employee may have one
+ * manager or no managers (in the case fo the CEO), and that manager is also
+ * an Employee. directReports has type [Employee] i.e. a list of 0 or more
+ * employees. Note that the manager and directReports fields have types that
+ * recursively refer to the Employee type. In other words, Employee is a
+ * recursive algebraic data type.
+ */
+data Employee =
+    RegularEmployee  
+        name          :: String
+        //the employeeID field is a potential future addition to the Employee 
+        //data type. notice below that case expressions using field-name based
+        //extraction would not need to be updated due to this change, but case
+        //expressions using positional based extraction would need updating.
+        //employeeID    :: Int
+        manager       :: (Maybe Employee)
+        directReports :: [Employee]
+    ;
+
+//below is a simple company org chart with 7 employees:
+//alice
+//     bart
+//         darlene
+//         evan
+//         frank
+//     christine
+//         gina
+
+/** alice is the CEO and has direct reports bart and christine */
+alice :: Employee; //an optional type declaration
+alice = RegularEmployee "Alice" Nothing [bart, christine];
+
+/**
+ * bart reports to alice and has darlene, evan and frank as his
+ * direct reports 
+ */
+bart = RegularEmployee "Bart" (Just alice) [darlene, evan, frank];
+
+darlene = RegularEmployee "Darlene" (Just bart) [];
+
+evan = RegularEmployee "Evan" (Just bart) [];
+
+frank = RegularEmployee "Frank" (Just bart) [];
+
+christine = RegularEmployee "Christine" (Just alice) [gina];
+
+gina = RegularEmployee "Gina" (Just christine) [];
+
+/**
+ * @arg employee
+ * @return the employee's name
+ */
+employeeName :: Employee -> String;
+employeeName employee = 
+    case employee of
+    //illustrates field-name based case expression extraction of the
+    //"name" field of the RegularEmployee data constructor  
+    RegularEmployee {name} -> name;   
+    ;
+
+/**
+ * @arg employee
+ * @return True if the employee is a manager.
+ */
+isManager :: Employee -> Boolean;
+isManager employee =
+    //illustrates data constructor field selection of the directReports field
+    not (isEmpty employee.RegularEmployee.directReports); 
+
+/**
+ * @arg employee
+ * @return list of all the managers of the given employee, from closest to 
+ *         farthest in the org-chart. 
+ */
+managementChain :: Employee -> [Employee];
+managementChain employee = 
+    case employee of
+    //illustrates positional based case extraction of the manager field.
+    //The manager field is bound to the maybeManager variable.
+    //The _ variables indicates that the values of the name and directReports
+    //fields are not needed. We could have used actual names instead of the
+    //placeholder values e.g. RegularEmployee name maybeManager reports.
+    RegularEmployee _ maybeManager _ -> 
+        case maybeManager of
+        Nothing -> [];
+        Just {value = manager} ->
+            manager : managementChain manager;
+        ;
+    ;
+
+/**
+ * @arg employee
+ * @return the employee, as well as all direct and indirect reports.
+ */
+entireTeam :: Employee -> [Employee];
+entireTeam employee =
+    employee : (concatMap entireTeam employee.RegularEmployee.directReports);    
+
+/**
+ * @arg employee
+ * @return the total number of people in the employee's team, including the
+ *         employee and direct and indirect reports.
+ */
+teamSize :: Employee -> Int;
+teamSize employee = length (entireTeam employee);
+
+/**
+ * Checks if 2 employees are in fact the same employee.
+ */
+equalsEmployee employee1 employee2 =
+    /* There is a shortcoming to the implementation of this function in that
+     * 2 employees are considered the same if they have the same name!
+     * Typically, this could be fixed by changing the Employee data type to
+     * have an employeeID field as well and then making use of it in this
+     * function instead of the employee's name.
+     */
+    employeeName employee1 == employeeName employee2;
+
+/**
+ * This is a Eq class instance declaration for the Employee type. It defines 
+ * what it means to use the Prelude.equals function, and the == operator,
+ * on values of the Employee type.
+ */
+instance Eq Employee where
+    equals = equalsEmployee;
+    ;
+
+
+employeeExamples =
+    
+    //Alice's team has 7 people (including herself)
+    assert (teamSize alice == 7)
+    
+    &&
+       
+    //Alice's entire team consists of the whole company.
+    //Note that the fact that we can compare list of Employee values 
+    //(i.e. [Employee]) is due to the Eq Employee instance defined above.
+    assert 
+    (
+        entireTeam alice
+        == [alice, bart, darlene, evan, frank, christine, gina]
+    )   
+    
+    &&    
+       
+    //Bart's team consists of himself and his direct reports 
+    //Darlene, Evan and Frank.
+    assert (entireTeam bart == [bart, darlene, evan, frank])
+     
+    &&
+     
+    //Gina's manager is Christine whose manager is Alice
+    assert (managementChain gina == [christine, alice])
+           
+    &&
+    
+    //the managers in the company are Alice, Bart and Christine
+    assert (filter isManager (entireTeam alice) == [alice, bart, christine])
+               
+    ;
+    
+
+        
+/**
+ * The Feeling type allows you to express how you're feeling in a wonderfully
+ * shaded way. It is an example of a recursive CAL algebraic data type with 
+ * multiple data constructors. The Feeling type has 6 data constructors,
+ * namely Vaguely, Mixed, Love, Hate, Happy and Depressed. The Mixed data
+ * constructor has 2 fields, feeling1 and feeling2, each of type Feeling.
+ * The Happy data constructor has no fields. Feeling is a recursive type since
+ * the field types of Vaguely and Mixed involve the Feeling type itself.
+ */                 
+data Feeling =
+    Vaguely 
+        feeling   :: Feeling |
+    Mixed 
+        feeling1  :: Feeling 
+        feeling2  :: Feeling |   
+    Love 
+        object    :: String |
+    Hate 
+        object    :: String |
+    Happy |
+    Depressed
+    //This deriving clause provides a default instance implemenation for the
+    //Show type class for the Feeling type. Essentially what this means is that
+    //the Debug.show function will work with Feeling values to display a String      
+    //representation of the value suitable for debugging purposes.
+    deriving Show; 
+        
+
+pragmaticFeeling = Vaguely (Mixed (Love "pleasure") (Hate "pain"));
+
+foodFeeling =   
+    Mixed 
+    (
+        Mixed
+            (Love "pickles")
+            (Vaguely (Love "olives"))
+    )
+    (
+        Mixed        
+            (Love "chocolate")
+            (Hate "mayonnaise")
+    )
+    ;
+                                                                       
+sensitiveFeeling = 
+    Mixed (Vaguely (Vaguely Happy)) (Vaguely (Vaguely Depressed));  
+
+/**
+ * @arg feeling
+ * @return the list of aspects of feeling related to love. May have duplicates.
+ */
+loves :: Feeling -> [String];
+loves feeling = 
+    
+    case feeling of    
+    
+    Vaguely {feeling = vagueFeeling} -> 
+        loves vagueFeeling;
+    
+    Mixed {feeling1, feeling2} ->
+        loves feeling1 ++ loves feeling2;
+    
+    Love {object} -> 
+        [object];
+    
+    //multiple data constructors can be grouped
+    (Happy | Depressed | Hate) {} ->
+        []; 
+    ;
+
+feelingExamples =
+       
+    //some examples of the use of loves
+    assert (loves pragmaticFeeling == ["pleasure"])    
+    &&     
+    assert (loves foodFeeling == ["pickles", "olives", "chocolate"])                                   
+    &&    
+    assert (loves sensitiveFeeling == [])
+    
+    &&
+    
+    //use of Debug.show to display values of the Feeling type.
+    //Handy for debugging purposes.
+    assert
+    (
+        show pragmaticFeeling
+        == "(Cal.Tutorials.CalIntro.Vaguely (Cal.Tutorials.CalIntro.Mixed (Cal.Tutorials.CalIntro.Love \"pleasure\") (Cal.Tutorials.CalIntro.Hate \"pain\")))"
+    )                                                                                            
+    ;
+                              
+/**
+ * test function for the module. If it evaluates to True, then all the examples
+ * in the module work.
+ */
+public testModule =
+    assert stringExamples
+    && assert colorsExamples
+    && assert fruitsExamples
+    && assert lazyListExamples
+    && assert moreListExamples
+    && assert sortingExamples
+    && assert quadraticEquationSolverExamples
+    && assert recordExamples
+    && assert employeeExamples
+    && assert feelingExamples
+    ;
+
+
+/*
+ * Congratulations- you have reached the end of the CAL Intro tutorial!
+ */
+
+

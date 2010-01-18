@@ -1,0 +1,302 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Plot.cal
+ * Creation date: Feb 28, 2003.
+ * By: Edward Lam
+ */
+
+/**
+ * This module is intended as a low level plotter for geometric objects.
+ * It is currently implemented as an opaque document type, with a set of foreign
+ * primitives which mutate that type.  In fact, to CAL this is designed to look
+ * like the document is 'threaded' through the primitives (i.e. the primitives
+ * transform document to document' which includes the new geometric primitive).
+ *
+ * At the moment the implementation is more of a 'toy'.  
+ *
+ * In future, we envisage the following changes:
+ * {@orderedList
+ *  {@item
+ *   A CAL combinator library for geometry.  This would allow a 'pure' CAL version
+ *   of a geometry to be built up, which can then be 'emitted' to the real world (i.e.
+ *   a 'page' through a foreign function, or set of functions)
+ *  @}
+ *  {@item
+ *   More primitives (fills as well as outlines, other geometry)
+ *  @}
+ *  {@item
+ *   Better control over document and plotted object attributes (grid lines, axes etc.)
+ *  @}
+ * @}
+ *
+ * @author Luke Evans
+ */
+module Cal.Samples.Plot;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, Double, String;
+    ;
+import Cal.Graphics.Color using
+    function = outputColor;
+    typeConstructor = Color, JColor;
+    ;
+
+
+data foreign unsafe import jvm "org.openquark.cal.samples.plotter.Plotter" private JPlotter;
+data foreign unsafe import jvm "org.openquark.cal.samples.plotter.Plotter$PlotDocument" public JPlotDoc;
+
+data foreign unsafe import jvm "java.awt.Rectangle" private JRectangle;
+foreign unsafe import jvm "constructor"
+    private jNewRectangle :: Int -> Int -> Int -> Int -> JRectangle; 
+
+/**
+ * Obtains a plotter.
+ * @arg title
+ */
+foreign unsafe import jvm "constructor"
+    private newPlotter :: String -> JPlotter;
+
+/** Obtains a ranged plotter. */
+foreign unsafe import jvm "constructor"
+    private jNewRangedPlotter :: String -> JRectangle -> Boolean -> JPlotter;
+
+/** Obtains a ranged plotter. */
+newRangedPlotter :: String -> Int -> Int -> Int -> Int -> Boolean -> JPlotter;
+private newRangedPlotter !title !minX !minY !maxX !maxY !lockedRange =
+    jNewRangedPlotter title (jNewRectangle minX minY (maxX - minX) (maxY - minY)) lockedRange;
+
+/** Obtains a plotter document. */
+foreign unsafe import jvm "method getPlotDocument"
+    private jGetPlotDocument :: JPlotter -> JPlotDoc;
+
+/**
+ * Obtains a plotter document.
+ * For now, we always create a new plotter when we create a document.
+ */
+newPlotDocument :: String -> JPlotDoc;
+public newPlotDocument !title =
+    jGetPlotDocument (newPlotter title);
+
+/**
+ * Obtains a ranged plotter document.
+ * For now, we always create a new plotter when we create a document.
+ */
+newRangedPlotDocument :: String -> Int -> Int -> Int -> Int -> Boolean -> JPlotDoc;
+public newRangedPlotDocument !title !minX !minY !maxX !maxY !lockedRange =
+    jGetPlotDocument (newRangedPlotter title minX minY maxX maxY lockedRange);
+
+foreign unsafe import jvm "method getNumPlotObjects"
+    private jGetNumPlotObjects :: JPlotDoc -> Int;
+
+/** Causes a strict evaluation of a document (force it to 'show') */
+show :: JPlotDoc -> Boolean;
+public show !plotDoc =
+    (jGetNumPlotObjects plotDoc) > 0;
+
+/**
+ * Plots a point.
+ * @arg inPlotDoc
+ * @arg x
+ * @arg y
+ */
+foreign unsafe import jvm "method plotPoint"
+    public plotPoint :: JPlotDoc -> Int -> Int -> JPlotDoc;
+
+/** Plots a coloured point. */
+foreign unsafe import jvm "method plotPoint"
+    private jPlotColouredPoint :: JPlotDoc -> Int -> Int -> JColor -> JPlotDoc;
+
+/** Plots a coloured point. */
+plotColouredPoint :: JPlotDoc -> Int -> Int -> Color -> JPlotDoc;
+public plotColouredPoint !inPlotDoc !x !y !colour =
+    jPlotColouredPoint inPlotDoc x y (outputColor colour); 	
+
+/**
+ * Plots a circle.
+ * @arg inPlotDoc
+ * @arg x
+ * @arg y
+ * @arg r
+ */
+foreign unsafe import jvm "method plotCircle"
+    public plotCircle :: JPlotDoc -> Int -> Int -> Int -> JPlotDoc;
+
+/** Plots a coloured circle. */
+foreign unsafe import jvm "method plotCircle"
+    private jPlotColouredCircle :: JPlotDoc -> Int -> Int -> Int -> JColor -> JPlotDoc;
+
+/** Plots a coloured circle. */
+plotColouredCircle :: JPlotDoc -> Int -> Int -> Int -> Color -> JPlotDoc;
+public plotColouredCircle !inPlotDoc !x !y !r !colour =
+    jPlotColouredCircle inPlotDoc x y r (outputColor colour); 	
+
+/**
+ * Plots a line.
+ * @arg inPlotDoc
+ * @arg x1
+ * @arg y1
+ * @arg x2
+ * @arg y2
+ */
+foreign unsafe import jvm "method plotLine"
+    public plotLine :: JPlotDoc -> Int -> Int -> Int -> Int -> JPlotDoc;
+
+/** Plots a coloured line. */
+foreign unsafe import jvm "method plotLine"
+    private jPlotColouredLine :: JPlotDoc -> Int -> Int -> Int -> Int -> JColor -> JPlotDoc;
+
+/** Plots a coloured line. */
+plotColouredLine :: JPlotDoc -> Int -> Int -> Int -> Int -> Color -> JPlotDoc;
+public plotColouredLine !inPlotDoc !x1 !y1 !x2 !y2 !colour =
+    jPlotColouredLine inPlotDoc x1 y1 x2 y2 (outputColor colour); 	
+
+/** Represents a glyph that can be plotted. */
+data public GlyphType =
+    public Glyph_X |
+    public Glyph_Plus |
+    public Glyph_O |
+    public Glyph_Square |
+    public Glyph_Triangle;
+
+glyphTypeToOrdinal :: GlyphType -> Int;
+private glyphTypeToOrdinal !type =  
+    case type of
+    Glyph_X -> 0;
+    Glyph_Plus -> 1;
+    Glyph_O -> 2;
+    Glyph_Square -> 3;
+    Glyph_Triangle -> 4;
+    ;
+
+/** Plots a glyph. */
+foreign unsafe import jvm "method plotGlyph"
+    private jPlotGlyph :: JPlotDoc -> Int -> Int -> Int -> Int -> JPlotDoc;
+
+/** Plots a glyph. */
+plotGlyph :: JPlotDoc -> Int -> Int -> Int -> GlyphType -> JPlotDoc;
+public plotGlyph !inPlotDoc !x !y !size !type =
+    jPlotGlyph inPlotDoc x y size (glyphTypeToOrdinal type);
+
+/** Plots a coloured glyph. */
+foreign unsafe import jvm "method plotGlyph"
+    private jPlotColouredGlyph :: JPlotDoc -> Int -> Int -> Int -> Int -> JColor -> JPlotDoc;
+
+/** Plots a coloured glyph. */
+plotColouredGlyph :: JPlotDoc -> Int -> Int -> Int -> GlyphType -> Color -> JPlotDoc;
+public plotColouredGlyph !inPlotDoc !x !y !size !type !colour =
+    jPlotColouredGlyph inPlotDoc x y size (glyphTypeToOrdinal type) (outputColor colour); 	
+
+/**
+ * Plots the specified text.
+ * @arg inPlotDoc
+ * @arg x
+ * @arg y
+ * @arg text
+ * @arg size
+ */
+foreign unsafe import jvm "method plotText"
+    public plotText :: JPlotDoc -> Int -> Int -> String -> Int -> JPlotDoc;
+
+/** Plots the specified coloured text. */
+foreign unsafe import jvm "method plotText"
+    private jPlotColouredText :: JPlotDoc -> Int -> Int -> String -> Int -> JColor -> JPlotDoc;
+
+/** Plots the specified coloured text. */
+plotColouredText :: JPlotDoc -> Int -> Int -> String -> Int -> Color -> JPlotDoc;
+public plotColouredText !inPlotDoc !x !y !text !size !colour =
+    jPlotColouredText inPlotDoc x y text size (outputColor colour); 	
+
+/**
+ * Plots a rectangle.
+ * @arg inPlotDoc
+ * @arg x
+ * @arg y
+ * @arg w
+ * @arg h
+ */
+foreign unsafe import jvm "method plotRect"
+    public plotRect :: JPlotDoc -> Int -> Int -> Int -> Int -> JPlotDoc;
+
+/** Plots a coloured rectangle. */
+foreign unsafe import jvm "method plotRect"
+    private jPlotColouredRect :: JPlotDoc -> Int -> Int -> Int -> Int -> JColor -> JPlotDoc;
+
+/** Plots a coloured rectangle. */
+plotColouredRect :: JPlotDoc -> Int -> Int -> Int -> Int -> Color -> JPlotDoc;
+public plotColouredRect !inPlotDoc !x !y !w !h !colour =
+    jPlotColouredRect inPlotDoc x y w h (outputColor colour); 	
+
+/**
+ * Plots a sector.
+ * @arg inPlotDoc
+ * @arg x
+ * @arg y
+ * @arg r
+ * @arg startAngle
+ * @arg intervalAngle
+ */
+foreign unsafe import jvm "method plotSector"
+    public plotSector :: JPlotDoc -> Int -> Int -> Int -> Double -> Double -> JPlotDoc;
+
+/** Plots a coloured sector. */
+foreign unsafe import jvm "method plotSector"
+    private jPlotColouredSector :: JPlotDoc -> Int -> Int -> Int -> Double -> Double -> JColor -> JPlotDoc;
+
+/** Plots a coloured sector. */
+plotColouredSector :: JPlotDoc -> Int -> Int -> Int -> Double -> Double -> Color -> JPlotDoc;
+public plotColouredSector !inPlotDoc !x !y !r !startAngle !intervalAngle !colour =
+    jPlotColouredSector inPlotDoc x y r startAngle intervalAngle (outputColor colour); 	
+
+
+/**
+ * Plots a box label.
+ * @arg inPlotDoc
+ * @arg x
+ * @arg y
+ * @arg w
+ * @arg h
+ * @arg size
+ * @arg text
+ */
+foreign unsafe import jvm "method plotBoxLabel"
+    public plotBoxLabel :: JPlotDoc -> Int -> Int -> Int -> Int -> Int -> String -> JPlotDoc;
+
+/** Plots a coloured box label. */
+foreign unsafe import jvm "method plotBoxLabel"
+    private jPlotColouredBoxLabel :: JPlotDoc -> Int -> Int -> Int -> Int -> Int -> String -> JColor -> JColor -> JColor -> JPlotDoc;
+
+/** Plots a coloured box label. */
+plotColouredBoxLabel :: JPlotDoc -> Int -> Int -> Int -> Int -> Int -> String -> Color -> Color -> Color -> JPlotDoc;
+public plotColouredBoxLabel !inPlotDoc !x !y !w !h !size !text !textColour !backColour !borderColour =
+    jPlotColouredBoxLabel inPlotDoc x y w h size text (outputColor textColour) (outputColor backColour) (outputColor borderColour); 	

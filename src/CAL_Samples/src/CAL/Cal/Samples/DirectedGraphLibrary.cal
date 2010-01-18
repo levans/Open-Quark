@@ -1,0 +1,813 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * DirectedGraphLibrary.cal
+ * Creation date: Oct 12, 2007.
+ * By: Joseph Wong
+ */
+
+/**
+ * This module exposes the functionality of {@link Cal.Utilities.DirectedGraph@}
+ * in a way that can be exported via a standalone library JAR.
+ *
+ * The main utility provided by this module is the marshalling of algebraic
+ * types to and from appropriate foreign types for easy consumption by Java
+ * clients. A secondary purpose is to host the API documentation of the library
+ * in the form of CALDoc comments, which will be transformed into Javadoc
+ * comments in source files produced by the Standalone JAR Tool.
+ *
+ * @author Andrew Casey
+ * @author Joseph Wong
+ */
+/*
+ * @implementation
+ * 
+ * This module should be generated as the library class
+ * org.openquark.cal.samples.directedgraph.DirectedGraphLibrary
+ */
+module Cal.Samples.DirectedGraphLibrary;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, JList, JObject, String;
+    typeClass = Eq, Inputable, Outputable;
+    dataConstructor = False, True, Nothing, Just;
+    function = error, output, toCalValue;
+    ;
+
+import Cal.Core.Debug;
+
+import Cal.Collections.List;
+
+import Cal.Utilities.DirectedGraph using
+    typeConstructor = DirectedGraph;
+    ;
+
+/** The foreign type for a vertex. */
+data foreign unsafe import jvm public "java.lang.Object"
+    public Vertex deriving Eq, Inputable, Outputable, Debug.Show;
+
+/** The foreign type for an edge. */
+data foreign unsafe import jvm public "org.openquark.util.Pair"
+    public Edge deriving Eq, Inputable, Outputable, Debug.Show;
+
+/** The foreign type for a generic pair. */
+data foreign unsafe import jvm public "org.openquark.util.Pair"
+    public Pair deriving Eq, Inputable, Outputable, Debug.Show;
+
+/**
+ * Constructs a pair.
+ * @arg elem1 the first element.
+ * @arg elem2 the second element.
+ * @return a pair.
+ */
+foreign unsafe import jvm "constructor"
+    public makePair :: JObject -> JObject -> Pair;
+
+/**
+ * Constructs an edge.
+ * @arg source the source vertex.
+ * @arg target the target vertex.
+ * @return an edge.
+ */
+foreign unsafe import jvm "constructor"
+    public makeEdge :: Vertex -> Vertex -> Edge;
+
+/**
+ * Returns the source vertex of the given edge.
+ * @arg edge the edge.
+ * @return the source vertex of the given edge.
+ */
+foreign unsafe import jvm "method fst"
+    public sourceVertex :: Edge -> Vertex;
+
+/**
+ * Returns the target vertex of the given edge.
+ * @arg edge the edge.
+ * @return the target vertex of the given edge.
+ */
+foreign unsafe import jvm "method snd"
+    public targetVertex :: Edge -> Vertex;
+
+foreign unsafe import jvm "cast"
+    private jobjectToEdge :: JObject -> Edge;
+
+foreign unsafe import jvm "cast"
+    private edgeToJObject :: Edge -> JObject;
+
+edgeToPair :: Edge -> (Vertex, Vertex);
+private edgeToPair !edge =
+    (sourceVertex edge, targetVertex edge);
+
+pairToEdge :: (Vertex, Vertex) -> Edge;
+private pairToEdge !pair =
+    case pair of
+    (source, target) -> makeEdge source target;
+    ;
+
+foreign unsafe import jvm "null"
+    private nullJList :: JList;
+
+/** The foreign type for a predicate. */
+data foreign unsafe import jvm public "org.openquark.cal.samples.directedgraph.Predicate"
+    public Predicate deriving Eq, Inputable, Outputable, Debug.Show;
+
+foreign unsafe import jvm "method apply"
+    private applyVertexPredicate :: Predicate -> Vertex -> Boolean;
+
+foreign unsafe import jvm "method apply"
+    private applyJObjectPredicate :: Predicate -> JObject -> Boolean;
+
+applyEdgePredicate :: Predicate -> Vertex -> Vertex -> Boolean;
+private applyEdgePredicate !predicate !source !target = applyJObjectPredicate predicate (edgeToJObject $ makeEdge source target);
+
+/** The foreign type for a one-argument function. */
+data foreign unsafe import jvm public "org.openquark.cal.samples.directedgraph.UnaryFunction"
+    public UnaryFunction deriving Eq, Inputable, Outputable, Debug.Show;
+
+foreign unsafe import jvm "method apply"
+    private applyVertexFunction :: UnaryFunction -> Vertex -> Vertex;
+
+/** The foreign type for a two-argument function. */
+data foreign unsafe import jvm public "org.openquark.cal.samples.directedgraph.BinaryFunction"
+    public BinaryFunction deriving Eq, Inputable, Outputable, Debug.Show;
+
+/** The foreign type for an accumulator value. */
+data foreign unsafe import jvm public "java.lang.Object"
+    public Accumulator deriving Eq, Inputable, Outputable, Debug.Show;
+
+foreign unsafe import jvm "method apply"
+    private applyAccumulatorFunction :: BinaryFunction -> Accumulator -> Vertex -> Accumulator;
+
+/**
+ * Returns the number of vertices in the specified graph.
+ * 
+ * @arg graph the graph whose vertex count is to be returned.
+ * 
+ * @return the number of vertices in the graph.
+ */
+getVertexCount :: DirectedGraph Vertex -> Int;
+public getVertexCount = DirectedGraph.getVertexCount;
+
+/**
+ * Returns the number of edges in the specified graph.
+ * 
+ * @arg graph the graph whose edge count is to be returned.
+ * 
+ * @return the number of edges in the graph.
+ */
+getEdgeCount :: DirectedGraph Vertex -> Int;
+public getEdgeCount = DirectedGraph.getEdgeCount;
+
+/**
+ * Returns a list of the vertices in the specified graph.  No particular order
+ * is guaranteed.
+ * 
+ * @arg graph the graph whose vertices are to be returned.
+ * 
+ * @return a list of vertices in the graph.
+ */
+getVertices :: DirectedGraph Vertex -> JList;
+public getVertices = List.outputList # DirectedGraph.getVertices;
+
+/**
+ * Returns a list of the vertices in the specified graph.  The vertices will
+ * be ordered by insertion time.
+ * 
+ * @arg graph the graph whose vertices are to be returned.
+ * 
+ * @return a list of vertices in the graph.
+ */
+getVerticesInInsertionOrder :: DirectedGraph Vertex -> JList;
+public getVerticesInInsertionOrder = List.outputList # DirectedGraph.getVerticesInInsertionOrder;
+
+/**
+ * Returns whether the specified graph is the empty graph (i.e. contains no
+ * vertices).
+ * 
+ * @arg graph the graph to check.
+ * 
+ * @return {@link True@} if the graph is empty; {@link False@} otherwise.
+ */
+isEmpty :: DirectedGraph Vertex -> Boolean;
+public isEmpty = DirectedGraph.isEmpty;
+
+/**
+ * {@code containsVertex graph vertex@} returns {@link True@} if {@code vertex@}
+ * is a vertex of {@code graph@}.
+ *
+ * @arg graph the graph to be checked.
+ * @arg vertex the value to be tested for membership in the graph.
+ * @return {@link True@} if {@code vertex@} is a vertex of {@code graph@};
+ *   {@link False@} otherwise.
+ */
+containsVertex :: DirectedGraph Vertex -> Vertex -> Boolean;
+public containsVertex = DirectedGraph.containsVertex;
+
+/**
+ * {@code containsEdge graph (vertex1, vertex2)@} returns {@link True@} if 
+ * {@code vertex1@} and {@code vertex2@} are vertices of {@code graph@} and
+ * {@code (vertex1, vertex2)@} is an edge of {@code graph@}.
+ *
+ * @arg graph the graph to be checked.
+ * @arg edge the value to be tested for membership in the graph.
+ * @return {@link True@} if {@code edge@} is an edge of {@code graph@};
+ *   {@link False@} otherwise.
+ */
+containsEdge :: DirectedGraph Vertex -> Edge -> Boolean;
+public containsEdge graph edge = DirectedGraph.containsEdge graph (edgeToPair edge);
+
+/**
+ * Constructs an empty graph.
+ * 
+ * @return an empty graph.
+ */
+emptyGraph :: DirectedGraph Vertex;
+public emptyGraph = DirectedGraph.emptyGraph;
+
+/**
+ * Constructs a graph containing the specified vertices and no edges.
+ * 
+ * {@strong Note@}: The order of the vertices is preserved.
+ * 
+ * @arg vertices the vertices of the graph to be constructed.
+ * 
+ * @return a graph containing the specified vertices and no edges.
+ */
+edgelessGraph :: JList -> DirectedGraph Vertex;
+public edgelessGraph = DirectedGraph.edgelessGraph # List.inputList;
+
+/**
+ * Constructs a graph containing the specified vertices and edges.
+ * 
+ * {@strong Note@}: If an edge {@code (v1, v2)@} is specified and if either
+ * {@code v1@} or {@code v2@} is not in the list of vertices, then it will be
+ * added to the graph anyway.  
+ * 
+ * {@strong Note@}: The insertion order will be determined by the order in which
+ * such vertices are encountered while adding edges to the graph.  For example, 
+ * {@code getVerticesInInsertionOrder (makeGraph [v1, v2] [(v1, v3), (v4, v2)])@}
+ * will return {@code [v1, v2, v3, v4]@}.
+ * 
+ * @arg vertices the vertices of the graph to be constructed.
+ * @arg edges the edges of the graph to be constructed.
+ * 
+ * @return a graph containing the specified vertices and edges.
+ */
+makeGraph :: JList -> JList -> DirectedGraph Vertex;
+public makeGraph vertices edges = DirectedGraph.makeGraph (List.inputList vertices) (List.inputListWith edges (edgeToPair # jobjectToEdge));
+
+/**
+ * Constructs a graph containing the specified vertices.  For each pair of vertices
+ * {@code v1@} and {@code v2@}, the graph will contain contain an edge {@code (v1, v2)@}
+ * if and only if {@code existsEdgeFn v1 v2@} returns {@link True@}.
+ * 
+ * {@strong Note@}: The order of the vertices is preserved.
+ * 
+ * @arg vertices the vertices of the graph to be constructed.
+ * @arg existsEdgeFn a predicate function indicating, for each ordered-pair of
+ *   vertices in the graph, whether an edge exists from one to the other.
+ * 
+ * @return a graph containing the specified vertices and the edges induced by
+ *   the specified predicate function.
+ *   
+ * @see function=addEdges
+ */
+makePredicateGraph :: JList -> Predicate -> DirectedGraph Vertex;
+public makePredicateGraph vertices existsEdgeFn = DirectedGraph.makePredicateGraph (List.inputList vertices) (applyEdgePredicate existsEdgeFn);
+
+/**
+ * For each pair of vertices {@code v1@} and {@code v2@}, add an edge {@code (v1, v2)@}
+ * to the graph if and only if {@code existsEdgeFn v1 v2@} returns {@link True@}.
+ * 
+ * @arg graph the graph to which edges will be added
+ * @arg existsEdgeFn a predicate function indicating, for each ordered-pair of
+ *   vertices in the graph, whether an edge should be added from one to the other.
+ * 
+ * @return a new graph containing all of the vertices and edges in the original
+ *   graph, plus the edges induced by the specified predicate function.
+ */
+addEdges :: DirectedGraph Vertex -> Predicate -> DirectedGraph Vertex;
+public addEdges graph existsEdgeFn = DirectedGraph.addEdges graph (applyEdgePredicate existsEdgeFn);
+
+/**
+ * Adds a new vertex to a graph.  If the specified vertex is already in the graph,
+ * then the resulting graph will be the same as the original (including the
+ * insertion order of the vertices).
+ * 
+ * @arg graph the graph to which the vertex will be added.
+ * @arg vertex the vertex to be added.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible addition of the specified vertex.
+ */
+addVertex :: DirectedGraph Vertex -> Vertex -> DirectedGraph Vertex;
+public addVertex = DirectedGraph.addVertex;
+
+/**
+ * Removes a new vertex from a graph.  If the specified vertex is already absent
+ * from the graph, then the resulting graph will be the same as the original.
+ * 
+ * @arg oldGraph the graph from which the vertex will be removed.
+ * @arg vertex the vertex to be removed.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible exception of the specified vertex.
+ */
+removeVertex :: DirectedGraph Vertex -> Vertex -> DirectedGraph Vertex;
+public removeVertex = DirectedGraph.removeVertex;
+
+/**
+ * Adds a new edge to a graph.  If the specified edge is already in the graph,
+ * then the resulting graph will be the same as the original.
+ * 
+ * {@strong Note@}: If the one or both vertices are not already in the graph, then
+ * they will be added - the first before the second.
+ * 
+ * @arg oldGraph the graph to which the edge will be added.
+ * @arg newEdge the edge to be added.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible addition of the specified edge and its endpoints.
+ */
+addEdge :: DirectedGraph Vertex -> Edge -> DirectedGraph Vertex;
+public addEdge oldGraph newEdge = DirectedGraph.addEdge oldGraph (edgeToPair newEdge);
+
+/**
+ * Removes an edge from a graph.  If the specified edge is already absent from
+ * the graph (perhaps because one of the endpoints is absent from the graph),
+ * then the resulting graph will be the same as the original.
+ * 
+ * @arg graph the graph from which the edge will be removed.
+ * @arg edge the edge to be removed.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible exception of the specified edge.
+ */
+removeEdge :: DirectedGraph Vertex -> Edge -> DirectedGraph Vertex;
+public removeEdge graph edge = DirectedGraph.removeEdge graph (edgeToPair edge);
+
+/**
+ * Returns the list of out-neighbours of the specified vertex.  No particular
+ * order is guaranteed.
+ * 
+ * @arg graph the graph in which to find neighbours.
+ * @arg vertex the vertex whose neighbours are sought.
+ * 
+ * @return a list of out-neighbours of the specified vertex.
+ */
+getNeighbours :: DirectedGraph Vertex -> Vertex -> JList;
+public getNeighbours graph vertex = List.outputList $ DirectedGraph.getNeighbours graph vertex;
+
+/**
+ * Returns a string representation of the graph.  The graph is traversed in depth-first
+ * order and each vertex is displayed with a list of its children.  Any vertex
+ * that has previously been encountered will be shown in angle brackets and
+ * not expanded (i.e. its children will not be shown).  For example:
+ * 
+ * {@code
+ * vertex1 {
+ *   child_1 {
+ *     grandchild_1_1 {
+ *     }
+ *     grandchild_1_2 {
+ *     }
+ *   child_2 {
+ *     grandchild_2_1 {
+ *     }
+ *     <grandchild_1_1>        <-- Details omitted since repeated
+ *   }
+ * }
+ * vertex2 {
+ *   ...
+ * }
+ * @}
+ * 
+ * @arg graph the graph to be displayed.
+ * 
+ * @return a string representation of the graph.
+ */
+showDirectedGraph :: DirectedGraph Vertex -> String;
+public showDirectedGraph = Debug.show;
+
+/**
+ * Applies the specified function to each vertex in the specified graph.
+ * 
+ * {@strong Note@}: If two vertices have the same image under the specified function,
+ * then they will be merged (retaining self-loops created during the merge).
+ * 
+ * @return the graph that results when the specified function is applied to each
+ *   vertex in the specified graph.
+ *   
+ * @see function=mergeVertices
+ */
+map :: UnaryFunction -> DirectedGraph Vertex -> DirectedGraph Vertex;
+public map mapFn graph = DirectedGraph.map (applyVertexFunction mapFn) graph;
+
+/**
+ * Merges two vertices of a graph.  
+ * {@code mergeVertices graph retainLoops vertex1 vertex2 mergedVertex@}
+ * results in a graph satisfying:
+ * {@unorderedList
+ *   {@item {@code vertex1@} is removed from the graph@}
+ *   {@item {@code vertex2@} is removed from the graph@}
+ *   {@item {@code mergedVertex@} is added to the graph@}
+ *   {@item Edges are transformed (modulo {@code retainLoops@}):
+ *     {@unorderedList
+ *       {@item {@code (A, ?)@} -> {@code (C, ?)@}@}
+ *       {@item {@code (?, A)@} -> {@code (?, C)@}@}
+ *       {@item {@code (B, ?)@} -> {@code (C, ?)@}@}
+ *       {@item {@code (?, B)@} -> {@code (?, C)@}@}
+ *     @}
+ *   @}
+ * @}  
+ * 
+ * {@strong Side effect@}: If the merged vertex is already contained in the graph, then
+ * its insertion order will not change.  Otherwise, the merged vertex will
+ * acquire the insertion order of the first vertex argument (note: argument 1,
+ * not vertex with earlier insertion time).
+ * 
+ * {@strong Note@}: Throws an {@link error@} if either {@code vertex1@} or
+ * {@code vertex2@} is not in the graph. 
+ * 
+ * @arg graph the graph in which to merge the vertices.
+ * @arg retainLoops if vertices A and B are merged to C and the graph contains
+ *   (A, B) or (B, A), then (C, C) will be added to the new graph if retainLoops
+ *   is true.  Note that if the graph contains (A, A) or (B, B), then the new
+ *   graph will contain (C, C) regardless of the value of retainLoops.
+ * @arg vertex1 the first vertex to be merged (error if invalid).
+ * @arg vertex2 the second vertex to be merged (error if invalid).
+ * @arg mergedVertex the resulting vertex.
+ * 
+ * @return a new graph with the two vertices merged.
+ */
+mergeVertices :: DirectedGraph Vertex -> Boolean -> Vertex -> Vertex -> Vertex -> DirectedGraph Vertex;
+public mergeVertices = DirectedGraph.mergeVertices;
+
+/**
+ * Fold across the entire graph in depth-first search order.
+ * 
+ * {@strong Note@}: this is simply an alias for {@link foldInDepthFirstSearchOrder@}.
+ * 
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldInDepthFirstSearchOrder
+ * @see function=foldReachableDFS
+ * @see function=foldReachableInDepthFirstSearchOrder
+ */
+foldDFS :: BinaryFunction -> BinaryFunction -> Accumulator -> DirectedGraph Vertex -> Accumulator;
+public foldDFS = foldInDepthFirstSearchOrder;
+
+/**
+ * Fold across the entire graph in depth-first search order.
+ * 
+ * {@strong Note@}: for convenience, you may wish to call this function as {@link foldDFS@}.
+ * 
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldDFS
+ * @see function=foldReachableDFS
+ * @see function=foldReachableInDepthFirstSearchOrder
+ */
+foldInDepthFirstSearchOrder :: BinaryFunction -> BinaryFunction -> Accumulator -> DirectedGraph Vertex -> Accumulator;
+public foldInDepthFirstSearchOrder startVertexFn finishVertexFn init graph =
+    DirectedGraph.foldInDepthFirstSearchOrder (applyAccumulatorFunction startVertexFn) (applyAccumulatorFunction finishVertexFn) init graph;
+
+/**
+ * Fold across graph vertices reachable from the specified root in depth-first
+ * search order.
+ * 
+ * {@strong Note@}: this is simply an alias for {@link foldReachableInDepthFirstSearchOrder@}.
+ * 
+ * @arg startVertex the vertex at which to begin the traversal.
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldDFS
+ * @see function=foldInDepthFirstSearchOrder
+ * @see function=foldReachableInDepthFirstSearchOrder
+ */
+foldReachableDFS :: Vertex -> BinaryFunction -> BinaryFunction -> Accumulator -> DirectedGraph Vertex -> Accumulator;
+public foldReachableDFS = foldReachableInDepthFirstSearchOrder;
+
+/**
+ * Fold across graph vertices reachable from the specified root in depth-first
+ * search order.
+ * 
+ * {@strong Note@}: for convenience, you may wish to call this function as {@link foldReachableDFS@}.
+ * 
+ * @arg startVertex the vertex at which to begin the traversal.
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldDFS
+ * @see function=foldInDepthFirstSearchOrder
+ * @see function=foldReachableDFS
+ */
+foldReachableInDepthFirstSearchOrder :: Vertex -> BinaryFunction -> BinaryFunction -> Accumulator -> DirectedGraph Vertex -> Accumulator;
+public foldReachableInDepthFirstSearchOrder startVertex startVertexFn finishVertexFn init graph =
+    DirectedGraph.foldReachableInDepthFirstSearchOrder startVertex (applyAccumulatorFunction startVertexFn) (applyAccumulatorFunction finishVertexFn) init graph;
+
+/**
+ * Returns the vertices of a graph in topological order if the graph is acyclic
+ * and in an unspecified order otherwise.
+ * 
+ * Algorithm based on TOPOLOGICAL-SORT on p. 550 of 
+ * "Introduction to Algorithms 2E"
+ * by Cormen, Leiserson, Rivest, and Stein (2002).
+ * 
+ * @arg graph the graph to be sorted.
+ * 
+ * @return an ordered list of vertices.
+ */
+topologicalSort :: DirectedGraph Vertex -> JList;
+public topologicalSort = List.outputList # DirectedGraph.topologicalSort;
+
+/**
+ * Returns the vertices in topological order if the graph is acyclic and in an
+ * unspecified order otherwise.  If the relative order of two vertices is not
+ * specified by the graph, then their insertion order will be used.
+ *
+ * If the graph contains cycles, then calling {@link flattenComponents@} before
+ * {@link stableTopologicalSort@} will produce the desired stable order.
+ * 
+ * {@strong Note@}: this may be quite a bit slower than a normal topological sort.
+ * 
+ * Algorithm adapted from Exercise 22.4-5 on p. 552 of 
+ * "Introduction to Algorithms 2E"
+ * by Cormen, Leiserson, Rivest, and Stein (2002).
+ * 
+ * @arg graph the graph to be sorted.
+ * 
+ * @return an ordered list of vertices.
+ */
+stableTopologicalSort :: DirectedGraph Vertex -> JList;
+public stableTopologicalSort = List.outputList # DirectedGraph.stableTopologicalSort;
+
+/**
+ * Returns a topologically sorted list of strongly-connected components of a
+ * specified graph (i.e. if A and B are SCCs and A precedes B in the returned
+ * list, then the graph contains no edges from vertices in A to vertices in B).
+ *   
+ * Algorithm based on STRONGLY-CONNECTED-COMPONENTS on p. 554 of 
+ * "Introduction to Algorithms 2E"
+ * by Cormen, Leiserson, Rivest, and Stein (2002).
+ * 
+ * @arg graph the graph to be broken into components.
+ * 
+ * @return a topologically sorted list of strongly-connected components of the
+ *   specified graph.
+ */
+stronglyConnectedComponents :: DirectedGraph Vertex -> JList;
+public stronglyConnectedComponents = List.outputList # DirectedGraph.stronglyConnectedComponents;
+
+/**
+ * Returns a copy of the graph that contains no cycles - within each strongly-
+ * connected component, all edges are removed and replaced with new edges
+ * enforcing the insertion order.
+ *   
+ * e.g. {@code cycle{B, A} -> F -> cycle{C, E, D}@} becomes 
+ * {@code A -> B -> F -> C -> D -> E@} (assuming the vertices were created in 
+ * alphabetical order).
+ * 
+ * @arg graph the graph in which to flatten cycles.
+ * 
+ * @return a copy of the specified graph with all cycles flattened.
+ */
+flattenComponents :: DirectedGraph Vertex -> DirectedGraph Vertex;
+public flattenComponents = DirectedGraph.flattenComponents;
+
+/**
+ * Returns a list of vertices forming a cycle (first list element is duplicated
+ * in the last position), if one exists.
+ *   
+ * {@strong Note@}: if the graph contains multiple cycles, then any one may be returned.
+ *   
+ * @arg graph the graph in which to seek a cycle.
+ * 
+ * @return the cycle if one exists, or {@code null@} otherwise.
+ *   
+ * @see function=findReachableCycle
+ * @see function=existsCycle
+ */
+findCycle :: DirectedGraph Vertex -> JList;
+public findCycle graph =
+    case DirectedGraph.findCycle graph of
+    Just cycle -> List.outputList cycle;
+    Nothing -> nullJList;
+    ;
+    
+/**
+ * Determines whether or not the specified graph contains a cycle.
+ * 
+ * @arg graph the graph in which to seek a cycle.
+ * 
+ * @return {@link True@} if the graph contains a cycle; {@link False@} otherwise.
+ *   
+ * @see function=findCycle
+ */
+existsCycle :: DirectedGraph Vertex -> Boolean;
+public existsCycle = DirectedGraph.existsCycle;
+
+/**
+ * Returns a list of vertices forming a cycle reachable from the specified
+ * vertex (first list element is duplicated in the last position), if one exists.
+ * 
+ * {@strong Note@}: if the reachable subgraph contains multiple cycles, then any one
+ * may be returned.
+ * 
+ * @arg graph the graph in which to seek a cycle.
+ * @arg startVertex the vertex from which to seek a cycle.
+ * 
+ * @return the cycle if one exists, or {@code null@} otherwise.
+ *   
+ * @see function=findCycle
+ * @see function=existsReachableCycle
+ */
+findReachableCycle :: DirectedGraph Vertex -> Vertex -> JList;
+public findReachableCycle graph startVertex =
+    case DirectedGraph.findReachableCycle graph startVertex of
+    Just cycle -> List.outputList cycle;
+    Nothing -> nullJList;
+    ;
+    
+/**
+ * Determines whether or not the specified graph contains a cycle reachable from
+ * the specified vertex.
+ * 
+ * @arg graph the graph in which to seek a cycle.
+ * @arg startVertex the vertex from which to seek a cycle.
+ * 
+ * @return {@link True@} if the graph contains a reachable cycle; {@link False@} otherwise.
+ *   
+ * @see function=findReachableCycle
+ */
+existsReachableCycle :: DirectedGraph Vertex -> Vertex -> Boolean;
+public existsReachableCycle = DirectedGraph.existsReachableCycle;
+
+/**
+ * Returns a list of vertices forming a path from {@code startVertex@} to 
+ *    {@code endVertex@} (inclusive), if one exists.
+ *   
+ * {@strong Note@}: if the graph contains multiple such paths, then any one may be returned.
+ * {@strong Note@}: each vertex is considered to have a trivial path from itself to itself.
+ *   
+ * @arg graph the graph in which to seek a path.
+ * @arg startVertex the vertex from which to search.
+ * @arg endVertex the vertex to seek.
+ * 
+ * @return the path if one exists, or {@code null@} otherwise.
+ *   
+ * @see function=existsPath
+ */
+findPath :: DirectedGraph Vertex -> Vertex -> Vertex -> JList;
+public findPath graph startVertex endVertex =
+    case DirectedGraph.findPath graph startVertex endVertex of
+    Just path -> List.outputList path;
+    Nothing -> nullJList;
+    ;
+    
+/**
+ * Determines whether the graph contains a path from path from {@code startVertex@}
+ * to {@code endVertex@}.
+ * 
+ * {@strong Note@}: each vertex is considered to have a trivial path from itself to itself.
+ * 
+ * @arg graph the graph in which to seek a path.
+ * @arg startVertex the vertex from which to search.
+ * @arg endVertex the vertex to seek.
+ * 
+ * @return {@link True@} if the graph contains a path from {@code startVertex@}
+ * to {@code endVertex@}; {@link False@} otherwise.
+ *   
+ * @see function=findPath
+ */
+existsPath :: DirectedGraph Vertex -> Vertex -> Vertex -> Boolean;
+public existsPath = DirectedGraph.existsPath;
+
+/**
+ * Partitions the vertices into two sets and then removes all edges from one set
+ *   to the other.
+ * 
+ * @arg partitionFn a function which returns {@link True@} if a vertex belongs
+ *   in the first subgraph and {@link False@} if a vertex belongs in the second
+ *   subgraph.
+ * @arg graph the graph to partition.
+ * 
+ * @return the two subgraphs induced by the partition function.
+ * 
+ * @see function=filter
+ */
+partition :: Predicate -> DirectedGraph Vertex -> Pair;
+public partition partitionFn graph =
+    case DirectedGraph.partition (applyVertexPredicate partitionFn) graph of
+    (graph1, graph2) -> makePair (output $ toCalValue graph1) (output $ toCalValue graph2);
+    ;
+
+/**
+ * Eliminates from the graph all elements for which {@code filterFn@} returns
+ * {@link False@}.
+ * 
+ * @arg filterFn a function which returns {@link True@} if a vertex belongs
+ *   in the subgraph and {@link False@} otherwise.
+ * @arg graph the graph to filter.
+ * 
+ * @return the subgraph induced by the filter function.
+ * 
+ * @see function=partition
+ */
+filter :: Predicate -> DirectedGraph Vertex -> DirectedGraph Vertex;
+public filter filterFn graph = DirectedGraph.filter (applyVertexPredicate filterFn) graph;
+
+/**
+ * Reverses all of the edges in a graph (sometimes referred to as the transpose
+ * graph).
+ * 
+ * @arg graph the graph to reverse.
+ * 
+ * @return the graph with all edges reversed.
+ */
+reverse :: DirectedGraph Vertex -> DirectedGraph Vertex;
+public reverse = DirectedGraph.reverse;
+
+/**
+ * Determines whether or not two graphs have the same vertices and whether each
+ * vertex has the same neighbours in both graphs.
+ * 
+ * @arg graph1 the first graph.
+ * @arg graph2 the second graph.
+ * 
+ * @return {@link True@} if the graphs have the same vertices with the same
+ *   neighbours; {@link False@} otherwise.
+ */
+equalsDirectedGraphIgnoreInsertionOrder :: DirectedGraph Vertex -> DirectedGraph Vertex -> Boolean;
+public equalsDirectedGraphIgnoreInsertionOrder = DirectedGraph.equalsDirectedGraphIgnoreInsertionOrder;
+
+/**
+ * Determines whether or not two graphs have the same vertices, whether each vertex
+ * has the same neighbours in both graphs, and whether both graphs have the same
+ * vertex insertion order.
+ * 
+ * @arg graph1 the first graph.
+ * @arg graph2 the second graph.
+ * 
+ * @return {@link True@} if the graphs have the same vertices with the same
+ *   neighbours and inserted in the same order; {@link False@} otherwise.
+ */
+equalsDirectedGraphWithInsertionOrder :: DirectedGraph Vertex -> DirectedGraph Vertex -> Boolean;
+public equalsDirectedGraphWithInsertionOrder = DirectedGraph.equalsDirectedGraphWithInsertionOrder;

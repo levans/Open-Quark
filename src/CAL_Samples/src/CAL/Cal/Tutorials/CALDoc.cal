@@ -1,0 +1,394 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CALDoc.cal
+ * Creation date: December 14, 2005.
+ * By: Joseph Wong
+ */
+
+/**
+ * This tutorial module goes over the basics of writing documentation comments
+ * (a.k.a. {@strong CALDoc@}) in CAL. Included in this tutorial are overviews of
+ * the various block and inline tags supported by CALDoc.
+ * 
+ * For more information on CALDoc, please refer to the CALDoc section in the
+ * {@em CAL User's Guide@}.
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Tutorials.CALDoc;
+
+import Cal.Core.Prelude using
+    function = id;
+    typeConstructor = Maybe, String;
+    typeClass = Bounded;
+    dataConstructor = Right;
+    ;
+import Cal.Collections.List;
+
+import Cal.Core.Debug;
+
+import Cal.Core.String;
+
+////
+/// Structure of a CALDoc comment
+//
+
+/*
+ * A CALDoc comment consists of two main sections:
+ * 
+ * - a general description section
+ * 
+ *   This section provides the main textual description of the entity being
+ *   documented.
+ *   
+ * - a tagged blocks section
+ * 
+ *   This section contains zero or more tagged blocks, which serve to
+ *   identify certain information that has a routine structure, such as the
+ *   intended purpose of the arguments of a function, in a form that
+ *   can be checked and processed by the compiler.
+ *   
+ *   A tagged block begins with a block tag, which is in the form of @tagName,
+ *   where tagName is the name of the tag.
+ *   
+ * Both of these sections are optional: it is permissible to write
+ * a CALDoc comment without a general description, or without any tagged blocks.
+ */
+
+/**
+ * A demo of the \@author block
+ * 
+ * It is recommended to put only {@em one author name per \@author block@},
+ * and let the documentation generator handle the generation of
+ * commas.
+ * 
+ * @author Joseph Wong
+ * @author Author 2 {@em (imaginary)@}
+ */
+public authorTagDemo = Prelude.undefined;
+
+/**
+ * A demo of the \@deprecated block
+ * 
+ * To mark that a definition is no longer recommended for use, put in
+ * a notice with a \@deprecated block.
+ * 
+ * It is helpful to include a hyperlinked cross-reference to the recommended
+ * replacement in the deprecation notice.
+ * 
+ * @deprecated This functionality is no longer supported. Use {@link "Cal.Collections.List.map"@} instead.
+ */
+public deprecatedTagDemo = Prelude.undefined;
+
+/**
+ * A demo of the \@version block
+ * 
+ * The version string can be an arbitrary block of text, and is not verified
+ * against any predefined syntax.
+ * 
+ * @version
+ *     37.2.1-beta2
+ *     
+ *     (Note that it is permitted to put any text in a \@version block, including
+ *     {@em formatted text@} and multiple paragraphs.)
+ */
+public versionTagDemo = Prelude.undefined;
+
+/**
+ * A demo of the \@arg and \@return blocks
+ * 
+ * The \@arg tag is meant to be used for documenting arguments,
+ * while the \@return block describes the return value.
+ * 
+ * @arg firstArg
+ * @arg secondArg
+ *        it is permissible to leave the description of an argument empty (as in the above).
+ * @arg thirdArg
+ *        this argument is not a declared parameter of the function,
+ *        but its existence is infered from the type signature.
+ * @return
+ *    {@link Prelude.True@} if the function succeeds, {@link Prelude.False@} otherwise.
+ *    
+ *    Note that this is the return value of
+ *    {@code
+ *        argReturnTagsDemo firstArg secondArg thirdArg
+ *    @}
+ *    and not of the partial evaluation
+ *    {@code
+ *        argReturnTagsDemo firstArg secondArg
+ *    @}
+ */
+argReturnTagsDemo :: a -> b -> c -> Prelude.Boolean;
+public argReturnTagsDemo firstArg secondArg = Prelude.undefined;
+
+/*
+ * The @see block
+ * 
+ * To add hyperlinked cross-references into a separate "See Also"
+ * section, use the @see block.
+ * 
+ * There are six variant forms of the @see block:
+ * 
+ * @see function = function1, function2...
+ * @see typeConstructor = typeCons1, typeCons2...
+ * @see dataConstructor = dataCons1, dataCons2...
+ * @see typeClass = typeClass1, typeClass2...
+ * @see module = module1, module2...
+ * @see reference1, reference2...
+ * 
+ * In each of these variants, a reference can either be just a name
+ * (e.g. Eq or Prelude.map), or a double-quoted name (e.g. "Debug.Show").
+ * 
+ * Double-quoted names are not checked during the compilation process,
+ * while unquoted ones are checked to make sure that the referenced
+ * entities do indeed exist.
+ */
+
+/**
+ * A demo of the \@see blocks containing 'context' keywords
+ * 
+ * Note that within an \@see block, whitespace is unimportant, and the listed
+ * references can span multiple lines.
+ * 
+ * @see module = Prelude, "Cal.IO.File",
+ *               "Cal.Test.General.M1", Debug
+ * @see function= List.map, "Cal.IO.File.makeFileName"
+ * @see typeClass=Prelude.Eq, "Bounded"
+ * @see typeConstructor =Maybe, "Cal.IO.File.FileName"
+ * @see dataConstructor = Prelude.Left, "Cal.IO.File.FileName"
+ */
+public demoSeeWithContext = Prelude.undefined;
+
+/*
+ * Short @see syntax
+ * 
+ * There is a variant of the @see syntax that allows you to write
+ * a significant number of @see blocks without the 'context' keyword. 
+ */
+
+/**
+ * This comment contains a number of \@see references, all without an
+ * explict context keyword!
+ * 
+ * @see List.map, id, "Cal.Collections.Array.map", "Cal.Core.Prelude.minBoundInt",
+ *  "demoSeeWithContext", "id",
+ *  
+ *  Prelude.Nothing, Right,
+ *  
+ *  Prelude.Either, Maybe,
+ *  
+ *  Prelude.Outputable, Bounded,
+ *  
+ *  Prelude
+ */
+public demoSeeWithoutContext = Prelude.undefined;
+
+////
+/// CALDoc Text Formatting Demo
+//
+
+/*
+ * Paragraphs in CALDoc
+ * 
+ * Paragraphs are separated by blank lines in CALDoc.
+ */
+
+/**
+ * This is a cool function. It adds 3 to its argument.
+ * 
+ * note: this function does not work.
+ * 
+ * TODO: make this work!!
+ */
+public paragraphBreakDemo = Prelude.undefined;
+
+/*
+ * Text escaping
+ * 
+ * The '@' character can appear in a CALDoc comment, escaped as \@.
+ * There are some circumstances where it can appear unescaped, e.g.
+ * immediately following a non-whitespace character, like:
+ * joseph.wong@businessobjects.com.
+ * 
+ * For more information on exactly when the escape sequence is
+ * required, please refer to the CALDoc section in the CAL User's Guide.
+ */
+
+/**
+ * A demo of the \@ character.
+ * 
+ * Email address: joseph.wong@businessobjects.com
+ */
+public textEscapingDemo = Prelude.undefined;
+
+/*
+ * Text formatting and inline blocks
+ * 
+ * To format text in a CALDoc comment, use inline tags and inline
+ * blocks.
+ * 
+ * An inline block is a section within a CALDoc coment that is
+ * delimited by the markers '{@tagName' and '@}', where tagName is
+ * the name of an inline tag.
+ * 
+ * Inline blocks can appear anywhere in a CALDoc comment
+ * where regular text can appear.
+ */
+
+/**
+ * A demo of simple formatting tags.
+ * 
+ * {@em text@} - applies emphasis to text (rendered as italics)
+ * 
+ * {@strong text@} - applies strong emphasis to text (rendered as bold)
+ * 
+ * {@sup text@} - superscript
+ * 
+ * {@sub text@} - subscript
+ * 
+ * {@url http://www.businessobjects.com@} - creates a hyperlink
+ */
+public formattingTagsDemo = Prelude.undefined;
+
+/**
+ * {@summary This is a demo of the \@summary inline block.
+ * This inline block facilitates the overriding of the default
+ * summary extraction behaviour (i.e. first sentence of first
+ * paragraph).@}
+ * 
+ * Use this inline block when your summary needs to span
+ * more than one sentence, or appear in a location
+ * other than the start of the comment.
+ */
+public summaryTagDemo = Prelude.undefined;
+
+/**
+ * Lists in CALDoc
+ * 
+ * CALDoc supports both ordered and unordered lists, and
+ * the nesting of lists within other lists.
+ * 
+ * Here's an ordered list:
+ * {@orderedList
+ *    {@item alpha@}
+ *    {@item beta - paragraph 1
+ *    
+ *    beta - paragraph 2
+ *    @}
+ * @}
+ * 
+ * Here's an unordered list:
+ * {@unorderedList {@item A@} {@item B@} @}
+ */
+public listTagsDemo = Prelude.undefined;
+
+/*
+ * Code fragments
+ * 
+ * Code fragments can be formatted using the @code inline block.
+ */
+
+//This example is taken from List.map:
+
+/**
+ * {@code map mapFunction list@} applies the function {@code mapFunction@}
+ * to each element of the list and returns the resulting list.
+ * 
+ * @arg mapFunction a function to be applied to each element of the list.
+ * @arg list the list.
+ * @return the list obtained by applying {@code mapFunction@} to each
+ *         element of the list.
+ */
+map :: (a -> b) -> [a] -> [b];
+public map mapFunction !list =
+    List.map mapFunction list;
+
+/*
+ * Whitespace and newlines are preserved in @code blocks, so a multi-line
+ * fragment will appear in the generated documentation as it is written in
+ * the comment. For example:
+ */
+
+/**
+ * This is a let expression in CAL:
+ * {@code
+ *    let
+ *        f = 3.0;
+ *    in
+ *        f
+ * @}
+ */
+public multilineCodeTagDemo = Prelude.undefined;
+
+/*
+ * Inline cross-references: the @link inline block
+ * 
+ * The @see block allows you to add "See Also" references as an
+ * appendix to the documentation. To include hyperlinked cross
+ * references inline within the body of the text, use the @link
+ * inline block.
+ */
+
+/**
+ * This is a cross reference to Prelude.Right: {@link Right@}
+ * 
+ * This is how you would write "Maybe a": {@code {@link Maybe@} a@}.
+ * 
+ * To disambiguate, you would write {@link typeConstructor = String@}
+ * or {@link module = String@}.
+ */
+public linkDemo = Prelude.undefined;
+
+/*
+ * Style suggestions
+ * 
+ * - do not repeat the name of the documented entity as a title to
+ *   your comment
+ */
+
+/**
+ * demoRedundantTitle
+ * 
+ * This is a demo of a redundant title.
+ */
+public demoRedundantTitle = Prelude.undefined;
+
+/**
+ * This is a demo of a CALDoc comment without a redundant title.
+ */
+public demoNotRedundantTitle = Prelude.undefined;
+
+//
+/// End of CALDoc Text Formatting Demo
+////

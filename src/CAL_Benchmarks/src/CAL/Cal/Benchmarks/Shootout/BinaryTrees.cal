@@ -1,0 +1,174 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * binary_trees benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org/gp4/benchmark.php?test=binarytrees&lang=all@}
+ * 
+ * This code is based on and inspired by the entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}
+ * 
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.BinaryTrees;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, String;
+    function = eager, max, seq, stringToInt;
+    ;
+
+import Cal.Core.Bits using
+    function = shiftL;
+    ;
+
+import Cal.Collections.List using
+    function = head;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.IO.Console using
+    function = printLine;
+    ;
+
+data public Tree =
+    Empty |
+    Node
+        value :: !Int
+        leftChild :: !Tree
+        rightChild :: !Tree
+    ;
+
+/** Traverses tree and returns a checksum on the values in the nodes.*/
+check :: Tree -> Int;
+check !tree =
+    case tree of
+    Empty -> 0;
+    Node value left right -> value + check left - check right;
+    ;
+
+/** builds a tree of depth */
+make :: Int -> Int -> Tree;
+make !i !depth =
+    if depth == 1 then
+        Node
+            i
+            (Node (2 * i - 1) Empty Empty)
+            (Node (2 * i) Empty Empty)
+    else
+        Node
+            i
+            (make (2 * i - 1) (depth - 1))
+            (make (2 * i) (depth - 1))
+    ;
+
+/** 
+ * Test different numbers of trees at different depths and
+ * writes the number and checksum to stdout.
+ */
+testTrees :: Int -> Int -> Int -> ();
+testTrees !depth !minDepth !maxDepth =
+    let
+        //allocates and checks 2i trees, each of depth depth
+        testFixedDepth :: Int -> Int -> Int -> Int;
+        testFixedDepth !i !depth !checksum =
+            if i == 0 then
+                checksum
+            else
+                testFixedDepth
+                    (i - 1)
+                    depth
+                    (
+                        checksum + check (make i depth)
+                        + check (make (-i) depth)
+                    )
+            ;
+    in
+        if depth > maxDepth then
+            ()
+        else
+            let
+                i :: Int;
+                i = eager $ shiftL 1 (maxDepth - depth + minDepth);
+            in
+                printLine
+                    (
+                        show (i * 2)
+                        ++ "\t trees of depth "
+                        ++ show depth
+                        ++ "\t check: "
+                        ++ show (testFixedDepth i depth 0)
+                    )
+                `seq`
+                testTrees (depth + 2) minDepth maxDepth
+    ;
+
+main :: [String] -> ();
+public main !args =
+    let
+        n :: Int;
+        n = eager $ stringToInt (head args);
+
+        minDepth :: Int;
+        minDepth = 4;
+
+        maxDepth :: Int;
+        maxDepth = max (minDepth + 2) n;
+
+        stretchDepth :: Int;
+        stretchDepth = maxDepth + 1;
+
+        longLivedTree :: Tree;
+        longLivedTree = make 0 maxDepth;
+    in
+        printLine
+            (
+                "stretch tree of depth "
+                ++ show stretchDepth
+                ++ "\t check: "
+                ++ show (check (make 0 stretchDepth))
+            )
+        `seq`
+        longLivedTree
+        `seq`
+        testTrees minDepth minDepth maxDepth
+        `seq`
+        printLine
+            (
+                "long lived tree of depth "
+                ++ show maxDepth
+                ++ "\t check: "
+                ++ show (check longLivedTree)
+            )
+    ;
+

@@ -1,0 +1,418 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * List_Tests.cal
+ * Creation date: Oct 20, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for the {@link module = List@} module.
+ * <P>
+ * Note that *examples functions can and should still go into the List module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Collections.List_Tests;
+import Cal.Core.Prelude using
+    typeClass = Ord, Outputable;
+    typeConstructor = Boolean, Int, JList, JObject, Long, String;
+    dataConstructor = False, True, Nothing, Just, LT, EQ, GT;
+    function = assert, upFrom, output, seq, input, not, error;
+    ;
+import Cal.Collections.List using
+    typeConstructor = JIterator;
+    function = andList, filter, map, mapIndexed, reverse, subscript, zipWith;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeConstructor = Property;
+    function = implies, quickCheck;
+    ; 
+    
+//////////////////////////////////////////////////////////////////////////////////////////////////////    
+    
+private ordersDataRecords =
+    [{order_Amount = 41.9, payment_Received = True},
+     {order_Amount = 100, payment_Received = False},
+     {order_Amount = 5060.28, payment_Received = True},
+     {order_Amount = 1000, payment_Received = False}];    
+ 
+/**
+ * compares according to payment_Received in ascending order, and then order_Amount in descending order.
+ * The interesting aspect here is that the type of the comparator is
+ * a) record polymorphic (type variable a)
+ * b) ad-hoc polymorphic (type variables b and c)
+ */
+criticalOrdersComparator ::
+    (a\order_Amount, a\payment_Received, Ord b, Ord c) =>
+    {a | order_Amount :: b, payment_Received :: c} ->
+    {a | order_Amount :: b, payment_Received :: c} ->
+    Prelude.Ordering;
+private criticalOrdersComparator x y =
+    Prelude.combineComparators 
+        (Prelude.induceComparator (\r -> r.payment_Received))
+        (Prelude.reverseComparator (Prelude.induceComparator (\r -> r.order_Amount)))
+        x
+        y;
+  
+private criticalOrders = List.sortBy criticalOrdersComparator ordersDataRecords;
+
+/**
+ * Nov 1, 2005. Running this cases a 
+ * java.lang.UnsupportedOperationException: Attempt to call getDoubleValue() on class: org.openquark.cal.runtime.lecc.RTData$CAL_Boolean$CAL_True
+ */
+private testCriticalOrders =
+    assert
+        (criticalOrders ==
+            [{order_Amount = 1000, payment_Received = False},
+             {order_Amount = 100, payment_Received = False},
+             {order_Amount = 5060.28, payment_Received = True},
+             {order_Amount = 41.9, payment_Received = True}]);
+
+//an attempt to simplify criticalOrders...
+//first remove the payment_Received field.
+
+private ordersDataRecords2 =
+    [{order_Amount = 41.9},
+     {order_Amount = 100},
+     {order_Amount = 5060.28},
+     {order_Amount = 1000}];    
+ 
+criticalOrdersComparator2 ::
+    (a\order_Amount, Ord b) =>
+    {a | order_Amount :: b} ->
+    {a | order_Amount :: b} ->
+    Prelude.Ordering;
+private criticalOrdersComparator2 x y =    
+    (Prelude.reverseComparator (Prelude.induceComparator (\r -> r.order_Amount))) x y;
+  
+private criticalOrders2 = List.sortBy criticalOrdersComparator2 ordersDataRecords2;
+
+/**
+ * Nov 1, 2005. Running this works.
+ */
+private testCriticalOrders2 =
+    assert
+        (criticalOrders2 ==
+            [{order_Amount = 5060.28},
+             {order_Amount = 1000},
+             {order_Amount = 100},             
+             {order_Amount = 41.9}]);
+
+//Is it something to do with ordering of fields?
+//rename payment_Received to ayment_Received to ensure it is ordered before order_Amount
+
+private ordersDataRecords3 =
+    [{order_Amount = 41.9, ayment_Received = True},
+     {order_Amount = 100, ayment_Received = False},
+     {order_Amount = 5060.28, ayment_Received = True},
+     {order_Amount = 1000, ayment_Received = False}];    
+ 
+criticalOrdersComparator3 ::
+    (a\order_Amount, a\ayment_Received, Ord b, Ord c) =>
+    {a | order_Amount :: b, ayment_Received :: c} ->
+    {a | order_Amount :: b, ayment_Received :: c} ->
+    Prelude.Ordering;
+private criticalOrdersComparator3 x y =
+    Prelude.combineComparators 
+        (Prelude.induceComparator (\r -> r.ayment_Received))
+        (Prelude.reverseComparator (Prelude.induceComparator (\r -> r.order_Amount)))
+        x
+        y;
+  
+private criticalOrders3 = List.sortBy criticalOrdersComparator3 ordersDataRecords3;
+
+/**
+ * Nov 1, 2005. Running this works. Thus it has something to do with ordering of the field names
+ * since testCriticalOrders fails.
+ */
+private testCriticalOrders3 =
+    assert
+        (criticalOrders3 ==
+            [{order_Amount = 1000, ayment_Received = False},
+             {order_Amount = 100, ayment_Received = False},
+             {order_Amount = 5060.28, ayment_Received = True},
+             {order_Amount = 41.9, ayment_Received = True}]);
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+//some performance benchmarking on mapIndexed.
+
+/** 
+ * List.mapIndexed could have been defined as:
+ * mapIndexed f !list = zipWith f list (upFrom 0);
+ * we want to see how much of an improvement the actual definition is.
+ */
+private mapIndexed_test1 n =
+    let
+        f :: Int -> Int -> Int;
+        f !value !index = value + index;
+                
+        ones :: [Int];
+        ones = 1 : ones;
+    in
+        subscript (mapIndexed f ones) n;
+
+/**
+ * same as mapIndexed_test1 but inlining a simple defn of mapIndexed as:
+ * mapIndexed f !list = zipWith f list (upFrom 0);
+ */
+private mapIndexed_test2 n =
+    let
+        f :: Int -> Int -> Int;
+        f !value !index = value + index;
+                
+        ones :: [Int];
+        ones = 1 : ones;
+    in
+        subscript (zipWith f ones (upFrom 0)) n;  
+
+/*
+As expected, it turns out that the direct definition of mapIndexed is faster.
+    
+running: mapIndexed_test1 5000000
+Summary:    time = 3,748
+Standard deviation of runs = 1ms or 0.02% of average    
+
+running: mapIndexed_test2 5000000
+Summary:    time = 4,654
+Standard deviation of runs = 15.49ms or 0.33% of average
+*/
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+prop_reverse :: [Prelude.Short] -> Boolean;
+prop_reverse list = reverse (reverse list) == list;
+
+prop_sort :: [Prelude.Long] -> Boolean;
+prop_sort list = List.sort (reverse list) == List.sort list;
+
+
+prop_filter :: [Int] -> (Int -> Boolean) -> Boolean;
+prop_filter list func= 
+    andList (map func (filter func list));
+
+prop_append :: [Prelude.Byte] -> [Prelude.Byte] -> Boolean;
+prop_append list1 list2 =
+    List.endsWith list2 (list1 ++ list2);
+
+prop_group :: Prelude.Char -> Prelude.Char -> Property;
+prop_group a b =
+    (a != b) `implies` (List.group (List.list3 a b b) == [[a],[b,b]]);
+
+//to display the test cases used try: 
+//join "\n" (map show (verboseCheck prop_compareBy))
+prop_compareBy :: [Boolean] -> [Boolean] -> Boolean;
+prop_compareBy list1 list2 =   
+    //use Boolean lists to ensure that the comparison will frequently need to look beyond the first element
+    List.compareBy Prelude.compare list1 list2 == Prelude.compare list1 list2;
+
+prop_compareBy2 :: [Boolean] -> [Boolean] -> Boolean;
+prop_compareBy2 list1 list2 =
+    let
+        rev !o =
+            case o of
+            LT -> GT;
+            EQ -> EQ;
+            GT -> LT;
+            ;
+    in       
+        List.compareBy Prelude.compare list1 list2 == rev (List.compareBy Prelude.compare list2 list1);
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////    
+
+//some tests of the List.toJIterator function. This is primarily intended to be used by in code involving
+//Java clients, but it can be tested within CAL to a certain degree.
+
+foreign unsafe import jvm "method iterator"
+    private list_iterator :: JList -> JIterator;
+    
+foreign unsafe import jvm "method hasNext"
+    private iterator_hasNext :: JIterator -> Boolean;
+    
+foreign unsafe import jvm "method next"
+    private iterator_next :: JIterator -> JObject;
+
+foreign unsafe import jvm "constructor java.util.ArrayList" list_new :: JList;
+foreign unsafe import jvm "method add" list_add :: JList -> JObject -> Boolean;
+
+convolutedOutput :: Outputable a => [a] -> JObject;
+convolutedOutput !list =
+    let
+        outputHelper :: JIterator -> JList -> JList;
+        outputHelper !iterator !javaList =
+            if iterator_hasNext iterator then
+               list_add javaList (iterator_next iterator)
+               `seq`
+               outputHelper iterator javaList                
+            else
+                javaList;
+    in
+        output (outputHelper (List.toJIterator list) list_new);
+
+
+
+testListtoJIterator =
+    
+    assert (input (convolutedOutput [10 :: Long, 20, 30, 22, 10]) ==  [10 :: Long, 20, 30, 22, 10])
+    
+    && assert (input (convolutedOutput [Just 'a', Nothing, Just 'b']) == [Just 'a', Nothing, Just 'b'])
+    
+    && assert (not # iterator_hasNext # List.toJIterator $ ([] :: [String]))
+    
+    && 
+    //the List.toJIterator function does not result in evaluation of the elements of the list
+    assert (iterator_hasNext # List.toJIterator $ ([error "do not touch"] :: [String]))
+    
+    && 
+    //tests traversing 3 different lists via iterators, with the traversals intertwined
+    assert 
+    (
+        let
+            it1 = List.toJIterator [10 :: Int, 20, 30, 40];
+            it2 = List.toJIterator ["apple", "pear", "banana"];
+            it3 = List.toJIterator (Prelude.upFrom (5 :: Long));
+        in
+            iterator_hasNext it1
+            && iterator_hasNext it2
+            && iterator_hasNext it3
+            && iterator_hasNext it1 //it is OK to call iterator_hasNext multiple times
+            
+            && (Prelude.input (iterator_next it1) == (10 :: Int))
+            && (Prelude.input (iterator_next it2) == "apple")
+            && (Prelude.input (iterator_next it3) == (5 :: Long))
+            
+            && iterator_hasNext it2
+            && iterator_hasNext it3
+            && iterator_hasNext it1
+            
+            && (Prelude.input (iterator_next it2) == "pear")
+            && (Prelude.input (iterator_next it3) == (6 :: Long))
+            && (Prelude.input (iterator_next it1) == (20 :: Int))
+            
+            && iterator_hasNext it2            
+            && iterator_hasNext it1
+            && iterator_hasNext it3 
+            
+            && (Prelude.input (iterator_next it2) == "banana")
+            && (Prelude.input (iterator_next it1) == (30 :: Int))
+            && (Prelude.input (iterator_next it3) == (7 :: Long))      
+            
+            && iterator_hasNext it3 
+            && not (iterator_hasNext it2)            
+            && iterator_hasNext it1
+            && not (iterator_hasNext it2) 
+                        
+            && (Prelude.input (iterator_next it1) == (40 :: Int))
+            && (Prelude.input (iterator_next it3) == (8 :: Long))   
+            
+            && not (iterator_hasNext it2)            
+            && iterator_hasNext it3
+            && not (iterator_hasNext it1)  
+            
+            && (Prelude.input (iterator_next it3) == (9 :: Long))   
+    )
+    ;
+
+/**
+ * Converts a list to an iterator in chunks. For example, if the list is [e1, e2, e3, e4, e5, ...] then
+ * toChoppedListIterator 3 [e1, e2, e3, e4, e5, ...] will produce a Java iterator such that the first
+ * call to java.util.Iterator.next() returns the Java object (Prelude.output [e1, e2, e3]). In other words, this
+ * will be a java.util.List of length 3, such that the first element is (output e1), the second is (output e2) and
+ * the third is (output e3).
+ * @arg chopLength the length of each piece of list that the iterator will iterate over.
+ */
+toChoppedListIterator :: Outputable a => Int -> [a] -> JIterator;
+toChoppedListIterator !chopLength !list = List.toJIterator (List.chop chopLength list);
+
+
+testInputtingIterators =
+    assert 
+    (
+        Prelude.input (Prelude.output (List.toJIterator ["apple", "pear", "grapefruit", "banana"]))
+        == ["apple", "pear", "grapefruit", "banana"]
+    )
+    &&
+    
+    //a potentially infinite list is output then input
+    assert 
+    (
+        List.take 6 (Prelude.input (Prelude.output (List.toJIterator (Prelude.upFrom (5 :: Long)))))
+        == [5 :: Long, 6, 7, 8, 9, 10]
+    )  
+    &&
+    assert
+    (
+        List.fromJIterator (List.toJIterator [Just "apple", Nothing, Just "pear"])
+        == [Just "apple", Nothing, Just "pear"]
+    )
+    ;
+        
+testUnzipInfinite =
+    assert
+    (
+        let
+            (from0, from1) = List.unzip $ List.zip (Prelude.upFrom (0 :: Int)) (Prelude.upFrom (1 :: Int));
+        in
+            (List.take 10 from0) == (Prelude.upFromTo 0 9)
+            && (List.take 10 from1) == (Prelude.upFromTo 1 10)
+    )
+    ;
+    
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    assert testCriticalOrders
+    && assert testCriticalOrders2
+    && assert testCriticalOrders3   
+    && assert (quickCheck prop_reverse)
+    && assert (quickCheck prop_sort)
+    && assert (quickCheck prop_filter)
+    && assert (quickCheck prop_append)
+    && assert (quickCheck prop_group)
+    && assert (quickCheck prop_compareBy)
+    && assert (quickCheck prop_compareBy2)
+    && assert testListtoJIterator
+    && assert testInputtingIterators
+    && assert testUnzipInfinite
+    ;
+
+//please leave testModule last! It makes it easy to see what tests are hooked up.
+

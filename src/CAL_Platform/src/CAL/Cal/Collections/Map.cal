@@ -1,0 +1,3676 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Map.cal
+ * Creation date: Dec 2, 2003.
+ * By: Bo Ilic
+ */
+
+/*
+
+An efficient implementation of maps from keys to values based on
+Daan Leijen's DData collections library for Haskell.
+The library was obtained from: http://www.cs.uu.nl/~daan/ddata.html
+Author: Bo Ilic
+
+implementation notes:
+1. the CAL implementation has explicit strictness annotations on the functions. In particular, typically map and key arguments
+to functions are marked as strict.
+2. certain functions is Daan's implementation have overloaded type signatures, even though they do not have an overloaded inferred
+type. Since the API is not broken by generalizing (i.e. cannot create corrupted Map values), and the functions improve in performance,
+we have used the non-overloaded more general type in CAL.  Examples are Map.filter, filterWithKey, partition, partitionWithKey,
+filterGt, filterLt, join and validsize.
+
+*/
+ 
+/* 
+Daan's license:
+
+--------------------------------------------------------------------------------------------
+Copyright (c) 2003, Daan Leijen, All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1) Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2) Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+   in the documentation and/or other materials provided with the distribution.
+
+3) Neither the name of the Universiteit Utrecht nor the names of its contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+THE POSSIBILITY OF SUCH DAMAGE.
+--------------------------------------------------------------------------------------------
+*/
+
+//
+//--------------------------------------------------------------------------------
+//{-| Module      :  Map
+//    Copyright   :  (c) Daan Leijen 2002
+//    License     :  BSD-style
+//
+//    Maintainer  :  daan@cs.uu.nl
+//    Stability   :  provisional
+//    Portability :  portable
+//
+//  An efficient implementation of maps from keys to values (dictionaries). 
+//
+//  1) The module exports some names that clash with the "Prelude" -- 'lookup', 'map', and 'filter'. 
+//      If you want to use "Map" unqualified, these functions should be hidden.
+//
+//      > import Prelude hiding (lookup,map,filter)
+//      > import Map
+//
+//      Another solution is to use qualified names. This is also the only way how
+//      a "Map", "Set", and "MultiSet" can be used within one module. 
+//
+//      > import qualified Map
+//      >
+//      > ... Map.single "Paris" "France"
+//
+
+//      Or, if you prefer a terse coding style:
+//
+//      > import qualified Map as M
+//      >
+//      > ... M.single "Berlin" "Germany"
+//
+//  2) The implementation of "Map" is based on /size balanced/ binary trees (or
+//     trees of /bounded balance/) as described by:
+//
+//     * Stephen Adams, \"/Efficient sets: a balancing act/\", Journal of Functional
+//       Programming 3(4):553-562, October 1993, <http://www.swiss.ai.mit.edu/~adams/BB>.
+//
+//     * J. Nievergelt and E.M. Reingold, \"/Binary search trees of bounded balance/\",
+//       SIAM journal of computing 2(1), March 1973.
+//     
+//  3) Another implementation of finite maps based on size balanced trees
+//      exists as "Data.FiniteMap" in the Ghc libraries. The good part about this library 
+//      is that it is highly tuned and thorougly tested. However, it is also fairly old, 
+//      uses @#ifdef@'s all  over the place and only supports the basic finite map operations. 
+//      The "Map" module overcomes some of these issues:
+//        
+//      * It tries to export a more complete and consistent set of operations, like
+//        'partition', 'adjust', 'mapAccum', 'elemAt' etc. 
+//      
+//      * It uses the efficient /hedge/ algorithm for both 'union' and 'difference'
+//        (a /hedge/ algorithm is not applicable to 'intersection').
+//      
+//      * It converts ordered lists in linear time ('fromAscList').  
+//
+//      * It takes advantage of the module system with names like 'empty' instead of 'Data.FiniteMap.emptyFM'.
+//      
+//      * It sticks to portable Haskell, avoiding @#ifdef@'s and other magic.
+//-}
+//----------------------------------------------------------------------------------
+//module Map  ( 
+//            -- * Map type
+//              Map          -- instance Eq,Show
+//
+//            -- * Operators
+//            , (!), (\\)
+//
+//            -- * Query
+//            , isEmpty
+//            , size
+//            , member
+//            , lookup
+//            , find          
+//            , findWithDefault
+//            
+//            -- * Construction
+//            , empty
+//            , single
+//
+//            -- ** Insertion
+//            , insert
+//            , insertWith, insertWithKey, insertLookupWithKey
+//            
+//            -- ** Delete\/Update
+//            , delete
+//            , adjust
+//            , adjustWithKey
+//            , update
+//            , updateWithKey
+//            , updateLookupWithKey
+//
+//            -- * Combine
+//
+//            -- ** Union
+//            , union         
+//            , unionWith          
+//            , unionWithKey
+//            , unions
+//
+//            -- ** Difference
+//            , difference
+//            , differenceWith
+//            , differenceWithKey
+//            
+//            -- ** Intersection
+//            , intersection           
+//            , intersectionWith
+//            , intersectionWithKey
+//
+//            -- * Traversal
+//            -- ** Map
+//            , map
+//            , mapWithKey
+//            , mapAccum
+//            , mapAccumWithKey
+//            
+//            -- ** Fold
+//            , fold
+//            , foldWithKey
+//
+//            -- * Conversion
+//            , elems
+//            , keys
+//            , assocs
+//            
+//            -- ** Lists
+//            , toList
+//            , fromList
+//            , fromListWith
+//            , fromListWithKey
+//
+//            -- ** Ordered lists
+//            , toAscList
+//            , fromAscList
+//            , fromAscListWith
+//            , fromAscListWithKey
+//            , fromDistinctAscList
+//
+//            -- * Filter 
+//            , filter
+//            , filterWithKey
+//            , partition
+//            , partitionWithKey
+//
+//            , split         
+//            , splitLookup   
+//
+//            -- * Subset
+//            , subset, subsetBy
+//            , properSubset, properSubsetBy
+//
+//            -- * Indexed 
+//            , lookupIndex
+//            , findIndex
+//            , elemAt
+//            , updateAt
+//            , deleteAt
+//
+//            -- * Min\/Max
+//            , findMin
+//            , findMax
+//            , deleteMin
+//            , deleteMax
+//            , deleteFindMin
+//            , deleteFindMax
+//            , updateMin
+//            , updateMax
+//            , updateMinWithKey
+//            , updateMaxWithKey
+//            
+//            -- * Debugging
+//            , showTree
+//            , showTreeWith
+//            , valid
+//            ) where
+//
+//import Prelude hiding (lookup,map,filter)
+//
+//
+//{-
+//-- for quick check
+//import qualified Prelude
+//import qualified List
+//import Debug.QuickCheck       
+//import List(nub,sort)    
+//-}
+//
+
+/**
+ * An efficient implementation of maps from keys to values.
+ * 
+ * The implementation of Map is based on {@em size balanced@} binary trees (or trees of {@em bounded balance@}) as described by:
+ * 
+ * {@unorderedList
+ *  {@item
+ *   Stephen Adams, "Efficient sets: a balancing act", Journal of Functional
+ *   Programming 3(4):553-562, October 1993, {@url http://www.swiss.ai.mit.edu/~adams/BB @}.
+ *  @}
+ *  {@item
+ *   J. Nievergelt and E.M. Reingold, "Binary search trees of bounded balance",
+ *   SIAM journal of computing 2(1), March 1973.
+ *  @}
+ * @}
+ * 
+ * This module is an adaptation of functionality from Daan Leijen's DData collections library for Haskell.
+ * The library was obtained from {@url http://www.cs.uu.nl/~daan/ddata.html@}.
+ * See the file {@code ThirdPartyComponents/ThirdPartyComponents.txt@} for the DData license.
+ * 
+ * @author Bo Ilic
+ * @see module = "Cal.Collections.IntMap", "Cal.Collections.LongMap"
+ */
+module Cal.Collections.Map;
+import Cal.Core.Prelude using
+    typeClass = Appendable, Eq, Inputable, Ord, Outputable;
+    typeConstructor = Boolean, Int, JObject, Maybe, Ordering, String;
+    dataConstructor = False, True, Nothing, Just, LT, EQ, GT;
+    function = 
+        compare, concat, const, equals, error, fromMaybe, fst, greaterThan, input, lessThan, lessThanEquals, not, 
+        output, seq, snd;
+    ;
+import Cal.Collections.List using
+    function = foldLeftStrict, length;
+    ;
+import Cal.Collections.Set;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+
+//{--------------------------------------------------------------------
+//  Operators
+//--------------------------------------------------------------------}
+//infixl 9 !,\\
+//
+//-- | /O(log n)/. See 'find'.
+//(!) :: Ord k => Map k a -> k -> a
+//m ! k    = find k m
+//
+//-- | /O(n+m)/. See 'difference'.
+//(\\) :: Ord k => Map k a -> Map k a -> Map k a
+//m1 \\ m2 = difference m1 m2
+//
+//{--------------------------------------------------------------------
+//  Size balanced trees.
+//--------------------------------------------------------------------}
+//-- | A Map from keys @k@ and values @a@. 
+//data Map k a  = Tip 
+//              | Bin !Size !k a !(Map k a) !(Map k a) 
+
+/** A map from keys (of type {@code k@}) to values (of type {@code a@}). */
+data public Map k a =
+    private Tip |
+    private Bin
+        size      :: !Int
+        key       :: !k
+        value     :: a
+        leftMap   :: !(Map k a)
+        rightMap  :: !(Map k a);
+
+
+//
+//type Size     = Int
+//
+//{--------------------------------------------------------------------
+//  Query
+//--------------------------------------------------------------------}
+//-- | /O(1)/. Is the map empty?
+//isEmpty :: Map k a -> Bool
+//isEmpty t
+//  = case t of
+//      Tip             -> True
+//      Bin sz k x l r  -> False
+//
+
+/**
+ * Returns whether the map is empty.
+ * 
+ * Complexity: O(1).
+ * 
+ * @arg map the map.
+ * @return {@link True@} if the map is empty; {@link False@} otherwise.
+ */
+isEmpty :: Map k a  -> Boolean;
+public isEmpty !map =
+    case map of
+    Tip -> True;
+    Bin {}  -> False;
+    ;
+
+
+//-- | /O(1)/. The number of elements in the map.
+//size :: Map k a -> Int
+//size t
+//  = case t of
+//      Tip             -> 0
+//      Bin sz k x l r  -> sz
+
+/**
+ * Returns the number of elements in the map.
+ * 
+ * Complexity: O(1).
+ * 
+ * @arg map the map.
+ * @return the number of elements in the map.
+ */
+size :: Map k a -> Int;
+public size !map =
+    case map of
+    Tip -> 0;
+    Bin {size} -> size;
+    ;
+
+//
+//
+//-- | /O(log n)/. Lookup the value of key in the map.
+//lookup :: Ord k => k -> Map k a -> Maybe a
+//lookup k t
+//  = case t of
+//      Tip -> Nothing
+//      Bin sz kx x l r
+//          -> case compare k kx of
+//               LT -> lookup k l
+//               GT -> lookup k r
+//               EQ -> Just x       
+
+//implementation note: lookup is marked strict in *both* the key and map arguments, even though
+//its defining expression is only strict in the map argument, since the key will not be touched in
+//the case of an empty map. However, the empty map case is rare- in the generic case keys will be
+//touched. Also, keys are generally supposed to be cheap to evaluate.
+//Similar reasoning is used in the Prelude to mark the index argument of subscript as strict.
+    
+/**
+ * Looks up the value at a key in the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg key the key.
+ * @arg map the map.
+ * @return {@code {@link Just@} value@} if the key is found in the map and associated with the
+ *         value, or {@link Nothing@} if the key is not found.
+ */
+lookup :: Ord k => k -> Map k a -> Maybe a;
+public lookup !key !map =
+    case map of
+    Tip -> Nothing;
+    Bin sz kx x l r ->
+        case compare key kx of
+        LT -> lookup key l;
+        GT -> lookup key r;
+        EQ -> Just x;
+        ;  
+    ; 
+
+//
+//-- | /O(log n)/. Is the key a member of the map?
+//member :: Ord k => k -> Map k a -> Bool
+//member k m
+//  = case lookup k m of
+//      Nothing -> False
+//      Just x  -> True
+//
+
+/**
+ * Returns whether the key is a member of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg key the key.
+ * @arg map the map.
+ * @return {@link True@} if the key is a member of the map; {@link False@} otherwise.
+ */
+member :: Ord k => k -> Map k a -> Boolean;
+public member !key !map =
+    case lookup key map of
+    Nothing -> False;
+    Just x  -> True;
+    ;
+    
+
+//-- | /O(log n)/. Find the value of a key. Calls @error@ when the element can not be found.
+//find :: Ord k => k -> Map k a -> a
+//find k m
+//  = case lookup k m of
+//      Nothing -> error "Map.find: element not in the map"
+//      Just x  -> x
+
+/**
+ * Finds the value of a key. Calls {@link Prelude.error@} when the element cannot be found.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg key the key.
+ * @arg map the map.
+ * @return the value of the key in the map, or a call to {@link Prelude.error@} if it cannot be found.
+ * @see lookup, lookupWithDefault
+ */
+find :: Ord k => k -> Map k a -> a;
+public find !key !map =
+    case lookup key map of
+    Nothing -> error "Element not in the map.";
+    Just x  -> x;
+    ;
+
+
+//
+//-- | /O(log n)/. The expression @(findWithDefault def k map)@ returns the value of key @k@ or returns @def@ when
+//-- the key is not in the map.
+//findWithDefault :: Ord k => a -> k -> Map k a -> a
+//findWithDefault def k m
+//  = case lookup k m of
+//      Nothing -> def
+//      Just x  -> x
+
+/**
+ * {@code lookupWithDefault key map defaultValue@} returns the value at the given key or {@code defaultValue@}
+ * when the key is not in the map.
+ * 
+ * Complexity: O(log n)
+ *  
+ * @arg key the key.
+ * @arg map the map.
+ * @arg defaultValue the default value to be returned if the key is not in the map.
+ * @return the value at the given key or {@code defaultValue@} when the key is not in the map.
+ */
+lookupWithDefault :: Ord k => k -> Map k a -> a -> a;
+public lookupWithDefault !key !map defaultValue =
+    case lookup key map of
+    Nothing -> defaultValue;
+    Just x -> x;
+    ;
+
+//
+//
+//
+//{--------------------------------------------------------------------
+//  Construction
+//--------------------------------------------------------------------}
+//-- | /O(1)/. Create an empty map.
+//empty :: Map k a
+//empty 
+//  = Tip
+
+/**
+ * The empty map.
+ * 
+ * Complexity: O(1)
+ * 
+ * @return an empty map.
+ */ 
+empty :: Map k a;
+public empty = Tip;
+
+//
+//-- | /O(1)/. Create a map with a single element.
+//single :: k -> a -> Map k a
+//single k x  
+//  = Bin 1 k x Tip Tip
+
+/**
+ * Creates a map with a single element.
+ * 
+ * Complexity: O(1)
+ * 
+ * @arg key the key.
+ * @arg value the value.
+ * @return a map with the specified key-value pair as its single element.
+ */
+single :: k -> a -> Map k a;
+public single !key value = Bin 1 key value Tip Tip;
+
+//
+//{--------------------------------------------------------------------
+//  Insertion
+//  [insert] is the inlined version of [insertWith (\k x y -> x)]
+//--------------------------------------------------------------------}
+//-- | /O(log n)/. Insert a new key and value in the map.
+//insert :: Ord k => k -> a -> Map k a -> Map k a
+//insert kx x t
+//  = case t of
+//      Tip -> single kx x
+//      Bin sz ky y l r
+//          -> case compare kx ky of
+//               LT -> balance ky y (insert kx x l) r
+//               GT -> balance ky y l (insert kx x r)
+//               EQ -> Bin sz kx x l r
+
+/**
+ * Inserts a new key and value in the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg key the key.
+ * @arg value the value.
+ * @arg map the map into which the key-value pair is to be inserted.
+ * @return the map with the key-value pair inserted.
+ */
+insert :: Ord k => k -> a -> Map k a -> Map k a;
+public insert !key value !map =
+    case map of
+    Tip -> single key value;
+    Bin sz ky y l r ->
+        case compare key ky of
+        LT -> balance ky y (insert key value l) r;
+        GT -> balance ky y l (insert key value r);
+        EQ -> Bin sz key value l r;
+        ;
+    ;
+    
+//
+//-- | /O(log n)/. Insert with a combining function.
+//insertWith :: Ord k => (a -> a -> a) -> k -> a -> Map k a -> Map k a
+//insertWith f k x m          
+//  = insertWithKey (\k x y -> f x y) k x m
+
+/**
+ * Inserts a new key and value in the map with a combining function.
+ * 
+ * Complexity: O(log n)
+ *
+ * @arg f the combining function.
+ * @arg key the key.
+ * @arg value the value.
+ * @arg map the map into which the key-value pair is to be inserted.
+ * @return the map with the key-value pair inserted.
+ */
+insertWith :: Ord k => (a -> a -> a) -> k -> a -> Map k a -> Map k a;
+public insertWith f !key value !map = insertWithKey (\key value y -> f value y) key value map;
+  
+
+//
+//-- | /O(log n)/. Insert with a combining function.
+//insertWithKey :: Ord k => (k -> a -> a -> a) -> k -> a -> Map k a -> Map k a
+//insertWithKey f kx x t
+//  = case map of
+//      Tip -> single kx x
+//      Bin sy ky y l r
+//          -> case compare kx ky of
+//               LT -> balance ky y (insertWithKey f kx x l) r
+//               GT -> balance ky y l (insertWithKey f kx x r)
+//               EQ -> Bin sy ky (f ky x y) l r
+
+/**
+ * Inserts a new key and value in the map with a combining function.
+ * 
+ * Complexity: O(log n)
+ *
+ * @arg f the combining function.
+ * @arg key the key.
+ * @arg value the value.
+ * @arg map the map into which the key-value pair is to be inserted.
+ * @return the map with the key-value pair inserted.
+ */
+insertWithKey :: Ord k => (k -> a -> a -> a) -> k -> a -> Map k a -> Map k a;
+public insertWithKey f !key value !map =
+    case map of
+    Tip -> single key value;
+    Bin sy ky y l r ->
+        case compare key ky of
+        LT -> balance ky y (insertWithKey f key value l) r;
+        GT -> balance ky y l (insertWithKey f key value r);
+        EQ -> Bin sy ky (f ky value y) l r;
+        ;
+    ;
+
+//
+//-- | /O(log n)/. The expression (@insertLookupWithKey f k value map@) is a pair where
+//-- the first element is equal to (@lookup k map@) and the second element
+//-- equal to (@insertWithKey f k x map@).
+//insertLookupWithKey :: Ord k => (k -> a -> a -> a) -> k -> a -> Map k a -> (Maybe a,Map k a)
+//insertLookupWithKey f kx x t
+//  = case t of
+//      Tip -> (Nothing, single kx x)
+//      Bin sy ky y l r
+//          -> case compare kx ky of
+//               LT -> let (found,l') = insertLookupWithKey f kx x l in (found,balance ky y l' r)
+//               GT -> let (found,r') = insertLookupWithKey f kx x r in (found,balance ky y l r')
+//               EQ -> (Just y, Bin sy ky (f ky x y) l r)
+
+/**
+ * {@code insertLookupWithKey f key value map@} is a pair where the first element is equal to
+ * {@code {@link lookup@} key map@} and the second element equal to {@code {@link insertWithKey@} f key value map@}.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the combining function.
+ * @arg key the key.
+ * @arg value the value.
+ * @arg map the map into which the key-value pair is to be inserted.
+ * @return the map with the key-value pair inserted.
+ */
+insertLookupWithKey :: Ord k => (k -> a -> a -> a) -> k -> a -> Map k a -> (Maybe a, Map k a);
+public insertLookupWithKey f !key value !map =
+    case map of
+    Tip -> (Nothing, single key value);
+    Bin sy ky y l r ->
+        case compare key ky of
+        LT ->
+            let
+                (found, lNew) = insertLookupWithKey f key value l;
+            in 
+                (found, balance ky y lNew r);
+        GT -> 
+            let
+                (found, rNew) = insertLookupWithKey f key value r;
+            in 
+                (found, balance ky y l rNew);
+        EQ -> (Just y, Bin sy ky (f ky value y) l r);
+        ;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Deletion
+//  [delete] is the inlined version of [deleteWith (\k x -> Nothing)]
+//--------------------------------------------------------------------}
+//-- | /O(log n)/. Delete a key and its value from the map. When the key is not
+//-- a member of the map, the original map is returned.
+//delete :: Ord k => k -> Map k a -> Map k a
+//delete k t
+//  = case t of
+//      Tip -> Tip
+//      Bin sx kx x l r 
+//          -> case compare k kx of
+//               LT -> balance kx x (delete k l) r
+//               GT -> balance kx x l (delete k r)
+//               EQ -> glue l r
+
+/**
+ * Deletes a key and its value from the map. When the key is not a member of the
+ * map, the original map is returned.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg key the key.
+ * @arg map the map.
+ * @return the map, with the specified key and its corresponding value deleted if present.
+ */
+delete :: Ord k => k -> Map k a -> Map k a;
+public delete !key !map =
+    case map of
+    Tip -> Tip;
+    Bin sx kx x l r ->
+        case compare key kx of
+        LT -> balance kx x (delete key l) r;
+        GT -> balance kx x l (delete key r);
+        EQ -> glue l r;
+        ;
+    ;
+
+//
+//-- | /O(log n)/. Adjust a value at a specific key. When the key is not
+//-- a member of the map, the original map is returned.
+//adjust :: Ord k => (a -> a) -> k -> Map k a -> Map k a
+//adjust f k m
+//  = adjustWithKey (\k x -> f x) k m
+
+/**
+ * Adjusts a value at a specific key. When the key is not a member of the map,
+ * the original map is returned.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function used to map the old value associated with the key to the new value.
+ * @arg key the key.
+ * @arg map the map.
+ * @return the map, with the value at the specified key adjusted if present.
+ */
+adjust :: Ord k => (a -> a) -> k -> Map k a -> Map k a;
+public adjust f !key !map = adjustWithKey (\k x -> f x) key map;
+
+//
+//-- | /O(log n)/. Adjust a value at a specific key. When the key is not
+//-- a member of the map, the original map is returned.
+//adjustWithKey :: Ord k => (k -> a -> a) -> k -> Map k a -> Map k a
+//adjustWithKey f k m
+//  = updateWithKey (\k x -> Just (f k x)) k m
+
+/**
+ * Adjusts a value at a specific key. When the key is not a member of the map,
+ * the original map is returned.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function which, when given the old key-value pair, returns the new value to be associated with the key.
+ * @arg key the key.
+ * @arg map the map.
+ * @return the map, with the value at the specified key adjusted if present.
+ */
+adjustWithKey :: Ord k => (k -> a -> a) -> k -> Map k a -> Map k a;
+public adjustWithKey f !key !map = updateWithKey (\k x -> Just (f k x)) key map;
+
+//
+//-- | /O(log n)/. The expression (@update f k map@) updates the value @x@
+//-- at @k@ (if it is in the map). If (@f x@) is @Nothing@, the element is
+//-- deleted. If it is (@Just y@), the key @k@ is bound to the new value @y@.
+//update :: Ord k => (a -> Maybe a) -> k -> Map k a -> Map k a
+//update f k m
+//  = updateWithKey (\k x -> f x) k m
+
+/**
+ * {@code update f key map@} updates the value {@code x@} at {@code key@} (if it is in the map). If {@code f x@} is
+ * {@link Nothing@}, the element is deleted. If it is {@code {@link Just@} y@}, the key {@code key@} is bound to the
+ * new value {@code y@}.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function used to map the old value associated with the key to the new value.
+ * @arg key the key.
+ * @arg map the map.
+ * @return the map, with the value at the specified key adjusted if present.
+ */
+update :: Ord k => (a -> Maybe a) -> k -> Map k a -> Map k a;
+public update f !key !map = updateWithKey (\k x -> f x) key map;
+
+//
+//-- | /O(log n)/. The expression (@update f k map@) updates the value @x@
+//-- at @k@ (if it is in the map). If (@f k x@) is @Nothing@, the element is
+//-- deleted. If it is (@Just y@), the key @k@ is bound to the new value @y@.
+//updateWithKey :: Ord k => (k -> a -> Maybe a) -> k -> Map k a -> Map k a
+//updateWithKey f k t
+//  = case t of
+//      Tip -> Tip
+//      Bin sx kx x l r 
+//          -> case compare k kx of
+//               LT -> balance kx x (updateWithKey f k l) r
+//               GT -> balance kx x l (updateWithKey f k r)
+//               EQ -> case f kx x of
+//                       Just x' -> Bin sx kx x' l r
+//                       Nothing -> glue l r
+
+/**
+ * {@code updateWithKey f key map@} updates the value {@code x@} at {@code key@} (if it is in the map). If
+ * {@code f key x@} is {@link Nothing@}, the element is deleted. If it is {@code {@link Just@} y@}, the key {@code key@} is
+ * bound to the new value {@code y@}.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function which, when given the old key-value pair, returns the new value to be associated with the key.
+ * @arg key the key.
+ * @arg map the map.
+ * @return the map, with the value at the specified key adjusted if present.
+ */
+updateWithKey :: Ord k => (k -> a -> Maybe a) -> k -> Map k a -> Map k a;
+public updateWithKey f !key !map =
+    case map of
+    Tip -> Tip;
+    Bin sx kx x l r ->
+        case compare key kx of
+        LT -> balance kx x (updateWithKey f key l) r;
+        GT -> balance kx x l (updateWithKey f key r);
+        EQ ->
+            case f kx x of
+            Just xNew -> Bin sx kx xNew l r;
+            Nothing -> glue l r;
+            ;
+        ;
+    ;
+                       
+//
+//-- | /O(log n)/. Lookup and update.
+//updateLookupWithKey :: Ord k => (k -> a -> Maybe a) -> k -> Map k a -> (Maybe a,Map k a)
+//updateLookupWithKey f k t
+//  = case t of
+//      Tip -> (Nothing,Tip)
+//      Bin sx kx x l r 
+//          -> case compare k kx of
+//               LT -> let (found,l') = updateLookupWithKey f k l in (found,balance kx x l' r)
+//               GT -> let (found,r') = updateLookupWithKey f k r in (found,balance kx x l r') 
+//               EQ -> case f kx x of
+//                       Just x' -> (Just x',Bin sx kx x' l r)
+//                       Nothing -> (Just x,glue l r)
+
+/**
+ * Simultaneously looks up and updates the map at a specific key.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function which, when given the old key-value pair, returns the new
+ *        value to be associated with the key.
+ * @arg key the key.
+ * @arg map the map.
+ * @return a pair. The first element contains either {@code {@link Just@} value@} if the key was
+ *         originally associated with value, or {@link Nothing@} otherwise. The second
+ *         element contains the map, with the value at the specified key
+ *         adjusted if present.
+ */
+updateLookupWithKey :: Ord k => (k -> a -> Maybe a) -> k -> Map k a -> (Maybe a, Map k a);
+public updateLookupWithKey f !key !map =
+    case map of
+    Tip -> (Nothing, Tip);
+    Bin sx kx x l r  ->
+        case compare key kx of
+        LT ->
+            let
+                (found, lNew) = updateLookupWithKey f key l;
+            in
+                (found, balance kx x lNew r);
+        GT ->
+            let
+                (found, rNew) = updateLookupWithKey f key r;
+            in
+                (found, balance kx x l rNew);
+        EQ ->
+            case f kx x of
+            Just xNew -> (Just xNew, Bin sx kx xNew l r);
+            Nothing -> (Just x, glue l r);
+            ;
+        ;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Indexing
+//----------------------------------------------------------------- ---}
+//-- | /O(log n)/. Return the /index/ of a key. The index is a number from
+//-- /0/ up to, but not including, the 'size' of the map. Calls 'error' when
+//-- the key is not a 'member' of the map.
+//findIndex :: Ord k => k -> Map k a -> Int
+//findIndex k t
+//  = case lookupIndex k t of
+//      Nothing  -> error "Map.findIndex: element is not in the map"
+//      Just idx -> idx
+
+/**
+ * Returns the index of a key. The index is a number from 0 up to, but not
+ * including, the size of the map. Calls {@link error@} when the key is not a member of
+ * the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg key the key.
+ * @arg map the map.
+ * @return the index of the key, or a call to {@link Prelude.error@} if the key is not a
+ *         member of the map.
+ */
+findIndex :: Ord k => k -> Map k a -> Int;
+public findIndex !key !map =
+    case lookupIndex key map of
+    Nothing  -> error "Element is not in the map.";
+    Just idx -> idx;
+    ;
+
+//
+//-- | /O(log n)/. Lookup the /index/ of a key. The index is a number from
+//-- /0/ up to, but not including, the 'size' of the map. 
+//lookupIndex :: Ord k => k -> Map k a -> Maybe Int
+//lookupIndex k t
+//  = lookup 0 t
+//  where
+//    lookup idx Tip  = Nothing
+//    lookup idx (Bin _ kx x l r)
+//      = case compare k kx of
+//          LT -> lookup idx l
+//          GT -> lookup (idx + size l + 1) r 
+//          EQ -> Just (idx + size l)
+
+/**
+ * Looks up the index of a key. The index is a number from 0 up to, but not
+ * including, the size of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg key the key.
+ * @arg map the map.
+ * @return {@code {@link Just@} indexValue@} where {@code indexValue@} is the index of the key, or {@link Nothing@}
+ *         if the key is not a member of the map.
+ */
+lookupIndex :: Ord k => k -> Map k a -> Maybe Int;
+public lookupIndex !key !map =
+    let
+        //lookup :: Int -> Map key a -> Maybe Int;
+        lookup !idx !map =
+            case map of
+            Tip -> Nothing;
+            Bin _ kx x l r ->
+                case compare key kx of
+                LT -> lookup idx l;
+                  GT -> lookup (idx + size l + 1) r;
+                  EQ -> Just (idx + size l);
+                  ;
+              ;
+    in
+        lookup 0 map;
+
+//
+//-- | /O(log n)/. Retrieve an element by /index/. Calls 'error' when an
+//-- invalid index is used.
+//elemAt :: Int -> Map k a -> (k,a)
+//elemAt i Tip = error "Map.elemAt: index out of range"
+//elemAt i (Bin _ kx x l r)
+//  = case compare i sizeL of
+//      LT -> elemAt i l
+//      GT -> elemAt (i-sizeL-1) r
+//      EQ -> (kx,x)
+//  where
+//    sizeL = size l
+
+/**
+ * Retrieves an element by index. Calls {@link Prelude.error@} when an invalid index is used.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg index the index.
+ * @arg map the map.
+ * @return the key-value pair at the specified index.
+ */
+elemAt :: Int -> Map k a -> (k, a);
+public elemAt !index !map =
+    case map of
+    Tip -> error "Index out of range.";
+    Bin _ kx x l r ->
+        let
+            sizeL :: Int;
+            sizeL = size l;
+        in
+            case compare index sizeL of
+            LT -> elemAt index l;
+            GT -> elemAt (index - sizeL - 1) r;
+            EQ -> (kx,x);
+            ;        
+    ;
+
+//
+//-- | /O(log n)/. Update the element at /index/. Calls 'error' when an
+//-- invalid index is used.
+//updateAt :: (k -> a -> Maybe a) -> Int -> Map k a -> Map k a
+//updateAt f i Tip  = error "Map.updateAt: index out of range"
+//updateAt f i (Bin sx kx x l r)
+//  = case compare i sizeL of
+//      LT -> updateAt f i l
+//      GT -> updateAt f (i-sizeL-1) r
+//      EQ -> case f kx x of
+//              Just x' -> Bin sx kx x' l r
+//              Nothing -> glue l r
+//  where
+//    sizeL = size l
+
+/**
+ * Updates the element at index. Calls {@link Prelude.error@} when an invalid index is used.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function used to map the old value associated with the key to the new value.
+ * @arg index the index.
+ * @arg map the map.
+ * @return the map, with the value at the specified index adjusted.
+ */
+updateAt :: (k -> a -> Maybe a) -> Int -> Map k a -> Map k a;
+public updateAt f !index !map =
+    case map of
+    Tip -> error "Index out of range.";
+    Bin sx kx x l r ->
+        let
+            sizeL :: Int;
+            sizeL = size l;
+        in
+            case compare index sizeL of
+            LT -> updateAt f index l;
+            GT -> updateAt f (index - sizeL - 1) r;
+            EQ ->
+                case f kx x of
+                Just xNew -> Bin sx kx xNew l r;
+                Nothing -> glue l r;
+                ;
+            ;
+    ;
+
+//
+//-- | /O(log n)/. Delete the element at /index/. Defined as (@deleteAt i map = updateAt (\k x -> Nothing) i map@).
+//deleteAt :: Int -> Map k a -> Map k a
+//deleteAt i map
+//  = updateAt (\k x -> Nothing) i map
+
+/**
+ * Deletes the element at index.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg index the index.
+ * @arg map the map.
+ * @return the map, with the value at the specified index deleted.
+ */
+deleteAt :: Int -> Map k a -> Map k a;
+public deleteAt !index !map = updateAt (\k x -> Nothing) index map;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Minimal, Maximal
+//--------------------------------------------------------------------}
+//-- | /O(log n)/. The minimal key of the map.
+//findMin :: Map k a -> (k,a)
+//findMin (Bin _ kx x Tip r)  = (kx,x)
+//findMin (Bin _ kx x l r)    = findMin l
+//findMin Tip                 = error "Map.findMin: empty tree has no minimal element"
+
+/**
+ * Finds the minimal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg map the map.
+ * @return the key-value pair of the minimal key of the map.
+ */
+findMin :: Map k a -> (k, a);
+public findMin !map =
+    case map of
+    Bin {key, value, leftMap} ->
+        if (isEmpty leftMap) then
+            (key, value)
+        else
+            findMin leftMap;
+    Tip -> error "Empty tree has no minimal element.";
+    ;
+
+//
+//-- | /O(log n)/. The maximal key of the map.
+//findMax :: Map k a -> (k,a)
+//findMax (Bin _ kx x l Tip)  = (kx,x)
+//findMax (Bin _ kx x l r)    = findMax r
+//findMax Tip                 = error "Map.findMax: empty tree has no maximal element"
+
+/**
+ * Finds the maximal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg map the map.
+ * @return the key-value pair of the maximal key of the map.
+ */
+findMax :: Map k a -> (k, a);
+public findMax !map =
+    case map of
+    Bin {key, value, rightMap} ->
+        if (isEmpty rightMap) then
+            (key, value)
+        else
+            findMax rightMap;
+    Tip -> error "Empty tree has no maximal element.";    
+    ;
+
+//
+//-- | /O(log n)/. Delete the minimal key
+//deleteMin :: Map k a -> Map k a
+//deleteMin (Bin _ kx x Tip r)  = r
+//deleteMin (Bin _ kx x l r)    = balance kx x (deleteMin l) r
+//deleteMin Tip                 = Tip
+
+/**
+ * Deletes the minimal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg map the map.
+ * @return the map, with its minimal key deleted.
+ */
+deleteMin :: Map k a -> Map k a;
+public deleteMin !map = 
+    case map of
+    Bin _ kx x l r ->
+        if (isEmpty l) then
+            r
+        else
+            balance kx x (deleteMin l) r;
+    Tip -> Tip;
+    ;
+
+//
+//-- | /O(log n)/. Delete the maximal key
+//deleteMax :: Map k a -> Map k a
+//deleteMax (Bin _ kx x l Tip)  = l
+//deleteMax (Bin _ kx x l r)    = balance kx x l (deleteMax r)
+//deleteMax Tip                 = Tip
+
+/**
+ * Deletes the maximal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg map the map.
+ * @return the map, with its maximal key deleted.
+ */
+deleteMax :: Map k a -> Map k a;
+public deleteMax !map =
+    case map of
+    Bin _ kx x l r ->
+        if (isEmpty r) then
+            l
+        else
+            balance kx x l (deleteMax r);
+    Tip -> Tip;
+    ;
+
+//
+//-- | /O(log n)/. Update the minimal key
+//updateMin :: (a -> Maybe a) -> Map k a -> Map k a
+//updateMin f m
+//  = updateMinWithKey (\k x -> f x) m
+
+/**
+ * Updates the minimal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function used to map the old value associated with the key to the new value.
+ * @arg map the map.
+ * @return the map, with its minimal key updated.
+ */
+updateMin :: (a -> Maybe a) -> Map k a -> Map k a;
+public updateMin f !map = updateMinWithKey (\k x -> f x) map;
+
+//
+//-- | /O(log n)/. Update the maximal key
+//updateMax :: (a -> Maybe a) -> Map k a -> Map k a
+//updateMax f m
+//  = updateMaxWithKey (\k x -> f x) m
+
+/**
+ * Updates the maximal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function used to map the old value associated with the key to the new value.
+ * @arg map the map.
+ * @return the map, with its maximal key updated.
+ */
+updateMax :: (a -> Maybe a) -> Map k a -> Map k a;
+public updateMax f !map = updateMaxWithKey (\k x -> f x) map;
+
+//
+//
+//-- | /O(log n)/. Update the minimal key
+//updateMinWithKey :: (k -> a -> Maybe a) -> Map k a -> Map k a
+//updateMinWithKey f t
+//  = case t of
+//      Bin sx kx x Tip r  -> case f kx x of
+//                              Nothing -> r
+//                              Just x' -> Bin sx kx x' Tip r
+//      Bin sx kx x l r    -> balance kx x (updateMinWithKey f l) r
+//      Tip                -> Tip
+
+/**
+ * Updates the minimal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function which, when given the old key-value pair, returns the new value to be associated with the key.
+ * @arg map the map.
+ * @return the map, with its minimal key updated.
+ */
+updateMinWithKey :: (k -> a -> Maybe a) -> Map k a -> Map k a;
+public updateMinWithKey f !map =
+    case map of
+    Bin sx kx x l r  ->
+        if (isEmpty l) then
+            case f kx x of
+            Nothing -> r;
+            Just xNew -> Bin sx kx xNew Tip r;            
+        else
+            balance kx x (updateMinWithKey f l) r;        
+    Tip -> Tip;
+    ;
+
+//
+//-- | /O(log n)/. Update the maximal key
+//updateMaxWithKey :: (k -> a -> Maybe a) -> Map k a -> Map k a
+//updateMaxWithKey f t
+//  = case t of
+//      Bin sx kx x l Tip  -> case f kx x of
+//                              Nothing -> l
+//                              Just x' -> Bin sx kx x' l Tip
+//      Bin sx kx x l r    -> balance kx x l (updateMaxWithKey f r)
+//      Tip                -> Tip
+
+/**
+ * Updates the maximal key of the map.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg f the function which, when given the old key-value pair, returns the new value to be associated with the key.
+ * @arg map the map.
+ * @return the map, with its maximal key updated.
+ */
+updateMaxWithKey :: (k -> a -> Maybe a) -> Map k a -> Map k a;
+public updateMaxWithKey f !map =
+    case map of
+    Bin sx kx x l r  ->
+        if (isEmpty r) then
+            case f kx x of
+            Nothing -> r;
+            Just xNew -> Bin sx kx xNew l Tip;            
+        else
+            balance kx x l (updateMaxWithKey f r);        
+    Tip -> Tip;
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Union. 
+//--------------------------------------------------------------------}
+//-- | The union of a list of maps: (@unions == foldl union empty@).
+//unions :: Ord k => [Map k a] -> Map k a
+//unions ts
+//  = foldlStrict union empty ts
+
+/**
+ * Returns the union of a list of maps.
+ * 
+ * @arg maps a list of maps.
+ * @return the union of the maps in the list.
+ */
+unions :: Ord k => [Map k a] -> Map k a;
+public unions !maps = foldLeftStrict union empty maps;
+
+//-- | The union of a list of maps, with a combining operation:
+//--   (@unionsWith f == foldl (unionWith f) empty@).
+//unionsWith :: Ord k => (a->a->a) -> [Map k a] -> Map k a
+//unionsWith f ts
+//  = foldlStrict (unionWith f) empty ts
+
+/**
+ * Returns the union of a list of maps, with a combining operation.
+ * 
+ * @arg f the combining function.
+ * @arg maps a list of maps.
+ * @return the union of the maps in the list.
+ */
+unionsWith :: Ord k => (a -> a -> a) -> [Map k a] -> Map k a;
+public unionsWith f !maps = foldLeftStrict (unionWith f) empty maps;
+
+/**
+ * Returns the union of a list of maps, with a combining operation.
+ * 
+ * @arg f the combining function.
+ * @arg maps a list of maps.
+ * @return the union of the maps in the list.
+ */
+unionsWithKey :: Ord k => (k -> a -> a -> a) -> [Map k a] -> Map k a;
+public unionsWithKey f !maps = foldLeftStrict (unionWithKey f) empty maps;
+
+
+//-- | /O(n+m)/.
+//-- The expression (@'union' t1 t2@) takes the left-biased union of @t1@ and @t2@. 
+//-- It prefers @t1@ when duplicate keys are encountered, ie. (@union == unionWith const@).
+//-- The implementation uses the efficient /hedge-union/ algorithm.
+//union :: Ord k => Map k a -> Map k a -> Map k a
+//union Tip t2  = t2
+//union t1 Tip  = t1
+//union t1 t2  -- hedge-union is more efficient on (bigset `union` smallset)
+//   | size t1 >= size t2  = hedgeUnionL (const LT) (const GT) t1 t2
+//   | otherwise           = hedgeUnionR (const LT) (const GT) t2 t1
+
+/**
+ * {@code union map1 map2@} takes the left-biased union of {@code map1@} and {@code map2@}. It prefers {@code map1@} when
+ * duplicate keys are encountered, i.e. {@code (union == {@link unionWith@} {@link const@})@}. The
+ * implementation uses the efficient {@em hedge-union@} algorithm.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the left-biased union of map1 and map2.
+ */
+union :: Ord k => Map k a -> Map k a -> Map k a;
+public union !map1 !map2 =
+    if (isEmpty map1) then
+        map2
+    else if (isEmpty map2) then
+        map1
+    else if (size map1 >= size map2) then //hedge-union is more efficient on (bigset `union` smallset)
+        hedgeUnionL (const LT) (const GT) map1 map2
+    else
+        hedgeUnionR (const LT) (const GT) map2 map1;
+        
+//
+//-- left-biased hedge union
+//hedgeUnionL cmplo cmphi t1 Tip 
+//  = t1
+//hedgeUnionL cmplo cmphi Tip (Bin _ kx x l r)
+//  = join kx x (filterGt cmplo l) (filterLt cmphi r)
+//hedgeUnionL cmplo cmphi (Bin _ kx x l r) t2
+//  = join kx x (hedgeUnionL cmplo cmpkx l (trim cmplo cmpkx t2)) 
+//              (hedgeUnionL cmpkx cmphi r (trim cmpkx cmphi t2))
+//  where
+//    cmpkx k  = compare kx k
+
+hedgeUnionL :: Ord k => (k -> Ordering) -> (k -> Ordering) -> Map k a -> Map k a -> Map k a;
+private hedgeUnionL cmplo cmphi !t1 !t2 =
+    if (isEmpty t2) then
+        t1
+    else if (isEmpty t1) then
+        case t2 of
+        Bin _ kx x l r ->
+            join kx x (filterGt cmplo l) (filterLt cmphi r);                
+    else
+        case t1 of
+        Bin _ kx x l r ->
+            let
+                cmpkx !k  = compare kx k;
+            in            
+                join kx x (hedgeUnionL cmplo cmpkx l (trim cmplo cmpkx t2)) (hedgeUnionL cmpkx cmphi r (trim cmpkx cmphi t2));            
+    ;            
+
+//
+//-- right-biased hedge union
+//hedgeUnionR cmplo cmphi t1 Tip 
+//  = t1
+//hedgeUnionR cmplo cmphi Tip (Bin _ kx x l r)
+//  = join kx x (filterGt cmplo l) (filterLt cmphi r)
+//hedgeUnionR cmplo cmphi (Bin _ kx x l r) t2
+//  = join kx newx (hedgeUnionR cmplo cmpkx l lt) 
+//                 (hedgeUnionR cmpkx cmphi r gt)
+//  where
+//    cmpkx k     = compare kx k
+//    lt          = trim cmplo cmpkx t2
+//    (found,gt)  = trimLookupLo kx cmphi t2
+//    newx        = case found of
+//                    Nothing -> x
+//                    Just y  -> y
+
+hedgeUnionR :: Ord k => (k -> Ordering) -> (k -> Ordering) -> Map k a -> Map k a -> Map k a;
+private hedgeUnionR cmplo cmphi !t1 !t2 =
+    if (isEmpty t2) then
+        t1
+    else if (isEmpty t1) then
+        case t2 of
+        Bin _ kx x l r ->
+            join kx x (filterGt cmplo l) (filterLt cmphi r);
+    else
+        case t1 of
+        Bin _ kx x l r ->
+            let
+                cmpkx !k = compare kx k;
+                lt = trim cmplo cmpkx t2;
+                (found, gt) = trimLookupLo kx cmphi t2;
+                newx = fromMaybe x found;
+            in            
+                join kx newx (hedgeUnionR cmplo cmpkx l lt) (hedgeUnionR cmpkx cmphi r gt);
+    ;                
+
+
+//
+//{--------------------------------------------------------------------
+//  Union with a combining function
+//--------------------------------------------------------------------}
+//-- | /O(n+m)/. Union with a combining function. The implementation uses the efficient /hedge-union/ algorithm.
+//unionWith :: Ord k => (a -> a -> a) -> Map k a -> Map k a -> Map k a
+//unionWith f m1 m2
+//  = unionWithKey (\k x y -> f x y) m1 m2
+
+/**
+ * Returns the left-biased union of two maps, with a combining function. The
+ * implementation uses the efficient {@em hedge-union@} algorithm.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg f the combining function.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the left-biased union of two maps.
+ */
+unionWith :: Ord k => (a -> a -> a) -> Map k a -> Map k a -> Map k a;
+public unionWith f !map1 !map2 = unionWithKey (\k x y -> f x y) map1 map2;
+
+//
+//-- | /O(n+m)/.
+//-- Union with a combining function. The implementation uses the efficient /hedge-union/ algorithm.
+//unionWithKey :: Ord k => (k -> a -> a -> a) -> Map k a -> Map k a -> Map k a
+//unionWithKey f Tip t2  = t2
+//unionWithKey f t1 Tip  = t1
+//unionWithKey f t1 t2  -- hedge-union is more efficient on (bigset `union` smallset)
+//  | size t1 >= size t2  = hedgeUnionWithKey f (const LT) (const GT) t1 t2
+//  | otherwise           = hedgeUnionWithKey flipf (const LT) (const GT) t2 t1
+//  where
+//    flipf k x y   = f k y x
+
+/**
+ * Returns the left-biased union of two maps, with a combining function. The
+ * implementation uses the efficient {@em hedge-union@} algorithm.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg f the combining function.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the left-biased union of two maps.
+ */
+unionWithKey :: Ord k => (k -> a -> a -> a) -> Map k a -> Map k a -> Map k a;
+public unionWithKey f !map1 !map2 = 
+    if (isEmpty map1) then
+        map2
+    else if (isEmpty map1) then
+        map1
+    else if (size map1 >= size map2) then //hedge-union is more efficient on (bigset `union` smallset)
+        hedgeUnionWithKey f (const LT) (const GT) map1 map2
+    else
+        let
+            flipf k x y   = f k y x;
+        in
+            hedgeUnionWithKey flipf (const LT) (const GT) map2 map1;
+
+
+//
+//hedgeUnionWithKey f cmplo cmphi t1 Tip 
+//  = t1
+//hedgeUnionWithKey f cmplo cmphi Tip (Bin _ kx x l r)
+//  = join kx x (filterGt cmplo l) (filterLt cmphi r)
+//hedgeUnionWithKey f cmplo cmphi (Bin _ kx x l r) t2
+//  = join kx newx (hedgeUnionWithKey f cmplo cmpkx l lt) 
+//                 (hedgeUnionWithKey f cmpkx cmphi r gt)
+//  where
+//    cmpkx k     = compare kx k
+//    lt          = trim cmplo cmpkx t2
+//    (found,gt)  = trimLookupLo kx cmphi t2
+//    newx        = case found of
+//                    Nothing -> x
+//                    Just y  -> f kx x y
+
+hedgeUnionWithKey :: Ord k => (k-> a -> a -> a) -> (k -> Ordering) -> (k -> Ordering) -> Map k a -> Map k a -> Map k a;
+private hedgeUnionWithKey f cmplo cmphi !t1 !t2 =
+    if (isEmpty t2) then
+        t1
+    else if (isEmpty t1) then
+        case t2 of
+        Bin _ kx x l r ->
+            join kx x (filterGt cmplo l) (filterLt cmphi r);
+    else
+        case t1 of
+        Bin _ kx x l r ->
+            let
+                cmpkx k = compare kx k;
+                lt = trim cmplo cmpkx t2;
+                (found, gt) = trimLookupLo kx cmphi t2;
+                newx =
+                    case found of
+                    Nothing -> x;
+                    Just y  -> f kx x y;
+                    ;        
+            in                                        
+                join kx newx (hedgeUnionWithKey f cmplo cmpkx l lt) (hedgeUnionWithKey f cmpkx cmphi r gt);
+    ;
+ 
+//
+//{--------------------------------------------------------------------
+//  Difference
+//--------------------------------------------------------------------}
+//-- | /O(n+m)/. Difference of two maps. 
+//-- The implementation uses an efficient /hedge/ algorithm comparable with /hedge-union/.
+//difference :: Ord k => Map k a -> Map k a -> Map k a
+//difference Tip t2  = Tip
+//difference t1 Tip  = t1
+//difference t1 t2   = hedgeDiff (const LT) (const GT) t1 t2
+
+/**
+ * Returns the difference of two maps.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the difference of the two maps.
+ */
+difference :: Ord k => Map k a -> Map k b -> Map k a;
+public difference !map1 !map2  =
+    if (isEmpty map1) then
+        Tip
+    else if (isEmpty map2) then
+        map1
+    else
+        hedgeDiff (const LT) (const GT) map1 map2;
+        
+//
+//hedgeDiff cmplo cmphi Tip t     
+//  = Tip
+//hedgeDiff cmplo cmphi (Bin _ kx x l r) Tip 
+//  = join kx x (filterGt cmplo l) (filterLt cmphi r)
+//hedgeDiff cmplo cmphi t (Bin _ kx x l r) 
+//  = merge (hedgeDiff cmplo cmpkx (trim cmplo cmpkx t) l) 
+//          (hedgeDiff cmpkx cmphi (trim cmpkx cmphi t) r)
+//  where
+//    cmpkx k = compare kx k  
+
+hedgeDiff :: Ord k => (k -> Ordering) -> (k -> Ordering) -> Map k a -> Map k b -> Map k a;
+private hedgeDiff cmplo cmphi !m !t =
+    if (isEmpty m) then
+        Tip
+    else if (isEmpty t) then
+        case m of
+        Bin _ kx x l r -> join kx x (filterGt cmplo l) (filterLt cmphi r);
+    else
+        case t of
+        Bin _ kx x l r ->
+            let
+                cmpkx k = compare kx k;
+            in
+                merge (hedgeDiff cmplo cmpkx (trim cmplo cmpkx m) l)
+                      (hedgeDiff cmpkx cmphi (trim cmpkx cmphi m) r);
+        ;          
+ 
+//
+//-- | /O(n+m)/. Difference with a combining function. 
+//-- The implementation uses an efficient /hedge/ algorithm comparable with /hedge-union/.
+//differenceWith :: Ord k => (a -> a -> Maybe a) -> Map k a -> Map k a -> Map k a
+//differenceWith f m1 m2
+//  = differenceWithKey (\k x y -> f x y) m1 m2
+
+/**
+ * Returns the difference of two maps, with a combining function.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg f the combining function.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the difference of the two maps.
+ */
+differenceWith :: Ord k => (a -> b -> Maybe a) -> Map k a -> Map k b -> Map k a;
+public differenceWith f !map1 !map2 = differenceWithKey (\k x y -> f x y) map1 map2;
+
+//
+//-- | /O(n+m)/. Difference with a combining function. When two equal keys are
+//-- encountered, the combining function is applied to the key and both values.
+//-- If it returns @Nothing@, the element is discarded (proper set difference). If
+//-- it returns (@Just y@), the element is updated with a new value @y@. 
+//-- The implementation uses an efficient /hedge/ algorithm comparable with /hedge-union/.
+//differenceWithKey :: Ord k => (k -> a -> a -> Maybe a) -> Map k a -> Map k a -> Map k a
+//differenceWithKey f Tip t2  = Tip
+//differenceWithKey f t1 Tip  = t1
+//differenceWithKey f t1 t2   = hedgeDiffWithKey f (const LT) (const GT) t1 t2
+
+/**
+ * Returns the difference of two maps, with a combining function. When two equal keys are
+ * encountered, the combining function is applied to the key and both values.
+ * If it returns {@link Nothing@}, the element is discarded (proper set difference). If
+ * it returns {@code {@link Just@} y@}, the element is updated with a new value {@code y@}. 
+ * The implementation uses an efficient hedge algorithm comparable with {@em hedge-union@}.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg f the combining function.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the difference of the two maps.
+ */
+differenceWithKey :: Ord k => (k -> a -> b -> Maybe a) -> Map k a -> Map k b -> Map k a;
+public differenceWithKey f !map1 !map2 =
+    if (isEmpty map1) then
+        Tip
+    else if (isEmpty map2) then
+        map1
+    else
+        hedgeDiffWithKey f (const LT) (const GT) map1 map2;
+
+//
+//hedgeDiffWithKey f cmplo cmphi Tip t     
+//  = Tip
+//hedgeDiffWithKey f cmplo cmphi (Bin _ kx x l r) Tip 
+//  = j    oin kx x (filterGt cmplo l) (filterLt cmphi r)
+//hedgeDiffWithKey f cmplo cmphi t (Bin _ kx x l r) 
+//  = case found of
+//      Nothing -> merge tl tr
+//      Just y  -> case f kx y x of
+//                   Nothing -> merge tl tr
+//                   Just z  -> join kx z tl tr
+//  where
+//    cmpkx k     = compare kx k   
+//    lt          = trim cmplo cmpkx t
+//    (found,gt)  = trimLookupLo kx cmphi t
+//    tl          = hedgeDiffWithKey f cmplo cmpkx lt l
+//    tr          = hedgeDiffWithKey f cmpkx cmphi gt r
+
+hedgeDiffWithKey :: Ord k => (k -> a -> b -> Maybe a) -> (k -> Ordering) -> (k -> Ordering) -> Map k a -> Map k b -> Map k a;
+private hedgeDiffWithKey f cmplo cmphi !map1 !map2 =
+    if (isEmpty map1) then
+        Tip
+    else if (isEmpty map2) then
+        case map1 of
+        Bin _ kx x l r ->
+            join kx x (filterGt cmplo l) (filterLt cmphi r);
+    else
+        case map2 of
+        Bin _ kx x l r ->
+            let
+                cmpkx !k = compare kx k;
+                lt = trim cmplo cmpkx map1;
+                (found, gt) = trimLookupLo kx cmphi map1;
+                tl = hedgeDiffWithKey f cmplo cmpkx lt l;
+                tr = hedgeDiffWithKey f cmpkx cmphi gt r;
+            in                        
+                case found of
+                Nothing -> merge tl tr;
+                Just y  ->
+                    case f kx y x of
+                    Nothing -> merge tl tr;
+                    Just z  -> join kx z tl tr;
+                    ;
+                ;
+        ;       
+
+//
+//
+//
+//{--------------------------------------------------------------------
+//  Intersection
+//--------------------------------------------------------------------}
+//-- | /O(n+m)/. Intersection of two maps. The values in the first
+//-- map are returned, i.e. (@intersection m1 m2 == intersectionWith const m1 m2@).
+//intersection :: Ord k => Map k a -> Map k a -> Map k a
+//intersection m1 m2
+//  = intersectionWithKey (\k x y -> x) m1 m2
+
+/**
+ * Returns the intersection of two maps. The values in the first map are returned.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the intersection of the two maps.
+ */
+intersection :: Ord k => Map k a -> Map k b -> Map k a;
+public intersection !map1 !map2 = intersectionWithKey (\k x y -> x) map1 map2;
+
+//
+//-- | /O(n+m)/. Intersection with a combining function.
+//intersectionWith :: Ord k => (a -> a -> a) -> Map k a -> Map k a -> Map k a
+//intersectionWith f !m1 !m2
+//  = intersectionWithKey (\k x y -> f x y) m1 m2
+
+/**
+ * Returns the intersection of two maps, with a combining function.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg f the combining function.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the intersection of the two maps.
+ */
+intersectionWith :: Ord k => (a -> b -> c) -> Map k a -> Map k b -> Map k c;
+public intersectionWith f !map1 !map2 = intersectionWithKey (\k x y -> f x y) map1 map2;
+
+//
+//-- | /O(n+m)/. Intersection with a combining function.
+//intersectionWithKey :: Ord k => (k -> a -> a -> a) -> Map k a -> Map k a -> Map k a
+//intersectionWithKey f Tip t = Tip
+//intersectionWithKey f t Tip = Tip
+//intersectionWithKey f t1 t2  -- intersection is more efficient on (bigset `intersection` smallset)
+//  | size t1 >= size t2  = intersectWithKey f t1 t2
+//  | otherwise           = intersectWithKey flipf t2 t1
+//  where
+//    flipf k x y   = f k y x
+
+/**
+ * Returns the intersection of two maps, with a combining function.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg f the combining function.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return the intersection of the two maps.
+ */
+intersectionWithKey :: Ord k => (k -> a -> b -> c) -> Map k a -> Map k b -> Map k c;
+public intersectionWithKey f !map1 !map2 =
+    if (isEmpty map1 || isEmpty map2) then
+        Tip
+    else if (size map1 >= size map2) then //intersection is more efficient on (bigset `intersection` smallset)
+        intersectWithKey f map1 map2
+    else
+        let
+            flipf k x y   = f k y x;
+        in
+            intersectWithKey flipf map2 map1;
+
+//
+//intersectWithKey f Tip t = Tip
+//intersectWithKey f t Tip = Tip
+//intersectWithKey f t (Bin _ kx x l r)
+//  = case found of
+//      Nothing -> merge tl tr
+//      Just y  -> join kx (f kx y x) tl tr
+//  where
+//    (found,lt,gt) = splitLookup kx t
+//    tl            = intersectWithKey f lt l
+//    tr            = intersectWithKey f gt r
+
+intersectWithKey :: Ord k => (k -> a -> b -> c) -> Map k a -> Map k b -> Map k c;
+private intersectWithKey f !t1 !t2 = 
+    if (isEmpty t1 || isEmpty t2) then
+        Tip
+    else        
+        case t2 of
+        Bin _ kx x l r ->
+            let
+                (found, lt, gt) = splitLookup kx t1;
+                tl = intersectWithKey f lt l;
+                tr = intersectWithKey f gt r;        
+            in
+                case found of
+                Nothing -> merge tl tr;
+                Just y  -> join kx (f kx y x) tl tr;
+            ;
+        ;
+        
+//
+//
+//
+//{--------------------------------------------------------------------
+//  Subset
+//--------------------------------------------------------------------}
+//-- | /O(n+m)/. 
+//-- This function is defined as (@subset = subsetBy (==)@).
+//subset :: (Ord k,Eq a) => Map k a -> Map k a -> Bool
+//subset m1 m2
+//  = subsetBy (==) m1 m2
+
+/**
+ * Returns whether the first map is a submap of the second map.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return {@link True@} if the first map is a submap of the second map; {@link False@} otherwise.
+ * @see isSubmapBy
+ */
+isSubmap :: (Ord k, Eq a) => Map k a -> Map k a -> Boolean;
+public isSubmap !map1 !map2 = isSubmapBy equals map1 map2;
+
+//
+//{- | /O(n+m)/. 
+// The expression (@subsetBy f t1 t2@) returns @True@ if
+// all keys in @t1@ are in tree @t2@, and when @f@ returns @True@ when
+// applied to their respective values. For example, the following 
+// expressions are all @True@.
+// 
+// > subsetBy (==) (fromList [('a',1)]) (fromList [('a',1),('b',2)])
+// > subsetBy (<=) (fromList [('a',1)]) (fromList [('a',1),('b',2)])
+// > subsetBy (==) (fromList [('a',1),('b',2)]) (fromList [('a',1),('b',2)])
+//
+// But the following are all @False@:
+// 
+// > subsetBy (==) (fromList [('a',2)]) (fromList [('a',1),('b',2)])
+// > subsetBy (<)  (fromList [('a',1)]) (fromList [('a',1),('b',2)])
+// > subsetBy (==) (fromList [('a',1),('b',2)]) (fromList [('a',1)])
+//-}
+//subsetBy :: Ord k => (a->a->Bool) -> Map k a -> Map k a -> Bool
+//subsetBy f t1 t2
+//  = (size t1 <= size t2) && (subset' f t1 t2)
+
+/**
+ * Returns whether the first map is a submap of the second map.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * The expression {@code isSubmapBy f t1 t2@} returns {@link True@} if all keys in {@code t1@} are in
+ * tree {@code t2@}, and when {@code f@} returns {@link True@} when applied to their respective values.
+ * 
+ * For example, the following expressions are all {@link True@}:
+ * {@code
+ * isSubmapBy {@link equals@}         ({@link fromList@} [('a',1)]) ({@link fromList@} [('a',1),('b',2)])
+ * isSubmapBy {@link lessThanEquals@} ({@link fromList@} [('a',1)]) ({@link fromList@} [('a',1),('b',2)])
+ * isSubmapBy {@link equals@}         ({@link fromList@} [('a',1),('b',2)]) ({@link fromList@} [('a',1),('b',2)])
+ * @}
+ *
+ * But the following are all {@link False@}:
+ * {@code
+ * isSubmapBy {@link equals@}   ({@link fromList@} [('a',2)]) ({@link fromList@} [('a',1),('b',2)])
+ * isSubmapBy {@link lessThan@} ({@link fromList@} [('a',1)]) ({@link fromList@} [('a',1),('b',2)])
+ * isSubmapBy {@link equals@}   ({@link fromList@} [('a',1),('b',2)]) ({@link fromList@} [('a',1)])
+ * @}
+ *
+ * @arg f a predicate for testing the equality of map values.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return {@link True@} if the first map is a submap of the second map; {@link False@} otherwise.
+ */
+isSubmapBy :: Ord k => (a -> b -> Boolean) -> Map k a -> Map k b -> Boolean;
+public isSubmapBy f !map1 !map2 = (size map1 <= size map2) && (isSubmapHelper f map1 map2);
+
+//
+//subset' f Tip t = True
+//subset' f t Tip = False
+//subset' f (Bin _ kx x l r) t
+//  = case found of
+//      Nothing -> False
+//      Just y  -> f x y && subset' f l lt && subset' f r gt
+//  where
+//    (found,lt,gt) = splitLookup kx t
+
+isSubmapHelper :: Ord k => (a -> b -> Boolean) -> Map k a -> Map k b -> Boolean;
+private isSubmapHelper f !t1 !t2 =
+    if (isEmpty t1) then
+        True
+    else if (isEmpty t2) then
+        False
+    else
+        case t1 of
+        Bin _ kx x l r ->
+            let
+                (found, lt, gt) = splitLookup kx t2;
+            in
+                case found of
+                Nothing -> False;
+                Just y  -> f x y && isSubmapHelper f l lt && isSubmapHelper f r gt;
+                ;
+        ;                
+
+//
+//-- | /O(n+m)/. Is this a proper subset? (ie. a subset but not equal). 
+//-- Defined as (@properSubset = properSubsetBy (==)@).
+//properSubset :: (Ord k,Eq a) => Map k a -> Map k a -> Bool
+//properSubset m1 m2
+//  = properSubsetBy (==) m1 m2
+
+/**
+ * Returns whether the first map is a proper submap of the second map (ie. a submap but not equal).
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return {@link True@} if the first map is a proper submap of the second map; {@link False@} otherwise.
+ * @see isProperSubmapBy
+ */
+isProperSubmap :: (Ord k, Eq a) => Map k a -> Map k a -> Boolean;
+public isProperSubmap !map1 !map2 = isProperSubmapBy equals map1 map2;
+
+//
+//{- | /O(n+m)/. Is this a proper subset? (ie. a subset but not equal).
+// The expression (@properSubsetBy f m1 m2@) returns @True@ when
+// @m1@ and @m2@ are not equal,
+// all keys in @m1@ are in @m2@, and when @f@ returns @True@ when
+// applied to their respective values. For example, the following 
+// expressions are all @True@.
+// 
+//  > properSubsetBy (==) (fromList [(1,1)]) (fromList [(1,1),(2,2)])
+//  > properSubsetBy (<=) (fromList [(1,1)]) (fromList [(1,1),(2,2)])
+//
+// But the following are all @False@:
+// 
+//  > properSubsetBy (==) (fromList [(1,1),(2,2)]) (fromList [(1,1),(2,2)])
+//  > properSubsetBy (==) (fromList [(1,1),(2,2)]) (fromList [(1,1)])
+//  > properSubsetBy (<)  (fromList [(1,1)])       (fromList [(1,1),(2,2)])
+//-}
+//properSubsetBy :: (Ord k,Eq a) => (a -> a -> Bool) -> Map k a -> Map k a -> Bool
+//properSubsetBy f t1 t2
+//  = (size t1 < size t2) && (subset' f t1 t2)
+
+/**
+ * Returns whether the first map is a proper submap of the second map (ie. a submap but not equal).
+ * 
+ * Complexity: O(n+m)
+ * 
+ * The expression {@code isProperSubmapBy f m1 m2@} returns {@link True@} when {@code m1@} and {@code m2@}
+ * are not equal, all keys in {@code m1@} are in {@code m2@}, and when {@code f@} returns {@link True@} when applied
+ * to their respective values.
+ * 
+ * For example, the following expressions are all {@link True@}:
+ * {@code
+ * isProperSubmapBy {@link equals@}         ({@link fromList@} [(1,1)]) ({@link fromList@} [(1,1),(2,2)])
+ * isProperSubmapBy {@link lessThanEquals@} ({@link fromList@} [(1,1)]) ({@link fromList@} [(1,1),(2,2)])
+ * @}
+ *
+ * But the following are all {@link False@}:
+ * {@code
+ * isProperSubmapBy {@link equals@}   ({@link fromList@} [(1,1),(2,2)]) ({@link fromList@} [(1,1),(2,2)])
+ * isProperSubmapBy {@link equals@}   ({@link fromList@} [(1,1),(2,2)]) ({@link fromList@} [(1,1)])
+ * isProperSubmapBy {@link lessThan@} ({@link fromList@} [(1,1)])       ({@link fromList@} [(1,1),(2,2)])
+ * @}
+ *
+ * @arg f a predicate for testing the equality of map values.
+ * @arg map1 the first map.
+ * @arg map2 the second map.
+ * @return {@link True@} if the first map is a submap of the second map; {@link False@} otherwise.
+ */
+isProperSubmapBy :: Ord k => (a -> b -> Boolean) -> Map k a -> Map k b -> Boolean;
+public isProperSubmapBy f !map1 !map2 = (size map1 < size map2) && (isSubmapHelper f map1 map2);
+
+
+//
+//{--------------------------------------------------------------------
+//  Filter and partition
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Filter all values that satisfy the predicate.
+//filter :: Ord k => (a -> Bool) -> Map k a -> Map k a
+//filter p m
+//  = filterWithKey (\k x -> p x) m
+
+/**
+ * Filters all values that satisfy the predicate.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg predicate the predicate for testing the values.
+ * @arg map the map.
+ * @return the map containing only those key-value pairs whose values satisfy the predicate.
+ */
+//filter :: Ord k => (a -> Boolean) -> Map k a -> Map k a;
+filter :: (a -> Boolean) -> Map k a -> Map k a;
+public filter predicate !map = filterWithKey (\k x -> predicate x) map;
+
+//
+//-- | /O(n)/. Filter all keys\values that satisfy the predicate.
+//filterWithKey :: Ord k => (k -> a -> Bool) -> Map k a -> Map k a
+//filterWithKey p Tip = Tip
+//filterWithKey p (Bin _ kx x l r)
+//  | p kx x    = join kx x (filterWithKey p l) (filterWithKey p r)
+//  | otherwise = merge (filterWithKey p l) (filterWithKey p r)
+
+/**
+ * Filters all keys/values that satisfy the predicate.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg p the predicate for testing the keys and values.
+ * @arg m the map.
+ * @return the map containing only those key-value pairs that satisfy the predicate.
+ */
+//filterWithKey :: Ord k => (k -> a -> Boolean) -> Map k a -> Map k a;
+filterWithKey :: (k -> a -> Boolean) -> Map k a -> Map k a;
+public filterWithKey p !m = 
+    case m of
+    Tip -> Tip;
+    Bin _ kx x l r ->
+        if (p kx x) then
+            join kx x (filterWithKey p l) (filterWithKey p r)
+        else
+            merge (filterWithKey p l) (filterWithKey p r);
+    ;    
+    
+//
+//
+//-- | /O(n)/. partition the map according to a predicate. The first
+//-- map contains all elements that satisfy the predicate, the second all
+//-- elements that fail the predicate. See also 'split'.
+//partition :: Ord k => (a -> Bool) -> Map k a -> (Map k a,Map k a)
+//partition p m
+//  = partitionWithKey (\k x -> p x) m
+
+/**
+ * Partitions the map according to a predicate. The first map contains all
+ * elements that satisfy the predicate, the second all elements that fail the
+ * predicate.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg p the predicate for testing the values.
+ * @arg m the map.
+ * @return a pair of maps. The first map contains all elements that satisfy the
+ *         predicate, the second all elements that fail the predicate.
+ * 
+ * @see split
+ */
+//partition :: Ord k => (a -> Boolean) -> Map k a -> (Map k a, Map k a);
+partition :: (a -> Boolean) -> Map k a -> (Map k a, Map k a);
+public partition p !m = partitionWithKey (\k x -> p x) m;
+
+//-- | /O(n)/. partition the map according to a predicate. The first
+//-- map contains all elements that satisfy the predicate, the second all
+//-- elements that fail the predicate. See also 'split'.
+//partitionWithKey :: Ord k => (k -> a -> Bool) -> Map k a -> (Map k a,Map k a)
+//partitionWithKey p Tip = (Tip,Tip)
+//partitionWithKey p (Bin _ kx x l r)
+//  | p kx x    = (join kx x l1 r1,merge l2 r2)
+//  | otherwise = (merge l1 r1,join kx x l2 r2)
+//  where
+//    (l1,l2) = partitionWithKey p l
+//    (r1,r2) = partitionWithKey p r
+
+/**
+ * Partitions the map according to a predicate. The first map contains all
+ * elements that satisfy the predicate, the second all elements that fail the
+ * predicate.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg p the predicate for testing the keys and values.
+ * @arg m the map.
+ * @return a pair of maps. The first map contains all elements that satisfy the
+ *         predicate, the second all elements that fail the predicate.
+ * 
+ * @see split
+ */
+//partitionWithKey :: Ord k => (k -> a -> Boolean) -> Map k a -> (Map k a, Map k a);
+partitionWithKey :: (k -> a -> Boolean) -> Map k a -> (Map k a, Map k a);
+public partitionWithKey p !m = 
+    case m of
+    Tip -> (Tip,Tip);
+    Bin _ kx x l r ->
+        let
+            (l1, l2) = partitionWithKey p l;
+            (r1, r2) = partitionWithKey p r;
+        in
+            if (p kx x) then
+                (join kx x l1 r1, merge l2 r2)
+            else
+                (merge l1 r1,join kx x l2 r2);
+    ;    
+
+//
+//
+//{--------------------------------------------------------------------
+//  Mapping
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Map a function over all values in the map.
+//map :: (a -> b) -> Map k a -> Map k b
+//map f m
+//  = mapWithKey (\k x -> f x) m
+
+/**
+ * Maps a function over all values in the map.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the function to be mapped over the values in the map.
+ * @arg m the map.
+ * @return the map containing the mapped values.
+ */
+map :: (a -> b) -> Map k a -> Map k b;
+public map f !m = mapWithKey (\k x -> f x) m;
+
+//
+//-- | /O(n)/. Map a function over all values in the map.
+//mapWithKey :: (k -> a -> b) -> Map k a -> Map k b
+//mapWithKey f Tip = Tip
+//mapWithKey f (Bin sx kx x l r) 
+//  = Bin sx kx (f kx x) (mapWithKey f l) (mapWithKey f r)
+
+/**
+ * Maps a function over all values in the map.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the function to be mapped over the keys and values in the map.
+ * @arg m the map.
+ * @return the map containing the mapped values.
+ */
+mapWithKey :: (k -> a -> b) -> Map k a -> Map k b;
+public mapWithKey f !m =
+    case m of
+    Tip -> Tip;
+    Bin sx kx x l r ->
+        Bin sx kx (f kx x) (mapWithKey f l) (mapWithKey f r);
+    ;
+
+//
+//-- | /O(n)/. The function @mapAccum@ threads an accumulating
+//-- argument through the map in an unspecified order.
+//mapAccum :: (a -> b -> (a,c)) -> a -> Map k b -> (a,Map k c)
+//mapAccum f a m
+//  = mapAccumWithKey (\a k x -> f a x) a m
+
+/**
+ * Threads an accumulating argument through the map in an unspecified order. (= ascending pre-order)
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the function to be mapped over the values in the map.
+ * @arg a the accumulator to be thread through the map.
+ * @arg m the map.
+ * @return the map containing the mapped values.
+ */
+mapAccum :: (a -> b -> (a, c)) -> a -> Map k b -> (a, Map k c);
+public mapAccum f a !m = mapAccumWithKey (\a k x -> f a x) a m;
+
+//
+//-- | /O(n)/. The function @mapAccumWithKey@ threads an accumulating
+//-- argument through the map in unspecified order. (= ascending pre-order)
+//mapAccumWithKey :: (a -> k -> b -> (a,c)) -> a -> Map k b -> (a,Map k c)
+//mapAccumWithKey f a t
+//  = mapAccumL f a t
+
+/**
+ * Threads an accumulating argument through the map in an unspecified order. (= ascending pre-order)
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the function to be mapped over the keys and values in the map.
+ * @arg a the accumulator to be thread through the map.
+ * @arg t the map.
+ * @return the map containing the mapped values.
+ */
+mapAccumWithKey :: (a -> k -> b -> (a, c)) -> a -> Map k b -> (a, Map k c);
+public mapAccumWithKey f a !t = mapAccumL f a t;
+
+//
+//-- | /O(n)/. The function @mapAccumL@ threads an accumulating
+//-- argument throught the map in (ascending) pre-order.
+//mapAccumL :: (a -> k -> b -> (a,c)) -> a -> Map k b -> (a,Map k c)
+//mapAccumL f a t
+//  = case t of
+//      Tip -> (a,Tip)
+//      Bin sx kx x l r
+//          -> let (a1,l') = mapAccumL f a l
+//                 (a2,x') = f a1 kx x
+//                 (a3,r') = mapAccumL f a2 r
+//             in (a3,Bin sx kx x' l' r')
+
+mapAccumL :: (a -> k -> b -> (a, c)) -> a -> Map k b -> (a, Map k c); 
+private mapAccumL f a !t =
+    case t of
+    Tip -> (a,Tip);
+    Bin sx kx x l r ->
+        let
+            (a1, lNew) = mapAccumL f a l;
+            (a2, xNew) = f a1 kx x;
+            (a3, rNew) = mapAccumL f a2 r;
+        in
+            (a3,Bin sx kx xNew lNew rNew);
+    ;
+
+//
+//-- | /O(n)/. The function @mapAccumR@ threads an accumulating
+//-- argument throught the map in (descending) post-order.
+//mapAccumR :: (a -> k -> b -> (a,c)) -> a -> Map k b -> (a,Map k c)
+//mapAccumR f a t
+//  = case t of
+//      Tip -> (a,Tip)
+//      Bin sx kx x l r 
+//          -> let (a1,r') = mapAccumR f a r
+//                 (a2,x') = f a1 kx x
+//                 (a3,l') = mapAccumR f a2 l
+//             in (a3,Bin sx kx x' l' r')
+//
+
+//-- | /O(n*log n)/. 
+//-- @mapKeys f s@ is the map obtained by applying @f@ to each key of @s@.
+//-- 
+//-- It's worth noting that the size of the result may be smaller if,
+//-- for some @(x,y)@, @x \/= y && f x == f y@
+//
+//mapKeys :: Ord k2 => (k1->k2) -> Map k1 a -> Map k2 a
+//mapKeys = mapKeysWith (\x y->x)
+
+/**
+ * {@code mapKeys f map@} is the map obtained by applying {@code f@} to each key of {@code map@}.
+ * 
+ * Complexity: O(n*log n)
+ * 
+ * The size of the result may be smaller if {@code f@} maps two or more distinct keys to
+ * the same new key. In this case the value at the smallest of these keys is
+ * retained.
+ * 
+ * @arg f the function to be mapped over the keys in the map.
+ * @arg map the map.
+ * @return the map containing the mapped keys.
+ */
+mapKeys :: Ord k2 => (k1 -> k2) -> Map k1 a -> Map k2 a;
+public mapKeys = mapKeysWith Prelude.const;
+
+//
+//-- | /O(n*log n)/. 
+//-- @mapKeysWith c f s@ is the map obtained by applying @f@ to each key of @s@.
+//-- 
+//-- It's worth noting that the size of the result may be smaller if,
+//-- for some @(x,y)@, @x \/= y && f x == f y@
+//-- In such a case, the values will be combined using @c@
+//
+//mapKeysWith :: Ord k2 => (a -> a -> a) -> (k1->k2) -> Map k1 a -> Map k2 a
+//mapKeysWith c f = fromListWith c . List.map fFirst . toList
+//    where fFirst (x,y) = (f x, y)
+
+/**
+ * {@code mapKeysWith c f s@} is the map obtained by applying {@code f@} to each key of {@code s@}.
+ * 
+ * Complexity: O(n*log n)
+ * 
+ * The size of the result may be smaller if {@code f@} maps two or more distinct keys to
+ * the same new key. In this case the associated values will be combined using
+ * {@code c@}.
+ * 
+ * @arg c the combining function.
+ * @arg f the function to be mapped over the keys in the map.
+ * @arg m the map.
+ * @return the map containing the mapped keys.
+ */
+mapKeysWith :: Ord k2 => (a -> a -> a) -> (k1 -> k2) -> Map k1 a -> Map k2 a;
+public mapKeysWith c f m = fromListWith c (List.map (\x -> (f (fst x), snd x)) (toList m));
+
+//
+//
+//-- | /O(n)/. The 
+//--
+//-- @mapMonotonic f s == 'map' f s@, but works only when @f@ is monotonic.
+//-- /The precondition is not checked./
+//-- Semi-formally, we have:
+//-- 
+//-- > and [x < y ==> f x < f y | x <- ls, y <- ls] 
+//-- >                     ==> mapMonotonic f s == map f s
+//-- >     where ls = keys s
+//
+//mapKeysMonotonic :: (k1->k2) -> Map k1 a -> Map k2 a
+//mapKeysMonotonic f Tip = Tip
+//mapKeysMonotonic f (Bin sz k x l r) =
+//    Bin sz (f k) x (mapKeysMonotonic f l) (mapKeysMonotonic f r) 
+
+
+
+
+//{--------------------------------------------------------------------
+//  Folds  
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Fold the map in an unspecified order. (= descending post-order).
+//fold :: (a -> b -> b) -> b -> Map k a -> b
+//fold f z m
+//  = foldWithKey (\k x z -> f x z) z m
+
+/**
+ * Folds over the values in the map in an unspecified order. (= descending post-order)
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the function to be folded over the values in the map.
+ * @arg z 
+ * @arg m the map.
+ * @return the summary value obtained from the fold.
+ */
+fold :: (a -> b -> b) -> b -> Map k a -> b;
+public fold f z !m = foldWithKey (\k x z -> f x z) z m;
+
+//
+//-- | /O(n)/. Fold the map in an unspecified order. (= descending post-order).
+//foldWithKey :: (k -> a -> b -> b) -> b -> Map k a -> b
+//foldWithKey f z t
+//  = foldR f z t
+
+/**
+ * Folds over the keys and values in the map in an unspecified order. (= descending post-order)
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the function to be folded over the keys and values in the map.
+ * @arg z 
+ * @arg t the map.
+ * @return the summary value obtained from the fold.
+ */
+foldWithKey :: (k -> a -> b -> b) -> b -> Map k a -> b;
+public foldWithKey f z !t = foldR f z t;
+
+//
+//-- | /O(n)/. In-order fold.
+//foldI :: (k -> a -> b -> b -> b) -> b -> Map k a -> b 
+//foldI f z Tip               = z
+//foldI f z (Bin _ kx x l r)  = f kx x (foldI f z l) (foldI f z r)
+
+foldI :: (k -> a -> b -> b -> b) -> b -> Map k a -> b;
+private foldI f z !m =
+    case m of
+    Tip -> z;
+    Bin _ kx x l r -> f kx x (foldI f z l) (foldI f z r);
+    ;
+
+//
+//-- | /O(n)/. Post-order fold.
+//foldR :: (k -> a -> b -> b) -> b -> Map k a -> b
+//foldR f z Tip              = z
+//foldR f z (Bin _ kx x l r) = foldR f (f kx x (foldR f z r)) l
+
+foldR :: (k -> a -> b -> b) -> b -> Map k a -> b;
+private foldR f z !m =
+    case m of
+    Tip -> z;
+    Bin _ kx x l r -> foldR f (f kx x (foldR f z r)) l;
+    ;
+
+//
+//-- | /O(n)/. Pre-order fold.
+//foldL :: (b -> k -> a -> b) -> b -> Map k a -> b
+//foldL f z Tip              = z
+//foldL f z (Bin _ kx x l r) = foldL f (f (foldL f z l) kx x) r
+
+foldL :: (b -> k -> a -> b) -> b -> Map k a -> b;
+private foldL f z !m =
+    case m of
+    Tip -> z;
+    Bin _ kx x l r -> foldL f (f (foldL f z l) kx x) r;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  List variations 
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Return all elements of the map.
+//elems :: Map k a -> [a]
+//elems m
+//  = [x | (k,x) <- assocs m]
+
+/**
+ * Returns all elements of the map.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg m the map.
+ * @return a list of all elements of the map.
+ */
+elems :: Map k a -> [a];
+public elems !m = List.map snd (toList m);
+
+//
+//-- | /O(n)/. Return all keys of the map.
+//keys  :: Map k a -> [k]
+//keys m
+//  = [k | (k,x) <- assocs m]
+
+/**
+ * Returns all keys of the map.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg m the map.
+ * @return a list of all keys of the map.
+ */
+keys  :: Map k a -> [k];
+public keys !m = List.map fst (toList m);
+
+//-- | /O(n)/. The set of all keys of the map.
+//keysSet :: Map k a -> Set.Set k
+//keysSet m = Set.fromDistinctAscList (keys m)
+
+/**
+ * Returns a set of all keys of the map.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg m the map.
+ * @return a {@code Set@} of all keys of the map.
+ * @see typeConstructor = Set.Set
+ */
+keySet :: Map k a -> Set.Set k;
+public keySet m = Set.fromDistinctAscList (keys m);
+
+
+//
+//-- | /O(n)/. Return all key\/value pairs in the map.
+//assocs :: Map k a -> [(k,a)]
+//assocs m
+//  = toList m
+
+/**
+ * Returns an association list of all key-value pairs in the map.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg m the map.
+ * @return an association list of all key-value pairs in the map.
+ */
+assocs :: Map k a -> [(k, a)];
+public assocs !m = toList m;
+
+//
+//{--------------------------------------------------------------------
+//  Lists 
+//  use [foldlStrict] to reduce demand on the control-stack
+//--------------------------------------------------------------------}
+//-- | /O(n*log n)/. Build a map from a list of key\/value pairs. See also 'fromAscList'.
+//fromList :: Ord k => [(k,a)] -> Map k a 
+//fromList xs       
+//  = foldlStrict ins empty xs
+//  where
+//    ins t (k,x) = insert k x t
+
+/**
+ * Builds a map from a list of key-value pairs.
+ * 
+ * Complexity: O(n*log n)
+ * 
+ * @arg xs the list of key-value pairs.
+ * @return a map containing the key-value entries.
+ * @see fromAscList
+ */
+fromList :: Ord k => [(k,a)] -> Map k a;
+public fromList !xs =
+    let
+        ins :: Ord k => Map k a -> (k, a) -> Map k a;
+        ins t !p =
+            case p of
+            (k, x) -> insert k x t;
+            ;
+    in
+        foldLeftStrict ins empty xs;    
+
+//
+//-- | /O(n*log n)/. Build a map from a list of key\/value pairs with a combining function. See also 'fromAscListWith'.
+//fromListWith :: Ord k => (a -> a -> a) -> [(k,a)] -> Map k a 
+//fromListWith f xs
+//  = fromListWithKey (\k x y -> f x y) xs
+
+/**
+ * Builds a map from a list of key-value pairs with a combining function.
+ * 
+ * Complexity: O(n*log n)
+ * 
+ * @arg f the combining function.
+ * @arg xs the list of key-value pairs.
+ * @return a map containing the key-value entries.
+ * @see fromAscListWith
+ */
+fromListWith :: Ord k => (a -> a -> a) -> [(k,a)] -> Map k a;
+public fromListWith f !xs =
+    fromListWithKey (\k x y -> f x y) xs;
+
+//
+//-- | /O(n*log n)/. Build a map from a list of key\/value pairs with a combining function. See also 'fromAscListWithKey'.
+//fromListWithKey :: Ord k => (k -> a -> a -> a) -> [(k,a)] -> Map k a 
+//fromListWithKey f xs 
+//  = foldlStrict ins empty xs
+//  where
+//    ins t (k,x) = insertWithKey f k x t
+
+/**
+ * Builds a map from a list of key-value pairs with a combining function.
+ * 
+ * Complexity: O(n*log n)
+ * 
+ * @arg f the combining function.
+ * @arg xs the list of key-value pairs.
+ * @return a map containing the key-value entries.
+ * @see fromAscListWithKey
+ */
+fromListWithKey :: Ord k => (k -> a -> a -> a) -> [(k,a)] -> Map k a;
+public fromListWithKey f !xs =
+    let
+        //ins :: Ord k => Map k a -> (k, a) -> Map k a;
+        ins t !p =
+            case p of
+            (k, x) -> insertWithKey f k x t;
+            ;
+    in
+        foldLeftStrict ins empty xs;
+
+//
+//-- | /O(n)/. Convert to a list of key\/value pairs with the keys in ascending order.
+//toList :: Map k a -> [(k,a)]
+//toList t      = toAscList t
+
+/**
+ * Converts to a list of key-value pairs with the keys in ascending order.
+ * 
+ * Complexity: O(n)
+ *
+ * @arg m the map.
+ * @return a list of key-value pairs with the keys in ascending order.
+ */
+toList :: Map k a -> [(k, a)];
+public toList !m = toAscList m;
+
+//
+//-- | /O(n)/. Convert to an ascending list.
+//toAscList :: Map k a -> [(k,a)]
+//toAscList t   = foldR (\k x xs -> (k,x):xs) [] t
+
+/**
+ * Converts to a list of key-value pairs with the keys in ascending order.
+ * 
+ * Complexity: O(n)
+ *
+ * @arg t the map.
+ * @return a list of key-value pairs with the keys in ascending order.
+ */
+toAscList :: Map k a -> [(k, a)];
+public toAscList !t = foldR (\k x xs -> (k, x) : xs) [] t;
+
+//
+//-- | /O(n)/. 
+//toDescList :: Map k a -> [(k,a)]
+//toDescList m = foldL (\xs k x -> (k,x):xs) [] m
+
+/**
+ * Converts to a list of key-value pairs with the keys in descending order.
+ * 
+ * Complexity: O(n)
+ *
+ * @arg m the map.
+ * @return a list of key-value pairs with the keys in descending order.
+ */
+toDescList :: Map k a -> [(k, a)];
+public toDescList !m = foldL (\xs k x -> (k, x) : xs) [] m;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Building trees from ascending/descending lists can be done in linear time.
+//  
+//  Note that if [xs] is ascending that: 
+//    fromAscList xs       == fromList xs
+//    fromAscListWith f xs == fromListWith f xs
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Build a map from an ascending list in linear time.
+//-- /The precondition (input list is ascending) is not checked./
+//fromAscList :: Eq k => [(k,a)] -> Map k a 
+//fromAscList xs
+//  = fromAscListWithKey (\k x y -> x) xs
+
+/**
+ * Builds a map from an ascending list in linear time. The precondition (input
+ * list is ascending) is not checked.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg xs an ascending list of key-value pairs.
+ * @return a map containing the key-value entries.
+ */
+fromAscList :: Eq k => [(k, a)] -> Map k a;
+public fromAscList !xs = fromAscListWithKey (\k x y -> x) xs;
+
+//
+//-- | /O(n)/. Build a map from an ascending list in linear time with a combining function for equal keys.
+//-- /The precondition (input list is ascending) is not checked./
+//fromAscListWith :: Eq k => (a -> a -> a) -> [(k,a)] -> Map k a 
+//fromAscListWith f xs
+//  = fromAscListWithKey (\k x y -> f x y) xs
+
+/**
+ * Builds a map from an ascending list in linear time with a combining function
+ * for equal keys. The precondition (input list is ascending) is not checked.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the combining function.
+ * @arg xs an ascending list of key-value pairs.
+ * @return a map containing the key-value entries.
+ */
+fromAscListWith :: Eq k => (a -> a -> a) -> [(k,a)] -> Map k a;
+public fromAscListWith f !xs = fromAscListWithKey (\k x y -> f x y) xs;
+
+//
+//-- | /O(n)/. Build a map from an ascending list in linear time with a combining function for equal keys
+//-- /The precondition (input list is ascending) is not checked./
+//fromAscListWithKey :: Eq k => (k -> a -> a -> a) -> [(k,a)] -> Map k a 
+//fromAscListWithKey f xs
+//  = fromDistinctAscList (combineEq f xs)
+//  where
+//  -- [combineEq f xs] combines equal elements with function [f] in an ordered list [xs]
+//  combineEq f xs
+//    = case xs of
+//        []     -> []
+//        [x]    -> [x]
+//        (x:xx) -> combineEq' x xx
+//
+//  combineEq' z [] = [z]
+//  combineEq' z@(kz,zz) (x@(kx,xx):xs)
+//    | kx==kz    = let yy = f kx xx zz in combineEq' (kx,yy) xs
+//    | otherwise = z:combineEq' x xs
+//
+
+/**
+ * Builds a map from an ascending list in linear time with a combining function
+ * for equal keys. The precondition (input list is ascending) is not checked.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the combining function.
+ * @arg xs an ascending list of key-value pairs.
+ * @return a map containing the key-value entries.
+ */
+fromAscListWithKey :: Eq k => (k -> a -> a -> a) -> [(k, a)] -> Map k a;
+public fromAscListWithKey f !xs = 
+    let
+        //[combineEq f xs] combines equal elements with function [f] in an ordered list [xs]
+        combineEq f xs =
+            case xs of
+            [] -> [];
+            xsHead : xsTail ->
+                if (Prelude.isEmpty xsTail) then
+                    xs
+                else
+                    combineEq2 xsHead xsTail;
+            ;
+                    
+        combineEq2 z list =
+            if (Prelude.isEmpty list) then
+                [z]
+            else
+                let
+                    (kz, zz) = z;
+                    x:xs = list;
+                    (kx, xx) = x;
+                in
+                    if (kx == kz) then
+                        //todoBI should xx and zz be interchanged here?
+                        combineEq2 (kx, f kx xx zz) xs
+                    else
+                        z : combineEq2 x xs;
+    in
+        fromDistinctAscList (combineEq f xs);
+
+/*
+implementation note: benchmarking using 
+size (fromDistinctAscList2 (mapList 200000))
+shows that the continuation based implementation is approximately 39% slower than the direct implementation. 
+Stack usage is not really an issue, because the maximum depth of the stack is logarithmic in the size of the
+Map due to the fact that the Map is a balanced binary tree.
+
+//
+//-- | /O(n)/. Build a map from an ascending list of distinct elements in linear time.
+//-- /The precondition is not checked./
+//fromDistinctAscList :: [(k,a)] -> Map k a 
+//fromDistinctAscList xs
+//  = build const (length xs) xs
+//  where
+//    -- 1) use continutations so that we use heap space instead of stack space.
+//    -- 2) special case for n==5 to build bushier trees. 
+//    build c 0 xs   = c Tip xs 
+//    build c 5 xs   = case xs of
+//                       ((k1,x1):(k2,x2):(k3,x3):(k4,x4):(k5,x5):xx) 
+//                            -> c (bin k4 x4 (bin k2 x2 (single k1 x1) (single k3 x3)) (single k5 x5)) xx
+//    build c n xs   = seq nr $ build (buildR nr c) nl xs
+//                   where
+//                     nl = n `div` 2
+//                     nr = n - nl - 1
+//
+//    buildR n c l ((k,x):ys) = build (buildB l k x c) n ys
+//    buildB l k x c r zs     = c (bin k x l r) zs
+
+fromDistinctAscList :: [(k, a)] -> Map k a;
+public fromDistinctAscList !xs = build const (length xs) xs;
+
+// 1) use continutations so that we use heap space instead of stack space.
+// 2) special case for n==5 to build bushier trees. 
+build :: (Map a b -> [(a, b)] -> Map a b) -> Int -> [(a, b)] -> Map a b;
+private build c !n xs  =
+    if (n == 0) then
+         c Tip xs
+    else if (n == 5) then
+        case xs of
+        y1 : list2 ->
+        case list2 of
+        y2 : list3 ->
+        case list3 of
+        y3 : list4 ->
+        case list4 of
+        y4 : list5 ->
+        case list5 of
+        y5 : list6 ->
+            //c (bin (fst y4) (snd y4) (bin (fst y2) (snd y2) (single (fst y1) (snd y1)) (single (fst y3) (snd y3))) (single (fst y5) (snd y5))) list6;;;;;
+            c (Bin 5 (fst y4) (snd y4) (Bin 3 (fst y2) (snd y2) (single (fst y1) (snd y1)) (single (fst y3) (snd y3))) (single (fst y5) (snd y5))) list6;;;;;                                          
+    else
+        let
+            nl = n / 2;
+            nr = n - nl - 1;
+        in
+            seq nr (build (buildR nr c) nl xs);
+
+buildR :: Int -> (Map a b -> [(a, b)] -> Map a b) -> Map a b -> [(a, b)] -> Map a b;
+private buildR n c l !xs =
+    case xs of
+    y : ys->
+        build (buildB l (fst y) (snd y) c) n ys;
+    ;        
+
+buildB :: Map a b -> a -> b -> (Map a b -> [(a, b)] -> Map a b) -> Map a b -> [(a, b)] -> Map a b;
+private buildB l !k x c r zs = c (bin k x l r) zs;
+*/
+
+/**
+ * Builds a map from an ascending list of distinct elements in linear time.
+ * The precondition is not checked.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg xs an ascending list of distinct key-value pairs.
+ * @return a map containing the key-value entries.
+ */
+fromDistinctAscList :: [(k, a)] -> Map k a;
+public fromDistinctAscList !xs = directBuild (length xs) xs;
+
+//an alternative direct implementation of build that is not in the continuation passing style.
+directBuild :: Int -> [(k, a)] -> Map k a;
+private directBuild !n list =
+    case n of
+    0 -> Tip;
+    5 ->
+        //special case for n==5 to build bushier trees. 
+        case list of
+        y1 : list2 ->
+        case list2 of
+        y2 : list3 ->
+        case list3 of
+        y3 : list4 ->
+        case list4 of
+        y4 : list5 ->
+        case list5 of
+        y5 : _ ->
+        case y1 of
+        (y1Key, y1Value) ->
+        case y2 of
+        (y2Key, y2Value) ->
+        case y3 of
+        (y3Key, y3Value) ->
+        case y4 of
+        (y4Key, y4Value) ->
+        case y5 of
+        (y5Key, y5Value) ->            
+            Bin 5 y4Key y4Value (Bin 3 y2Key y2Value (single y1Key y1Value) (single y3Key y3Value)) (single y5Key y5Value);;;;;;;;;;;
+    _ ->
+        let
+            nLeft :: Int;
+            nLeft = n / 2;
+            
+            nRight :: Int;
+            nRight = n - nLeft - 1;
+        in            
+            case (List.drop nLeft list) of
+            root : rightList ->    
+            case root of
+            (rootKey, rootValue) ->
+                seq nRight (Bin n rootKey rootValue (directBuild nLeft list) (directBuild nRight rightList));;            
+            ;         
+    ;
+                                          
+
+//                      
+//
+//
+//{--------------------------------------------------------------------
+//  Utility functions that return sub-ranges of the original
+//  tree. Some functions take a comparison function as argument to
+//  allow comparisons against infinite values. A function [cmplo k]
+//  should be read as [compare lo k].
+//
+//  [trim cmplo cmphi t]  A tree that is either empty or where [cmplo k == LT]
+//                        and [cmphi k == GT] for the key [k] of the root.
+//  [filterGt cmp t]      A tree where for all keys [k]. [cmp k == LT]
+//  [filterLt cmp t]      A tree where for all keys [k]. [cmp k == GT]
+//
+//  [split k t]           Returns two trees [l] and [r] where all keys
+//                        in [l] are <[k] and all keys in [r] are >[k].
+//  [splitLookup k t]     Just like [split] but also returns whether [k]
+//                        was found in the tree.
+//--------------------------------------------------------------------}
+//
+//{--------------------------------------------------------------------
+//  [trim lo hi t] trims away all subtrees that surely contain no
+//  values between the range [lo] to [hi]. The returned tree is either
+//  empty or the key of the root is between @lo@ and @hi@.
+//--------------------------------------------------------------------}
+//trim :: (k -> Ordering) -> (k -> Ordering) -> Map k a -> Map k a
+//trim cmplo cmphi Tip = Tip
+//trim cmplo cmphi t@(Bin sx kx x l r)
+//  = case cmplo kx of
+//      LT -> case cmphi kx of
+//              GT -> t
+//              le -> trim cmplo cmphi l
+//      ge -> trim cmplo cmphi r
+
+trim :: (k -> Ordering) -> (k -> Ordering) -> Map k a -> Map k a;
+private trim cmplo cmphi !t =
+    case t of
+    Tip -> Tip;
+    Bin {key, leftMap, rightMap} ->
+        case cmplo key of
+        LT ->
+            case cmphi key of
+            GT -> t;
+            _  -> trim cmplo cmphi leftMap;
+            ;
+        _  -> trim cmplo cmphi rightMap;
+        ;
+    ;
+
+//              
+//trimLookupLo :: Ord k => k -> (k -> Ordering) -> Map k a -> (Maybe a, Map k a)
+//trimLookupLo lo cmphi Tip = (Nothing,Tip)
+//trimLookupLo lo cmphi t@(Bin sx kx x l r)
+//  = case compare lo kx of
+//      LT -> case cmphi kx of
+//              GT -> (lookup lo t, t)
+//              le -> trimLookupLo lo cmphi l
+//      GT -> trimLookupLo lo cmphi r
+//      EQ -> (Just x,trim (compare lo) cmphi r)
+
+trimLookupLo :: Ord k => k -> (k -> Ordering) -> Map k a -> (Maybe a, Map k a);
+private trimLookupLo lo cmphi !t =
+    case t of
+    Tip -> (Nothing, Tip);
+	Bin sx kx x l r ->	
+        case compare lo kx of
+        LT ->
+            case cmphi kx of
+            GT -> (lookup lo t, t);
+            _  -> trimLookupLo lo cmphi l;
+            ;
+        GT -> trimLookupLo lo cmphi r;
+        EQ -> (Just x,trim (compare lo) cmphi r);
+        ;
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  [filterGt k t] filter all keys >[k] from tree [t]
+//  [filterLt k t] filter all keys <[k] from tree [t]
+//--------------------------------------------------------------------}
+//filterGt :: Ord k => (k -> Ordering) -> Map k a -> Map k a
+//filterGt cmp Tip = Tip
+//filterGt cmp (Bin sx kx x l r)
+//  = case cmp kx of
+//      LT -> join kx x (filterGt cmp l) r
+//      GT -> filterGt cmp r
+//      EQ -> r
+
+//filterGt :: Ord k => (k -> Ordering) -> Map k a -> Map k a;
+filterGt :: (k -> Ordering) -> Map k a -> Map k a;
+private filterGt cmp !m =
+    case m of
+    Tip -> Tip;
+	Bin sx kx x l r ->	
+        case cmp kx of
+        LT -> join kx x (filterGt cmp l) r;
+        GT -> filterGt cmp r;
+        EQ -> r;
+        ;
+    ;
+
+//      
+//filterLt :: Ord k => (k -> Ordering) -> Map k a -> Map k a
+//filterLt cmp Tip = Tip
+//filterLt cmp (Bin sx kx x l r)
+//  = case cmp kx of
+//      LT -> filterLt cmp l
+//      GT -> join kx x l (filterLt cmp r)
+//      EQ -> l
+
+//filterLt :: Ord k => (k -> Ordering) -> Map k a -> Map k a;
+filterLt :: (k -> Ordering) -> Map k a -> Map k a;
+private filterLt cmp !m =
+    case m of
+    Tip -> Tip;
+	Bin sx kx x l r ->
+        case cmp kx of
+        LT -> filterLt cmp l;
+        GT -> join kx x l (filterLt cmp r);
+        EQ -> l;
+        ;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Split
+//--------------------------------------------------------------------}
+//-- | /O(log n)/. The expression (@split k map@) is a pair @(map1,map2)@ where
+//-- the keys in @map1@ are smaller than @k@ and the keys in @map2@ larger than @k@.
+//-- Any key equal to @k@ is found in neither @map1@ nor @map2@.
+//split :: Ord k => k -> Map k a -> (Map k a,Map k a)
+//split k Tip = (Tip,Tip)
+//split k (Bin sx kx x l r)
+//  = case compare k kx of
+//      LT -> let (lt,gt) = split k l in (lt,join kx x gt r)
+//      GT -> let (lt,gt) = split k r in (join kx x l lt,gt)
+//      EQ -> (l,r)
+
+/**
+ * {@code split k map@} returns a pair {@code (map1,map2)@} where the keys in {@code map1@} are smaller
+ * than {@code k@} and the keys in {@code map2@} larger than {@code k@}. Any key equal to {@code k@} is found in
+ * neither {@code map1@} nor {@code map2@}.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg k the key.
+ * @arg m the map.
+ * @return a pair {@code (map1,map2)@} where the keys in {@code map1@} are smaller than {@code k@} and the
+ *         keys in {@code map2@} larger than {@code k@}.
+ */
+split :: Ord k => k -> Map k a -> (Map k a, Map k a);
+public split k !m =
+    case m of
+    Tip -> (Tip, Tip);
+	Bin sx kx x l r ->
+        case (compare k kx) of
+        LT ->
+            let
+                (lt, gt) = split k l;
+            in
+                (lt, join kx x gt r);
+        GT ->
+            let
+                (lt, gt) = split k r;
+            in
+                (join kx x l lt, gt);
+        EQ -> (l, r);
+        ;
+    ;        
+
+//
+//-- | /O(log n)/. The expression (@splitLookup k map@) splits a map just
+//-- like 'split' but also returns @lookup k map@.
+//splitLookup :: Ord k => k -> Map k a -> (Maybe a,Map k a,Map k a)
+//splitLookup k Tip = (Nothing,Tip,Tip)
+//splitLookup k (Bin sx kx x l r)
+//  = case compare k kx of
+//      LT -> let (z,lt,gt) = splitLookup k l in (z,lt,join kx x gt r)
+//      GT -> let (z,lt,gt) = splitLookup k r in (z,join kx x l lt,gt)
+//      EQ -> (Just x,l,r)
+//
+
+/**
+ * {@code splitLookup k map@} splits a map just like {@link split@} but also returns {@code {@link lookup@} k map@}.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg k the key.
+ * @arg m the map.
+ * @return a triple {@code (lookupResult,map1,map2)@} where the keys in {@code map1@} are smaller than {@code k@} and the
+ *         keys in {@code map2@} larger than {@code k@}, and where {@code lookupResult@} is the result of looking
+ *         up the key in the map.
+ * @see split, lookup
+ */
+splitLookup :: Ord k => k -> Map k a -> (Maybe a, Map k a, Map k a);
+public splitLookup k !m =
+    case m of
+    Tip -> (Nothing, Tip, Tip);
+	Bin sx kx x l r ->
+        case (compare k kx) of
+        LT ->
+            let
+                (z, lt, gt) = splitLookup k l;
+            in
+                (z, lt, join kx x gt r);                     
+        GT ->
+            let
+                (z, lt, gt) = splitLookup k r;
+            in
+                (z, join kx x l lt, gt);
+        EQ -> (Just x, l, r);
+        ;
+    ;
+
+//{--------------------------------------------------------------------
+//  Utility functions that maintain the balance properties of the tree.
+//  All constructors assume that all values in [l] < [k] and all values
+//  in [r] > [k], and that [l] and [r] are valid trees.
+//  
+//  In order of sophistication:
+//    [Bin sz k x l r]  The type constructor.
+//    [bin k x l r]     Maintains the correct size, assumes that both [l]
+//                      and [r] are balanced with respect to each other.
+//    [balance k x l r] Restores the balance and size.
+//                      Assumes that the original tree was balanced and
+//                      that [l] or [r] has changed by at most one element.
+//    [join k x l r]    Restores balance and size. 
+//
+//  Furthermore, we can construct a new tree from two trees. Both operations
+//  assume that all values in [l] < all values in [r] and that [l] and [r]
+//  are valid:
+//    [glue l r]        Glues [l] and [r] together. Assumes that [l] and
+//                      [r] are already balanced with respect to each other.
+//    [merge l r]       Merges two trees and restores balance.
+//
+//  Note: in contrast to Adam's paper, we use (<=) comparisons instead
+//  of (<) comparisons in [join], [merge] and [balance]. 
+//  Quickcheck (on [difference]) showed that this was necessary in order 
+//  to maintain the invariants. It is quite unsatisfactory that I haven't 
+//  been able to find out why this is actually the case! Fortunately, it 
+//  doesn't hurt to be a bit more conservative.
+//--------------------------------------------------------------------}
+//
+//{--------------------------------------------------------------------
+//  Join 
+//--------------------------------------------------------------------}
+//join :: Ord k => k -> a -> Map k a -> Map k a -> Map k a
+//join kx x Tip r  = insertMin kx x r
+//join kx x l Tip  = insertMax kx x l
+//join kx x l@(Bin sizeL ky y ly ry) r@(Bin sizeR kz z lz rz)
+//  | delta*sizeL <= sizeR  = balance kz z (join kx x l lz) rz
+//  | delta*sizeR <= sizeL  = balance ky y ly (join kx x ry r)
+//  | otherwise             = bin kx x l r
+
+//join :: Ord k => k -> a -> Map k a -> Map k a -> Map k a;
+join :: k -> a -> Map k a -> Map k a -> Map k a;
+private join kx x !l r =
+    case l of
+    Tip -> insertMin kx x r;
+    Bin sizeL ky y ly ry ->
+        case r of
+        Tip -> insertMax kx x l;
+        Bin sizeR kz z lz rz ->
+            if (delta * sizeL <= sizeR) then
+                balance kz z (join kx x l lz) rz
+            else if (delta * sizeR <= sizeL) then
+                balance ky y ly (join kx x ry r)
+            else
+                bin kx x l r;
+        ;
+    ;
+
+//
+//
+//-- insertMin and insertMax don't perform potentially expensive comparisons.
+//insertMax,insertMin :: k -> a -> Map k a -> Map k a 
+//insertMax kx x t
+//  = case t of
+//      Tip -> single kx x
+//      Bin sz ky y l r
+//          -> balance ky y l (insertMax kx x r)
+
+insertMax :: k -> a -> Map k a -> Map k a;
+private insertMax kx x !t =
+    case t of
+    Tip -> single kx x;
+    Bin sz ky y l r ->
+        balance ky y l (insertMax kx x r);
+    ;
+
+//             
+//insertMin kx x t
+//  = case t of
+//      Tip -> single kx x
+//      Bin sz ky y l r
+//          -> balance ky y (insertMin kx x l) r
+
+insertMin :: k -> a -> Map k a -> Map k a;
+private insertMin kx x !t =
+    case t of
+    Tip -> single kx x;
+    Bin sz ky y l r ->
+        balance ky y (insertMin kx x l) r;
+    ;
+
+//             
+//{--------------------------------------------------------------------
+//  [merge l r]: merges two trees.
+//--------------------------------------------------------------------}
+//merge :: Map k a -> Map k a -> Map k a
+//merge Tip r   = r
+//merge l Tip   = l
+//merge l@(Bin sizeL kx x lx rx) r@(Bin sizeR ky y ly ry)
+//  | delta*sizeL <= sizeR = balance ky y (merge l ly) ry
+//  | delta*sizeR <= sizeL = balance kx x lx (merge rx r)
+//  | otherwise            = glue l r
+
+merge :: Map k a -> Map k a -> Map k a;
+private merge !l !r =    
+    case l of
+    Tip -> r;
+    Bin sizeL kx x lx rx ->
+        case r of
+        Tip -> l;
+        Bin sizeR ky y ly ry ->
+            if (delta * sizeL <= sizeR) then
+                balance ky y (merge l ly) ry
+            else if (delta * sizeR <= sizeL) then
+                balance kx x lx (merge rx r)
+            else
+                glue l r;
+        ;
+    ;                
+                
+//
+//{--------------------------------------------------------------------
+//  [glue l r]: glues two trees together.
+//  Assumes that [l] and [r] are already balanced with respect to each other.
+//--------------------------------------------------------------------}
+//glue :: Map k a -> Map k a -> Map k a
+//glue Tip r = r
+//glue l Tip = l
+//glue l r   
+//  | size l > size r = let ((km,m),l') = deleteFindMax l in balance km m l' r
+//  | otherwise       = let ((km,m),r') = deleteFindMin r in balance km m l r'
+
+glue :: Map k a -> Map k a -> Map k a;
+private glue !l !r =
+    if (isEmpty l) then
+        r
+    else if (isEmpty r) then
+        l
+    else if (size l > size r) then
+        let
+            (keyValuePair, lNew) = deleteFindMax l;
+            (km, m) = keyValuePair;
+        in
+            balance km m lNew r                
+    else
+        let 
+            (keyValuePair, rNew) = deleteFindMin r;
+            (km, m) = keyValuePair;
+        in
+            balance km m l rNew;
+
+//-- | /O(log n)/. Delete and find the minimal element.
+//deleteFindMin :: Map k a -> ((k,a),Map k a)
+//deleteFindMin t 
+//  = case t of
+//      Bin _ k x Tip r -> ((k,x),r)
+//      Bin _ k x l r   -> let (km,l') = deleteFindMin l in (km,balance k x l' r)
+//      Tip             -> (error "Map.deleteFindMin: can not return the minimal element of an empty map", Tip)
+
+/**
+ * Deletes and finds the minimal element.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg t the map.
+ * @return a pair containing the minimal element and the map with the minimal element removed.
+ */
+deleteFindMin :: Map k a -> ((k, a), Map k a);
+public deleteFindMin !t =
+    case t of
+    Bin _ k x l r ->
+        if (isEmpty l) then
+            ((k, x), r)
+        else
+            let
+                (keyValuePair, lNew) = deleteFindMin l;
+            in
+                (keyValuePair, balance k x lNew r);
+    Tip -> (error "Can not return the minimal element of an empty map.", Tip);
+    ;
+
+//
+//-- | /O(log n)/. Delete and find the maximal element.
+//deleteFindMax :: Map k a -> ((k,a),Map k a)
+//deleteFindMax t
+//  = case t of
+//      Bin _ k x l Tip -> ((k,x),l)
+//      Bin _ k x l r   -> let (km,r') = deleteFindMax r in (km,balance k x l r')
+//      Tip             -> (error "Map.deleteFindMax: can not return the maximal element of an empty map", Tip)
+
+deleteFindMax :: Map k a -> ((k, a), Map k a);
+public deleteFindMax !t =
+    case t of
+    Bin _ k x l r ->
+        if (isEmpty r) then
+            ((k, x), l)
+        else
+            let
+                (keyValuePair, rNew) = deleteFindMax r;
+            in
+                (keyValuePair, balance k x l rNew);
+    Tip -> (error "Can not return the maximal element of an empty map.", Tip);
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  [balance l x r] balances two trees with value x.
+//  The sizes of the trees should balance after decreasing the
+//  size of one of them. (a rotation).
+//
+//  [delta] is the maximal relative difference between the sizes of
+//          two trees, it corresponds with the [w] in Adams' paper.
+//  [ratio] is the ratio between an outer and inner sibling of the
+//          heavier subtree in an unbalanced setting. It determines
+//          whether a double or single rotation should be performed
+//          to restore balance. It is correspondes with the inverse
+//          of $\alpha$ in Adam's article.
+//
+//  Note that:
+//  - [delta] should be larger than 4.646 with a [ratio] of 2.
+//  - [delta] should be larger than 3.745 with a [ratio] of 1.534.
+//  
+//  - A lower [delta] leads to a more 'perfectly' balanced tree.
+//  - A higher [delta] performs less rebalancing.
+//
+//  - Balancing is automaic for random data and a balancing
+//    scheme is only necessary to avoid pathological worst cases.
+//    Almost any choice will do, and in practice, a rather large
+//    [delta] may perform better than smaller one.
+//
+//  Note: in contrast to Adam's paper, we use a ratio of (at least) [2]
+//  to decide whether a single or double rotation is needed. Allthough
+//  he actually proves that this ratio is needed to maintain the
+//  invariants, his implementation uses an invalid ratio of [1].
+//--------------------------------------------------------------------}
+//delta,ratio :: Int
+//delta = 5
+//ratio = 2
+
+delta :: Int;
+private delta = 5;
+
+ratio :: Int;
+private ratio = 2;
+
+//
+//balance :: k -> a -> Map k a -> Map k a -> Map k a
+//balance k x l r
+//  | sizeL + sizeR <= 1    = Bin sizeX k x l r
+//  | sizeR >= delta*sizeL  = rotateL k x l r
+//  | sizeL >= delta*sizeR  = rotateR k x l r
+//  | otherwise             = Bin sizeX k x l r
+//  where
+//    sizeL = size l
+//    sizeR = size r
+//    sizeX = sizeL + sizeR + 1
+
+balance :: k -> a -> Map k a -> Map k a -> Map k a;
+private balance !k x !l !r =
+    let
+        sizeL :: Int;
+        sizeL = size l;
+        
+        sizeR :: Int;
+        sizeR = size r;
+        
+        sizeX :: Int;
+        sizeX = sizeL + sizeR + 1;
+    in
+        if (sizeL + sizeR <= 1) then
+            Bin sizeX k x l r
+        else if (sizeR >= delta * sizeL) then
+            rotateL k x l r
+        else if (sizeL >= delta * sizeR) then
+            rotateR k x l r
+        else
+            Bin sizeX k x l r;
+            
+//
+//-- rotate
+//rotateL k x l r@(Bin _ _ _ ly ry)
+//  | size ly < ratio*size ry = singleL k x l r
+//  | otherwise               = doubleL k x l r
+
+rotateL :: k -> a -> Map k a -> Map k a -> Map k a;
+private rotateL !k x !l !r =
+    case r of
+    Bin {leftMap, rightMap} ->
+        if (size leftMap < ratio * size rightMap) then
+            singleL k x l r
+        else
+            doubleL k x l r;
+    ;
+
+//rotateR k x l@(Bin _ _ _ ly ry) r
+//  | size ry < ratio*size ly = singleR k x l r
+//  | otherwise               = doubleR k x l r
+
+rotateR :: k -> a -> Map k a -> Map k a -> Map k a;
+private rotateR !k x !l !r =
+    case l of
+    Bin {leftMap, rightMap} ->
+        if (size rightMap < ratio * size leftMap) then
+            singleR k x l r
+        else
+            doubleR k x l r;
+    ;
+            
+//
+//-- basic rotations
+//singleL k1 x1 t1 (Bin _ k2 x2 t2 t3)  = bin k2 x2 (bin k1 x1 t1 t2) t3
+
+singleL :: k -> a -> Map k a -> Map k a -> Map k a;
+private singleL !k1 x1 !t1 !t4 =
+    case t4 of
+    Bin _ k2 x2 t2 t3 -> bin k2 x2 (bin k1 x1 t1 t2) t3;
+    ;
+
+//singleR k1 x1 (Bin _ k2 x2 t1 t2) t3  = bin k2 x2 t1 (bin k1 x1 t2 t3)
+
+singleR :: k -> a -> Map k a -> Map k a -> Map k a;
+private singleR !k1 x1 !t4 !t3  =
+    case t4 of
+    Bin _ k2 x2 t1 t2 -> bin k2 x2 t1 (bin k1 x1 t2 t3);
+    ;
+
+//
+//doubleL k1 x1 t1 (Bin _ k2 x2 (Bin _ k3 x3 t2 t3) t4) = bin k3 x3 (bin k1 x1 t1 t2) (bin k2 x2 t3 t4)
+
+doubleL :: k -> a -> Map k a -> Map k a -> Map k a;
+private doubleL !k1 x1 !t1 !t5 =
+    case t5 of
+    Bin _ k2 x2 t6 t4 ->
+        case t6 of
+        Bin _ k3 x3 t2 t3 ->
+            bin k3 x3 (bin k1 x1 t1 t2) (bin k2 x2 t3 t4);
+        ;
+    ;
+
+//doubleR k1 x1 (Bin _ k2 x2 t1 (Bin _ k3 x3 t2 t3)) t4 = bin k3 x3 (bin k2 x2 t1 t2) (bin k1 x1 t3 t4)
+
+doubleR :: k -> a -> Map k a -> Map k a -> Map k a;
+private doubleR !k1 x1 !t5 !t4 =
+    case t5 of
+    Bin _ k2 x2 t1 t6 ->
+        case t6 of
+        Bin _ k3 x3 t2 t3 ->
+             bin k3 x3 (bin k2 x2 t1 t2) (bin k1 x1 t3 t4);
+         ;
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  The bin constructor maintains the size of the tree
+//--------------------------------------------------------------------}
+//bin :: k -> a -> Map k a -> Map k a -> Map k a
+//bin k x l r
+//  = Bin (size l + size r + 1) k x l r
+
+bin :: k -> a -> Map k a -> Map k a -> Map k a;
+private bin !k x !l !r = Bin (size l + size r + 1) k x l r;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Eq converts the tree to a list. In a lazy setting, this 
+//  actually seems one of the faster methods to compare two trees 
+//  and it is certainly the simplest :-)
+//--------------------------------------------------------------------}
+//instance (Eq k,Eq a) => Eq (Map k a) where
+//  t1 == t2  = (size t1 == size t2) && (toAscList t1 == toAscList t2)
+
+instance (Eq k, Eq a) => Eq (Map k a) where
+    equals = equalsMap;
+    notEquals = notEqualsMap;
+    ;
+
+equalsMap :: (Eq k, Eq a) => Map k a -> Map k a -> Boolean;    
+private equalsMap !m1 !m2 =
+    size m1 == size m2 && toAscList m1 == toAscList m2;
+
+notEqualsMap :: (Eq a, Eq b) => Map a b -> Map a b -> Boolean;
+private notEqualsMap !m1 !m2 = not (equalsMap m1 m2);
+
+instance Ord k => Appendable (Map k a) where
+    empty = emptySpecialized;
+    isEmpty = isEmptySpecialized;
+    append = union;
+    concat = unions;
+    ;
+
+//todoBI we should not need to define emptySpecialized and isEmptySpecialized below if
+//the class instance resolution code is updated to ignore unneeded dictionary arguments.
+
+emptySpecialized :: Ord k => Map k a;
+emptySpecialized = empty;    
+
+isEmptySpecialized :: Ord k => Map k a -> Boolean;
+isEmptySpecialized = isEmpty;
+
+instance (Outputable k, Outputable a) => Outputable (Map k a) where
+    //a map is output as a list of (key, value) pairs sorted in ascending order by key.
+    output = outputMap;
+    ;
+    
+outputMap :: (Outputable k, Outputable a) => Map k a -> JObject;    
+private outputMap m = output (toList m);
+
+instance (Ord k, Inputable k, Inputable a) => Inputable (Map k a) where
+    input = inputMap;
+    ;
+
+inputMap :: (Ord k, Inputable k, Inputable a) => JObject -> Map k a;
+private inputMap list = fromList (input list);
+
+    
+//
+//{--------------------------------------------------------------------
+//  Functor
+//--------------------------------------------------------------------}
+//instance Functor (Map k) where
+//  fmap f m  = map f m
+//
+//{--------------------------------------------------------------------
+//  Show
+//--------------------------------------------------------------------}
+//instance (Show k, Show a) => Show (Map k a) where
+//  showsPrec d m  = showMap (toAscList m)
+//
+//showMap :: (Show k,Show a) => [(k,a)] -> ShowS
+//showMap []     
+//  = showString "{}" 
+//showMap (x:xs) 
+//  = showChar '{' . showElem x . showTail xs
+//  where
+//    showTail []     = showChar '}'
+//    showTail (x:xs) = showChar ',' . showElem x . showTail xs
+//    
+//    showElem (k,x)  = shows k . showString ":=" . shows x
+//  
+//
+//-- | /O(n)/. Show the tree that implements the map. The tree is shown
+//-- in a compressed, hanging format.
+//showTree :: (Show k,Show a) => Map k a -> String
+//showTree m
+//  = showTreeWith showElem True False m
+//  where
+//    showElem k x  = show k ++ ":=" ++ show x
+//
+//
+//{- | /O(n)/. The expression (@showTreeWith showelem hang wide map@) shows
+// the tree that implements the map. Elements are shown using the @showElem@ function. If @hang@ is
+// @True@, a /hanging/ tree is shown otherwise a rotated tree is shown. If
+// @wide@ is true, an extra wide version is shown.
+//
+//>  Map> putStrLn $ showTreeWith (\k x -> show (k,x)) True False $ fromDistinctAscList [(x,()) | x <- [1..5]]
+//>  (4,())
+//>  +--(2,())
+//>  |  +--(1,())
+//>  |  +--(3,())
+//>  +--(5,())
+//>
+//>  Map> putStrLn $ showTreeWith (\k x -> show (k,x)) True True $ fromDistinctAscList [(x,()) | x <- [1..5]]
+//>  (4,())
+//>  |
+//>  +--(2,())
+//>  |  |
+//>  |  +--(1,())
+//>  |  |
+//>  |  +--(3,())
+//>  |
+//>  +--(5,())
+//>
+//>  Map> putStrLn $ showTreeWith (\k x -> show (k,x)) False True $ fromDistinctAscList [(x,()) | x <- [1..5]]
+//>  +--(5,())
+//>  |
+//>  (4,())
+//>  |
+//>  |  +--(3,())
+//>  |  |
+//>  +--(2,())
+//>     |
+//>     +--(1,())
+//
+//-}
+//showTreeWith :: (k -> a -> String) -> Bool -> Bool -> Map k a -> String
+//showTreeWith showelem hang wide t
+//  | hang      = (showsTreeHang showelem wide [] t) ""
+//  | otherwise = (showsTree showelem wide [] [] t) ""
+//
+//showsTree :: (k -> a -> String) -> Bool -> [String] -> [String] -> Map k a -> ShowS
+//showsTree showelem wide lbars rbars t
+//  = case t of
+//      Tip -> showsBars lbars . showString "|\n"
+//      Bin sz kx x Tip Tip
+//          -> showsBars lbars . showString (showelem kx x) . showString "\n" 
+//      Bin sz kx x l r
+//          -> showsTree showelem wide (withBar rbars) (withEmpty rbars) r .
+//             showWide wide rbars .
+//             showsBars lbars . showString (showelem kx x) . showString "\n" .
+//             showWide wide lbars .
+//             showsTree showelem wide (withEmpty lbars) (withBar lbars) l
+//
+//showsTreeHang :: (k -> a -> String) -> Bool -> [String] -> Map k a -> ShowS
+//showsTreeHang showelem wide bars t
+//  = case t of
+//      Tip -> showsBars bars . showString "|\n" 
+//      Bin sz kx x Tip Tip
+//          -> showsBars bars . showString (showelem kx x) . showString "\n" 
+//      Bin sz kx x l r
+//          -> showsBars bars . showString (showelem kx x) . showString "\n" . 
+//             showWide wide bars .
+//             showsTreeHang showelem wide (withBar bars) l .
+//             showWide wide bars .
+//             showsTreeHang showelem wide (withEmpty bars) r
+//
+//
+//showWide wide bars 
+//  | wide      = showString (concat (reverse bars)) . showString "|\n" 
+//  | otherwise = id
+//
+//showsBars :: [String] -> ShowS
+//showsBars bars
+//  = case bars of
+//      [] -> id
+//      _  -> showString (concat (reverse (tail bars))) . showString node
+//
+//node           = "+--"
+//withBar bars   = "|  ":bars
+//withEmpty bars = "   ":bars
+//
+//
+//{--------------------------------------------------------------------
+//  Assertions
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Test if the internal map structure is valid.
+//valid :: Ord k => Map k a -> Bool
+//valid t
+//  = balanced t && ordered t && validsize t
+
+valid :: Ord k => Map k a -> Boolean;
+private valid !t = balanced t && ordered t && validsize t;
+
+//
+//ordered t
+//  = bounded (const True) (const True) t
+//  where
+//    bounded lo hi t
+//      = case t of
+//          Tip              -> True
+//          Bin sz kx x l r  -> (lo kx) && (hi kx) && bounded lo (<kx) l && bounded (>kx) hi r
+
+ordered :: Ord k => Map k a -> Boolean;
+private ordered !t =
+    let
+        bounded :: Ord k => (k -> Boolean) -> (k -> Boolean) -> Map k a -> Boolean;
+        bounded lo hi t =
+            case t of
+            Tip -> True;
+            Bin {key, leftMap, rightMap} -> (lo key) && (hi key) && bounded lo (greaterThan key) leftMap && bounded (lessThan key) hi rightMap;
+            ;
+    in
+        bounded (const True) (const True) t;
+
+//
+//-- | Exported only for "Debug.QuickCheck"
+//balanced :: Map k a -> Bool
+//balanced t
+//  = case t of
+//      Tip              -> True
+//      Bin sz kx x l r  -> (size l + size r <= 1 || (size l <= delta*size r && size r <= delta*size l)) &&
+//                          balanced l && balanced r
+
+balanced :: Map k a -> Boolean;
+private balanced !t =
+    case t of
+    Tip -> True;
+    Bin {leftMap, rightMap} ->
+        (size leftMap + size rightMap <= 1 || (size leftMap <= delta*size rightMap && size rightMap <= delta*size leftMap)) &&
+        balanced leftMap && balanced rightMap;
+    ;
+
+//
+//
+//validsize t
+//  = (realsize t == Just (size t))
+//  where
+//    realsize t
+//      = case t of
+//          Tip             -> Just 0
+//          Bin sz kx x l r -> case (realsize l,realsize r) of
+//                              (Just n,Just m)  | n+m+1 == sz  -> Just sz
+//                              other            -> Nothing
+
+validsize :: Map k a -> Boolean;
+private validsize !t = 
+    let
+        realsize :: Map k a -> Maybe Int;
+        realsize !t =
+            case t of
+            Tip -> Just 0;
+            Bin {size, leftMap, rightMap} ->
+                let
+                    rsl :: Maybe Int;
+                    rsl = realsize leftMap;
+                    
+                    rsr :: Maybe Int;
+                    rsr = realsize rightMap;
+                in
+                    case rsl of
+                    Nothing ->
+                        Nothing;
+                    Just rslValue ->
+                        case rsr of
+                        Nothing -> Nothing;
+                        Just rsrValue ->
+                            if (rslValue + rsrValue + 1 == size) then
+                                Just size
+                            else
+                                Nothing;
+                        ;
+                    ;
+            ;           
+    in
+        (realsize t == Just (size t));
+ 
+
+
+instance (Show a, Show b) => Show (Map a b) where
+    show = showMap;
+    ;
+
+showMap :: (Show a, Show b) => Map a b -> String;
+showMap !m = 
+    let
+        showEntry !entry = 
+            case entry of
+            (key, val) -> show key ++ " = " ++ show val;
+            ;
+    in
+        concat ["Map.Map{",
+                List.join ", " (List.map showEntry $ toList m),
+                "}"];
+
+
+//used to test structural equality of 2 maps. This is for debugging purposes since 2 maps that are equal under Prelude.equals
+//need not be structurally equal.
+deepEquals :: (Eq a, Eq b) => Map a b -> Map a b -> Boolean;            
+private deepEquals t1 t2 =
+case t1 of
+Bin size1 key1 value1 leftMap1 rightMap1 ->
+    case t2 of
+    Bin size2 key2 value2 leftMap2 rightMap2 ->
+        size1 == size2 && key1 == key2 && value1 == value2 && (deepEquals leftMap1 leftMap2) && (deepEquals rightMap1 rightMap2);
+    Tip -> False;
+    ;
+Tip ->
+    case t2 of
+    Bin size2 key2 value2 leftMap2 rightMap2 -> False;
+    Tip -> True;
+    ;
+;            
+

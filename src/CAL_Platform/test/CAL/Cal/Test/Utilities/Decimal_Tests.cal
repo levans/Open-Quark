@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Decimal_Tests.cal
+ * Creation date: Dec 15/2005
+ * By: James Wright
+ */
+
+/**
+ * This module contains test cases for the {@link module = Decimal@} module.
+ * 
+ * @author James Wright
+ */
+module Cal.Test.Utilities.Decimal_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Int;
+    function = assert, input, output;
+    ;
+import Cal.Utilities.Decimal using
+    dataConstructor = 
+        ROUND_UP, ROUND_DOWN, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, ROUND_HALF_DOWN, ROUND_HALF_EVEN, 
+        ROUND_UNNECESSARY;
+    ;
+    
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_UP"
+    private jROUND_UP :: Int;
+
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_DOWN"
+    private jROUND_DOWN :: Int;
+
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_CEILING"
+    private jROUND_CEILING :: Int;
+
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_FLOOR"
+    private jROUND_FLOOR :: Int;
+
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_HALF_UP"
+    private jROUND_HALF_UP :: Int;
+
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_HALF_DOWN"
+    private jROUND_HALF_DOWN :: Int;
+
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_HALF_EVEN"
+    private jROUND_HALF_EVEN :: Int;
+
+foreign unsafe import jvm "static field java.math.BigDecimal.ROUND_UNNECESSARY"
+    private jROUND_UNNECESSARY :: Int;
+
+testRoundingModeInput =
+    assert (input (output jROUND_UP) == ROUND_UP) &&
+    assert (input (output jROUND_DOWN) == ROUND_DOWN) &&
+    assert (input (output jROUND_CEILING) == ROUND_CEILING) &&
+    assert (input (output jROUND_FLOOR) == ROUND_FLOOR) &&
+    assert (input (output jROUND_HALF_UP) == ROUND_HALF_UP) &&
+    assert (input (output jROUND_HALF_DOWN) == ROUND_HALF_DOWN) &&
+    assert (input (output jROUND_HALF_EVEN) == ROUND_HALF_EVEN) &&
+    assert (input (output jROUND_UNNECESSARY) == ROUND_UNNECESSARY);
+
+testRoundingModeOutput =
+    assert (input (output ROUND_UP) == jROUND_UP) &&
+    assert (input (output ROUND_CEILING) == jROUND_CEILING) &&
+    assert (input (output ROUND_DOWN) == jROUND_DOWN) &&
+    assert (input (output ROUND_FLOOR) == jROUND_FLOOR) &&
+    assert (input (output ROUND_HALF_UP) == jROUND_HALF_UP) &&
+    assert (input (output ROUND_HALF_DOWN) == jROUND_HALF_DOWN) &&
+    assert (input (output ROUND_HALF_EVEN) == jROUND_HALF_EVEN) &&
+    assert (input (output ROUND_UNNECESSARY) == jROUND_UNNECESSARY);
+    
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    assert testRoundingModeInput &&
+    assert testRoundingModeOutput;

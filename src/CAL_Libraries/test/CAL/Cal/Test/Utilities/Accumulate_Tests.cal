@@ -1,0 +1,188 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Accumulate_Tests.cal
+ * Created: Oct. 6, 2006
+ * By: Raymond cypher
+ */
+
+/**
+ * Tests of the functionality defined in the Accumulate module.
+ *  
+ * @author Raymond Cypher
+ */
+
+module Cal.Test.Utilities.Accumulate_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Double, Int, String;
+    ;
+      
+import Cal.Core.String;        
+
+import Cal.Utilities.Accumulate using
+    function = accumulate, accumulate3, accumulate3Strict;
+    ;
+
+/**
+ * The function gSum is created through a partial application of accumulate.
+ * The converter function and the values are not provided.
+ * gSum is used to test the {@link accumulate@} function on 
+ * different data sources.
+ */
+gSum = accumulate Prelude.add Prelude.id 0 ;
+
+/**
+ * Use gSum to test accumualting a value on a set of records.
+ */
+sumDblTest = gSum (\x -> x.mydbl) recordset;
+
+/**
+ * Use gSum to test accumulating a value on a set of tuples.
+ */
+sumDblTest2 = gSum Prelude.field4 tupleset;
+
+/**
+ * sumDblandSquared accumulates the sum of the 'mydbl' field in the recordset and then
+ *  uses the finalizer argument to produce a tuple containing the sum and the sum squared. 
+ */
+sumDblandSquared = accumulate Prelude.add (\x -> (x, x * x)) 0 (\x -> x.mydbl) recordset;
+
+/**
+ * Calculate the variance on a data set.
+ * The running value is a record of type {@code {#1 :: {@link Int@}, #2 :: {@link Double@}, #3 :: {@link Double@}}@} where {@code #1@} is the count, {@code #2@} is the sum, and {@code #3@} is the sum of the squares.
+ */
+variance :: (b\#2, b\#3) => (a -> {b | #2 :: Prelude.Double, #3 :: Prelude.Double}) -> [a] -> Prelude.Double;
+variance extractor values = accumulate (\x y -> let eval1 = x.#1 + 1; eval2 = x.#2 + y.#2; eval3 = x.#3 + y.#3; in Prelude.seq eval1 (Prelude.seq eval2 (Prelude.seq eval3 {#1 = eval1, #2 = eval2, #3 = eval3})))
+                                 (\x -> let n = Prelude.toDouble x.#1; in Prelude.abs (n * x.#3- (x.#2 * x.#2)) / (n * n))
+                                 {#1 = 0 :: Int, #2 = 0.0, #3 = 0.0}
+                                 extractor
+                                 values;
+
+/**
+ * Calculates variance on the record set by using an appropriate extractor.        
+ */
+varianceonrecords = variance (\x -> {#1 = 1 :: Int, #2 = x.mydbl, #3 = (x.mydbl * x.mydbl)}) recordset;
+
+/**
+ * Calculates variance on the tuple set by using an appropriate extractor.
+ */
+varianceontuples =  variance (\x -> let v = Prelude.field4 x; in {#1 = 1 :: Int, #2 = v, #3 = (v * v)}) tupleset;
+
+/**
+ * Calculates variance on a list of doubles.
+ */
+varianceondoubles = variance (\x -> {#1 = 1 :: Int, #2 = x, #3 = x * x}) [4.0, 7.0, 3.0, 5.0, 1.0];
+
+
+// some tests using multiple accumulators
+//Create some accumulator description records, but leave out the converter function.
+
+/**
+ * varianceAccumulator is an accumulator record which contains the functions and values
+ * needed to calculate variance on a data set.  The converter function is left out.
+ */
+varianceAccumulator = {accumulator = (\x y -> let eval1 = x.#1 + 1; eval2 = x.#2 + y.#2; eval3 = x.#3 + y.#3; in Prelude.seq eval1 (Prelude.seq eval2 (Prelude.seq eval3 {#1 = eval1, #2 = eval2, #3 = eval3}))),
+                       finalizer = (\x -> let n = Prelude.toDouble x.#1; in Prelude.abs (n * x.#3- (x.#2 * x.#2)) / (n * n)),
+                       runningValue = {#1 = 0 :: Int, #2 = 0.0, #3 = 0.0}};
+
+/**
+ * maxStringAccumulator is an accumulator record which contains the functions and
+ * values needed to calcualte the maximum string value.  The converter function is left out.
+ */
+maxStringAccumulator = {accumulator = Prelude.max, finalizer = Prelude.id, runningValue = ""};
+
+/**
+ * minStringAccumulator is an accumulator record which contains the functions and
+ * values needed to calcualte the minimum string value.  The converter function is left out.
+ */
+minStringAccumulator = {accumulator = Prelude.min, finalizer = Prelude.id, runningValue = "zzz"};
+
+// Now apply three accumulators to the recordset.  This involves extending the previous three accumulator 
+// descriptions with a converter function
+
+/**
+ * Run 3 accumulators on the record set.  This calculates the sum of the double field and the
+ * max and min of the string field.
+ */
+test3OnRecords = accumulate3 {#1 = {accumulator = Prelude.add, finalizer = Prelude.id, runningValue = 0.0, converter = (\x -> x.mydbl)},
+                                     #2 = {maxStringAccumulator | converter = (\x -> x.mystring)},
+                                     #3 = {minStringAccumulator | converter = (\x -> x.mystring)}} recordset;
+
+/**
+ * Run 3 accumulators on the tuple set.  This calculates the variance of the double field and
+ * the max and min of the string field.
+ */
+test3OnTuples = accumulate3 {#1 = {varianceAccumulator | converter = (\x -> let v = Prelude.field4 x; in {#1 = 1 :: Int, #2 = v, #3 = (v * v)})},
+                                     #2 = {maxStringAccumulator | converter = Prelude.field3},
+                                     #3 = {minStringAccumulator | converter = Prelude.field3}} tupleset;
+
+/**
+ * Run 3 accumulators on the tuple set.  This calculates the variance of the double field and
+ * the max and min of the string field.
+ * Note: this test uses accumulate3Strict which does a strict folding of the accumulators across
+ * the tuple set.  As a result there should only be one pass across the data.
+ */
+test3OnTuples2 = accumulate3Strict {#1 = {varianceAccumulator | converter = (\x -> let v = Prelude.field4 x; in {#1 = 1 :: Int, #2 = v, #3 = (v * v)})},
+                                     #2 = {maxStringAccumulator | converter = Prelude.field3},
+                                     #3 = {minStringAccumulator | converter = Prelude.field3}} tupleset;
+        
+/**
+ * A simple set of records used for testing accumulators.
+ */
+recordset :: [{myint :: Int, intval :: Int, mystring :: String, mydbl :: Double}];        
+recordset = [{myint = 1, intval = 2, mystring = "abc", mydbl = 4.0}, 
+             {myint = 2, intval = 2, mystring = "yyy", mydbl = 7.0}, 
+             {myint = 3, intval = 2, mystring = "aaa", mydbl = 3.0}, 
+             {myint = 4, intval = 2, mystring = "xxx", mydbl = 5.0}, 
+             {myint = 5, intval = 2, mystring = "ccc", mydbl = 1.0}];       
+
+/**
+ * A simple set of tuples used for testing accumulators.
+ */
+tupleset = [(1 :: Int, 2 :: Int, "abc", 4.0), 
+            (2, 2, "yyy", 7.0), 
+            (3, 2, "aaa", 3.0), 
+            (4, 2, "xxx", 5.0), 
+            (5, 2, "ccc", 1.0)];
+
+
+public test_Accumulate =
+    Prelude.assert (sumDblTest == 20.0)
+    && Prelude.assert (sumDblTest2 == 20.0)
+    && Prelude.assert (sumDblandSquared == (20.0, 400.0))
+    && Prelude.assert (varianceonrecords == 4.0)
+    && Prelude.assert (varianceontuples == 4.0)
+    && Prelude.assert (varianceondoubles == 4.0)
+    && Prelude.assert (test3OnRecords == {#1 = 20.0, #2 = "yyy", #3 = "aaa"})
+    && Prelude.assert (test3OnTuples  == {#1 = 4.0, #2 = "yyy", #3 = "aaa"})
+    && Prelude.assert (test3OnTuples2  == {#1 = 4.0, #2 = "yyy", #3 = "aaa"});

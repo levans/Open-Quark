@@ -1,0 +1,924 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Debug_Tests.cal
+ * Creation date: Oct 20, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for the {@link module = Dynamic@} module.
+ *
+ * Note that *examples functions can and should still go into the Dynamic module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Dynamic_Tests;
+import Cal.Core.Prelude using
+    typeClass = Num;
+    typeConstructor = Boolean, Char, Double, Either, Int, String;
+    dataConstructor = True, Left, Right, Nothing, Just;
+    function = 
+        assert, compose, doubleToString, equals, error, fromJust, fst, intToString, seq, snd, typeOf, typeRepToString, 
+        upFromTo;
+    ;
+import Cal.Core.Dynamic using
+    typeConstructor = Dynamic;
+    function = 
+        appendDynamicRecord, appendRecord, dynamicRecordFieldValue, fromDynamic, fromDynamicWithDefault, 
+        insertDynamicRecordField, insertRecordField, recordFieldValue, toDynamic;
+    ;
+import Cal.Collections.List using
+    function = last, map, sum;
+    ;
+import Cal.Core.String using
+    function = fromList;
+    ; 
+       
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Dynamic_Tests.ShadowFieldName.isValidOrdinalFieldName"
+    private isOrdinalFieldName :: String -> Boolean;
+
+//////////////////////////////////////////////////////////////////////
+// Benchmarks
+
+    
+mapStrict :: (a -> b) -> [a] -> [b];
+mapStrict mapFunction !list =
+    case list of
+    []     -> [];
+    listHead : listTail -> 
+        seq (mapFunction listHead) 
+            (mapFunction listHead : map mapFunction listTail);
+    ;
+
+testingList :: (Prelude.Enum a, Num a) => a -> [a];
+testingList n =
+    let
+        baseList = (upFromTo 1 n);
+    in
+        seq (last baseList) baseList;
+
+testingDynamic list =
+    let
+        baseList :: [Dynamic];
+        baseList = mapStrict toDynamic list;
+    in
+        seq (last baseList) baseList;
+    
+testingMaybe list =
+    let
+        baseList = mapStrict Just list;
+    in
+        seq (last baseList) baseList;
+
+forceList !list =
+    seq (last list) list;
+    
+dataSetDouble = testingList 1000000.0;
+dataSetInt = testingList (1000000 :: Int);
+dataSetDynamicDouble = testingDynamic dataSetDouble; 
+dataSetDynamicInt = testingDynamic dataSetInt;
+dataSetMaybeInt = testingMaybe dataSetInt;
+dataSetMaybeDouble = testingMaybe dataSetDouble;
+
+lazyDoubles = (upFromTo 1.0 1000000);
+lazyDynamics = map toDynamic (upFromTo 1.0 1000000);
+lazyMaybes = map Just (upFromTo 1.0 1000000);
+
+sumDoubles :: Double;
+sumDoubles = 
+    sum dataSetDouble;
+
+sumDynamicDouble :: Double;
+sumDynamicDouble =
+    sum (map (compose fromJust fromDynamic) dataSetDynamicDouble);
+
+sumInt :: Int;
+sumInt =
+    sum dataSetInt;
+
+sumDynamicInt :: Int;
+sumDynamicInt =
+    sum (map (compose fromJust fromDynamic) dataSetDynamicInt);
+    
+sumMaybeInt :: Int;
+sumMaybeInt =
+    sum (map fromJust dataSetMaybeInt);
+
+sumMaybeDouble :: Double;
+sumMaybeDouble =
+    sum (map fromJust dataSetMaybeDouble);
+
+// Benchmarks run Jun 10/2005
+//                  n=  100,000         1,000,000
+//                      ---------       -----------
+// sumDoubles            222 s= 7        3444 s= 34
+// sumDynamicDouble     1019 s=22       13760 s=338
+// sumInt                140 s= 0        2123 s= 40
+// sumDynamicInt         917 s=13       13830 s=628
+// sumMaybeInt           601 s=12        7592 s= 60
+// sumMaybeDouble        666 s=11        9166 s=109
+
+// Benchmarks run Jun 13/2005
+// (At this point, we have extended TypeRep to include the DoubleTypeRep data constructor)
+//                  n=  100,000         1,000,000
+//                      ---------       -----------
+// sumDoubles            218 s= 1        3202 s= 72     
+// sumDynamicDouble     1000 s=12       11884 s=147
+// sumMaybeDouble        662 s= 8        8167 s=485
+
+// Benchmarks run Jun 14/2005 (post TypeRep extended to include Byte, Int, Short, Long, Char, String, Float, Double)
+//                  n=  100,000         1,000,000
+//                      ---------       -----------
+// sumInt                154 s=10        2151 s=  7                  
+// sumDynamicInt         859 s= 8       11049 s= 98
+// sumMaybeInt           615 s=14        7797 s=211
+
+// Benchmarks run Jun 15/2005 (pre TypeRep extended to records)
+//                  n=      100,000   
+//                          ----------
+// sumTupleDataset          1121 s= 11
+// sumMixedDataset          1103 s= 30
+// sumDynamicTupleDataset   8183 s=203
+// sumDynamicMixedDataset   9041 s=198
+
+// Benchmarks run Jun 15/2005 (post TypeRep extended to records)
+//                  n=      100,000   
+//                          ----------
+// sumTupleDataset          1066 s= 89
+// sumMixedDataset          1139 s=102
+// sumDynamicTupleDataset   5124 s= 62
+// sumDynamicMixedDataset   9704 s=110 [apparently the extra field in MixedRecordTypeRep is a disadvantage for records with small numbers of fields]
+
+// Benchmark run Jun 15/2005 (pre TypeRep extended to records)
+//                                    n=30000
+// sumDynamicMixManyFieldsDataset     5011 s=78
+
+// Benchmark run Jun 15/2005 (post TypeRep extended to records)
+//                                    n=30000
+// sumDynamicMixManyFieldsDataset     3910 s=107
+
+// Benchmark run Jun 17/2005 (pre TypeRep special cases Algebraic0TypeRep, Algebraic1TypeRep, Algebraic1TypeRep)
+//                  n=      100,000         200,000
+//                          ----------      ----------      
+// sumEitherDataset          468 s= 0        925 s=  7
+// sumDynamicEither         1521 s=22       3808 s=126
+
+// Benchmark run Jun 16/2005 (post TypeRep special cases Algebraic0TypeRep, Algebraic1TypeRep, Algebraic1TypeRep)
+//                  n=      100,000         200,000   
+//                          ----------      ---------
+// sumEitherDataset          578 s= 30       900 s= 8
+// sumDynamicEither         1379 s= 41      2456 s= 7
+
+sz = 100000;
+dataSetTuples = forceList (map makeTuple (testingList sz));
+dataSetMixed = forceList (map makeMixed (testingList sz));
+dataSetMixedManyFields = forceList (map makeMixedManyFields (testingList sz));
+dataSetEither = forceList (map makeEither (testingList sz));
+
+dataSetDynamicTuples = testingDynamic dataSetTuples;
+dataSetDynamicMixed = testingDynamic dataSetMixed;
+dataSetDynamicMixedManyFields = testingDynamic dataSetMixedManyFields;
+dataSetDynamicEither = testingDynamic dataSetEither;
+
+makeTuple :: Double -> (Double,Double,Double);
+makeTuple inp =
+    (inp, inp+0.5, inp+1.0);
+
+makeMixed :: Double -> {x::Double, y::Double, #1::Double, #3::Double};
+makeMixed inp =
+    {x = inp, y = inp+0.5, #1=inp+1.0, #3=inp+1.5};
+
+makeMixedManyFields :: Double -> {q::Double, w::Double, x::Double, y::Double, z::Double, #5::Double, #7::Double, #9::Double, #11::Double, #13::Double};
+makeMixedManyFields inp =
+    { q = inp, w = inp+0.1, x = inp+0.2, y = inp+0.3, z = inp+0.4, #5 = inp+0.5, #7 = inp+0.6, #9 = inp+0.7, #11 = inp+0.8, #13 = inp+0.9}; 
+
+makeEither :: Double -> Either Double String;
+makeEither inp =
+    Left inp;
+
+acceptEmptyDatapoint :: {} -> Double;
+acceptEmptyDatapoint x =
+    5;
+
+acceptTupleDatapoint :: (Double,Double,Double) -> Double;
+acceptTupleDatapoint x =
+    x.#1 + x.#2 + x.#3;
+
+acceptMixedDatapoint :: {x::Double, y::Double, #1::Double, #3::Double} -> Double;
+acceptMixedDatapoint x =
+    x.x + x.y + x.#1 + x.#3;
+
+acceptMixedManyFieldsDatapoint:: {q::Double, w::Double, x::Double, y::Double, z::Double, #5::Double, #7::Double, #9::Double, #11::Double, #13::Double} -> Double;
+acceptMixedManyFieldsDatapoint inp =
+    inp.q + inp.w + inp.x + inp.y + inp.z + inp.#5 + inp.#7 + inp.#9 + inp.#11 + inp.#13; 
+
+acceptEither :: Either Double String -> Double;
+acceptEither inp =
+    case inp of
+    Left val -> val;
+    Right str -> 0;
+    ;
+    
+sumTupleDataset = 
+    sum (map acceptTupleDatapoint dataSetTuples);
+
+sumMixedDataset = 
+    sum (map acceptTupleDatapoint dataSetTuples);
+
+sumEitherDataset =
+    sum (map acceptEither dataSetEither);
+
+sumDynamicTupleDataset :: Double;
+sumDynamicTupleDataset =
+    sum (map acceptTupleDatapoint (map (compose fromJust fromDynamic) dataSetDynamicTuples));
+
+sumDynamicMixedManyFieldsDataset :: Double;
+sumDynamicMixedManyFieldsDataset =
+    sum (map acceptMixedManyFieldsDatapoint (map (compose fromJust fromDynamic) dataSetDynamicMixedManyFields));
+
+sumDynamicMixedDataset :: Double;
+sumDynamicMixedDataset =
+    sum (map acceptMixedDatapoint (map (compose fromJust fromDynamic) dataSetDynamicMixed));
+
+sumDynamicEither:: Double;
+sumDynamicEither =
+    sum (map acceptEither (map (compose fromJust fromDynamic) dataSetDynamicEither));
+    
+/*
+Before replacing sort w/merge and max:
+    running: Prelude.fromDynamic (dynamicAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        3,224 ms
+After replacing sort w/merge and max:
+    running: Prelude.fromDynamic (dynamicAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        3,259 ms
+After using mergeAndEliminateDuplicates and the algebraic FieldName type:
+    running: Prelude.fromDynamic (dynamicAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        2,258 ms
+After moving functionality to RTRecordValue but before replacing primfunc with primop:
+    running: Prelude.fromDynamic (dynamicAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        2,375 ms
+After replacing primitive fcn with primop:
+    running: Prelude.fromDynamic (dynamicAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        2,375 ms
+Back to primitive fcn (checked-in version):
+    Oct 21/2005
+    running: Prelude.fromDynamic (dynamicAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        2,391 ms
+Switched to a dictionary-based RecordTypeRep:
+    Nov 3/2005
+    running: Dynamic.fromDynamic (dynamicAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        906 ms
+*/
+dynamicAppendTextualRecordsBenchmark :: Int -> Dynamic;
+dynamicAppendTextualRecordsBenchmark !n =
+    let
+        helper :: Int -> Dynamic -> Dynamic;
+        helper !index !prevDynamic =
+            let
+                prevValue :: {a::Int,b::Int,c::Int,d::Int,e::Int,f::Int,g::Int,h::Int,i::Int,j::Int,k::Int,l::Int,m::Int,n::Int};
+                prevValue = fromJust (fromDynamic prevDynamic); 
+            
+                appended = appendRecord {a=prevValue.a+(10::Int),b=prevValue.b+(10::Int),c=prevValue.c+(10::Int),d=prevValue.d+(10::Int),e=prevValue.e+(10::Int),f=prevValue.f+(10::Int),g=prevValue.g+(10::Int)}
+                                        {h=prevValue.h+(10::Int),i=prevValue.i+(10::Int),j=prevValue.j+(10::Int),k=prevValue.k+(10::Int),l=prevValue.l+(10::Int),m=prevValue.m+(10::Int),n=prevValue.n+(10::Int)};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq appended
+                    (helper (index+1) appended)
+                else
+                    appended;
+    in
+        helper 0 (toDynamic {a=(0::Int),b=(0::Int),c=(0::Int),d=(0::Int),e=(0::Int),f=(0::Int),g=(0::Int),h=(0::Int),i=(0::Int),j=(0::Int),k=(0::Int),l=(0::Int),m=(0::Int),n=(0::Int)});
+
+/*
+    Oct 21/2005
+    running: Prelude.fromDynamic (staticAppendTextualRecordsBenchmark 10000) :: Prelude.Maybe {a::Prelude.Int,b::Prelude.Int,c::Prelude.Int,d::Prelude.Int,e::Prelude.Int,f::Prelude.Int,g::Prelude.Int,h::Prelude.Int,i::Prelude.Int,j::Prelude.Int,k::Prelude.Int,l::Prelude.Int,m::Prelude.Int,n::Prelude.Int}
+    Run Time:        1,176 ms
+ */
+staticAppendTextualRecordsBenchmark :: Int -> Dynamic;
+staticAppendTextualRecordsBenchmark !n =
+    let
+        helper :: Int -> Dynamic -> Dynamic;
+        helper !index !prevDynamic =
+            let
+                prevValue :: {a::Int,b::Int,c::Int,d::Int,e::Int,f::Int,g::Int,h::Int,i::Int,j::Int,k::Int,l::Int,m::Int,n::Int};
+                prevValue = fromJust (fromDynamic prevDynamic); 
+            
+                appended :: {a::Int,b::Int,c::Int,d::Int,e::Int,f::Int,g::Int,h::Int,i::Int,j::Int,k::Int,l::Int,m::Int,n::Int};
+                appended = {{a=prevValue.a+10,b=prevValue.b+20,c=prevValue.c+30,d=prevValue.d+40,e=prevValue.e+50,f=prevValue.f+60,g=prevValue.g+70} |
+                            h=prevValue.h+10,i=prevValue.i+10,j=prevValue.j+10,k=prevValue.k+10,l=prevValue.j+10,m=prevValue.l+10,n=prevValue.m+10};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq appended
+                    (helper (index+1) (toDynamic appended))
+                else
+                    toDynamic appended;
+    in
+        helper 0 (toDynamic {a=(0::Int),b=(0::Int),c=(0::Int),d=(0::Int),e=(0::Int),f=(0::Int),g=(0::Int),h=(0::Int),i=(0::Int),j=(0::Int),k=(0::Int),l=(0::Int),m=(0::Int),n=(0::Int)});
+/*
+    Oct 21/2005
+    running: staticAppendTextualRecordsStaticResultBenchmark 10000
+    Run Time:        296 ms
+*/    
+staticAppendTextualRecordsStaticResultBenchmark :: Int -> {a::Int,b::Int,c::Int,d::Int,e::Int,f::Int,g::Int,h::Int,i::Int,j::Int,k::Int,l::Int,m::Int,n::Int};
+staticAppendTextualRecordsStaticResultBenchmark !n =
+    let
+        helper :: Int -> {a::Int,b::Int,c::Int,d::Int,e::Int,f::Int,g::Int,h::Int,i::Int,j::Int,k::Int,l::Int,m::Int,n::Int} -> {a::Int,b::Int,c::Int,d::Int,e::Int,f::Int,g::Int,h::Int,i::Int,j::Int,k::Int,l::Int,m::Int,n::Int};
+        helper !index !prevValue =
+            let
+                appended :: {a::Int,b::Int,c::Int,d::Int,e::Int,f::Int,g::Int,h::Int,i::Int,j::Int,k::Int,l::Int,m::Int,n::Int};
+                appended = {{a=prevValue.a+10,b=prevValue.b+20,c=prevValue.c+30,d=prevValue.d+40,e=prevValue.e+50,f=prevValue.f+60,g=prevValue.g+70} |
+                            h=prevValue.h+10,i=prevValue.i+10,j=prevValue.j+10,k=prevValue.k+10,l=prevValue.j+10,m=prevValue.l+10,n=prevValue.m+10};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq appended
+                    (helper (index+1) appended)
+                else
+                    appended;
+    in
+        helper 0 {a=(0::Int),b=(0::Int),c=(0::Int),d=(0::Int),e=(0::Int),f=(0::Int),g=(0::Int),h=(0::Int),i=(0::Int),j=(0::Int),k=(0::Int),l=(0::Int),m=(0::Int),n=(0::Int)};
+
+/*
+    running: Prelude.fromDynamic (dynamicAppendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        2,797 ms
+
+after moving functionality to RTRecordValue (but before replacing primitive function with primitive op):
+    running: Prelude.fromDynamic (dynamicAppendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        2,750 ms
+    
+after replacing primitive function with primitive op:
+    running: Prelude.fromDynamic (dynamicAppendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        2,734 ms
+
+Back to primitive functions (checked-in implementation):
+    Oct 21/2005
+    running: Prelude.fromDynamic (dynamicAppendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        2,828 ms
+
+Switched to a dictionary-based RecordTypeRep:
+    Nov 3/2005
+    running: Dynamic.fromDynamic (dynamicAppendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        875 ms
+*/
+dynamicAppendOrdinalRecordsBenchmark :: Int -> Dynamic;
+dynamicAppendOrdinalRecordsBenchmark !n =
+    let
+        helper :: Int -> Dynamic -> Dynamic;
+        helper !index !prevDynamic =
+            let
+                prevValue :: {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+                prevValue = fromJust (fromDynamic prevDynamic); 
+            
+                appended = appendRecord {#1=prevValue.#1+(10::Int),#3=prevValue.#3+(10::Int),#4=prevValue.#4+(10::Int),#5=prevValue.#5+(10::Int),#6=prevValue.#6+(10::Int),#7=prevValue.#7+(10::Int),#8=prevValue.#8+(10::Int)}
+                                        {#9=prevValue.#9+(10::Int),#10=prevValue.#10+(10::Int),#11=prevValue.#11+(10::Int),#12=prevValue.#12+(10::Int),#13=prevValue.#13+(10::Int),#14=prevValue.#14+(10::Int),#15=prevValue.#15+(10::Int)};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq appended
+                    (helper (index+1) appended)
+                else
+                    appended;
+    in
+        helper 0 (toDynamic {#1=(0::Int),#3=(0::Int),#4=(0::Int),#5=(0::Int),#6=(0::Int),#7=(0::Int),#8=(0::Int),#9=(0::Int),#10=(0::Int),#11=(0::Int),#12=(0::Int),#13=(0::Int),#14=(0::Int),#15=(0::Int)});
+
+/*
+    Oct 21/2005
+    running: Prelude.fromDynamic (staticAppendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        1,875 ms
+ */
+staticAppendOrdinalRecordsBenchmark :: Int -> Dynamic;
+staticAppendOrdinalRecordsBenchmark !n =
+    let
+        helper :: Int -> Dynamic -> Dynamic;
+        helper !index !prevDynamic =
+            let
+                prevValue :: {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+                prevValue = fromJust (fromDynamic prevDynamic); 
+            
+                appended = toDynamic {{#1=prevValue.#1+(10::Int),#3=prevValue.#3+(10::Int),#4=prevValue.#4+(10::Int),#5=prevValue.#5+(10::Int),#6=prevValue.#6+(10::Int),#7=prevValue.#7+(10::Int),#8=prevValue.#8+(10::Int)} |
+                                      #9=prevValue.#9+(10::Int),#10=prevValue.#10+(10::Int),#11=prevValue.#11+(10::Int),#12=prevValue.#12+(10::Int),#13=prevValue.#13+(10::Int),#14=prevValue.#14+(10::Int),#15=prevValue.#15+(10::Int)};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq appended
+                    (helper (index+1) appended)
+                else
+                    appended;
+    in
+        helper 0 (toDynamic {#1=(0::Int),#3=(0::Int),#4=(0::Int),#5=(0::Int),#6=(0::Int),#7=(0::Int),#8=(0::Int),#9=(0::Int),#10=(0::Int),#11=(0::Int),#12=(0::Int),#13=(0::Int),#14=(0::Int),#15=(0::Int)});
+
+/*
+Oct 21/2005
+running: staticAppendOrdinalRecordsStaticResultBenchmark 10000
+Run Time:        250 ms
+*/
+staticAppendOrdinalRecordsStaticResultBenchmark :: Int -> {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+staticAppendOrdinalRecordsStaticResultBenchmark !n =
+    let
+        helper :: Int -> {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int} -> {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+        helper !index !prevValue =
+            let
+                appended = {{#1=prevValue.#1+(10::Int),#3=prevValue.#3+(10::Int),#4=prevValue.#4+(10::Int),#5=prevValue.#5+(10::Int),#6=prevValue.#6+(10::Int),#7=prevValue.#7+(10::Int),#8=prevValue.#8+(10::Int)} |
+                            #9=prevValue.#9+(10::Int),#10=prevValue.#10+(10::Int),#11=prevValue.#11+(10::Int),#12=prevValue.#12+(10::Int),#13=prevValue.#13+(10::Int),#14=prevValue.#14+(10::Int),#15=prevValue.#15+(10::Int)};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq appended
+                    (helper (index+1) appended)
+                else
+                    appended;
+    in
+        helper 0 {#1=(0::Int),#3=(0::Int),#4=(0::Int),#5=(0::Int),#6=(0::Int),#7=(0::Int),#8=(0::Int),#9=(0::Int),#10=(0::Int),#11=(0::Int),#12=(0::Int),#13=(0::Int),#14=(0::Int),#15=(0::Int)};
+
+/*
+    running: Prelude.fromDynamic (dynamicExtendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        2,657 ms
+
+After converting primitive functions to primitive operations:
+    running: Prelude.fromDynamic (dynamicExtendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        2,360 ms
+
+Back to primitive functions (checked-in implementation):
+    Oct 21/2005
+    running: Prelude.fromDynamic (dynamicExtendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        2,468 ms
+    
+Switched to a dictionary-based RecordTypeRep:
+    Nov 3/2005
+    running: Dynamic.fromDynamic (dynamicExtendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+    Run Time:        1,046 ms
+*/
+dynamicExtendOrdinalRecordsBenchmark :: Int -> Dynamic;
+dynamicExtendOrdinalRecordsBenchmark !n =
+    let
+        helper :: Int -> Dynamic -> Dynamic;
+        helper !index !prevDynamic =
+            let
+                prevValue :: {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+                prevValue = fromJust (fromDynamic prevDynamic); 
+            
+                extended = insertRecordField {#3=prevValue.#3+(10::Int),#4=prevValue.#4+(10::Int),#5=prevValue.#5+(10::Int),#6=prevValue.#6+(10::Int),#7=prevValue.#7+(10::Int),#8=prevValue.#8+(10::Int), #9=prevValue.#9+(10::Int),#10=prevValue.#10+(10::Int),#11=prevValue.#11+(10::Int),#12=prevValue.#12+(10::Int),#13=prevValue.#13+(10::Int),#14=prevValue.#14+(10::Int),#15=prevValue.#15+(10::Int)}
+                                              "#1" (prevValue.#1+(10::Int));
+            in
+                if (index <= n) then
+                    Prelude.deepSeq extended
+                    (helper (index+1) extended)
+                else
+                    extended;
+    in
+        helper 0 (toDynamic {#1=(0::Int),#3=(0::Int),#4=(0::Int),#5=(0::Int),#6=(0::Int),#7=(0::Int),#8=(0::Int),#9=(0::Int),#10=(0::Int),#11=(0::Int),#12=(0::Int),#13=(0::Int),#14=(0::Int),#15=(0::Int)});
+
+/*
+Oct 21/2005
+running: Prelude.fromDynamic (staticExtendOrdinalRecordsBenchmark 10000) :: Prelude.Maybe {#1::Prelude.Int,#3::Prelude.Int,#4::Prelude.Int,#5::Prelude.Int,#6::Prelude.Int,#7::Prelude.Int,#8::Prelude.Int,#9::Prelude.Int,#10::Prelude.Int,#11::Prelude.Int,#12::Prelude.Int,#13::Prelude.Int,#14::Prelude.Int,#15::Prelude.Int}
+Run Time:        2,173 ms
+*/
+staticExtendOrdinalRecordsBenchmark :: Int -> Dynamic;
+staticExtendOrdinalRecordsBenchmark !n =
+    let
+        helper :: Int -> Dynamic -> Dynamic;
+        helper !index !prevDynamic =
+            let
+                prevValue :: {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+                prevValue = fromJust (fromDynamic prevDynamic); 
+            
+                extended = toDynamic {{#3=prevValue.#3+(10::Int),#4=prevValue.#4+(10::Int),#5=prevValue.#5+(10::Int),#6=prevValue.#6+(10::Int),#7=prevValue.#7+(10::Int),#8=prevValue.#8+(10::Int), #9=prevValue.#9+(10::Int),#10=prevValue.#10+(10::Int),#11=prevValue.#11+(10::Int),#12=prevValue.#12+(10::Int),#13=prevValue.#13+(10::Int),#14=prevValue.#14+(10::Int),#15=prevValue.#15+(10::Int)}
+                                                | #1=(prevValue.#1+(10::Int))};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq extended
+                    (helper (index+1) extended)
+                else
+                    extended;
+    in
+        helper 0 (toDynamic {#1=(0::Int),#3=(0::Int),#4=(0::Int),#5=(0::Int),#6=(0::Int),#7=(0::Int),#8=(0::Int),#9=(0::Int),#10=(0::Int),#11=(0::Int),#12=(0::Int),#13=(0::Int),#14=(0::Int),#15=(0::Int)});
+
+/*
+Oct 21/2005
+running: staticExtendOrdinalRecordsStaticResultBenchmark 10000
+Run Time:        234 ms
+*/
+staticExtendOrdinalRecordsStaticResultBenchmark :: Int -> {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+staticExtendOrdinalRecordsStaticResultBenchmark !n =
+    let
+        helper :: Int -> {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int} -> {#1::Int,#3::Int,#4::Int,#5::Int,#6::Int,#7::Int,#8::Int,#9::Int,#10::Int,#11::Int,#12::Int,#13::Int,#14::Int,#15::Int};
+        helper !index !prevValue =
+            let
+                extended = {{#3=prevValue.#3+(10::Int),#4=prevValue.#4+(10::Int),#5=prevValue.#5+(10::Int),#6=prevValue.#6+(10::Int),#7=prevValue.#7+(10::Int),#8=prevValue.#8+(10::Int), #9=prevValue.#9+(10::Int),#10=prevValue.#10+(10::Int),#11=prevValue.#11+(10::Int),#12=prevValue.#12+(10::Int),#13=prevValue.#13+(10::Int),#14=prevValue.#14+(10::Int),#15=prevValue.#15+(10::Int)}
+                           | #1=(prevValue.#1+(10::Int))};
+            in
+                if (index <= n) then
+                    Prelude.deepSeq extended
+                    (helper (index+1) extended)
+                else
+                    extended;
+    in
+        helper 0 {#1=(0::Int),#3=(0::Int),#4=(0::Int),#5=(0::Int),#6=(0::Int),#7=(0::Int),#8=(0::Int),#9=(0::Int),#10=(0::Int),#11=(0::Int),#12=(0::Int),#13=(0::Int),#14=(0::Int),#15=(0::Int)};
+
+/*
+    Oct 21/2005
+    running: dynamicRecordFieldValueBenchmark 1000000
+    Run Time:        32,468 ms
+
+Switched to a dictionary-based RecordTypeRep:
+    Nov 3/2005
+    running: dynamicRecordFieldValueBenchmark 1000000
+    Run Time:        29,910 ms
+*/
+dynamicRecordFieldValueBenchmark :: Int -> Int;
+dynamicRecordFieldValueBenchmark !n =
+    let
+        helper :: Int -> Int -> {a :: Int, b :: Int, c :: Int, d :: Int, e :: Int, f :: Int, g :: Int, h :: Int, i :: Int, j :: Int} -> Int;
+        helper !index !total !lookupTarget =
+            if (index < n) then
+                let
+                    newTerm :: Int;
+                    newTerm = fromJust (fromDynamic (recordFieldValue lookupTarget "a")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "b")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "c")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "d")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "e")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "f")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "g")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "h")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "i")) +
+                              fromJust (fromDynamic (recordFieldValue lookupTarget "j"));
+                in
+                    helper (index + 1) (total + newTerm) lookupTarget
+            else
+                total;
+    in
+        helper 0 0 {a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8, i = 9, j = 10};
+/*
+Nov 3/2005
+running: staticRecordFieldValueBenchmark 1000000
+Run Time:        1,343 ms
+*/
+staticRecordFieldValueBenchmark :: Int -> Int;
+staticRecordFieldValueBenchmark !n =
+    let
+        helper :: Int -> Int -> {a :: Int, b :: Int, c :: Int, d :: Int, e :: Int, f :: Int, g :: Int, h :: Int, i :: Int, j :: Int} -> Int;
+        helper !index !total !lookupTarget =
+            if (index < n) then
+                let
+                    newTerm :: Int;
+                    newTerm = lookupTarget.a +
+                              lookupTarget.b +
+                              lookupTarget.c +
+                              lookupTarget.d +
+                              lookupTarget.e +
+                              lookupTarget.f +
+                              lookupTarget.g +
+                              lookupTarget.h +
+                              lookupTarget.i +
+                              lookupTarget.j;
+                in
+                    helper (index + 1) (total + newTerm) lookupTarget
+            else
+                total;
+    in
+        helper 0 0 {a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8, i = 9, j = 10};
+
+/*
+staticRecordFieldValueBenchmark + having to parse a fieldname for each access:
+    Nov 3/2005
+    running: hobbledStaticRecordFieldValueBenchmark 1000000
+    Run Time:        8,234 ms (using Prelude.isOrdinalFieldName)
+    
+    (compare to 1343ms for staticRecordFieldValueBenchmark without parsing overhead)
+    
+    Having to parse field names alone appears to slow down access by ~5x.
+    Pre-parsed FieldNames would be a substantial win here.
+*/
+hobbledStaticRecordFieldValueBenchmark :: Int -> Int;
+hobbledStaticRecordFieldValueBenchmark !n =
+    let
+        helper :: Int -> Int -> {a :: Int, b :: Int, c :: Int, d :: Int, e :: Int, f :: Int, g :: Int, h :: Int, i :: Int, j :: Int} -> Int;
+        helper !index !total !lookupTarget =
+            if (index < n) then
+                let
+                    newTerm :: Int;
+                    newTerm = (seq (isOrdinalFieldName "a") lookupTarget.a) +
+                              (seq (isOrdinalFieldName "b") lookupTarget.b) +
+                              (seq (isOrdinalFieldName "c") lookupTarget.c) +
+                              (seq (isOrdinalFieldName "d") lookupTarget.d) +
+                              (seq (isOrdinalFieldName "e") lookupTarget.e) +
+                              (seq (isOrdinalFieldName "f") lookupTarget.f) +
+                              (seq (isOrdinalFieldName "g") lookupTarget.g) +
+                              (seq (isOrdinalFieldName "h") lookupTarget.h) +
+                              (seq (isOrdinalFieldName "i") lookupTarget.i) +
+                              (seq (isOrdinalFieldName "j") lookupTarget.j);
+                in
+                    helper (index + 1) (total + newTerm) lookupTarget
+            else
+                total;
+    in
+        helper 0 0 {a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8, i = 9, j = 10};
+
+
+/*
+Oct 21/2005
+running: dynamicPairLookupBenchmark 1000000
+Run Time:        81,779 ms
+*/
+dynamicPairLookupBenchmark :: Int -> Int;
+dynamicPairLookupBenchmark !n =
+    let
+        helper :: Int -> Int -> [(String, Dynamic)] -> Int;
+        helper !index !total !lookupTarget =
+            if (index < n) then
+                let
+                    newTerm :: Int;
+                    newTerm = fromJust (fromDynamic (fromJust (List.lookup "a" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "b" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "c" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "d" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "e" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "f" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "g" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "h" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "i" lookupTarget))) +
+                              fromJust (fromDynamic (fromJust (List.lookup "j" lookupTarget)));
+                in
+                    helper (index + 1) (total + newTerm) lookupTarget
+            else
+                total;
+    
+        pairBasedMap :: [(String, Dynamic)];
+        pairBasedMap =
+            [("a", toDynamic (1 :: Int)),
+             ("b", toDynamic (2 :: Int)),
+             ("c", toDynamic (3 :: Int)),
+             ("d", toDynamic (4 :: Int)),
+             ("e", toDynamic (5 :: Int)),
+             ("f", toDynamic (6 :: Int)),
+             ("g", toDynamic (7 :: Int)),
+             ("h", toDynamic (8 :: Int)),
+             ("i", toDynamic (9 :: Int)),
+             ("j", toDynamic (10 :: Int))];
+    in
+        helper 0 0 pairBasedMap; 
+
+// See also Benchmarks.dynamicMapLookupBenchmark.  That benchmark can't be here
+// currently, because it depends upon the Map module, which is not a part of
+// CAL Platform.
+        
+/*
+Using old TypeRep representation of records (EmptyTypeRep, TupleTypeRep, et al): 
+    Oct 26/2005
+    running: createAndCompareRecordTypeRepBenchmark 100000
+    Run Time:        8,343 ms
+
+Using new dictionary-based RecordTypeRep:
+    Oct 26/2005
+    running: createAndCompareRecordTypeRepBenchmark 100000
+    Run Time:        2,328 ms
+*/
+createAndCompareRecordTypeRepBenchmark :: Int -> Int;    
+createAndCompareRecordTypeRepBenchmark !n =
+    let
+        helper :: Int -> {a :: Int, b :: Int, c :: Int, d :: Int, e :: Int, f :: Int, g :: Int, h :: Int} -> Int -> Int;
+        helper !i !prevRecord !prevTotal =
+            let
+                newRecord :: {a :: Int, b :: Int, c :: Int, d :: Int, e :: Int, f :: Int, g :: Int, h :: Int};
+                newRecord = {a = prevRecord.a + 1, b = prevRecord.b + 1, c = prevRecord.c + 1, d = prevRecord.d + 1, e = prevRecord.e + 1, f = prevRecord.f + 1, g = prevRecord.g + 1, h = prevRecord.h + 1};
+            
+                newTotal :: Int;
+                newTotal = prevTotal + newRecord.a + newRecord.b + newRecord.c + newRecord.d + newRecord.e + newRecord.f + newRecord.g + newRecord.h;
+            in
+                if i == n then
+                    newTotal
+                else
+                    if equals (typeOf prevRecord) (typeOf newRecord) then
+                        helper (i + 1) newRecord newTotal
+                    else
+                        error "surely not";
+    in
+        helper 0 {a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0} 0;  
+
+//////////////////////////////////////////////////////////////////////
+// Testing predicates
+testDynamic =
+    let
+        /** helper function for testing fromDynamicWithDefault */    
+        usingDynamicListSample =
+            let
+                processSomeDynamicValues :: Dynamic -> String;    
+                processSomeDynamicValues v =
+                    let
+                        intValue = fromDynamicWithDefault v (0 :: Int);
+                        stringValue = fromDynamicWithDefault v "";
+                        doubleValue = fromDynamicWithDefault v 0.0;
+                        pairCharDoubleValue = fromDynamicWithDefault v ('a', 0.0);
+                    in
+                        if (intValue != 0) then
+                            intToString intValue
+                        else if (stringValue != "") then
+                            stringValue
+                        else if (doubleValue != 0) then
+                            doubleToString doubleValue
+                        else if (pairCharDoubleValue != ('a', 0.0)) then
+                            "(" ++ fromList [(fst pairCharDoubleValue)] ++ ", " ++ doubleToString (snd pairCharDoubleValue) ++ ")"
+                        else
+                            "unknown Dynamic value";
+            in        
+                map processSomeDynamicValues [toDynamic (10 :: Int), toDynamic "abc", toDynamic (20 :: Double), toDynamic ('c', 30.0), toDynamic ["foo"]];
+    in           
+        assert (usingDynamicListSample == ["10", "abc", "20.0", "(c, 30.0)", "unknown Dynamic value"])
+        && assert (fromJust (fromDynamic (toDynamic "zebra")) == "zebra")
+        && assert (fromJust (fromDynamic (toDynamic ("ant", True, Just 'a'))) == ("ant", True, Just 'a'))
+        && assert ([fromDynamic (toDynamic 209.0), Just 'c'] == [Nothing, Just 'c'])       
+        ;    
+
+// In-depth testing for dynamic record functions
+testInsertRecordField =
+    assert (fromDynamic (insertRecordField {} "newField" "new value") == Just {newField = "new value"}) &&
+    assert (fromDynamic (insertRecordField {oldField = "old value"} "newField" "new value") == Just {oldField = "old value", newField = "new value"}) &&
+    assert (fromDynamic (insertRecordField {oldField = "old value"} "oldField" "new value") == Just {oldField = "new value"}) &&
+    assert (fromDynamic (insertRecordField ('a', 'b') "#3" "new value") == Just ('a', 'b', "new value")) &&
+    assert (fromDynamic (insertRecordField ('a', 'b') "#9" "new value") == Just {#1 = 'a', #2 = 'b', #9 = "new value"}) &&
+    assert (fromDynamic (insertRecordField ('a', 'b') "#2" (Just 18.9)) == Just ('a', Just 18.9)) &&
+    
+    assert (fromDynamic (insertRecordField {} "#1" "new value") == Just {#1 = "new value"}) &&
+    assert (fromDynamic (insertRecordField {} "#5" "new value") == Just {#5 = "new value"}) &&
+    assert (fromDynamic (insertRecordField {oldField = "old value"} "#1" "new value") == Just {#1="new value", oldField = "old value"}) &&
+    assert (fromDynamic (insertRecordField {oldField = "old value"} "#10" "new value") == Just {#10="new value", oldField = "old value"}) &&
+    assert (fromDynamic (insertRecordField (8.0, 9.0) "newField" "new value") == Just {#1 = 8.0, #2 = 9.0, newField = "new value"}) &&
+    assert (fromDynamic (insertRecordField {#2 = "second", #3 = "third"} "#1" "first") == Just ("first", "second", "third")) &&
+    assert (fromDynamic (insertRecordField {#2 = "second", #3 = "third"} "#4" "fourth") == Just {#2 = "second", #3 = "third", #4 = "fourth"}) &&
+    assert (fromDynamic (insertRecordField {#2 = "second", #3 = "third"} "newField" "new value") == Just {#2 = "second", #3 = "third", newField = "new value"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #2 = "two", textual = "text field"} "#3" "three") == Just {#1 = "one", #2 = "two", #3 = "three", textual = "text field"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #2 = "two", textual = "text field"} "#5" "five") == Just {#1 = "one", #2 = "two", #5 = "five", textual = "text field"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #2 = "two", textual = "text field"} "newField" "new value") == Just {#1 = "one", #2 = "two", newField = "new value", textual = "text field"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #3 = "three", textual = "text field"} "#2" 20.5) == Just {#1 = "one", #2 = 20.5, #3 = "three", textual = "text field"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #3 = "three", textual = "text field"} "#5" 21.5) == Just {#1 = "one", #3 = "three", #5 = 21.5, textual = "text field"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #3 = "three", textual = "text field"} "newField" 21.5) == Just {#1 = "one", #3 = "three", newField = 21.5, textual = "text field"}) &&
+   
+    assert (fromDynamic (insertRecordField {#1 = "oldone", #3 = "oldThree"} "#1" "newone") == Just {#1 = "newone", #3 = "oldThree"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #2 = "two", textual = "text field"} "textual" 'X') == Just {#1 = "one", #2 = "two", textual = 'X'}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #2 = "two", textual = "text field"} "#2" 'X') == Just {#1 = "one", #2 = 'X', textual = "text field"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #3 = "three", textual = "text field"} "#1" 'X') == Just {#1 = 'X', #3 = "three", textual = "text field"}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one", #3 = "three", textual = "text field"} "textual" 'X') == Just {#1 = "one", #3 = "three", textual = 'X'}) &&
+    assert (fromDynamic (insertRecordField {#1 = "one"} "#1" "newone") == Just {#1 = "newone"}) &&
+    assert (fromDynamic (insertRecordField {#3 = "three"} "#3" "newthree") == Just {#3 = "newthree"});
+
+testInsertDynamicRecordField =
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {}) "newField" "new value") == Just {newField = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {oldField = "old value"}) "newField" "new value") == Just {oldField = "old value", newField = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {oldField = "old value"}) "oldField" "new value") == Just {oldField = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic ('a', 'b')) "#3" "new value") == Just ('a', 'b', "new value")) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic ('a', 'b')) "#9" "new value") == Just {#1 = 'a', #2 = 'b', #9 = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic ('a', 'b')) "#2" (Just 18.9)) == Just ('a', Just 18.9)) &&
+    
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {}) "#1" "new value") == Just {#1 = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {}) "#5" "new value") == Just {#5 = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {oldField = "old value"}) "#1" "new value") == Just {#1="new value", oldField = "old value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {oldField = "old value"}) "#10" "new value") == Just {#10="new value", oldField = "old value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic (8.0, 9.0)) "newField" "new value") == Just {#1 = 8.0, #2 = 9.0, newField = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#2 = "second", #3 = "third"}) "#1" "first") == Just ("first", "second", "third")) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#2 = "second", #3 = "third"}) "#4" "fourth") == Just {#2 = "second", #3 = "third", #4 = "fourth"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#2 = "second", #3 = "third"}) "newField" "new value") == Just {#2 = "second", #3 = "third", newField = "new value"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #2 = "two", textual = "text field"}) "#3" "three") == Just {#1 = "one", #2 = "two", #3 = "three", textual = "text field"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #2 = "two", textual = "text field"}) "#5" "five") == Just {#1 = "one", #2 = "two", #5 = "five", textual = "text field"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #2 = "two", textual = "text field"}) "newField" "new value") == Just {#1 = "one", #2 = "two", newField = "new value", textual = "text field"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #3 = "three", textual = "text field"}) "#2" 20.5) == Just {#1 = "one", #2 = 20.5, #3 = "three", textual = "text field"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #3 = "three", textual = "text field"}) "#5" 21.5) == Just {#1 = "one", #3 = "three", #5 = 21.5, textual = "text field"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #3 = "three", textual = "text field"}) "newField" 21.5) == Just {#1 = "one", #3 = "three", newField = 21.5, textual = "text field"}) &&
+   
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "oldone", #3 = "oldThree"}) "#1" "newone") == Just {#1 = "newone", #3 = "oldThree"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #2 = "two", textual = "text field"}) "textual" 'X') == Just {#1 = "one", #2 = "two", textual = 'X'}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #2 = "two", textual = "text field"}) "#2" 'X') == Just {#1 = "one", #2 = 'X', textual = "text field"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #3 = "three", textual = "text field"}) "#1" 'X') == Just {#1 = 'X', #3 = "three", textual = "text field"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one", #3 = "three", textual = "text field"}) "textual" 'X') == Just {#1 = "one", #3 = "three", textual = 'X'}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#1 = "one"}) "#1" "newone") == Just {#1 = "newone"}) &&
+    assert (fromDynamic (insertDynamicRecordField (toDynamic {#3 = "three"}) "#3" "newthree") == Just {#3 = "newthree"});
+
+testAppendDynamicRecord =
+    assert (fromDynamic (appendDynamicRecord (toDynamic {}) (toDynamic {})) == Just {}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {}) (toDynamic {newField = "new field 1", otherField = "other new field"})) == Just {newField = "new field 1", otherField = "other new field"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {}) (toDynamic (3.3, 4.4))) == Just (3.3, 4.4)) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {}) (toDynamic {#2 = 3.3, #9 = 4.4})) == Just {#2 = 3.3, #9 = 4.4}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {leftField = "left one"}) (toDynamic {rightField = "right one"})) == Just {leftField = "left one", rightField = "right one"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {leftField = "left one"}) (toDynamic {#1 = "right one"})) == Just {leftField = "left one", #1 = "right one"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {leftField = "left one"}) (toDynamic {#2 = "right two"})) == Just {leftField = "left one", #2 = "right two"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {leftField = "left one"}) (toDynamic ('a', 'b', 'c'))) == Just {#1 = 'a', #2 = 'b', #3 = 'c', leftField = "left one"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic ("first", "second")) (toDynamic {#3 = "third", #4 = "fourth"})) == Just ("first", "second", "third", "fourth")) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic ("first", "second")) (toDynamic {#4 = "fourth", #5 = "fifth"})) == Just {#1 = "first", #2 = "second", #4 = "fourth", #5 = "fifth"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic ("first", "second")) (toDynamic {a = "Ath", b = "Bth"})) == Just {#1 = "first", #2 = "second", a = "Ath", b = "Bth"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#2 = "two", #3 = "three"}) (toDynamic {#1 = "one", #4 = "four"})) == Just ("one", "two", "three", "four")) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#2 = "two", #3 = "three"}) (toDynamic {#4 = "four"})) == Just {#2 = "two", #3 = "three", #4 = "four"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#2 = "two", #3 = "three"}) (toDynamic {four = "FOURTH"})) == Just {#2 = "two", #3 = "three", four = "FOURTH"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = "one", #2 = "two", field = 99.9}) (toDynamic {#3 = "III"})) == Just {#1 = "one", #2 = "two", #3 = "III", field = 99.9}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = "one", #2 = "two", field = 99.9}) (toDynamic {#4 = "IV"})) == Just {#1 = "one", #2 = "two", #4 = "IV", field = 99.9}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = "one", #2 = "two", field = 99.9}) (toDynamic {hello = "hi"})) == Just {#1 = "one", #2 = "two", hello = "hi", field = 99.9}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#2 = "two", field = 99.9}) (toDynamic {#1 = "I"})) == Just {#1 = "I", #2 = "two", field = 99.9}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#2 = "two", field = 99.9}) (toDynamic {#3 = "III"})) == Just {#2 = "two", #3 = "III", field = 99.9}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#2 = "two", field = 99.9}) (toDynamic {ahoy = "yarr!"})) == Just {#2 = "two", ahoy = "yarr!", field = 99.9}) &&
+    
+    assert (fromDynamic (appendDynamicRecord (toDynamic {first = '1', second = '2'}) (toDynamic {first = 0.0, third = 0.0})) == Just {first = '1', second = '2', third = 0.0}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic (1.1, 1.2, 1.3)) (toDynamic (9.1, 9.2, 9.3, 9.4, 9.5))) == Just (1.1, 1.2, 1.3, 9.4, 9.5)) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic ('a', 'b', 'c')) (toDynamic {#2 = "X", #4 = "X"})) == Just ('a', 'b', 'c', "X")) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic ('a', 'b', 'c')) (toDynamic {#2 = "X", #9 = "X"})) == Just {#1 = 'a', #2 = 'b', #3 = 'c', #9 = "X"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'}) (toDynamic {#2 = 20 :: Int, #4 = 40 :: Int})) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, #4 = 40 :: Int, fn = 'v'}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'}) (toDynamic {#2 = 20 :: Int, #3 = 'X'})) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, fn = 'v'}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#3 = 30 :: Int, fn = 'v'}) (toDynamic {#2 = 20 :: Int, #3 = 'X'})) == Just {#2 = 20 :: Int, #3 = 30 :: Int, fn = 'v'}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'}) (toDynamic {#2 = 20 :: Int, #4 = 40 :: Int, fn = '?', newField = "new value"})) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, #4 = 40 :: Int, fn = 'v', newField = "new value"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'}) (toDynamic {#2 = 20 :: Int, #3 = 'X', fn = '?', newField = "new value"})) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, fn = 'v', newField = "new value"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#3 = 30 :: Int, fn = 'v'}) (toDynamic {#2 = 20 :: Int, #3 = 'X', fn = '?', newField = "new value"})) == Just {#2 = 20 :: Int, #3 = 30 :: Int, fn = 'v', newField = "new value"}) &&
+    
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#3 = "X"}) (toDynamic {#3 = "X"})) == Just {#3 = "X"}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic (1.0, 2.0)) (toDynamic (1.0, 2.0))) == Just (1.0, 2.0)) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {a = 'A', b= 'B'}) (toDynamic {a = 'A', b= 'B'})) == Just {a = 'A', b= 'B'}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#1 = 'A', #2 = 'B', a = 'C', b = 'D'}) (toDynamic {#1 = 'A', #2 = 'B', a = 'C', b = 'D'})) == Just {#1 = 'A', #2 = 'B', a = 'C', b = 'D'}) &&
+    assert (fromDynamic (appendDynamicRecord (toDynamic {#2 = 'B', #3 = 'A', a = 'C', b = 'D'}) (toDynamic {#2 = 'B', #3 = 'A', a = 'C', b = 'D'})) == Just {#2 = 'B', #3 = 'A', a = 'C', b = 'D'});
+
+testAppendRecord =
+    assert (fromDynamic (appendRecord {} {}) == Just {}) &&
+    assert (fromDynamic (appendRecord {} {newField = "new field 1", otherField = "other new field"}) == Just {newField = "new field 1", otherField = "other new field"}) &&
+    assert (fromDynamic (appendRecord {} (3.3, 4.4)) == Just (3.3, 4.4)) &&
+    assert (fromDynamic (appendRecord {} {#2 = 3.3, #9 = 4.4}) == Just {#2 = 3.3, #9 = 4.4}) &&
+    assert (fromDynamic (appendRecord {leftField = "left one"} {rightField = "right one"}) == Just {leftField = "left one", rightField = "right one"}) &&
+    assert (fromDynamic (appendRecord {leftField = "left one"} {#1 = "right one"}) == Just {leftField = "left one", #1 = "right one"}) &&
+    assert (fromDynamic (appendRecord {leftField = "left one"} {#2 = "right two"}) == Just {leftField = "left one", #2 = "right two"}) &&
+    assert (fromDynamic (appendRecord {leftField = "left one"} ('a', 'b', 'c')) == Just {#1 = 'a', #2 = 'b', #3 = 'c', leftField = "left one"}) &&
+    assert (fromDynamic (appendRecord ("first", "second") {#3 = "third", #4 = "fourth"}) == Just ("first", "second", "third", "fourth")) &&
+    assert (fromDynamic (appendRecord ("first", "second") {#4 = "fourth", #5 = "fifth"}) == Just {#1 = "first", #2 = "second", #4 = "fourth", #5 = "fifth"}) &&
+    assert (fromDynamic (appendRecord ("first", "second") {a = "Ath", b = "Bth"}) == Just {#1 = "first", #2 = "second", a = "Ath", b = "Bth"}) &&
+    assert (fromDynamic (appendRecord {#2 = "two", #3 = "three"} {#1 = "one", #4 = "four"}) == Just ("one", "two", "three", "four")) &&
+    assert (fromDynamic (appendRecord {#2 = "two", #3 = "three"} {#4 = "four"}) == Just {#2 = "two", #3 = "three", #4 = "four"}) &&
+    assert (fromDynamic (appendRecord {#2 = "two", #3 = "three"} {four = "FOURTH"}) == Just {#2 = "two", #3 = "three", four = "FOURTH"}) &&
+    assert (fromDynamic (appendRecord {#1 = "one", #2 = "two", field = 99.9} {#3 = "III"}) == Just {#1 = "one", #2 = "two", #3 = "III", field = 99.9}) &&
+    assert (fromDynamic (appendRecord {#1 = "one", #2 = "two", field = 99.9} {#4 = "IV"}) == Just {#1 = "one", #2 = "two", #4 = "IV", field = 99.9}) &&
+    assert (fromDynamic (appendRecord {#1 = "one", #2 = "two", field = 99.9} {hello = "hi"}) == Just {#1 = "one", #2 = "two", hello = "hi", field = 99.9}) &&
+    assert (fromDynamic (appendRecord {#2 = "two", field = 99.9} {#1 = "I"}) == Just {#1 = "I", #2 = "two", field = 99.9}) &&
+    assert (fromDynamic (appendRecord {#2 = "two", field = 99.9} {#3 = "III"}) == Just {#2 = "two", #3 = "III", field = 99.9}) &&
+    assert (fromDynamic (appendRecord {#2 = "two", field = 99.9} {ahoy = "yarr!"}) == Just {#2 = "two", ahoy = "yarr!", field = 99.9}) &&
+    
+    assert (fromDynamic (appendRecord {first = '1', second = '2'} {first = 0.0, third = 0.0}) == Just {first = '1', second = '2', third = 0.0}) &&
+    assert (fromDynamic (appendRecord (1.1, 1.2, 1.3) (9.1, 9.2, 9.3, 9.4, 9.5)) == Just (1.1, 1.2, 1.3, 9.4, 9.5)) &&
+    assert (fromDynamic (appendRecord ('a', 'b', 'c') {#2 = "X", #4 = "X"}) == Just ('a', 'b', 'c', "X")) &&
+    assert (fromDynamic (appendRecord ('a', 'b', 'c') {#2 = "X", #9 = "X"}) == Just {#1 = 'a', #2 = 'b', #3 = 'c', #9 = "X"}) &&
+    assert (fromDynamic (appendRecord {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'} {#2 = 20 :: Int, #4 = 40 :: Int}) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, #4 = 40 :: Int, fn = 'v'}) &&
+    assert (fromDynamic (appendRecord {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'} {#2 = 20 :: Int, #3 = 'X'}) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, fn = 'v'}) &&
+    assert (fromDynamic (appendRecord {#3 = 30 :: Int, fn = 'v'} {#2 = 20 :: Int, #3 = 'X'}) == Just {#2 = 20 :: Int, #3 = 30 :: Int, fn = 'v'}) &&
+    assert (fromDynamic (appendRecord {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'} {#2 = 20 :: Int, #4 = 40 :: Int, fn = '?', newField = "new value"}) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, #4 = 40 :: Int, fn = 'v', newField = "new value"}) &&
+    assert (fromDynamic (appendRecord {#1 = 10 :: Int, #3 = 30 :: Int, fn = 'v'} {#2 = 20 :: Int, #3 = 'X', fn = '?', newField = "new value"}) == Just {#1 = 10 :: Int, #2 = 20 :: Int, #3 = 30 :: Int, fn = 'v', newField = "new value"}) &&
+    assert (fromDynamic (appendRecord {#3 = 30 :: Int, fn = 'v'} {#2 = 20 :: Int, #3 = 'X', fn = '?', newField = "new value"}) == Just {#2 = 20 :: Int, #3 = 30 :: Int, fn = 'v', newField = "new value"}) &&
+    
+    assert (fromDynamic (appendRecord {#3 = "X"} {#3 = "X"}) == Just {#3 = "X"}) &&
+    assert (fromDynamic (appendRecord (1.0, 2.0) (1.0, 2.0)) == Just (1.0, 2.0)) &&
+    assert (fromDynamic (appendRecord {a = 'A', b= 'B'} {a = 'A', b= 'B'}) == Just {a = 'A', b= 'B'}) &&
+    assert (fromDynamic (appendRecord {#1 = 'A', #2 = 'B', a = 'C', b = 'D'} {#1 = 'A', #2 = 'B', a = 'C', b = 'D'}) == Just {#1 = 'A', #2 = 'B', a = 'C', b = 'D'}) &&
+    assert (fromDynamic (appendRecord {#2 = 'B', #3 = 'A', a = 'C', b = 'D'} {#2 = 'B', #3 = 'A', a = 'C', b = 'D'}) == Just {#2 = 'B', #3 = 'A', a = 'C', b = 'D'});
+
+dynamicRecordStrictnessChecks =
+    assert (fromDynamic (insertRecordField (error "uh oh" :: Double, 50.0) "#1" 60.0) == Just (60.0, 50.0)) &&
+    assert (fromDynamic (dynamicRecordFieldValue (insertRecordField {safe = "SAFE"} "dangerous" (error "oh no" :: Char)) "safe") == Just "SAFE") &&
+    assert (fromDynamic (dynamicRecordFieldValue (appendRecord {a = error "don't evaluate" :: Int, b = 3.0} {b = error "shouldn't be part of result" :: Char, c = 4.0}) "b") == Just 3.0) &&
+    assert (fromDynamic (appendRecord {#2 = "OK", #3 = "fine"} {#1 = "swell", #2 = error "VERY BAD" :: String}) == Just ("swell", "OK", "fine")) &&
+    assert (typeRepToString (typeOf {a = (error "don't eval" :: {})}) == "{a :: {}}");
+    
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    assert dynamicRecordStrictnessChecks &&
+    assert testAppendDynamicRecord &&
+    assert testAppendRecord &&
+    assert testDynamic &&
+    assert testInsertDynamicRecordField &&
+    assert testInsertRecordField
+    ;
+//please leave testModule last! It makes it easy to see what tests are hooked up.
+//please also make sure that the test predicates are in sorted order, so that it's easy to tell
+//at a glance whether a specific test is hooked up or not.

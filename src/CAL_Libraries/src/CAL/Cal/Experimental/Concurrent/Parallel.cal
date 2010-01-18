@@ -1,0 +1,227 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Parallel.cal
+ * Creation date: July 10, 2007
+ */
+
+/**
+ * Various functions for parallel evaluation in CAL. CAL must be started with
+ * the system propery org.openquark.cal.machine.lecc.concurrent_runtime for the
+ * functions in this module to truly behave in a parallel fashion. Otherwise
+ * they result in a sequential approximations of the parallel functionality.
+ *
+ * @author Bo Ilic
+ */
+module Cal.Experimental.Concurrent.Parallel;
+
+import Cal.Core.Prelude using
+    typeConstructor = CalFunction, Int, JObject;
+    function = outputCalValueStrict, seq, toCalValue;
+    ;
+import Cal.Core.System using
+    function = concurrentRuntime;
+    ;
+import Cal.Core.Record;
+import Cal.Collections.List using
+    function = map;
+    ;
+
+/**
+ * An Executor is used to run tasks, typically on worker threads.
+ * Different executors can be used to get different threading behaviour (such as thread pooling).
+ */
+data foreign unsafe import jvm public "java.util.concurrent.Executor" public Executor;
+
+/**
+ * The thread-per-task executor will spawn a new thread for each execution.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.concurrent.ConcurrentHelpers.makeThreadPerTaskExecutor"
+    public threadPerTaskExecutor :: Executor;
+
+/**
+ * The synchronous executor will run tasks directly on the calling thread when submitted.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.concurrent.ConcurrentHelpers.makeSynchronousExecutor"
+    public synchronousExecutor :: Executor;
+
+/**
+ * An executor with a pool of N threads for executing tasks.
+ * @arg nThreads  the number of threads in the pool
+ */
+foreign unsafe import jvm "static method java.util.concurrent.Executors.newFixedThreadPool"
+    public fixedThreadPoolExecutor :: Int -> Executor;
+
+
+/**
+ * If CAL is started with the system property
+ * org.openquark.cal.machine.lecc.concurrent_runtime then this function returns
+ * the original pair, except that a thread is started for each component to
+ * evaluate it to weak-head normal form (WHNF). These 2 threads may not be
+ * finished doing so before this function returns, but if a component is needed
+ * in WHNF prior to this by client code, then graph reduction will block until
+ * the component has finished evaluation to WHNF.
+ *
+ * If CAL is not started with the above system property then this function
+ * behaves like {@link Prelude.id@} on pairs.
+ *
+ * If you want to ensure that the components of the pair have finished being
+ * evaluated to WHNF prior to the pair being returned, just compose with {@link
+ * Record.strictRecord@}.
+ *
+ * @arg pair
+ * @return pair, where the first and second components are in the process of
+ *   being evaluated to WHNF.
+ */
+//this function could be generalized to records
+//i.e. parallelRecord :: {r} -> {r}
+parallelTuple2 :: (a, b) -> (a, b);
+public parallelTuple2 !pair =
+    case pair of
+    (x, y) -> x `par` y `par` pair;
+    ;
+
+/**
+ * If CAL is started with the system property
+ * org.openquark.cal.machine.lecc.concurrent_runtime then this function provides
+ * a parallel version of {@link List.map@}. This function will not terminate for
+ * infinite lists, unlike {@link List.map@}. A separate evaluation thread is
+ * created for each element of {@code list@} to begin evaluating the application
+ * of {@code mapFunction@} to each element to weak-head normal form (WHNF).
+ *
+ * If CAL is not started with the above system property then this function
+ * behaves similar to {@link map@} except that the elements of the list are
+ * first traversed (without being evaluated), so it will still hang for an
+ * infinite list.
+ *
+ * If you want to ensure that the components of the list are actually evaluated
+ * to WHNF prior to the result being returned, just compose with {@link
+ * List.strictList@}.
+ *
+ * @arg mapFunction
+ * @arg list
+ * @return applies {@code mapFunction@} to each element of {@code list@}, and
+ *   evaluates these applications, in parallel, to WHNF. The function may return
+ *   prior to all elements being evaluated to WHNF.
+ */
+parallelMap :: (a -> b) -> [a] -> [b];
+public parallelMap mapFunction !list =
+    let
+        mappedList = List.map mapFunction list;
+
+        parList :: [a] -> ();
+        parList !list =
+            case list of
+            [] -> ();
+            x : xs -> x `par` parList xs;
+            ;
+    in
+        parList mappedList
+        `seq`
+        mappedList
+    ;
+
+/**
+ * If CAL is started with the system property
+ * org.openquark.cal.machine.lecc.concurrent_runtime then this function provides
+ * a way of spawning a new thread to perform a computation in parallel. It is
+ * often used in conjunction with {@code Prelude.seq@} to precisely specify how
+ * a problem is sequenced and parallelized. In particular, if {@code par x y@}
+ * is evaluated to weak-head normal form, then a thread is spawned to evaluate
+ * {@code x@} to WHNF, and in parallel, {@code y@} is also evaluated to WHNF
+ * with the function then returning {@code y@}. Note this function may return
+ * before {@code x@} has actually finished evaluating to WHNF.
+ *
+ * If CAL is not started with the above system property then this function just
+ * returns {@code y@} without touching {@code x@}.
+ *
+ * @arg x
+ * @arg y
+ * @return {@code y@}, but a thread is spawned to evaluate {@code x@} to WHNF in
+ *   parallel. 
+ */
+par :: a -> b -> b;
+public par x y =
+    parallelExecute threadPerTaskExecutor x y;
+
+
+/**
+ * If CAL is started with the system property
+ * org.openquark.cal.machine.lecc.concurrent_runtime then this function provides
+ * a way of performing a computation in parallel using the specified executor. 
+ * It is often used in conjunction with {@code Prelude.seq@} to precisely specify how
+ * a problem is sequenced and parallelized. In particular, if {@code par x y@}
+ * is evaluated to weak-head normal form, then a task is spawned to evaluate
+ * {@code x@} to WHNF, and in parallel, {@code y@} is also evaluated to WHNF
+ * with the function then returning {@code y@}. Note this function may return
+ * before {@code x@} has actually finished evaluating to WHNF.
+ *
+ * If CAL is not started with the above system property then this function just
+ * returns {@code y@} without touching {@code x@}.
+ *
+ * @arg executor  the executor to be used to perform the parallel task
+ * @arg x         a value to be evaluated to WHNF in parallel
+ * @arg y         a value to be evaluated normally
+ * @return        {@code y@}, but a task is spawned to evaluate {@code x@} to 
+ *                WHNF in parallel.
+ */
+parallelExecute :: Executor -> a -> b -> b;
+public parallelExecute executor x y =
+    if concurrentRuntime then
+        toFuture executor x
+        `seq`
+        y
+    else
+        y
+    ;
+
+
+data foreign unsafe import jvm "java.util.concurrent.Future" JFuture;
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.concurrent.ConcurrentHelpers.makeFuture"
+    makeFuture :: Executor -> CalFunction -> JFuture;
+
+toFuture :: Executor -> a -> JFuture;
+toFuture executor value =
+    let
+        makeCalFunction :: a -> CalFunction;
+        makeCalFunction x =
+            let
+                makeArgOfCalFunction :: a -> (JObject -> JObject);
+                makeArgOfCalFunction x y =
+                    outputCalValueStrict (toCalValue x);
+            in
+                Prelude.makeCalFunction (makeArgOfCalFunction x)
+            ;
+    in
+        makeFuture executor (makeCalFunction value)
+    ;

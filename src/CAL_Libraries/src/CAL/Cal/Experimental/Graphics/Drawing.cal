@@ -1,0 +1,604 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Drawing.cal
+ * Creation date: July 4, 2005.
+ * By: Richard Webster
+ */
+
+/**
+ * This experimental module contains functions which give access to
+ * Java2D functionality from CAL.
+ * There are functions to draw text, shapes, images, etc... to a graphics device (a Java Graphics2D).
+ * Functions also exist to perform any drawing with a transformation
+ * applied (scaling, shifting, etc...).
+ *  
+ * @author Richard Webster
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Experimental.Graphics.Drawing;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, CalFunction, Double, Int, JObject, String;
+    typeClass = Inputable, Num, Outputable;
+    function =
+        field1, field2, input, isEmpty, makeCalFunction, output, seq, toDouble;
+    typeConstructor = Float;
+    function = ceiling, floor, toFloat;
+    ;
+import Cal.Collections.List using
+    function = foldLeftStrict, head, tail;
+    ;      
+import Cal.Graphics.Color using
+    typeConstructor = Color;
+    ;
+import Cal.IO.File using
+    typeConstructor = FileName;
+    ;
+
+
+/**
+ * The graphics device to which drawing can be done.
+ */
+data foreign unsafe import jvm "java.awt.Graphics2D" public Graphics deriving Outputable, Inputable;
+
+foreign unsafe import jvm "method dispose" private jDisposeGraphics :: Graphics -> ();
+
+foreign unsafe import jvm "method draw" private jDrawShape :: Graphics -> Shape -> ();
+foreign unsafe import jvm "method fill" private jFillShape :: Graphics -> Shape -> ();
+
+foreign unsafe import jvm "method drawString" private jDrawString :: Graphics -> String -> Float -> Float -> ();
+
+/**
+ * A font for printing on a graphics device.
+ */
+data foreign unsafe import jvm "java.awt.Font" public Font deriving Outputable, Inputable;
+
+foreign unsafe import jvm "method getFont" private getFont :: Graphics -> Font;
+foreign unsafe import jvm "method setFont" private setFont :: Graphics -> Font -> ();
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.FontHelper.makeFont" private jMakeFont :: String -> Double -> Boolean -> Boolean -> Font;
+
+/**
+ * A paint (i.e. fill pattern) for coloring a graphics device.
+ */
+data foreign unsafe import jvm "java.awt.Paint" public Paint deriving Outputable, Inputable;
+foreign unsafe import jvm "method getPaint" private getPaint :: Graphics -> Paint;
+foreign unsafe import jvm "method setPaint" private setPaint :: Graphics -> Paint -> ();
+
+/**
+ * A stroke (i.e. line pattern) for drawing on a graphics device.
+ */
+data foreign unsafe import jvm "java.awt.Stroke" public Stroke deriving Outputable, Inputable;
+
+foreign unsafe import jvm "method getStroke" private getStroke :: Graphics -> Stroke;
+foreign unsafe import jvm "method setStroke" private setStroke :: Graphics -> Stroke -> ();
+
+foreign unsafe import jvm "constructor java.awt.BasicStroke" private jMakeStroke0 :: Stroke;
+foreign unsafe import jvm "constructor java.awt.BasicStroke" private jMakeStroke1 :: Float -> Stroke;
+
+
+/**
+ * Constructs a font from the specified info.
+ */
+font :: String -> Double -> Boolean -> Boolean -> Font;
+public font = jMakeFont;
+
+
+/**
+ * Creates a paint for a solid colour.
+ */
+solidColourPaint :: Color -> Paint;
+public solidColourPaint !color = 
+    // A Color is actually a Paint already.
+    Prelude.input (Prelude.output color);
+
+
+/**
+ * A stroke with default attributes.
+ */
+defaultStroke :: Stroke;
+public defaultStroke = jMakeStroke0;
+
+/**
+ * A solid stroke with the specified width.
+ */
+solidStroke :: Num a => a -> Stroke;
+public solidStroke !width = jMakeStroke1 (toFloat width);
+
+
+/**
+ * Shapes which can be drawn.
+ */
+data foreign unsafe import jvm "java.awt.Shape" public Shape deriving Outputable, Inputable;
+
+foreign unsafe import jvm "constructor java.awt.geom.Line2D$Double" private jMakeLine :: Double -> Double -> Double -> Double -> Shape;
+foreign unsafe import jvm "constructor java.awt.geom.Rectangle2D$Double" private jMakeRectangle :: Double -> Double -> Double -> Double -> Shape;
+
+data foreign unsafe import jvm "java.awt.geom.GeneralPath" private GeneralPath deriving Outputable, Inputable;
+foreign unsafe import jvm "constructor java.awt.geom.GeneralPath" private jMakeGeneralPath :: GeneralPath;
+
+foreign unsafe import jvm "method moveTo" private gpMoveTo :: GeneralPath -> Float -> Float -> ();
+foreign unsafe import jvm "method lineTo" private gpLineTo :: GeneralPath -> Float -> Float -> ();
+foreign unsafe import jvm "method closePath" private gpClosePath :: GeneralPath -> ();
+
+
+foreign unsafe import jvm "method getClip" private getClip :: Graphics -> Shape;
+foreign unsafe import jvm "method clip" private clip :: Graphics -> Shape -> ();
+foreign unsafe import jvm "method setClip" private setClip :: Graphics -> Shape -> ();
+
+/**
+ * Trasforms for shifting, rotating, etc....
+ */
+data foreign unsafe import jvm "java.awt.geom.AffineTransform" private Transform;
+
+foreign unsafe import jvm "method getTransform" private getTransform :: Graphics -> Transform;
+foreign unsafe import jvm "method setTransform" private setTransform :: Graphics -> Transform -> ();
+foreign unsafe import jvm "method translate" private translate :: Graphics -> Double -> Double -> ();
+foreign unsafe import jvm "method rotate" private rotate :: Graphics -> Double -> Double -> Double -> ();
+foreign unsafe import jvm "method scale" private scale :: Graphics -> Double -> Double -> ();
+
+
+/**
+ * Constructs a line shape.
+ */
+makeLine :: Double -> Double -> Double -> Double -> Shape;
+public makeLine !x1 !y1 !x2 !y2 = jMakeLine x1 y1 x2 y2;
+
+/**
+ * Constructs a rectangle shape.
+ */
+makeRectangle :: Double -> Double -> Double -> Double -> Shape;
+public makeRectangle !x !y !w !h = jMakeRectangle x y w h;
+
+
+/**
+ * Constructs a polygon using the specified points.
+ */
+makePolygon :: [(Double, Double)] -> Shape;
+public makePolygon !points = 
+    let
+        firstPoint = head points;
+        otherPoints = tail points;
+
+        path = jMakeGeneralPath;
+
+        addPoints !points path = 
+            case points of
+            [] -> path;
+            p : ps -> seq (gpLineTo path (toFloat (field1 p)) (toFloat (field2 p))) (addPoints ps path);
+            ;
+    in
+        input (output (seq path
+            $ seq (gpMoveTo path (toFloat (field1 firstPoint)) (toFloat (field2 firstPoint)))
+            $ seq (addPoints otherPoints path)
+            $ seq (gpClosePath path)
+            $ path));
+
+
+/**
+ * Draws the specified shape.
+ */
+drawShape :: Paint -> Stroke -> Shape -> Graphics -> Graphics;
+public drawShape !paint !stroke !shape !graphics = drawShapes paint stroke [shape] graphics;
+
+/**
+ * Fills the interior of the specified shape.
+ */
+fillShape :: Paint -> Shape -> Graphics -> Graphics;
+public fillShape !paint !shape !graphics = fillShapes paint [shape] graphics;
+
+/**
+ * Draws the specified shapes.
+ */
+drawShapes :: Paint -> Stroke -> [Shape] -> Graphics -> Graphics;
+public drawShapes !paint !stroke !shapes !graphics = 
+    let
+        drawHelper :: [Shape] -> Graphics -> Graphics;
+        drawHelper !shapes !graphics = 
+            case shapes of
+            [] -> graphics;
+            s : ss -> seq (jDrawShape graphics s) (drawHelper ss graphics);
+            ;
+    in
+        drawWithPaint paint (drawWithStroke stroke (drawHelper shapes)) graphics;
+
+
+/**
+ * Fills the interior of the specified shapes.
+ */
+fillShapes :: Paint -> [Shape] -> Graphics -> Graphics;
+public fillShapes !paint !shapes !graphics = 
+    let
+        fillHelper :: [Shape] -> Graphics -> Graphics;
+        fillHelper !shapes !graphics= 
+            case shapes of
+            [] -> graphics;
+            s : ss -> seq (jFillShape graphics s) (fillHelper ss graphics);
+            ;
+    in
+        drawWithPaint paint (fillHelper shapes) graphics;
+
+/**
+ * Draws text to the graphics.
+ */
+drawText :: (Num a, Num b) => Paint -> Font -> String -> a -> b -> Graphics -> Graphics;
+public drawText !paint !font !text !x !y !graphics = 
+    let
+        drawHelper !graphics = seq (jDrawString graphics text (toFloat x) (toFloat y)) graphics;
+    in
+        drawWithPaint paint (drawWithFont font drawHelper) graphics;
+
+/**
+ * Performs drawing with the specified paint active.
+ */
+drawWithPaint :: Paint -> (Graphics -> Graphics) -> Graphics -> Graphics;
+drawWithPaint !paint drawingFn !graphics = 
+    let
+        oldPaint = getPaint graphics;
+    in
+        seq oldPaint
+            $ seq (setPaint graphics paint)
+            $ seq (drawingFn graphics)
+            $ seq (setPaint graphics oldPaint)
+            $ graphics;
+
+/**
+ * Performs drawing with the specified stroke active.
+ */
+drawWithStroke :: Stroke -> (Graphics -> Graphics) -> Graphics -> Graphics;
+drawWithStroke !stroke drawingFn !graphics = 
+    let
+        oldStroke = getStroke graphics;
+    in
+        seq oldStroke
+            $ seq (setStroke graphics stroke)
+            $ seq (drawingFn graphics)
+            $ seq (setStroke graphics oldStroke)
+            $ graphics;
+
+/**
+ * Performs drawing with the specified font active.
+ */
+drawWithFont :: Font -> (Graphics -> Graphics) -> Graphics -> Graphics;
+drawWithFont !font drawingFn !graphics = 
+    let
+        oldFont = getFont graphics;
+    in
+        seq oldFont
+            $ seq (setFont graphics font)
+            $ seq (drawingFn graphics)
+            $ seq (setFont graphics oldFont)
+            $ graphics;
+
+/**
+ * Performs drawing with a clipping shape.
+ */
+drawWithClipping :: Shape -> (Graphics -> Graphics) -> Graphics -> Graphics;
+public drawWithClipping !clippingShape drawingFn !graphics = 
+    let
+        oldClipping = getClip graphics;
+    in
+        seq oldClipping
+            $ seq (clip graphics clippingShape)
+            $ seq (drawingFn graphics)
+            $ seq (setClip graphics oldClipping)
+            $ graphics;
+
+/**
+ * Performs drawing with the output translated in the x and y directions.
+ */
+drawTranslated :: Double -> Double -> (Graphics -> Graphics) -> Graphics -> Graphics;
+public drawTranslated !xShift !yShift drawingFn !graphics = 
+    let
+        oldTransform = getTransform graphics;
+    in
+        if (xShift == 0 && yShift == 0) then drawingFn graphics
+        else seq oldTransform
+                $ seq (translate graphics xShift yShift)
+                $ seq (drawingFn graphics)
+                $ seq (setTransform graphics oldTransform)
+                $ graphics;
+
+/**
+ * Performs drawing with the output rotated about the specified point.
+ * The rotation angle is in radians.
+ */
+drawRotated :: Double -> Double -> Double -> (Graphics -> Graphics) -> Graphics -> Graphics;
+public drawRotated !rotationAngle !x !y drawingFn !graphics = 
+    let
+        oldTransform = getTransform graphics;
+    in
+        if (rotationAngle == 0.0) then drawingFn graphics
+        else seq oldTransform
+            $ seq (rotate graphics rotationAngle x y)
+            $ seq (drawingFn graphics)
+            $ seq (setTransform graphics oldTransform)
+            $ graphics;
+
+/**
+ * Performs drawing with the output scaled in the x and y directions.
+ */
+drawScaled :: Double -> Double -> (Graphics -> Graphics) -> Graphics -> Graphics;
+public drawScaled !xScaling !yScaling drawingFn !graphics = 
+    let
+        oldTransform = getTransform graphics;
+    in
+        if (xScaling == 1.0 && yScaling == 1.0) then drawingFn graphics
+        else seq oldTransform
+            $ seq (scale graphics xScaling yScaling)
+            $ seq (drawingFn graphics)
+            $ seq (setTransform graphics oldTransform)
+            $ graphics;
+
+
+/**
+ * Rendering Hints.
+ */
+data public RenderingHint = 
+    private RenderingHint 
+        hintKey :: !RenderingHintKey 
+        hintValue :: !RenderingHintValue;
+
+data foreign unsafe import jvm "java.awt.RenderingHints$Key" public RenderingHintKey deriving Outputable, Inputable;
+data foreign unsafe import jvm "java.lang.Object" public RenderingHintValue deriving Outputable, Inputable;
+
+data foreign unsafe import jvm "java.util.Map" private RenderingHintsMap;
+
+foreign unsafe import jvm "method getRenderingHints" private getRenderingHintsMap :: Graphics -> RenderingHintsMap;
+foreign unsafe import jvm "method setRenderingHints" private setRenderingHintsMap :: Graphics -> RenderingHintsMap -> ();
+foreign unsafe import jvm "method setRenderingHint"  private setRenderingHint :: Graphics -> RenderingHintKey -> RenderingHintValue -> ();
+
+/**
+ * Performs drawing with the specified rendering hints set.
+ */
+drawWithRenderingHints :: [RenderingHint] -> (Graphics -> Graphics) -> Graphics -> Graphics;
+public drawWithRenderingHints !renderingHints drawingFn !graphics = 
+    let
+        oldRenderingHints = getRenderingHintsMap graphics;
+
+        setRenderingHintHelper :: Graphics -> RenderingHint -> Graphics;
+        setRenderingHintHelper !graphics !renderingHint = 
+            case renderingHint of
+            RenderingHint {hintKey, hintValue} -> 
+                seq (setRenderingHint graphics hintKey hintValue) graphics;
+            ;
+    in
+        if (isEmpty renderingHints) then drawingFn graphics
+        else seq oldRenderingHints
+            $ seq (foldLeftStrict setRenderingHintHelper graphics renderingHints)
+            $ seq (drawingFn graphics)
+            $ seq (setRenderingHintsMap graphics oldRenderingHints)
+            $ graphics;
+
+foreign unsafe import jvm "static field java.awt.RenderingHints.KEY_RENDERING" private renderingHintKey_Rendering :: RenderingHintKey;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_RENDER_SPEED" private renderingHintValue_Rendering_Speed :: RenderingHintValue;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_RENDER_QUALITY" private renderingHintValue_Rendering_Quality :: RenderingHintValue;
+
+foreign unsafe import jvm "static field java.awt.RenderingHints.KEY_ANTIALIASING" private renderingHintKey_Antialiasing :: RenderingHintKey;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_ANTIALIAS_ON" private renderingHintValue_Antialiasing_On :: RenderingHintValue;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_ANTIALIAS_OFF" private renderingHintValue_Antialiasing_Off :: RenderingHintValue;
+
+foreign unsafe import jvm "static field java.awt.RenderingHints.KEY_TEXT_ANTIALIASING" private renderingHintKey_TextAntialiasing :: RenderingHintKey;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON" private renderingHintValue_TextAntialiasing_On :: RenderingHintValue;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_OFF" private renderingHintValue_TextAntialiasing_Off :: RenderingHintValue;
+
+foreign unsafe import jvm "static field java.awt.RenderingHints.KEY_FRACTIONALMETRICS" private renderingHintKey_FractionalMetrics :: RenderingHintKey;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_FRACTIONALMETRICS_ON" private renderingHintValue_FractionalMetrics_On :: RenderingHintValue;
+foreign unsafe import jvm "static field java.awt.RenderingHints.VALUE_FRACTIONALMETRICS_OFF" private renderingHintValue_FractionalMetrics_Off :: RenderingHintValue;
+
+// TODO: expose more rendering hints as needed...
+public renderingHint_Rendering_Speed = RenderingHint renderingHintKey_Rendering renderingHintValue_Rendering_Speed;
+public renderingHint_Rendering_Quality = RenderingHint renderingHintKey_Rendering renderingHintValue_Rendering_Quality;
+
+public renderingHint_Antialiasing_On = RenderingHint renderingHintKey_Antialiasing renderingHintValue_Antialiasing_On;
+public renderingHint_Antialiasing_Off = RenderingHint renderingHintKey_Antialiasing renderingHintValue_Antialiasing_Off;
+
+public renderingHint_TextAntialiasing_On = RenderingHint renderingHintKey_TextAntialiasing renderingHintValue_TextAntialiasing_On;
+public renderingHint_TextAntialiasing_Off = RenderingHint renderingHintKey_TextAntialiasing renderingHintValue_TextAntialiasing_Off;
+
+public renderingHint_FractionalMetrics_On = RenderingHint renderingHintKey_FractionalMetrics renderingHintValue_FractionalMetrics_On;
+public renderingHint_FractionalMetrics_Off = RenderingHint renderingHintKey_FractionalMetrics renderingHintValue_FractionalMetrics_Off;
+
+/**
+ * Default rendering hints for faster drawing.
+ */
+highSpeedRenderingHints :: [RenderingHint];
+public highSpeedRenderingHints = [renderingHint_Rendering_Speed, 
+                                  renderingHint_Antialiasing_Off, 
+                                  renderingHint_TextAntialiasing_Off, 
+                                  renderingHint_FractionalMetrics_Off];
+
+/**
+ * Default rendering hints for high quality output.
+ */
+highQualityRenderingHints :: [RenderingHint];
+public highQualityRenderingHints = [renderingHint_Rendering_Quality, 
+                                    renderingHint_Antialiasing_On, 
+                                    renderingHint_TextAntialiasing_On, 
+                                    renderingHint_FractionalMetrics_On];
+
+/**
+ * Returns whether the specified rectangle might intersect the clipping rectangle in the graphics.
+ */
+hitClip :: Graphics -> Double -> Double -> Double -> Double -> Boolean;
+public hitClip !graphics !x !y !width !height = 
+    jHitClip graphics (floor x) (floor y) (ceiling width) (ceiling height);
+
+foreign unsafe import jvm "method hitClip" public jHitClip :: Graphics -> Int -> Int -> Int -> Int -> Boolean;
+
+
+/**
+ * A icon image.
+ */
+data foreign unsafe import jvm "javax.swing.Icon" public Icon deriving Outputable, Inputable;
+
+foreign unsafe import jvm "method getIconHeight" public iconHeight :: Icon -> Int;
+foreign unsafe import jvm "method getIconWidth"  public iconWidth  :: Icon -> Int;
+
+foreign unsafe import jvm "constructor javax.swing.ImageIcon" private jLoadIconFromFile :: String -> Icon;
+foreign unsafe import jvm "constructor javax.swing.ImageIcon" private jIconFromImage :: Image -> Icon;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ResourceHelper.getResourceIcon" public jLoadResourceIcon :: String -> Icon;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ResourceHelper.getResourceImage" public jLoadResourceImage :: String -> Image;
+
+
+/**
+ * Loads an icon from the specified file name.
+ */
+iconFromFile :: FileName -> Icon;
+public iconFromFile !fileName = 
+    jLoadIconFromFile (File.getPathFromFileName fileName);
+
+/**
+ * Loads an icon from the 'Resources' folder in the classpath.
+ * The .gif extension will be added automatically.
+ */
+iconFromResource :: String -> Icon;
+public iconFromResource !iconResourceName = 
+    jLoadResourceIcon iconResourceName;
+
+
+/**
+ * Loads an image from the 'Resources' folder in the classpath.
+ * The resource name should include the file extension where appropriate.
+ */
+imageFromResource :: String -> Image;
+public imageFromResource !imageResourceName = 
+    jLoadResourceImage imageResourceName;
+
+
+/**
+ * Applies the specified drawing to an icon.
+ * The modified icon is returned.
+ * The width and height of the icon will be passed to the drawing function.
+ * The size of the resulting icon will be the same as the original.
+ */
+drawOnIcon :: (Int -> Int -> Graphics -> Graphics) -> Icon -> Icon;
+public drawOnIcon drawFn !icon = 
+    let
+        w = iconWidth icon;
+        h = iconHeight icon;
+
+        type_INT_ARGB = 2;
+
+        destImage = jMakeBufferedImage w h type_INT_ARGB;
+        graphics = graphicsForImage destImage;
+    in
+        seq graphics
+            $ seq (drawImage (iconImage icon) 0 0 graphics)
+            $ seq (drawFn w h graphics)
+            $ seq (jDisposeGraphics graphics)
+            $ jIconFromImage destImage;
+
+
+/**
+ * Creates an image of the specified size with a white background and performs some drawing on it.
+ */
+drawToImage :: Int -> Int -> (Graphics -> Graphics) -> Image;
+public drawToImage !imageHeight !imageWidth drawFn =
+    let
+        type_INT_ARGB = 2;
+
+        destImage = jMakeBufferedImage imageHeight imageWidth type_INT_ARGB;
+        graphics = graphicsForImage destImage;
+    in
+        seq graphics
+            $ seq (fillShape (solidColourPaint Color.white) (makeRectangle 0 0 (toDouble imageHeight) (toDouble imageWidth)) graphics)
+            $ seq (drawFn graphics)
+            $ seq (jDisposeGraphics graphics)
+            $ destImage;
+
+/**
+ * An image.
+ */
+data foreign unsafe import jvm "java.awt.Image" public Image deriving Outputable, Inputable;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ImageHelper.getImageWidth"
+    public imageWidth :: Image -> Int;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ImageHelper.getImageHeight"
+    public imageHeight :: Image -> Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ImageHelper.getImageGraphics"
+    private graphicsForImage  :: Image -> Graphics;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ImageHelper.drawImage"
+    private jDrawImage :: Image -> Double -> Double -> Graphics -> Graphics;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ImageHelper.drawImage"
+    private jDrawImageWithSize :: Image -> Double -> Double -> Double -> Double -> Graphics -> Graphics;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.ImageHelper.getIconImage"
+    private iconImage :: Icon -> Image;
+
+foreign unsafe import jvm "constructor java.awt.image.BufferedImage" private jMakeBufferedImage :: Int -> Int -> Int -> Image;
+
+
+/**
+ * Draws an entire image at full size at the specified graphics coordinates.
+ */
+drawImage :: Image -> Double -> Double -> Graphics -> Graphics;
+public drawImage !image !x !y !graphics = jDrawImage image x y graphics;
+
+/**
+ * Draws an entire image with the specified size and coordinates.
+ */
+drawImageWithSize :: Image -> Double -> Double -> Double -> Double -> Graphics -> Graphics;
+public drawImageWithSize !image !x !y !w !h !graphics = jDrawImageWithSize image x y w h graphics;
+
+
+/**
+ * Displays the image in a dialog.
+ * @arg caption  the dialog caption
+ * @arg image    the image to be displayed
+ */
+foreign unsafe import jvm "static method org.openquark.util.ui.ScrollableImageDialog.displayImage" 
+    public displayImage :: String -> Image -> ();
+
+/**
+ * Displays a dialog showing the results of the specified drawing function.
+ * @arg caption  the dialog caption
+ * @arg drawFn   the function to draw the dialog contents
+ */
+displayCustomDrawDialog :: String -> (Graphics -> Graphics) -> ();
+public displayCustomDrawDialog !caption drawFn = 
+    let
+        // Create a version of the drawing function with the input and output values marshalled to JObjects.
+        drawFn_marshalled :: JObject -> JObject;
+        drawFn_marshalled !graphicsObj= 
+            output $ drawFn $ input graphicsObj;
+    in
+        jDisplayCustomDrawDialog caption $ makeCalFunction drawFn_marshalled;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Drawing.CustomDrawDialog.displayCustomDrawDialog" 
+    private jDisplayCustomDrawDialog :: String -> CalFunction -> ();
+

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+    <classpathentry excluding="lecc_runtime/" kind="src" output="samples/bam" path="samples/bam"/>
+    <classpathentry excluding="lecc_runtime/" kind="src" output="samples/simple" path="samples/simple"/>
+    <classpathentry excluding="lecc_runtime/" kind="src" output="bin/cal/debug" path="bin/cal/debug"/>
+    <classpathentry kind="lib" path="bin/java/release/calLibraries_test.jar"/>
+    <classpathentry exported="true" kind="lib" path="bin/java/release/calLibraries.jar"/>
+    <classpathentry kind="lib" path="bin/java/release/calPlatform_test.jar"/>
+    <classpathentry exported="true" kind="lib" path="bin/java/release/calPlatform.jar"/>
+    <classpathentry exported="true" kind="lib" path="bin/java/release/calRuntime.jar"/>
+    <classpathentry exported="true" kind="lib" path="bin/java/release/calUtilities.jar"/>
+    <classpathentry kind="lib" path="bin/java/release/quarkGems_test.jar"/>
+    <classpathentry exported="true" kind="lib" path="bin/java/release/quarkGems.jar"/>
+    <classpathentry kind="lib" path="bin/java/release/calBenchmarks.jar"/>
+    <classpathentry kind="lib" path="bin/java/release/calBenchmarks_test.jar"/>
+    <classpathentry kind="lib" path="bin/java/release/calSamples_test.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/antlr.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/asm-all-3.0.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/commons-collections-3.1.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/icu4j.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/junit.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/log4j.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/xercesImpl.jar"/>
+    <classpathentry exported="true" kind="lib" path="lib/Resources/External/java/xmlParserAPIs.jar"/>
+    <classpathentry kind="lib" path="lib/Resources/External/Sun/JavaHelp/2.0_02/jh.jar"/>
+    <classpathentry kind="lib" path="lib/Resources/GemCutterHelpFiles.jar"/>
+    <classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+    <classpathentry kind="lib" path="samples/simple/Standalone Library JARs/directedgraph.jar" sourcepath="samples/simple/Standalone Library JARs/directedgraph.src.zip"/>
+    <classpathentry kind="output" path="bin/java"/>
+</classpath>

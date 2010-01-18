@@ -1,0 +1,320 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * KNucledotide benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org/@}
+ * 
+ * This code is based on and inspired by the other entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}.
+ */
+module Cal.Benchmarks.Shootout.KNucleotide;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, JObject, String;
+    function =
+        combineComparators, eager, fromInt, fst, induceComparator, input, not, 
+        reverseComparator, seq, snd;
+    ;
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+import Cal.Core.String using
+    function = length, startsWith, subscript, substring, toUpperCase;
+    ;
+
+import Cal.Collections.List using
+    function = foldLeftStrict, map, sortBy;
+    ;
+
+import Cal.Utilities.MessageFormat using
+    function = formatWithPattern;
+    ;
+
+import Cal.Utilities.Locale using
+    function = invariantLocale;
+    ;
+
+import Cal.IO.Console using
+    function = isNullString, makeBufferedReader, print, readLine, stdin;
+    typeConstructor = JBufferedReader;
+    ;
+
+
+data foreign unsafe import jvm "java.lang.StringBuilder"
+    private JStringBuilder deriving Show;
+
+data foreign unsafe import jvm "java.util.Collection" private JCollection;
+
+foreign unsafe import jvm "constructor"
+    private createStringBuilder :: JStringBuilder;
+
+foreign unsafe import jvm "method append"
+    private append :: JStringBuilder -> String -> JStringBuilder;
+
+data foreign unsafe import jvm "int[]" JIntArray;
+
+//Import Java integer arrays
+foreign unsafe import jvm "newArray" newArray :: Int -> JIntArray;
+
+foreign unsafe import jvm "subscriptArray"
+    subscriptArray :: JIntArray -> Int -> Int;
+
+foreign unsafe import jvm "updateArray"
+    updateArray :: JIntArray -> Int -> Int -> Int;
+
+data foreign unsafe import jvm "java.util.HashMap"
+    private JHashMap deriving Show;
+
+data foreign unsafe import jvm "java.util.Set" private JSet;
+
+//Import mutable Java Hash Maps
+
+foreign unsafe import jvm "constructor" private createHashMap :: JHashMap;
+
+foreign unsafe import jvm "isNull" private isArrayNull :: JIntArray -> Boolean;
+
+foreign unsafe import jvm "method get"
+    private lookup :: JHashMap -> JObject -> JObject;
+
+foreign unsafe import jvm "method keySet" private keySet :: JHashMap -> JSet;
+
+foreign unsafe import jvm "method put"
+    private insert :: JHashMap -> JObject -> JObject -> JObject;
+
+foreign unsafe import jvm "cast" stringToObject :: String -> JObject;
+
+foreign unsafe import jvm "cast" objectToJIntArray :: JObject -> JIntArray;
+
+foreign unsafe import jvm "cast" jIntArrayToJObject :: JIntArray -> JObject;
+
+foreign unsafe import jvm "cast" jSetToJObject :: JSet -> JObject;
+
+/** 
+ * update the count for a given key in the map
+ * if the key is not in the map, it is added with value 1.
+ */
+update :: JHashMap -> String -> Int;
+update !map !string =
+    let
+        value :: JIntArray;
+        value =
+            eager $ objectToJIntArray (lookup map (stringToObject string));
+    in
+        if not (isArrayNull value) then
+            updateArray value 0 (1 + value `subscriptArray` 0)
+        else
+            let
+                array :: JIntArray;
+                array = eager (newArray 1);
+            in
+                insert map (stringToObject string) (jIntArrayToJObject array)
+                `seq`
+                updateArray array 0 1
+    ;
+
+/** 
+ * Lookup a value in a hashmap.
+ * Return 0 if the key is not in the hashmap
+ */
+getValue :: JHashMap -> String -> Int;
+getValue !map !string =
+    let
+        value :: JIntArray;
+        value =
+            eager $ objectToJIntArray (lookup map (stringToObject string));
+    in
+        if not (isArrayNull value) then
+            value `subscriptArray` 0
+        else
+            //the key is not in the map
+            0
+    ;
+
+/** convert a JhashMap to a list of key, value pairs.*/
+hashMapToPairs :: JHashMap -> [(String, Int)];
+hashMapToPairs !jmap =
+    let
+        keys :: [String];
+        keys = input (jSetToJObject (keySet jmap));
+    in
+        map (\!key -> (key, getValue jmap key)) keys
+    ;
+
+/** compute the frequency table for a specified fragment length*/
+calculateFrequencies :: String -> Int -> JHashMap;
+calculateFrequencies !sequence !fragmentLength =
+    let
+        len :: Int;
+        len = eager $ length sequence - fragmentLength + 1;
+
+        freqMap :: JHashMap;
+        freqMap = eager createHashMap;
+
+        process :: Int -> Int -> JHashMap;
+        process !offset !index =
+            if index < len then
+                update
+                    freqMap
+                    (substring sequence index (index + fragmentLength))
+                `seq`
+                process offset (index + 1)
+            else
+                freqMap
+            ;
+    in
+        process 0 0
+    ;
+
+/**read dna seq from stdin*/
+read :: JBufferedReader -> String;
+read !reader =
+    let
+        skipTill3 :: JBufferedReader -> ();
+        skipTill3 !reader =
+            let
+                line :: String;
+                line = eager $ readLine reader;
+            in
+                if not (startsWith ">THREE" line) then
+                    skipTill3 reader
+                else
+                    ()
+            ;
+
+        stringBuilder :: JStringBuilder;
+        stringBuilder = eager $ createStringBuilder;
+
+        readSeq :: JBufferedReader -> ();
+        readSeq !reader =
+            let
+                line :: String;
+                line = eager $ readLine reader;
+            in
+                if isNullString line then
+                    ()
+                else if subscript line 0 == '>' then
+                    ()
+                else if subscript line 0 != ';' then
+                    append stringBuilder (toUpperCase line)
+                    `seq`
+                    readSeq reader
+                else
+                    readSeq reader
+            ;
+    in
+        skipTill3 reader
+        `seq`
+        readSeq reader
+        `seq`
+        show stringBuilder
+    ;
+
+showFreq :: [(String, Int)] -> Int -> String;
+showFreq !freqList !total =
+    foldLeftStrict
+        (
+            \!str !item ->
+                case item of
+                (name, freq)
+                ->
+                    formatWithPattern
+                        "{0}{1} {2,number,0.000}\n"
+                        invariantLocale
+                        (str, name, fromInt freq / fromInt total * 100.0)
+                    ;
+        )
+        ""
+        (sortBy
+            (combineComparators
+                (reverseComparator (induceComparator snd))
+                (induceComparator fst)
+            )
+            freqList
+        )
+    ++ "\n"
+    ;
+
+showCount :: JHashMap -> String -> String;
+showCount !hashmap !nucleotide =
+    show (getValue hashmap nucleotide) ++ "\t" ++ nucleotide ++ "\n";
+
+main :: [String] -> ();
+public main !args =
+    let
+        sq :: String;
+        sq = eager $ read (makeBufferedReader stdin);
+
+        //sequence (readLines (makeBufferedReader stdin));
+
+        //build freqnece map for length 1 nucledotides
+        freq1 :: [(String, Int)];
+        freq1 = hashMapToPairs (calculateFrequencies sq 1);
+
+        //build freqnece map for length 2 nucledotides
+        freq2 :: [(String, Int)];
+        freq2 = hashMapToPairs (calculateFrequencies sq 2);
+
+        seqLength :: Int;
+        seqLength = length sq;
+
+        //build 3,4,6,12,18 nucledotide maps and get counts for some specific instances.
+        counts :: String;
+        counts =
+            foldLeftStrict
+                (
+                    \!str !item ->
+                        str
+                        ++ showCount
+                            (calculateFrequencies sq (length item))
+                            item
+                )
+                ""
+                [
+                    "GGT",
+                    "GGTA",
+                    "GGTATT",
+                    "GGTATTTTAATT",
+                    "GGTATTTTAATTTATAGT"
+                ]
+            ;
+    in
+
+        print (showFreq freq1 seqLength)
+        `seq`
+        print (showFreq freq2 (seqLength - 1))
+        `seq`
+        print counts
+    ;
+

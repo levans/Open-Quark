@@ -1,0 +1,1712 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * DirectedGraph.cal
+ * Creation date: June 7, 2007.
+ * By: Andrew Casey
+ */
+
+/**
+ * A directed graph of distinguishable objects.  Useful for storing partial
+ * orders and finding cyclical dependencies.
+ * 
+ * {@strong Note@}: Maintains the insertion order of the vertices.
+ * 
+ * {@strong Note@}: Does not maintain the insertion order of the edges.
+ * 
+ * {@strong INVARIANT@}: If vertices A and B are distinct and A was inserted before B,
+ * then it must be true that #A < #B.
+ * 
+ * {@strong INVARIANT@}: If vertices A and B are not distinct, then #A = #B (i.e. no
+ * duplicate vertices).
+ * 
+ * @author Andrew Casey
+ */
+
+module Cal.Utilities.DirectedGraph;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Ord;
+    typeConstructor = Boolean, Int, Maybe, String;
+    function =
+        concat, error, flip, fromJust, fromMaybe, fst, induceEqualityFunction, 
+        isJust, not, snd, upFrom;
+    dataConstructor = False, True, Cons, Nothing, Just;
+    ;
+
+import Cal.Collections.List using
+    function =
+        foldLeftStrict, foldRight, head, length, repeat, sum, tail, take, 
+        unzip, zip;
+    ;
+
+import Cal.Collections.IntMap using
+    typeConstructor = IntMap;
+    ;
+
+import Cal.Collections.Set using
+    typeConstructor = Set;
+    ;
+
+import Cal.Core.Debug using
+    function = showInternal;
+    ;
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// INVARIANT: If vertices A and B are distinct and A was inserted before B, then
+// it must be true that #A < #B.  Required for flattenComponents and
+// stableTopologicalSort.
+//
+// INVARIANT: If vertices A and B are not distinct, then #A = #B (i.e. no
+// duplicate vertices).
+//
+////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * A directed graph with distinct distinguishable (ie. {@link Eq@}) vertices.
+ * 
+ * {@strong Note@}: Maintains the insertion order of the vertices.
+ * 
+ * {@strong Note@}: Does not maintain the insertion order of the edges.
+ * 
+ * Structure:
+ * {@unorderedList
+ *   {@item Assigns a unique integer to each vertex so that it can be manipulated
+ *   more nicely (many of the standard collections expect elements to be orderable).
+ *   {@strong Invariant:@} if vertex1 was inserted before vertex2, then vertex1 has a
+ *   unique integer that is less than that of vertex2.@}
+ *   
+ *   {@item Stores vertices in a map (ID -> Vertex).@}
+ *   
+ *   {@item Stores edges in an adjacency list (ID -> Set of IDs).@}
+ * @}
+ */
+data public DirectedGraph a = 
+    /**
+     * @arg nextVertexNum the number to be assigned to the next vertex added to the graph.
+     * @arg vertexMap a map from vertex identifiers to vertices.
+     * @arg edges a map from vertex identifiers to sets of out-neighbours (an adjacency list).
+     */
+    private DirectedGraph
+        nextVertexNum :: !Int
+        vertexMap :: !(IntMap a)
+        edges :: !(IntMap (Set Int));
+
+/**
+ * Returns the number of vertices in the specified graph.
+ * 
+ * @arg graph the graph whose vertex count is to be returned.
+ * 
+ * @return the number of vertices in the graph.
+ */
+getVertexCount :: DirectedGraph a -> Int;
+public getVertexCount graph =
+    IntMap.size graph.DirectedGraph.vertexMap;
+
+/**
+ * Returns the number of edges in the specified graph.
+ * 
+ * @arg graph the graph whose edge count is to be returned.
+ * 
+ * @return the number of edges in the graph.
+ */
+getEdgeCount :: DirectedGraph a -> Int;
+public getEdgeCount graph = 
+    sum $ List.map Set.size $ IntMap.elems graph.DirectedGraph.edges;
+
+/**
+ * Returns a list of the vertices in the specified graph.  No particular order
+ * is guaranteed.
+ * 
+ * @arg graph the graph whose vertices are to be returned.
+ * 
+ * @return a list of vertices in the graph.
+ */
+getVertices :: DirectedGraph a -> [a];
+public getVertices graph =
+    IntMap.elems graph.DirectedGraph.vertexMap;
+
+/**
+ * Returns a list of the vertices in the specified graph.  The vertices will
+ * be ordered by insertion time.
+ * 
+ * @arg graph the graph whose vertices are to be returned.
+ * 
+ * @return a list of vertices in the graph.
+ */
+getVerticesInInsertionOrder :: DirectedGraph a -> [a];
+public getVerticesInInsertionOrder graph = 
+    List.map snd $ IntMap.toAscList graph.DirectedGraph.vertexMap; 
+
+/**
+ * Returns whether the specified graph is the empty graph (i.e. contains no
+ * vertices).
+ * 
+ * @arg graph the graph to check.
+ * 
+ * @return {@link True@} if the graph is empty; {@link False@} otherwise.
+ */
+isEmpty :: DirectedGraph a -> Boolean;
+public isEmpty graph = 
+    IntMap.isEmpty graph.DirectedGraph.vertexMap;
+
+/**
+ * {@code containsVertex graph vertex@} returns {@link True@} if {@code vertex@}
+ * is a vertex of {@code graph@}.
+ *
+ * @arg graph the graph to be checked.
+ * @arg vertex the value to be tested for membership in the graph.
+ * @return {@link True@} if {@code vertex@} is a vertex of {@code graph@};
+ *   {@link False@} otherwise.
+ */
+containsVertex :: Eq a => DirectedGraph a -> a -> Boolean;
+public containsVertex graph vertex = 
+    isJust $ getMaybeVertexNumber graph vertex;
+
+/**
+ * {@code containsEdge graph (vertex1, vertex2)@} returns {@link True@} if 
+ * {@code vertex1@} and {@code vertex2@} are vertices of {@code graph@} and
+ * {@code (vertex1, vertex2)@} is an edge of {@code graph@}.
+ *
+ * @arg graph the graph to be checked.
+ * @arg edge the value to be tested for membership in the graph.
+ * @return {@link True@} if {@code edge@} is an edge of {@code graph@};
+ *   {@link False@} otherwise.
+ */
+containsEdge :: Eq a => DirectedGraph a -> (a, a) -> Boolean;
+public containsEdge graph edge =
+    case edge of
+    (startVertex, endVertex) ->
+        let
+            maybeStartVertexNum = getMaybeVertexNumber graph startVertex;
+            startVertexNum = fromJust maybeStartVertexNum;
+            maybeEndVertexNum = getMaybeVertexNumber graph endVertex;
+            endVertexNum = fromJust maybeEndVertexNum;
+        in
+            (isJust maybeStartVertexNum)
+                && (isJust maybeEndVertexNum)
+                && (containsEdgeInternal graph startVertexNum endVertexNum);
+    ;
+
+/**
+ * {@code containsEdgeInternal graph vertexNum1 vertexNum2@} returns 
+ * {@link True@} if {@code vertexNum2@} is an out-neighbour of
+ * {@code vertexNum1@} in {@code graph@}.
+ *
+ * @arg graph the graph to be checked.
+ * @arg startVertexNum the source vertex to be checked.
+ * @arg endVertexNum the destination vertex to be checked.
+ * @return {@link True@} if {@code vertexNum2@} is an out-neighbour of
+ *   {@code vertexNum1@} in {@code graph@}; {@link False@} otherwise.
+ *   
+ * @see function=containsEdge
+ */
+containsEdgeInternal :: Eq a => DirectedGraph a -> Int -> Int -> Boolean;
+private containsEdgeInternal graph startVertexNum endVertexNum =
+    Set.member endVertexNum $ getNeighbourSet graph startVertexNum;
+
+/**
+ * Constructs an empty graph.
+ * 
+ * @return an empty graph.
+ */
+emptyGraph :: Eq a => DirectedGraph a;
+public emptyGraph = 
+    DirectedGraph 0 IntMap.empty IntMap.empty;
+
+/**
+ * Constructs a graph containing the specified vertices and no edges.
+ * 
+ * {@strong Note@}: The order of the vertices is preserved.
+ * 
+ * @arg vertices the vertices of the graph to be constructed.
+ * 
+ * @return a graph containing the specified vertices and no edges.
+ */
+edgelessGraph :: Eq a => [a] -> DirectedGraph a;
+public edgelessGraph vertices = 
+    DirectedGraph (length vertices) (IntMap.fromDistinctAscList $ zip (upFrom 0) vertices) IntMap.empty;
+
+/**
+ * Constructs a graph containing the specified vertices and edges.
+ * 
+ * {@strong Note@}: If an edge {@code (v1, v2)@} is specified and if either
+ * {@code v1@} or {@code v2@} is not in the list of vertices, then it will be
+ * added to the graph anyway.  
+ * 
+ * {@strong Note@}: The insertion order will be determined by the order in which
+ * such vertices are encountered while adding edges to the graph.  For example, 
+ * {@code getVerticesInInsertionOrder (makeGraph [v1, v2] [(v1, v3), (v4, v2)])@}
+ * will return {@code [v1, v2, v3, v4]@}.
+ * 
+ * @arg vertices the vertices of the graph to be constructed.
+ * @arg edges the edges of the graph to be constructed.
+ * 
+ * @return a graph containing the specified vertices and edges.
+ */
+makeGraph :: Eq a => [a] -> [(a, a)] -> DirectedGraph a;
+public makeGraph vertices edges =
+    foldLeftStrict addEdge (edgelessGraph vertices) edges;
+
+/**
+ * Constructs a graph containing the specified vertices.  For each pair of vertices
+ * {@code v1@} and {@code v2@}, the graph will contain contain an edge {@code (v1, v2)@}
+ * if and only if {@code existsEdgeFn v1 v2@} returns {@link True@}.
+ * 
+ * {@strong Note@}: The order of the vertices is preserved.
+ * 
+ * @arg vertices the vertices of the graph to be constructed.
+ * @arg existsEdgeFn a predicate function indicating, for each ordered-pair of
+ *   vertices in the graph, whether an edge exists from one to the other.
+ * 
+ * @return a graph containing the specified vertices and the edges induced by
+ *   the specified predicate function.
+ *   
+ * @see function=addEdges
+ */
+makePredicateGraph :: Eq a => [a] -> (a -> a -> Boolean) -> DirectedGraph a;
+public makePredicateGraph vertices existsEdgeFn =
+    addEdges (edgelessGraph vertices) existsEdgeFn;
+
+/**
+ * For each pair of vertices {@code v1@} and {@code v2@}, add an edge {@code (v1, v2)@}
+ * to the graph if and only if {@code existsEdgeFn v1 v2@} returns {@link True@}.
+ * 
+ * @arg graph the graph to which edges will be added
+ * @arg existsEdgeFn a predicate function indicating, for each ordered-pair of
+ *   vertices in the graph, whether an edge should be added from one to the other.
+ * 
+ * @return a new graph containing all of the vertices and edges in the original
+ *   graph, plus the edges induced by the specified predicate function.
+ */
+addEdges :: Eq a => DirectedGraph a -> (a -> a -> Boolean) -> DirectedGraph a;
+public addEdges graph existsEdgeFn =
+    let
+        vertexPairs = IntMap.toAscList graph.DirectedGraph.vertexMap;
+        
+        addNewEndpointsForVertex !graph !pair1 =
+            let
+                (vertexNum1, vertex1) = pair1;
+                
+                accumulateExistingEdges !accum !pair2 =
+                    let
+                        (vertexNum2, vertex2) = pair2;
+                    in
+                        if existsEdgeFn vertex1 vertex2 then
+                            pair2 : accum
+                        else 
+                            accum;
+                
+                extractVertexNums !accum !next = fst next : accum;
+                
+                //Note that the double foldLeft restores the original (ascending) order
+                relevantPairs = foldLeftStrict accumulateExistingEdges [] vertexPairs;
+                newEndpoints = Set.fromDistinctAscList $ foldLeftStrict extractVertexNums [] relevantPairs;
+            in
+                if Prelude.isEmpty relevantPairs then
+                    graph
+                else
+                    case graph of
+                    DirectedGraph {nextVertexNum, vertexMap, edges = oldEdges} ->
+                        DirectedGraph 
+                            nextVertexNum
+                            vertexMap
+                            (IntMap.insertWith Set.union vertexNum1 newEndpoints oldEdges);
+                    ;
+    in
+        foldLeftStrict addNewEndpointsForVertex graph vertexPairs;
+
+/**
+ * Returns the internal vertex number (i.e. unique key) of the specified vertex.
+ * 
+ * {@strong Note@}: The graph cannot contain duplicate values so there is no risk
+ * of a single vertex having multiple vertex numbers.
+ * 
+ * @arg graph the graph in which to lookup the vertex.
+ * @arg vertex the vertex whose number is sought.
+ * 
+ * @return {@code {@link Just@} vertexNum @} if the vertex is in the graph;
+ *   {@link Nothing@} otherwise.
+ */
+getMaybeVertexNumber :: Eq a => DirectedGraph a -> a -> Maybe Int;
+private getMaybeVertexNumber graph vertex = 
+    let
+        findVertexNum !result !pair =
+            if isJust result then
+                result
+            else
+                case pair of
+                (key, val) -> if val == vertex then Just key else Nothing;
+                ;
+    in
+        foldLeftStrict findVertexNum Nothing $ IntMap.toList graph.DirectedGraph.vertexMap;
+
+/**
+ * Returns the vertex associated with the specified internal vertex number.
+ * 
+ * {@strong Note@}: Will throw an {@link error@} if there is no such vertex.
+ * 
+ * @arg graph the graph in which to lookup the vertex number.
+ * @arg vertexNum the vertexNumber whose corresponding vertex is sought.
+ * 
+ * @return the vertex associated with the given vertex number.
+ */
+getVertex :: DirectedGraph a -> Int -> a;
+private getVertex graph vertexNum =
+    IntMap.find vertexNum graph.DirectedGraph.vertexMap;
+
+/**
+ * Adds a new vertex to a graph.  If the specified vertex is already in the graph,
+ * then the resulting graph will be the same as the original (including the
+ * insertion order of the vertices).
+ * 
+ * @arg graph the graph to which the vertex will be added.
+ * @arg vertex the vertex to be added.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible addition of the specified vertex.
+ */
+addVertex :: Eq a => DirectedGraph a -> a -> DirectedGraph a;
+public addVertex graph vertex = 
+    fst $ addVertexInternal graph vertex;
+
+/**
+ * Adds a new vertex to a graph.  If the specified vertex is already in the graph,
+ * then the resulting graph will be the same as the original (including the
+ * insertion order of the vertices).
+ * 
+ * @arg oldGraph the graph to which the vertex will be added.
+ * @arg newVertex the vertex to be added.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible addition of the specified vertex; the vertex number of the
+ *   inserted vertex.
+ *   
+ * @see function=addVertex
+ */
+addVertexInternal :: Eq a => DirectedGraph a -> a -> (DirectedGraph a, Int);
+private addVertexInternal oldGraph newVertex =
+    case getMaybeVertexNumber oldGraph newVertex of
+    Nothing ->
+        case oldGraph of
+        DirectedGraph {nextVertexNum = oldNextNum, vertexMap = oldVertexMap, edges = oldEdges} ->
+            (DirectedGraph 
+                (oldNextNum + 1)
+                (IntMap.insert oldNextNum newVertex oldVertexMap)
+                oldEdges,
+             oldNextNum);
+        ;
+    Just vertexNum ->
+        (oldGraph, vertexNum);
+    ;
+
+/**
+ * Removes a new vertex from a graph.  If the specified vertex is already absent
+ * from the graph, then the resulting graph will be the same as the original.
+ * 
+ * @arg oldGraph the graph from which the vertex will be removed.
+ * @arg vertex the vertex to be removed.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible exception of the specified vertex.
+ */
+removeVertex :: Eq a => DirectedGraph a -> a -> DirectedGraph a;
+public removeVertex oldGraph vertex =
+    case getMaybeVertexNumber oldGraph vertex of
+    Just vertexNum ->
+        case oldGraph of
+        DirectedGraph {nextVertexNum, vertexMap = oldVertexMap, edges = oldEdges} ->
+            DirectedGraph 
+                nextVertexNum
+                (IntMap.delete vertexNum oldVertexMap)
+                (IntMap.map (Set.delete vertexNum) (IntMap.delete vertexNum oldEdges));
+        ;
+    Nothing ->
+        oldGraph;
+    ;
+
+//TODO: version of remove that forwards edges (e.g. {(a,b),(b,c)} -> remove b -> {(a,c)}).
+
+/**
+ * Adds a new edge to a graph.  If the specified edge is already in the graph,
+ * then the resulting graph will be the same as the original.
+ * 
+ * {@strong Note@}: If the one or both vertices are not already in the graph, then
+ * they will be added - the first before the second.
+ * 
+ * @arg oldGraph the graph to which the edge will be added.
+ * @arg newEdge the edge to be added.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible addition of the specified edge and its endpoints.
+ */
+addEdge :: Eq a => DirectedGraph a -> (a, a) -> DirectedGraph a;
+public addEdge oldGraph newEdge =
+    let
+        (startVertex, endVertex) = newEdge;
+        
+        (partiallyUpdatedGraph, startVertexNum) = addVertexInternal oldGraph startVertex;
+        (updatedGraph, endVertexNum) = addVertexInternal partiallyUpdatedGraph endVertex;
+    in
+        addEdgeInternal updatedGraph (startVertexNum, endVertexNum);
+
+/**
+ * Adds a new edge to a graph.  If the specified edge is already in the graph,
+ * then the resulting graph will be the same as the original.
+ * 
+ * @arg oldGraph the graph to which the edge will be added.
+ * @arg newEdge the edge to be added.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible addition of the specified edge.
+ *   
+ * @see function=addEdge
+ */
+addEdgeInternal :: Eq a => DirectedGraph a -> (Int, Int) -> DirectedGraph a;
+private addEdgeInternal oldGraph newEdge =
+    let
+        (startVertexNum, endVertexNum) = newEdge;
+    in
+        case oldGraph of
+        DirectedGraph {nextVertexNum, vertexMap, edges = oldEdges} ->
+            DirectedGraph 
+                nextVertexNum 
+                vertexMap
+                (IntMap.insertWith Set.union startVertexNum (Set.single endVertexNum) oldEdges);
+        ;
+
+/**
+ * Removes an edge from a graph.  If the specified edge is already absent from
+ * the graph (perhaps because one of the endpoints is absent from the graph),
+ * then the resulting graph will be the same as the original.
+ * 
+ * @arg graph the graph from which the edge will be removed.
+ * @arg edge the edge to be removed.
+ * 
+ * @return a graph containing the same vertices and edges as the original, with
+ *   the possible exception of the specified edge.
+ */
+removeEdge :: Eq a => DirectedGraph a -> (a, a) -> DirectedGraph a;
+public removeEdge graph edge =
+    let
+        (vertex1, vertex2) = edge;
+        maybeVertex1Num = getMaybeVertexNumber graph vertex1;
+        vertex1Num = fromJust maybeVertex1Num;
+        maybeVertex2Num = getMaybeVertexNumber graph vertex2;
+        vertex2Num = fromJust maybeVertex2Num;
+        
+        deleteDest destSet = Just $ Set.delete vertex2Num destSet;
+    in
+        if isJust maybeVertex1Num && isJust maybeVertex2Num then
+            case graph of
+            DirectedGraph {nextVertexNum, vertexMap, edges} ->
+                DirectedGraph nextVertexNum vertexMap $ IntMap.update deleteDest vertex1Num edges;
+        else
+            graph;
+
+/**
+ * Returns the set of vertex numbers of out-neighbours of the specified vertex.
+ * 
+ * @arg graph the graph in which to find neighbours.
+ * @arg startVertexNum the vertex whose neighbours are sought.
+ * 
+ * @return the set of out-neighbours of the specified vertex.
+ * 
+ * @see function=getNeighbourList
+ * @see function=getNeighbours
+ */
+getNeighbourSet :: DirectedGraph a -> Int -> Set Int;
+private getNeighbourSet graph startVertexNum =
+    IntMap.lookupWithDefault startVertexNum graph.DirectedGraph.edges Set.empty;
+
+/**
+ * Returns the list of vertex numbers of out-neighbours of the specified vertex.
+ * No particular order is guaranteed.
+ * 
+ * @arg graph the graph in which to find neighbours.
+ * @arg startVertexNum the vertex whose neighbours are sought.
+ * 
+ * @return a list of out-neighbours of the specified vertex.
+ * 
+ * @see function=getNeighbourSet
+ * @see function=getNeighbours
+ */
+getNeighbourList :: DirectedGraph a -> Int -> [Int];
+private getNeighbourList graph startVertexNum =
+    Set.toList $ getNeighbourSet graph startVertexNum;
+
+/**
+ * A helper function for converting a list of vertex numbers into a list of
+ * vertices.
+ * 
+ * {@strong Note@}: Throws an {@link error@} if any of the vertex numbers are invalid.
+ * 
+ * @return a list of vertices (one per per vertex number).
+ */
+indicesToVertices :: DirectedGraph a -> [Int] -> [a];
+private indicesToVertices graph indices =
+    List.map (getVertex graph) indices;
+
+/**
+ * Returns the list of out-neighbours of the specified vertex.  No particular
+ * order is guaranteed.
+ * 
+ * @arg graph the graph in which to find neighbours.
+ * @arg vertex the vertex whose neighbours are sought.
+ * 
+ * @return a list of out-neighbours of the specified vertex.
+ */
+getNeighbours :: Eq a => DirectedGraph a -> a -> [a];
+public getNeighbours graph vertex = 
+    case getMaybeVertexNumber graph vertex of
+    Nothing -> [];
+    Just vertexNum -> indicesToVertices graph $ getNeighbourList graph vertexNum;
+    ;
+
+/**
+ * If each vertex in a graph is an instance of {@link Debug.Show@}, then the
+ * graph has a string representation.  The graph is traversed in depth-first
+ * order and each vertex is displayed with a list of its children.  Any vertex
+ * that has previously been encountered will be shown in angle brackets and
+ * not expanded (i.e. its children will not be shown).  For example:
+ * 
+ * {@code
+ * vertex1 {
+ *   child_1 {
+ *     grandchild_1_1 {
+ *     }
+ *     grandchild_1_2 {
+ *     }
+ *   child_2 {
+ *     grandchild_2_1 {
+ *     }
+ *     <grandchild_1_1>        <-- Details omitted since repeated
+ *   }
+ * }
+ * vertex2 {
+ *   ...
+ * }
+ * @}
+ * 
+ * @arg graph the graph to be displayed.
+ * 
+ * @return a string representation of the graph.
+ */
+showDirectedGraph :: (Debug.Show a, Eq a) => DirectedGraph a -> String;
+private showDirectedGraph graph =
+    let
+        baseIndent = 0;
+        indentDiff = 2;
+        makeIndentString num = concat $ take num $ repeat " ";
+    in
+        //TODO-AC: don't reverse children
+        snd $
+            foldDFSInternal 
+                Nothing
+                (\accum vertexNum -> 
+                    case accum of (indent, text) -> 
+                        (indent + indentDiff, text ++ makeIndentString indent ++ (Debug.show $ getVertex graph vertexNum) ++ " {\n");)
+                (\accum vertexNum -> 
+                    case accum of (indent, text) ->
+                        if indent == baseIndent then
+                            accum
+                        else    
+                            (indent, text ++ makeIndentString indent ++ "<ref: " ++ (Debug.show $ getVertex graph vertexNum) ++ ">\n");)
+                (\accum vertexNum -> 
+                    case accum of (indent, text) ->
+                        (indent - indentDiff, text ++ makeIndentString (indent - indentDiff) ++ "}\n");)
+                (baseIndent, "")
+                graph;
+
+instance (Debug.Show a, Eq a) => Debug.Show (DirectedGraph a)
+where
+    show = showDirectedGraph;
+    ;
+
+/**
+ * Applies the specified function to each vertex in the specified graph.
+ * 
+ * {@strong Note@}: If two vertices have the same image under the specified function,
+ * then they will be merged (retaining self-loops created during the merge).
+ * 
+ * @return the graph that results when the specified function is applied to each
+ *   vertex in the specified graph.
+ *   
+ * @see function=mergeVertices
+ */
+map :: (Eq a, Eq b) => (a -> b) -> DirectedGraph a -> DirectedGraph b;
+public map mapFn graph =
+    case graph of
+    DirectedGraph {nextVertexNum, vertexMap, edges} ->
+        let
+            mappedGraph = 
+                DirectedGraph 
+                    nextVertexNum
+                    (IntMap.map mapFn vertexMap)
+                    edges;
+            
+            mapEntries = IntMap.toList mappedGraph.DirectedGraph.vertexMap;
+            
+            mergeIfDuplicate !accumPair !entry =
+                let
+                    (seenEntries, graph) = accumPair;
+                    maybeDuplicate = List.find (\p -> snd p == snd entry) seenEntries;
+                in
+                    case maybeDuplicate of
+                    Nothing -> 
+                        (entry : seenEntries, graph);
+                    Just duplicate ->
+                        let
+                            entryNum = fst entry;
+                            (duplicateNum, duplicateVertex) = duplicate;
+                        in
+                            //TODO-AC: expose flag?
+                            (seenEntries, mergeVerticesInternal graph True duplicateNum entryNum duplicateVertex);
+                    ;
+        in
+            snd $ foldLeftStrict mergeIfDuplicate ([], mappedGraph) mapEntries;
+    ;
+
+/**
+ * Merges two vertices of a graph.  
+ * {@code mergeVertices graph retainLoops vertex1 vertex2 mergedVertex@}
+ * results in a graph satisfying:
+ * {@unorderedList
+ *   {@item {@code vertex1@} is removed from the graph@}
+ *   {@item {@code vertex2@} is removed from the graph@}
+ *   {@item {@code mergedVertex@} is added to the graph@}
+ *   {@item Edges are transformed (modulo {@code retainLoops@}):
+ *     {@unorderedList
+ *       {@item {@code (A, ?)@} -> {@code (C, ?)@}@}
+ *       {@item {@code (?, A)@} -> {@code (?, C)@}@}
+ *       {@item {@code (B, ?)@} -> {@code (C, ?)@}@}
+ *       {@item {@code (?, B)@} -> {@code (?, C)@}@}
+ *     @}
+ *   @}
+ * @}  
+ * 
+ * {@strong Side effect@}: If the merged vertex is already contained in the graph, then
+ * its insertion order will not change.  Otherwise, the merged vertex will
+ * acquire the insertion order of the first vertex argument (note: argument 1,
+ * not vertex with earlier insertion time).
+ * 
+ * {@strong Note@}: Throws an {@link error@} if either {@code vertex1@} or
+ * {@code vertex2@} is not in the graph. 
+ * 
+ * @arg graph the graph in which to merge the vertices.
+ * @arg retainLoops if vertices A and B are merged to C and the graph contains
+ *   (A, B) or (B, A), then (C, C) will be added to the new graph if retainLoops
+ *   is true.  Note that if the graph contains (A, A) or (B, B), then the new
+ *   graph will contain (C, C) regardless of the value of retainLoops.
+ * @arg vertex1 the first vertex to be merged (error if invalid).
+ * @arg vertex2 the second vertex to be merged (error if invalid).
+ * @arg mergedVertex the resulting vertex.
+ * 
+ * @return a new graph with the two vertices merged.
+ */
+mergeVertices :: Eq a => DirectedGraph a -> Boolean -> a -> a -> a -> DirectedGraph a;
+public mergeVertices graph retainLoops vertex1 vertex2 mergedVertex =
+    let
+        vertex1Num = fromMaybe (error "First vertex is invalid.") $ getMaybeVertexNumber graph vertex1;
+        vertex2Num = fromMaybe (error "Second vertex is invalid.") $ getMaybeVertexNumber graph vertex2;
+        
+        mergedWithEachother = mergeVerticesInternal graph retainLoops vertex1Num vertex2Num mergedVertex;
+    in
+        case getMaybeVertexNumber graph mergedVertex of
+        Nothing -> mergedWithEachother;
+        Just mergedVertexNum ->
+            //if the target already exists, then merge the merged vertex into it
+            //NB: we assume that mergedVertex was assigned vertex1Num in mergedWithEachother 
+            mergeVerticesInternal mergedWithEachother retainLoops mergedVertexNum vertex1Num mergedVertex;
+        ;
+
+/**
+ * Merges two vertices of a graph.  
+ * {@code mergeVertices graph retainLoops vertex1 vertex2 mergedVertex@}
+ * results in a graph satisfying:
+ * {@unorderedList
+ *   {@item {@code vertex1@} is removed from the graph@}
+ *   {@item {@code vertex2@} is removed from the graph@}
+ *   {@item {@code mergedVertex@} is added to the graph@}
+ *   {@item Edges are transformed (modulo {@code retainLoops@}):
+ *     {@unorderedList
+ *       {@item {@code (A, ?)@} -> {@code (C, ?)@}@}
+ *       {@item {@code (?, A)@} -> {@code (?, C)@}@}
+ *       {@item {@code (B, ?)@} -> {@code (C, ?)@}@}
+ *       {@item {@code (?, B)@} -> {@code (?, C)@}@}
+ *     @}
+ *   @}
+ * @}
+ * 
+ * {@strong Note@}: Performs no checks on {@code mergedVertex@}.  If it is the same
+ * as an existing vertex, then a duplicate may be created, {@strong violating an 
+ * invariant@} of this module.  Use with caution.
+ * 
+ * @arg graph the graph in which to merge the vertices.
+ * @arg retainLoops if vertices A and B are merged to C and the graph contains
+ *   (A, B) or (B, A), then (C, C) will be added to the new graph if retainLoops
+ *   is true.  Note that if the graph contains (A, A) or (B, B), then the new
+ *   graph will contain (C, C) regardless of the value of retainLoops.
+ * @arg vertex1Num the first vertex to be merged.
+ * @arg vertex2Num the second vertex to be merged.
+ * @arg mergedVertex the resulting vertex.
+ * 
+ * @return a new graph with the two vertices merged.
+ *
+ * @see function=mergeVertices
+ */
+mergeVerticesInternal :: Eq a => DirectedGraph a -> Boolean -> Int -> Int -> a -> DirectedGraph a;
+private mergeVerticesInternal graph retainLoops vertex1Num vertex2Num mergedVertex =
+    case graph of
+    DirectedGraph {nextVertexNum, vertexMap, edges} ->
+        if vertex1Num == vertex2Num then
+            DirectedGraph 
+                nextVertexNum
+                (IntMap.update (Prelude.const $ Just mergedVertex) vertex1Num vertexMap)
+                edges
+        else
+            let
+                replaceNum :: Int -> Int;
+                replaceNum num = 
+                    if num == vertex2Num then
+                        vertex1Num
+                    else
+                        num;
+                
+                filteredEdges :: IntMap (Set Int);
+                filteredEdges = 
+                    if retainLoops then
+                        edges
+                    else
+                        let
+                            without1To2 = IntMap.update (Just # Set.delete vertex2Num) vertex1Num edges;
+                            without2To1 = IntMap.update (Just # Set.delete vertex1Num) vertex2Num without1To2;
+                        in
+                            without2To1;
+                
+                outEdgesMerged :: IntMap (Set Int);
+                outEdgesMerged =
+                    let
+                        updateVertex1Fn destSet = Just $ Set.union destSet $ IntMap.lookupWithDefault vertex2Num filteredEdges Set.empty;
+                        updateVertex2Fn destSet = Nothing;
+                    in
+                        IntMap.update updateVertex2Fn vertex2Num (IntMap.update updateVertex1Fn vertex1Num filteredEdges);
+                
+                inEdgesMerged :: IntMap (Set Int);
+                inEdgesMerged =
+                    IntMap.map (Set.map replaceNum) outEdgesMerged;
+                    
+            in
+                DirectedGraph 
+                    nextVertexNum
+                    (IntMap.update (Prelude.const Nothing) vertex2Num (IntMap.update (Prelude.const $ Just mergedVertex) vertex1Num vertexMap))
+                    inEdgesMerged;
+    ;
+
+/**
+ * Fold across the entire graph in depth-first search order.
+ * 
+ * {@strong Note@}: this is simply an alias for {@link foldInDepthFirstSearchOrder@}.
+ * 
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldInDepthFirstSearchOrder
+ * @see function=foldReachableDFS
+ * @see function=foldReachableInDepthFirstSearchOrder
+ */
+foldDFS :: Eq a => (b -> a -> b) -> (b -> a -> b) -> b -> DirectedGraph a -> b;
+public foldDFS = foldInDepthFirstSearchOrder;
+
+/**
+ * Fold across the entire graph in depth-first search order.
+ * 
+ * {@strong Note@}: for convenience, you may wish to call this function as {@link foldDFS@}.
+ * 
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once per vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldDFS
+ * @see function=foldReachableDFS
+ * @see function=foldReachableInDepthFirstSearchOrder
+ */
+foldInDepthFirstSearchOrder :: Eq a => (b -> a -> b) -> (b -> a -> b) -> b -> DirectedGraph a -> b;
+public foldInDepthFirstSearchOrder startVertexFn finishVertexFn init graph =
+    foldDFSInternal 
+        Nothing
+        (\accum vertexNum -> startVertexFn accum $ getVertex graph vertexNum)
+        noChange
+        (\accum vertexNum -> finishVertexFn accum $ getVertex graph vertexNum)
+        init
+        graph;
+
+/**
+ * Fold across graph vertices reachable from the specified root in depth-first
+ * search order.
+ * 
+ * {@strong Note@}: this is simply an alias for {@link foldReachableInDepthFirstSearchOrder@}.
+ * 
+ * @arg startVertex the vertex at which to begin the traversal.
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldDFS
+ * @see function=foldInDepthFirstSearchOrder
+ * @see function=foldReachableInDepthFirstSearchOrder
+ */
+foldReachableDFS :: Eq a => a -> (b -> a -> b) -> (b -> a -> b) -> b -> DirectedGraph a -> b;
+public foldReachableDFS = foldReachableInDepthFirstSearchOrder;
+
+/**
+ * Fold across graph vertices reachable from the specified root in depth-first
+ * search order.
+ * 
+ * {@strong Note@}: for convenience, you may wish to call this function as {@link foldReachableDFS@}.
+ * 
+ * @arg startVertex the vertex at which to begin the traversal.
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once for each reachable vertex.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @return The accumulated value after the final vertex is finished.
+ * 
+ * @see function=foldDFS
+ * @see function=foldInDepthFirstSearchOrder
+ * @see function=foldReachableDFS
+ */
+foldReachableInDepthFirstSearchOrder :: Eq a => a -> (b -> a -> b) -> (b -> a -> b) -> b -> DirectedGraph a -> b;
+public foldReachableInDepthFirstSearchOrder startVertex startVertexFn finishVertexFn init graph =
+    foldDFSInternal 
+        (Just startVertex)
+        (\accum vertexNum -> startVertexFn accum $ getVertex graph vertexNum)
+        noChange
+        (\accum vertexNum -> finishVertexFn accum $ getVertex graph vertexNum)
+        init
+        graph;
+
+/**
+ * Fold across graph vertices in depth-first search order.  Visits either the
+ * entire graph or the reachable vertices according to whether or not a start
+ * vertex is specified.
+ * 
+ * @arg maybeStartVertex the vertex at which to begin the traversal.  If the 
+ *   value is {@link Nothing@}, then the fold will cross the entire graph.
+ *   Otherwise, if the value is {@code {@link Just@} startVertex@}, then the
+ *   fold will cross only the vertices reachable from {@code startVertex@}.
+ * @arg startVertexFn called when a vertex is visited for the first time.
+ *   Guaranteed to be called exactly once for each vertex affected by the fold.
+ * @arg revisitVertexFn called when a vertex is visited between the first time
+ *   it is encountered and when it is finished.
+ * @arg finishVertexFn called when a vertex is finished (all children are finished).
+ *   Guaranteed to be called exactly once for each vertex affected by the fold.
+ * @arg init the initial accumulator value (returned directly if the graph is empty).
+ * @arg graph the graph to fold across.
+ * 
+ * @see function=foldDFS
+ * @see function=foldInDepthFirstSearchOrder
+ * @see function=foldReachableDFS
+ * @see function=foldReachableInDepthFirstSearchOrder
+ */
+foldDFSInternal :: Eq a => Maybe a -> (b -> Int -> b) -> (b -> Int -> b) ->(b -> Int -> b) ->  b -> DirectedGraph a -> b;
+private foldDFSInternal maybeStartVertex startVertexFn revisitVertexFn finishVertexFn init graph =
+    let
+        dfsHelper = performDFS (getNeighbourList graph) startVertexFn revisitVertexFn finishVertexFn;
+        
+        dfsReachable !vertexNum = snd $ dfsHelper vertexNum Set.empty init;
+        
+        dfsAll !visited !accum !vertexNums =
+            case vertexNums of
+            [] -> accum;
+            n : ns ->
+                let
+                    (newVisited, newAccum) = dfsHelper n visited accum;
+                    newVertexNums = filterListStrict (\num -> not $ Set.member num newVisited) ns;
+                in
+                    dfsAll newVisited newAccum newVertexNums;
+            ;
+    in
+        case maybeStartVertex of
+        Nothing -> dfsAll Set.empty init $ IntMap.keys graph.DirectedGraph.vertexMap;
+        Just startVertex ->
+            case getMaybeVertexNumber graph startVertex of
+            Nothing ->
+                let 
+                    message :: String;
+                    message = 
+                        "foldDFSInternal: Invalid start node\n" 
+                            ++ (startVertex `Prelude.deepSeq` showInternal startVertex) 
+                            ++ "\nin graph\n" 
+                            ++ (graph `Prelude.deepSeq` showInternal graph) ++ "\n";
+                in
+                    Debug.trace message $ error "Invalid start node.";
+            Just startVertexNum -> dfsReachable startVertexNum; 
+            ;
+        ;
+
+/**
+ * A helper function for performing a depth-first search on a graph.
+ * 
+ * @arg getChildrenFn returns the children of a specific vertex.
+ * @arg startVertexFn update accum on encountering a vertex.
+ * @arg revisitVertexFn update accum on re-encountering a vertex.
+ * @arg finishVertexFn update accum on finishing a vertex.
+ * @arg startVertexNum the root of the depth-first search.
+ * @arg visited vertices that have already been encountered.
+ * @arg init the initial accum value.
+ * 
+ * @return the set of visited vertices and the accumulated value.
+ */
+performDFS :: (Int -> [Int]) -> (a -> Int -> a) -> (a -> Int -> a) ->(a -> Int -> a) -> Int -> Set Int -> a -> (Set Int, a);
+private performDFS getChildrenFn startVertexFn revisitVertexFn finishVertexFn startVertexNum visited init =
+    let
+        //dfsLoop :: [(Int, Boolean)] -> [Int] -> a -> ([Int], a);
+        dfsLoop !stack !visited !accum =
+            case stack of
+            [] -> (visited, accum);
+            stackTop : stackBottom ->
+                case stackTop of
+                (vertexNum, finished) ->
+                    if finished then
+                        dfsLoop stackBottom visited $ finishVertexFn accum vertexNum
+                    else if Set.member vertexNum visited then
+                        dfsLoop stackBottom visited $ revisitVertexFn accum vertexNum
+                    else
+                        let
+                            children = getChildrenFn vertexNum;
+                            newStack = (zip children (repeat False)) ++ ((vertexNum, True) : stackBottom);
+                            newVisited = Set.insert vertexNum visited;
+                            newAccum = startVertexFn accum vertexNum;
+                        in
+                            dfsLoop newStack newVisited newAccum;
+                ;
+            ;
+    in
+        dfsLoop [(startVertexNum, False)] visited init;
+
+/**
+ * Same as {@link List.filter@} but strict to avoid stack overflows.
+ * 
+ * @see function=List.filter
+ */
+filterListStrict :: (a -> Boolean) -> [a] -> [a];
+private filterListStrict pred elements = 
+    let
+        possiblyCons !accum !next = 
+            if pred next then
+                next : accum
+            else
+                accum;
+    in
+        List.reverse $ foldLeftStrict possiblyCons [] elements;
+
+/**
+ * Since most clients of foldDFS will not want to use all of the function arguments,
+ * this is provided as a convenient default (simply passes the accumulated value
+ * through to the next handler).
+ */
+noChange :: a -> b -> a;
+public noChange = Prelude.const;
+
+/**
+ * Returns the vertices of a graph in topological order if the graph is acyclic
+ * and in an unspecified order otherwise.
+ * 
+ * Algorithm based on TOPOLOGICAL-SORT on p. 550 of 
+ * "Introduction to Algorithms 2E"
+ * by Cormen, Leiserson, Rivest, and Stein (2002).
+ * 
+ * @arg graph the graph to be sorted.
+ * 
+ * @return an ordered list of vertices.
+ */
+topologicalSort :: Eq a => DirectedGraph a -> [a];
+public topologicalSort graph =
+    indicesToVertices graph $ foldDFSInternal Nothing noChange noChange (flip Cons) [] graph;
+
+/**
+ * Returns the vertices in topological order if the graph is acyclic and in an
+ * unspecified order otherwise.  If the relative order of two vertices is not
+ * specified by the graph, then their insertion order will be used.
+ *
+ * If the graph contains cycles, then calling {@link flattenComponents@} before
+ * {@link stableTopologicalSort@} will produce the desired stable order.
+ * 
+ * {@strong Note@}: this may be quite a bit slower than a normal topological sort.
+ * 
+ * Algorithm adapted from Exercise 22.4-5 on p. 552 of 
+ * "Introduction to Algorithms 2E"
+ * by Cormen, Leiserson, Rivest, and Stein (2002).
+ * 
+ * @arg graph the graph to be sorted.
+ * 
+ * @return an ordered list of vertices.
+ */
+stableTopologicalSort :: Eq a => DirectedGraph a -> [a];
+public stableTopologicalSort graph =
+    let
+        vertexNumSet = Set.fromDistinctAscList $ List.sort $ IntMap.keys graph.DirectedGraph.vertexMap;
+        noIncomingSet = foldLeftStrict Set.difference vertexNumSet $ IntMap.elems graph.DirectedGraph.edges;
+        
+        reverseGraph = DirectedGraph.reverse graph;
+        
+        sortHelper reversedList satisfiedSet candidateSet =
+            if Set.isEmpty candidateSet then
+                List.reverse reversedList
+            else
+                //treat candidateSet as a priority queue -
+                //dequeue the smallest element
+                case Set.deleteFindMin candidateSet of
+                (min, candidateSetWithoutMin) ->
+                    let
+                        newReversedList = min : reversedList;
+                        newSatisfiedSet = Set.insert min satisfiedSet;
+                        
+                        candidatesToAdd =
+                            let
+                                areDependenciesSatisfied vertex = Set.isSubsetOf (getNeighbourSet reverseGraph vertex) newSatisfiedSet;
+                                neighbours = Set.toAscList $ getNeighbourSet graph min;
+//                                neighbourSet = getNeighbourSet graph min;
+                            in
+                                //find the neighbours of min whose dependencies are satisfied
+                                //(i.e. all incoming edges are from satisfied elements)
+                                Set.fromDistinctAscList $ filterListStrict areDependenciesSatisfied neighbours;
+                                //the set version is clearer, but is liable to overflow the stack
+//                                Set.filter areDependenciesSatisfied neighbourSet;
+                        
+                        newCandidateSet = Set.union candidateSetWithoutMin candidatesToAdd;
+                    in
+                        sortHelper newReversedList newSatisfiedSet newCandidateSet;
+                ;
+        in
+            indicesToVertices graph $ sortHelper [] Set.empty noIncomingSet;
+
+/**
+ * Returns a topologically sorted list of strongly-connected components of a
+ * specified graph (i.e. if A and B are SCCs and A precedes B in the returned
+ * list, then the graph contains no edges from vertices in A to vertices in B).
+ *   
+ * Algorithm based on STRONGLY-CONNECTED-COMPONENTS on p. 554 of 
+ * "Introduction to Algorithms 2E"
+ * by Cormen, Leiserson, Rivest, and Stein (2002).
+ * 
+ * @arg graph the graph to be broken into components.
+ * 
+ * @return a topologically sorted list of strongly-connected components of the
+ *   specified graph.
+ */
+stronglyConnectedComponents :: Eq a => DirectedGraph a -> [[a]];
+public stronglyConnectedComponents graph = 
+    List.map (indicesToVertices graph) $ stronglyConnectedComponentsInternal graph;
+
+/**
+ * Returns a topologically sorted list of strongly-connected components of a
+ * specified graph (i.e. if A and B are SCCs and A precedes B in the returned
+ * list, then the graph contains no edges from vertices in A to vertices in B).
+ *   
+ * Algorithm based on STRONGLY-CONNECTED-COMPONENTS on p. 554 of 
+ * "Introduction to Algorithms 2E"
+ * by Cormen, Leiserson, Rivest, and Stein (2002).
+ * 
+ * @arg graph the graph to be broken into components.
+ * 
+ * @return a topologically sorted list of strongly-connected components of the
+ *   specified graph.
+ * 
+ * @see function=stronglyConnectedComponents
+ */
+stronglyConnectedComponentsInternal :: Eq a => DirectedGraph a -> [[Int]];
+private stronglyConnectedComponentsInternal graph = 
+    let
+        //vertices in decending order of finishing time
+        verticesByFinisingTime = foldDFSInternal Nothing noChange noChange (flip Cons) [] graph;
+        
+        //DFS reachable vertices in the reverse graph
+        dfsHelper = performDFS (getNeighbourList $ reverse graph) (flip Cons) noChange noChange;
+        
+        //find all SCCs - return in reverse topological order
+        findReverseSortedSCCs !visited !components !vertexNums =
+            case vertexNums of
+            [] -> components;
+            n : ns ->
+                let
+                    (newVisited, component) = dfsHelper n visited [];
+                    newComponents = component : components;
+                    newVertexNums = filterListStrict (\num -> not $ Set.member num newVisited) ns;
+                in
+                    findReverseSortedSCCs newVisited newComponents newVertexNums;
+            ;
+    in
+        List.reverse $ findReverseSortedSCCs Set.empty [] verticesByFinisingTime;
+
+/**
+ * Returns a copy of the graph that contains no cycles - within each strongly-
+ * connected component, all edges are removed and replaced with new edges
+ * enforcing the insertion order.
+ *   
+ * e.g. {@code cycle{B, A} -> F -> cycle{C, E, D}@} becomes 
+ * {@code A -> B -> F -> C -> D -> E@} (assuming the vertices were created in 
+ * alphabetical order).
+ * 
+ * @arg graph the graph in which to flatten cycles.
+ * 
+ * @return a copy of the specified graph with all cycles flattened.
+ */
+flattenComponents :: Eq a => DirectedGraph a -> DirectedGraph a;
+public flattenComponents graph = 
+    let
+        flattenComponent :: IntMap (Set Int) -> [Int] -> IntMap (Set Int);
+        flattenComponent !oldEdges !component =
+            let
+                //vertex numbers of component in insertion order
+                sortedComponent :: [Int];
+                sortedComponent = List.sort component;
+                
+                //vertex numbers of component as a set
+                componentSet :: Set Int;
+                componentSet = Set.fromDistinctAscList sortedComponent;
+                
+                //remove edges with the destination endpoint in the component
+                removeComponentSet :: Set Int -> Maybe (Set Int);
+                removeComponentSet set =
+                    let
+                        updatedSet = Set.difference set componentSet;
+                    in
+                        if Set.isEmpty updatedSet then
+                            Nothing
+                        else
+                            Just updatedSet;
+
+                //insert a new edge
+                insertEdge :: IntMap (Set Int) -> (Int, Int) -> IntMap (Set Int);
+                insertEdge !edges !edgePair=
+                    case edgePair of
+                    (startVertexNum, endVertexNum) ->
+                        IntMap.insertWith Set.union startVertexNum (Set.single endVertexNum) edges;
+                    ;
+                
+                //edges from the first vertex to the second, from the second
+                //vertex to the third, etc (in insertion order).
+                insertionOrderEdges :: [(Int, Int)];
+                insertionOrderEdges = zip sortedComponent $ tail sortedComponent;
+                
+                edges_internalRemoved = foldLeftStrict (flip $ IntMap.update removeComponentSet) oldEdges component;
+                edges_insertionOrderAdded = foldLeftStrict insertEdge edges_internalRemoved insertionOrderEdges;
+            in
+                edges_insertionOrderAdded;
+    in
+        case graph of
+        DirectedGraph {nextVertexNum, vertexMap, edges = oldEdges} ->
+            let
+                components = stronglyConnectedComponentsInternal graph;
+                newEdges = foldLeftStrict flattenComponent oldEdges components;
+            in
+                DirectedGraph nextVertexNum vertexMap newEdges;
+        ;
+
+/**
+ * Returns a list of vertices forming a cycle (first list element is duplicated
+ * in the last position), if one exists.
+ *   
+ * {@strong Note@}: if the graph contains multiple cycles, then any one may be returned.
+ *   
+ * @arg graph the graph in which to seek a cycle.
+ * 
+ * @return {@code {@link Just@} cycle@} if one exists and {@link Nothing@} otherwise.
+ *   
+ * @see function=findReachableCycle
+ * @see function=existsCycle
+ */
+findCycle :: Eq a => DirectedGraph a -> Maybe [a];
+public findCycle graph = findCycleInternal graph Nothing;
+    
+/**
+ * Determines whether or not the specified graph contains a cycle.
+ * 
+ * @arg graph the graph in which to seek a cycle.
+ * 
+ * @return {@link True@} if the graph contains a cycle; {@link False@} otherwise.
+ *   
+ * @see function=findCycle
+ */
+existsCycle :: Eq a => DirectedGraph a -> Boolean;
+public existsCycle graph = isJust $ findCycle graph;
+
+/**
+ * Returns a list of vertices forming a cycle reachable from the specified
+ * vertex (first list element is duplicated in the last position), if one exists.
+ * 
+ * {@strong Note@}: if the reachable subgraph contains multiple cycles, then any one
+ * may be returned.
+ * 
+ * @arg graph the graph in which to seek a cycle.
+ * @arg startVertex the vertex from which to seek a cycle.
+ * 
+ * @return {@code {@link Just@} cycle@} if one exists and {@link Nothing@} otherwise.
+ *   
+ * @see function=findCycle
+ * @see function=existsReachableCycle
+ */
+findReachableCycle :: Eq a => DirectedGraph a -> a -> Maybe [a];
+public findReachableCycle graph startVertex = findCycleInternal graph $ Just startVertex;
+    
+/**
+ * Determines whether or not the specified graph contains a cycle reachable from
+ * the specified vertex.
+ * 
+ * @arg graph the graph in which to seek a cycle.
+ * @arg startVertex the vertex from which to seek a cycle.
+ * 
+ * @return {@link True@} if the graph contains a reachable cycle; {@link False@} otherwise.
+ *   
+ * @see function=findReachableCycle
+ */
+existsReachableCycle :: Eq a => DirectedGraph a -> a -> Boolean;
+public existsReachableCycle graph startVertex = isJust $ findReachableCycle graph startVertex;
+
+/**
+ * Determines whether or not the specified graph contains a cycle.  If a start
+ * vertex is specified, then only the reachable subgraph is considered.
+ * 
+ * @arg graph the graph in which to seek a cycle.
+ * @arg maybeStartVertex {@code {@link Just@} startVertex@} to search the
+ *   subgraph reachable from {@code startVertex@} or {@link Nothing@} to search
+ *   the entire graph.
+ * 
+ * @return {@code {@link Just@} cycle@} if one exists and {@link Nothing@} otherwise.
+ * 
+ * @see function=findCycle
+ * @see function=existsCycle
+ * @see function=findReachableCycle
+ * @see function=existsReachableCycle
+ */
+findCycleInternal :: Eq a => DirectedGraph a -> Maybe a -> Maybe [a];
+private findCycleInternal graph maybeStartVertex =
+    let
+        //could use a set rather than a list, but this should be faster in
+        //a graph without cycles
+        
+        startVertexFn :: ([Int], Boolean) -> Int -> ([Int], Boolean);
+        startVertexFn accum vertexNum =
+            case accum of
+            (path, isCycle) -> 
+                if isCycle then
+                    accum
+                else
+                    (vertexNum : path, isCycle);
+            ;
+        
+        revisitVertexFn :: ([Int], Boolean) -> Int -> ([Int], Boolean);
+        revisitVertexFn accum vertexNum = 
+            case accum of
+            (path, isCycle) -> 
+                if isCycle then
+                    accum
+                else
+                    case List.findIndex (\x -> x == vertexNum) path of
+                    Nothing -> accum;
+                    Just index -> (take (index + 1) path, True);
+                    ;
+            ;
+        
+        finishVertexFn :: ([Int], Boolean) -> Int -> ([Int], Boolean);
+        finishVertexFn accum vertexNum =
+            case accum of
+            (path, isCycle) -> 
+                if isCycle then
+                    accum
+                else
+                    //assert: vertexNum == head path
+                    (tail path, isCycle);
+            ;
+        
+        (path, isCycle) = foldDFSInternal maybeStartVertex startVertexFn revisitVertexFn finishVertexFn ([], False) graph;
+    in
+        if isCycle then
+            Just $ List.reverse $ indicesToVertices graph path
+        else
+            Nothing;
+
+/**
+ * Returns a list of vertices forming a path from {@code startVertex@} to 
+ *    {@code endVertex@} (inclusive), if one exists.
+ *   
+ * {@strong Note@}: if the graph contains multiple such paths, then any one may be returned.
+ * {@strong Note@}: each vertex is considered to have a trivial path from itself to itself.
+ *   
+ * @arg graph the graph in which to seek a path.
+ * @arg startVertex the vertex from which to search.
+ * @arg endVertex the vertex to seek.
+ * 
+ * @return {@code {@link Just@} path@} if one exists and {@link Nothing@} otherwise.
+ *   
+ * @see function=existsPath
+ */
+findPath :: Eq a => DirectedGraph a -> a -> a -> Maybe [a];
+public findPath graph startVertex endVertex =
+    let
+        //not used - just checked so that foldDFSInternal won't throw an error
+        maybeStartVertexNum = getMaybeVertexNumber graph startVertex;
+        
+        maybeEndVertexNum = getMaybeVertexNumber graph endVertex;
+        endVertexNum = fromJust maybeEndVertexNum;
+        
+        startVertexFn :: ([Int], Boolean) -> Int -> ([Int], Boolean);
+        startVertexFn accum vertexNum =
+            case accum of
+            (path, reachesEnd) -> 
+                if reachesEnd then
+                    accum
+                else
+                    (vertexNum : path, vertexNum == endVertexNum);
+            ;
+        
+        (path, reachesEnd) = foldDFSInternal (Just startVertex) startVertexFn noChange noChange ([], False) graph;
+    in
+        if (isJust maybeStartVertexNum) && (isJust maybeEndVertexNum) && reachesEnd then
+            Just $ List.reverse $ indicesToVertices graph path
+        else
+            Nothing;
+    
+/**
+ * Determines whether the graph contains a path from path from {@code startVertex@}
+ * to {@code endVertex@}.
+ * 
+ * {@strong Note@}: each vertex is considered to have a trivial path from itself to itself.
+ * 
+ * @arg graph the graph in which to seek a path.
+ * @arg startVertex the vertex from which to search.
+ * @arg endVertex the vertex to seek.
+ * 
+ * @return {@link True@} if the graph contains a path from {@code startVertex@}
+ * to {@code endVertex@}; {@link False@} otherwise.
+ *   
+ * @see function=findPath
+ */
+/* TODO-AC: re-implement using existsPathInternal? */
+existsPath :: Eq a => DirectedGraph a -> a -> a -> Boolean;
+public existsPath graph startVertex endVertex =
+    isJust $ findPath graph startVertex endVertex;
+
+/**
+ * Determines whether the graph contains a path from path from {@code startVertex@}
+ * to {@code endVertex@}.
+ * 
+ * {@strong Note@}: each vertex is considered to have a trivial path from itself to itself.
+ * 
+ * @arg graph the graph in which to seek a path.
+ * @arg startVertexNum the vertex number of the vertex from which to search.
+ * @arg endVertexNum the vertex number of the vertex to seek.
+ * 
+ * @return {@link True@} if the graph contains a path from {@code startVertex@}
+ * to {@code endVertex@}; {@link False@} otherwise.
+ *   
+ * @see function=findPath
+ */
+existsPathInternal :: Eq a => DirectedGraph a -> Int -> Int -> Boolean;
+private existsPathInternal graph startVertexNum endVertexNum =
+    let
+        vertexFoundFn :: Boolean -> Int -> Boolean;
+        vertexFoundFn isFound vertexNum = isFound || (vertexNum == endVertexNum);
+        
+        dfsHelper = performDFS (getNeighbourList graph) vertexFoundFn noChange noChange;
+    in
+        snd $ dfsHelper startVertexNum Set.empty False;
+
+/**
+ * Partitions the vertices into two sets and then removes all edges from one set
+ *   to the other.
+ * 
+ * @arg partitionFn a function which returns {@link True@} if a vertex belongs
+ *   in the first subgraph and {@link False@} if a vertex belongs in the second
+ *   subgraph.
+ * @arg graph the graph to partition.
+ * 
+ * @return the two subgraphs induced by the partition function.
+ * 
+ * @see function=filter
+ */
+partition :: Eq a => (a -> Boolean) -> DirectedGraph a -> (DirectedGraph a, DirectedGraph a);
+public partition partitionFn graph =
+    let
+        vertexPairs = IntMap.toAscList graph.DirectedGraph.vertexMap;
+        
+        (list1, list2) = List.partition (partitionFn # snd) vertexPairs;
+        
+        vertexNums1 = List.map fst list1;
+        vertexNums2 = List.map fst list2;
+    in
+        case graph of
+        DirectedGraph {nextVertexNum, vertexMap, edges} ->
+            let
+                getMaybeAdjacencyNode invalidEndpoints vertexNum =
+                    case IntMap.lookup vertexNum edges of
+                    Nothing -> Nothing;
+                    Just allEndpoints ->
+                        let
+                            validEndpoints = Set.difference allEndpoints invalidEndpoints;
+                        in
+                            if Set.isEmpty validEndpoints then
+                                Nothing
+                            else
+                                Just (vertexNum, validEndpoints);
+                    ;
+                
+                
+                vertexMap1 = IntMap.fromDistinctAscList list1;
+                vertexMap2 = IntMap.fromDistinctAscList list2;
+                
+                edges1 = 
+                    IntMap.fromDistinctAscList $ List.mapJust (getMaybeAdjacencyNode $ Set.fromDistinctAscList vertexNums2) vertexNums1;
+                edges2 = 
+                    IntMap.fromDistinctAscList $ List.mapJust (getMaybeAdjacencyNode $ Set.fromDistinctAscList vertexNums1) vertexNums2;
+                
+                graph1 = 
+                    DirectedGraph
+                        nextVertexNum //TODO-AC: (1 + max vertexNums1)?
+                        vertexMap1
+                        edges1;
+                graph2 = 
+                    DirectedGraph
+                        nextVertexNum //TODO-AC: (1 + max vertexNums2)?
+                        vertexMap2
+                        edges2;
+            in
+                (graph1, graph2);
+        ;
+
+/**
+ * Eliminates from the graph all elements for which {@code filterFn@} returns
+ * {@link False@}.
+ * 
+ * @arg filterFn a function which returns {@link True@} if a vertex belongs
+ *   in the subgraph and {@link False@} otherwise.
+ * @arg graph the graph to filter.
+ * 
+ * @return the subgraph induced by the filter function.
+ * 
+ * @see function=partition
+ */
+filter :: Eq a => (a -> Boolean) -> DirectedGraph a -> DirectedGraph a;
+public filter filterFn graph =
+    fst $ partition filterFn graph;
+
+/**
+ * Sorts a list of tuples into dictionary order and then collapses adjacent
+ * elements with the same first component.
+ * 
+ * e.g. {@code groupByFirst [(1,5),(2,4),(1,2)]@} yields {@code [(1,[2,5]),(2,[4])]@}.
+ * 
+ * @arg tuples a list of tuples.
+ * 
+ * @return the sorted and grouped list of tuples.
+ */
+groupByFirst :: (Ord a, Ord b) => [(a, b)] -> [(a, [b])];
+private groupByFirst tuples =
+    let
+        sortedTuples = List.sort tuples;
+        groupedTuples= List.groupBy (induceEqualityFunction fst) sortedTuples;
+    in
+        List.map (\group -> (fst $ head group, snd $ unzip group)) groupedTuples;
+
+/**
+ * Reverses all of the edges in a graph (sometimes referred to as the transpose
+ * graph).
+ * 
+ * @arg graph the graph to reverse.
+ * 
+ * @return the graph with all edges reversed.
+ */
+reverse :: Eq a => DirectedGraph a -> DirectedGraph a;
+public reverse graph = 
+    case graph of
+    DirectedGraph {nextVertexNum, vertexMap, edges} ->
+        let
+            reversedTuples = IntMap.foldWithKey (\startVertex neighbourSet accum -> Set.fold (\endVertex accum2 -> (endVertex, startVertex) : accum2) accum neighbourSet) [] edges;
+            reversedNeighbourLists = groupByFirst reversedTuples;
+            reversedNeighbourSets = List.map (\pair -> (fst pair, Set.fromDistinctAscList $ snd pair)) reversedNeighbourLists;
+            reversedEdges = IntMap.fromDistinctAscList reversedNeighbourSets;
+        in
+            DirectedGraph nextVertexNum vertexMap reversedEdges;
+    ;
+
+/**
+ * Returns a bijection from the indices of the first list to the indices of the
+ * second list, if such a bijection exists.
+ * 
+ * e.g {@code findPermutation ['a', 'b', 'c'] ['c', 'a', 'b']@} yields {@code IntMap{0 = 1, 1 = 2, 2 = 0}@}.
+ * 
+ * i.e. {@unorderedList
+ *        {@item The element that is in position 0 in the first list is in position 1 in the second list,@}
+ *        {@item the element that is in position 1 in the first list is in position 2 in the second list,@}
+ *        {@item the element that is in position 2 in the first list is in position 0 in the second list.@}
+ *      @}
+ * 
+ * @arg list1 the original list
+ * @arg list2 the permuted list
+ * 
+ * @return {@code {@link Just@} permutation@} if one exists and {@link Nothing@}
+ *   otherwise.
+ *      
+ * @see function=permute
+ */
+findPermutation :: Eq a => [a] -> [a] -> Maybe (IntMap Int);
+private findPermutation list1 list2 =
+    let
+        addIndex elem1 accum =
+            case accum of
+            Nothing -> Nothing;
+            Just perm ->
+                case List.findIndex (\elem2 -> elem1 == elem2) list2 of
+                Nothing -> Nothing;
+                Just index -> Just $ index : perm;
+                ;
+            ;
+    in
+        if (length list1) != (length list2) then
+            Nothing
+        else
+            case foldRight addIndex (Just []) list1 of
+            Nothing -> Nothing;
+            Just image ->
+                Just $ IntMap.fromDistinctAscList $ zip (upFrom 0) image;
+            ;
+
+/**
+ * Rearranges a list according to an index-permutation.
+ * 
+ * e.g. Let {@code perm@} be {@code IntMap{0 = 1, 1 = 2, 2 = 0}@}.
+ *      Then {@code permute perm ['c', 'a', 'b']@} yields {@code ['a', 'b', 'c']@}.
+ *      
+ * i.e. {@unorderedList
+ *        {@item The element in position 0 in the new list was in position 1 in the old list,@}
+ *        {@item the element in position 1 in the new list was in position 2 in the old list,@}
+ *        {@item the element in position 2 in the new list was in position 0 in the old list.@}
+ *      @}
+ *      
+ * {@strong Note@}: {@code (permute (fromJust $ findPermutation list1 list2) list2) == list1@}
+ * 
+ * @arg perm a bijection from the indices of the first list to the indices of the
+ *   second list (generally created by calling {@link function=findPermutation@}.
+ * @arg oldList the list to permute.
+ * 
+ * @return the permuted list.
+ *      
+ * @see function=findPermutation
+ */
+permute :: IntMap Int -> [a] -> [a];
+private permute perm oldList =
+    List.mapIndexed (\element index -> List.subscript oldList $ IntMap.find index perm) oldList;
+
+/**
+ * Determines whether or not two graphs have the same vertices and whether each
+ * vertex has the same neighbours in both graphs.
+ * 
+ * @arg graph1 the first graph.
+ * @arg graph2 the second graph.
+ * 
+ * @return {@link True@} if the graphs have the same vertices with the same
+ *   neighbours; {@link False@} otherwise.
+ */
+equalsDirectedGraphIgnoreInsertionOrder :: Eq a => DirectedGraph a -> DirectedGraph a -> Boolean;
+public equalsDirectedGraphIgnoreInsertionOrder graph1 graph2 =
+    let
+        (vertexNums1, vertices1) = List.unzip $ IntMap.toList graph1.DirectedGraph.vertexMap;
+        (vertexNums2, vertices2) = List.unzip $ IntMap.toList graph2.DirectedGraph.vertexMap;
+        
+        maybeIndexPerm = findPermutation vertices1 vertices2;
+        indexPerm = fromJust maybeIndexPerm;
+        
+        vertexNumPerm = IntMap.fromList $ zip (permute indexPerm vertexNums2) vertexNums1;
+        
+        translateNum2 num2 = IntMap.find num2 vertexNumPerm;
+        
+        sameNeighbours vertexNum1 vertexNum2 =
+            (getNeighbourSet graph1 vertexNum1) ==
+                (Set.map translateNum2 $ getNeighbourSet graph2 vertexNum2);
+        
+        edgesMatch =
+            List.all (\num2 -> sameNeighbours (translateNum2 num2) num2) vertexNums2;
+    in
+        if isJust maybeIndexPerm then
+            edgesMatch
+        else
+            False;
+
+/**
+ * Determines whether or not two graphs have the same vertices, whether each vertex
+ * has the same neighbours in both graphs, and whether both graphs have the same
+ * vertex insertion order.
+ * 
+ * @arg graph1 the first graph.
+ * @arg graph2 the second graph.
+ * 
+ * @return {@link True@} if the graphs have the same vertices with the same
+ *   neighbours and inserted in the same order; {@link False@} otherwise.
+ */
+equalsDirectedGraphWithInsertionOrder :: Eq a => DirectedGraph a -> DirectedGraph a -> Boolean;
+public equalsDirectedGraphWithInsertionOrder graph1 graph2 =
+    //TODO-AC: could be faster if it wasn't implemented in terms of an unordered
+    //comparison
+    (getVerticesInInsertionOrder graph1 == getVerticesInInsertionOrder graph2)
+        && equalsDirectedGraphIgnoreInsertionOrder graph1 graph2;
+
+/**
+ * The same value as {@link function = equalsDirectedGraphIgnoreInsertionOrder @}.
+ * 
+ * Rationale: analogy to LinkedHashSet in Java.
+ */
+instance Eq a => Eq (DirectedGraph a)
+where
+    equals = equalsDirectedGraphIgnoreInsertionOrder;
+    ;

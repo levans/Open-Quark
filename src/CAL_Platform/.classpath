@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry excluding="lecc_runtime/" kind="src" output="src" path="src"/>
+	<classpathentry excluding="lecc_runtime/" kind="src" output="test" path="test"/>
+	<classpathentry kind="src" path="/Utilities"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/asm-all-3.0.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/commons-collections-3.1.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/junit.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/xercesImpl.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/xmlParserAPIs.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/antlr.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/CAL_Runtime"/>
+	<classpathentry kind="output" path="src"/>
+</classpath>

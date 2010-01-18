@@ -1,0 +1,375 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * PrettyPrinter.cal
+ * Creation date: Nov 24, 2004.
+ * By: Richard Webster
+ */
+
+/**
+ * Functions for pretty-printing text.
+ * This is based on the paper 'A prettier printer' by Philip Wadler.
+ *      ({@url http://homepages.inf.ed.ac.uk/wadler/papers/prettier/prettier.pdf@})
+ *
+ * @author Richard Webster
+ */
+
+module Cal.Utilities.PrettyPrinter;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, String;
+    dataConstructor = False, True;
+    function = append, compose, concat, empty, isEmpty, not;
+    ;
+import Cal.Collections.List using
+    function = filter, join, map;
+    ;      
+import Cal.Core.String;        
+
+
+// The pretty printer
+/*
+infixr 5 :<|>
+infixr 6 :<>
+infixr 6 <>
+*/
+
+/*
+data Document = NIL
+         | Document :<> Document
+         | NEST Int Document
+         | TEXT String
+         | LINE
+         | Document :<|> Document
+*/
+data public Document = 
+    private NIL |
+    private APPEND 
+        doc1            :: Document 
+        doc2            :: Document |
+    private NEST 
+        indent          :: Int 
+        doc             :: Document |
+    private TEXT 
+        strValue        :: String |
+    private LINE |
+    private UNION 
+        doc1            :: Document 
+        doc2            :: Document;
+
+/**
+ * Make {@code Document@} part of the {@code Appendable@} type class.
+ */
+instance Prelude.Appendable Document where
+    empty = emptyDoc; 
+    isEmpty = isEmptyDoc;  
+    append = appendDocs;
+    concat = concatDocs;    
+    ;
+
+//nil = NIL
+emptyDoc :: Document;
+private emptyDoc = NIL;
+
+isEmptyDoc :: Document -> Boolean;
+private isEmptyDoc doc = 
+    case doc of
+    NIL -> True;
+    _ -> False;
+    ;
+
+//x <> y = x :<> y
+appendDocs :: Document -> Document -> Document;
+private appendDocs x y = APPEND x y;
+
+concatDocs :: [Document] -> Document;
+private concatDocs = folddoc append;
+
+
+/*
+data InternalDoc = Nil
+         | String �Text� InternalDoc
+         | Int �Line� InternalDoc
+*/
+data private InternalDoc = 
+    private Nil |
+    private Text 
+        strValue        :: String 
+        doc             :: InternalDoc |        // rest of doc
+    private Line 
+        indent          :: Int 
+        doc             :: InternalDoc;         // rest of doc
+
+
+//nest i x = NEST i x
+nest :: Int -> Document -> Document;
+public nest i x = NEST i x;
+
+//text s = TEXT s
+text :: String -> Document;
+public text s = TEXT s;
+
+//line = LINE
+line :: Document;
+public line = LINE;
+
+// group x = flatten x :<|> x
+group :: Document -> Document;
+public group x = UNION (flatten x) x;
+
+/*
+flatten NIL = NIL
+flatten (x :<> y) = flatten x :<> flatten y
+flatten (NEST i x) = NEST i (flatten x)
+flatten (TEXT s) = TEXT s
+flatten LINE = TEXT " "
+flatten (x :<|> y) = flatten x
+*/
+flatten :: Document -> Document;
+flatten doc = 
+    case doc of
+    NIL -> NIL;
+    APPEND {doc1, doc2} -> APPEND (flatten doc1) (flatten doc2);
+    NEST {indent, doc} -> NEST indent (flatten doc);
+    TEXT {} -> doc;
+    LINE -> TEXT " ";
+    UNION {doc1} -> flatten doc1;
+    ;
+
+/*
+layout Nil = ""
+layout (s �Text� x) = s ++ layout x
+layout (i �Line� x) = '\n' : copy i ' ' ++ layout x
+*/
+/**
+ * Converts a text document to a string.
+ */
+layout :: InternalDoc -> String;
+layout !doc = 
+    let
+        layoutHelper :: InternalDoc -> [String];
+        layoutHelper doc = 
+            case doc of
+            Nil -> [];
+            Text {strValue, doc} -> strValue : layoutHelper doc;
+            Line {indent, doc} -> "\n" : String.space indent : layoutHelper doc;
+            ;
+
+        docStrings = layoutHelper doc;
+    in
+        concat docStrings;
+
+//copy i x = [ x | _ <- [1..i] ]
+
+//best w k x = be w k [(0,x)]
+best :: Int -> Int -> Document -> InternalDoc;
+best w k x = be w k [(0, x)];
+
+/*
+be w k [] = Nil
+be w k ((i,NIL):z) = be w k z
+be w k ((i,x :<> y):z) = be w k ((i,x):(i,y):z)
+be w k ((i,NEST j x):z) = be w k ((i+j,x):z)
+be w k ((i,TEXT s):z) = s �Text� be w (k+length s) z
+be w k ((i,LINE):z) = i �Line� be w i z
+be w k ((i,x :<|> y):z) = better w k (be w k ((i,x):z))
+                                     (be w k ((i,y):z))
+*/
+be :: Int -> Int -> [(Int, Document)] -> InternalDoc;
+be w k indentDocs = 
+    case indentDocs of
+    [] -> Nil;
+    indentDoc : z -> 
+        case indentDoc of
+        (i, doc) -> 
+            case doc of
+            NIL -> be w k z;
+            APPEND {doc1, doc2} -> be w k ((i, doc1) : (i , doc2) : z);
+            NEST {indent, doc} -> be w k ((i + indent, doc) : z);
+            TEXT {strValue} -> Text strValue (be w (k + String.length strValue) z);
+            LINE -> Line i (be w i z);
+            UNION {doc1, doc2} -> better w k (be w k ((i , doc1) : z))
+                                             (be w k ((i , doc2) : z));
+            ;
+        ;
+    ;
+
+//better w k x y = if fits (w-k) x then x else y
+better :: Int -> Int -> InternalDoc -> InternalDoc -> InternalDoc;
+better !w !k x y = if fits (w - k) x then x else y;
+
+/*
+fits w x | w < 0 = False
+fits w Nil = True
+fits w (s �Text� x) = fits (w - length s) x
+fits w (i �Line� x) = True
+*/
+fits :: Int -> InternalDoc -> Boolean;
+fits !w doc = 
+    if (w < 0) then False
+    else
+        case doc of
+        Nil -> True;
+        Text {strValue, doc} -> fits (w - String.length strValue) doc;
+        Line {} -> True;
+        ;
+
+//pretty w x = layout (best w 0 x)
+pretty :: Int -> Document -> String;
+public pretty !maxWidth doc = layout (best maxWidth 0 doc);
+
+
+// Utility functions
+
+singleSpace :: Document;
+public singleSpace = text " ";
+
+// x <+> y = x <> text " " <> y
+spaceSep :: Document -> Document -> Document;
+public spaceSep x y = x ++ singleSpace ++ y;
+
+// x </> y = x <> line <> y
+lineSep :: Document -> Document -> Document;
+public lineSep x y = x ++ line ++ y;
+
+/*
+folddoc f [] = nil
+folddoc f [x] = x
+folddoc f (x:xs) = f x (folddoc f xs)
+*/
+folddoc :: (Document -> Document -> Document) -> [Document] -> Document;
+public folddoc f !docs = 
+    case docs of
+    [] -> empty;
+    d : ds -> 
+        case ds of
+        [] -> d;
+        _ -> f d (folddoc f ds);
+        ;
+    ;
+
+//spread = folddoc (<+>)
+// Separate the items by spaces.
+// Ignore empty items.
+spread :: [Document] -> Document;
+public spread docs = 
+    folddoc spaceSep (filter (compose not isEmpty) docs);
+
+//stack = folddoc (</>)
+// Separate the items by new lines.
+// Ignore empty items.
+stack :: [Document] -> Document;
+public stack docs = 
+    folddoc lineSep (filter (compose not isEmpty) docs);
+
+/*
+bracket l x r = group (text l <>
+                nest 2 (line <> x) <>
+                line <> text r)
+*/
+bracket :: String -> Document -> String -> Document;
+public bracket l x r = group (text l ++ nest 2 (line ++ x) ++ line ++ text r);
+
+
+//x <+/> y = x <> (text " " :<|> line) <> y
+spaceOrLineSep :: Document -> Document -> Document;
+public spaceOrLineSep x y = x ++ (UNION singleSpace line) ++ y;
+
+
+//fillwords = folddoc (<+/>) . map text . words
+fillwords :: String -> Document;
+public fillwords !str = 
+    let
+        textWords = map text (String.words str);
+    in
+        folddoc spaceOrLineSep textWords;
+
+/*
+fill [] = nil
+fill [x] = x
+fill (x:y:zs) = (flatten x <+> fill (flatten y : zs))
+                :<|>
+                (x </> fill (y : zs))
+*/
+fill :: [Document] -> Document;
+public fill docs = 
+    case docs of
+    [] -> empty;
+    x : xs -> 
+        case xs of
+        [] -> x;
+        y : zs -> UNION (spaceSep (flatten x) (fill ((flatten y) : zs ))) (lineSep x (fill xs));
+        ;
+    ;
+
+/**
+ * Similar to fill, except that the specified separator text will be inserted between the items.
+ * The {@code trailingSeparator@} flag controls whether the separator appears after each item (except the last) 
+ * or before each item (except the first).
+ */
+fillSeparatedList :: Boolean -> String -> [Document] -> Document;
+public fillSeparatedList !trailingSeparator separator docs = 
+    let
+        addTrailingSeparators docs = 
+            case docs of
+            [] -> [];
+            d : ds ->
+                case ds of
+                [] -> [d];
+                _ -> (d ++ text separator) : addTrailingSeparators ds;
+                ;
+            ;
+        addLeadingSeparators docs = 
+            case docs of
+            [] -> [];
+            docsHead : docsTail -> docsHead : map (append (text separator)) docsTail;
+            ;
+
+        // Filter out any empty documents.
+        nonEmptyDocs = filter (compose not isEmpty) docs;
+
+        separatedDocs = if trailingSeparator then addTrailingSeparators nonEmptyDocs
+                        else addLeadingSeparators nonEmptyDocs;
+    in
+        fill separatedDocs;
+
+/**
+ * Breaks the text into multiple lines (based on the {@code '\n'@} char) and creates a document item for each line.
+ */
+multilineText :: String -> Document;
+public multilineText s = 
+    let
+        textLines = String.lines s;
+    in
+        join line (map text textLines);
+

@@ -1,0 +1,609 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * QuickCheck.cal
+ * Creation date: Oct 24, 2006.
+ * By: Magnus Byne
+ */
+
+/**
+  This is a tutorial module that shows how the {@link Cal.Utilities.QuickCheck@} module 
+  can be used to facilitate testing.
+  QuickCheck allows program properties to be expressed as predicate functions.
+  QuickCheck can verify these predicates automatically by generating arbitrary data to
+  satisfy their parameters.
+  
+  In order to generate arbitrary data for the parameters there
+  must be an {@link Arbitrary@} class instance for the parameter types. {@link Cal.Utilities.QuickCheck@} defines
+  {@code Arbitrary@} class instances for all of the types defined in Prelude.
+  
+  It is probably best to start an ICE session with the current module set to
+  this module, and to try out some of the QuickCheck functions as you read through this
+  tutorial.
+  
+  {@strong A first example@}
+  
+  A simple property of {@link reverse@} can be expressed as follows:
+ 
+{@code
+prop_reverse :: [Int] -> Boolean;
+public prop_reverse list = reverse (reverse list) == list;
+@}
+
+  that is, if you reverse the reverse of a list, you should get back to where
+  you started.
+  
+  This predicate can be checked using {@link quickCheck@} as follows: 
+  
+  {@code quickCheck prop_reverse @}
+ 
+  This causes QuickCheck to test the predicate function with lots of randomly generated
+  lists. If the predicate function evaluates to true for each list, 
+  {@link quickCheck@} will evaluate to true.
+  
+  To see the randomly generated test data we can use {@link showResults@}:
+  
+  {@code showResults prop_reverse@}
+  
+  In this case the list of results will look something like this:
+  
+  {@code
+Passed with: ([])
+Passed with: ([])
+Passed with: ([])
+Passed with: ([0])
+Passed with: ([3])
+Passed with: ([0, -2, -5])
+Passed with: ([-3, 5, 4, -3])
+Passed with: ([4, 2, 0, 4])
+Passed with: ([])
+Passed with: ([-6, -6, -2])
+Passed with: ([2, 3, 1, 3, 6])
+Passed with: ([4])
+Passed with: ([-5, -2, -4, -8, 3, -6])
+Passed with: ([3, 5, 4, -4, -5, 6])
+Passed with: ([])
+Passed with: ([5, 8, -5, 5])
+Passed with: ([-8, -9, 1, -4, 6, 2])
+Passed with: ([-4, -7])
+Passed with: ([-6, 7, -10, -5, 8, -5, -7, -8, 8])
+Passed with: ([])
+Passed with: ([-2, 6])
+Passed with: ([6, -3, -4, 1, -6, 2, 1, -1, -2, 10])
+Passed with: ([-11, -3, -2, -3, -8, 9, -6, 7, 5])
+Passed with: ([2, 4])
+Passed with: ([1, 5, 8, 11, 10, -8, 5, -2])
+Passed with: ([5, -2, 7, -8, 3, 2, 3])
+Passed with: ([])
+Passed with: ([1, 0, -10, 11, 7, 3])
+Passed with: ([-6, 8, 9, 2, -7, -7, 3, 7])
+Passed with: ([9, -5, 5, 8, -9, 11])
+Passed with: ([10, -10, 3, -10, 8, 0, 8, 7, 7, 11])
+Passed with: ([])
+Passed with: ([1, 10, 1, -7, 6, 7])
+Passed with: ([-5, 10, -10, -1, -7, -2, 11, -9, -7, 3, 1, 1])
+Passed with: ([3, 5, -12, -2, -4])
+Passed with: ([-6, 2, -4, 4, 2, -13, 10, 5, -4, 7])
+Passed with: ([5, -4, -3, -11])
+Passed with: ([-14, 3, -13, -14, -7, -10, 12, 0, -2, 0, -4])
+Passed with: ([-1, -6, -8, -12, -6, -7, -4, -5, 12, 6, 13, -10])
+Passed with: ([])
+Passed with: ([7, 3, -6, 13, 4, -1, 5, -5, -1, 7, 1])
+Passed with: ([5, -1])
+Passed with: ([12, 1, 2, 12, 6, -8, 0, 7, 7, 13])
+Passed with: ([-4, 5, -10, 7, 13, -5, 7])
+Passed with: ([7, -12, 13, 2, 5, 13, -6, -8, -2])
+Passed with: ([-2, -5, 4, 11, 1])
+Passed with: ([-9, 8, 2, -13, 11, -6, -5, -7, 13, -7, 11])
+Passed with: ([])
+Passed with: ([-1, -10, -7, 11, -2, -7, 9, 10, -7])
+Passed with: ([12, -2, 4, -7, -7, 1, 3, -12, -6, -3, 11, 2, 10])
+Passed with: ([-2, -6, 1, 12, 8, -10, 7])
+Passed with: ([11, 5, 1, -14, 6])
+Passed with: ([-2])
+Passed with: ([-8, 13, -12, -6, -5])
+Passed with: ([-3, 1, -2, -7, 2, 8])
+Passed with: ([-6, -9, 6, 2, -5, 6, -11, -7, 7, -8, 1, -8, -5])
+Passed with: ([10, 12, 12, -5, -12, 13, 6, 8, 10, 13])
+Passed with: ([8, -8, 6, -4])
+Passed with: ([])
+Passed with: ([2, -13, 15, 7, 14, -16, 3, 5, 14, -2, -1, 8, -9])
+Passed with: ([-1, -7])
+Passed with: ([10, -11, -6, -3, -7, -13, -12, 6, -11, 15, 5, -9, 10])
+Passed with: ([])
+Passed with: ([-14, -14, 8, 10, 11, -15])
+Passed with: ([12, 4, 1, 13, 0, -7, 5, -16, -5, 9, -10, 5, 12, 15, 14])
+Passed with: ([-10, -5, 4, 13, 11, -8, -9, 13, 9])
+Passed with: ([-12, -10, -11, -14, -7, 1, -2])
+Passed with: ([-1])
+Passed with: ([-12, -3, 6, -15, 9, -5, -4, 10, -4, 13, 8])
+Passed with: ([-12, 7, -8, -14])
+Passed with: ([-13, -3, 13, -11])
+Passed with: ([])
+Passed with: ([-3, 5])
+Passed with: ([-8, -12, -11, 1, -5, -7])
+Passed with: ([-8, 2, -16, -9, 12, -15, 10, -3, 3, 0, 14, -9, -15, -5])
+Passed with: ([8, 9, -11, -13, -9, -8])
+Passed with: ([-3, -5])
+Passed with: ([-13, -2, 15, -1, -10, 5, -6])
+Passed with: ([-8, 6, -11, 3, 12, 12, -15, -2, -13, -4, 0, 12, 11])
+Passed with: ([-14, -5, -14, -5, 0, 12])
+Passed with: ([-6, 0, -2, 14, -17])
+Passed with: ([0, -17, 10, 8, 11, 13, 10, -15, -5, 5, -4, -1])
+Passed with: ([-15, -9, 11, 4, -14])
+Passed with: ([-7, -1, -16, -13, 9, 16, -4, 15, -13, -1, 10])
+Passed with: ([-7, -5, -17, -17, -10, 15, -11, -4, 12, 14, 9, -12, -1, -17, -2])
+Passed with: ([15, 3, -11, -5, 0, -4, -13, 12, -5, -8, -7])
+Passed with: ([16, 6, 15, -9, -9, -14, -14, 3, -14, -7, 14, -9, -13, -2, 5, 9])
+Passed with: ([-5, 13, 10, 14, -4, 16, 11, 11])
+Passed with: ([-10, -10, 11, 5, -17, -4, 15, -1, -6, 2, -17])
+Passed with: ([5, 14, 14, -6, 14, -16, 2, -9, 7, -1, -14, -14])
+Passed with: ([11, 16, 10, -2, -3, -17, 4])
+Passed with: ([-1, 13])
+Passed with: ([2, -14, 4, -15])
+Passed with: ([-2, -2, 4])
+Passed with: ([-2, -6, 7, -6, -10, 16, -15, -13, -2, -9, -8, -2, -6, 12, -11, -4])
+Passed with: ([7, 15, -3, 15, -2, 5, 0, 12, 8])
+Passed with: ([6, 6, -15, 16, 6, -2, 8, 5, -14, 1, -17])
+Passed with: ([15, 10, 7, 9, 0, -15, -8, 10, 10, -8, -11])
+Passed with: ([3, 15, -10, 8, 14, 14, -5, -13, -7, 15, -5, 10, 10, -1, -11, 1])
+Passed with: ([-16])
+  @}
+  
+  Here we can see the results of every test. They include the result of evaluating the predicate 
+  function and the randomly generated list of integers used to
+  satisfy its arguments. You may notice that the random lists tend to
+  get longer as more tests are performed. This is because the default {@link quickCheck@} behavior is to 
+  start by generating small 
+  inputs, and then to increase them as subsequent tests are performed. This helps to improve the
+  performance of testing, and can help to provide simpler failing cases. The results
+  can be formated more clearly using {@link formatResults@}.
+  
+  {@link quickCheck@} uses default settings for testing. In order to override any of these 
+  settings you should use {@link check@}, which takes a conifuration parameter for controlling how the
+  tests are performed, including the number of tests and how the sizing is varied.
+   
+   It is also possible to test conditional laws using QuickCheck with the {@link implies@} operator. For example
+   consider a function to insert an element into an ordered list, which preserves the order of the list, e.g:
+ 
+{@code
+orderedInsert :: Prelude.Ord a => a -> [a] -> [a];
+orderedInsert value list =
+    case list of
+        [] -> [value];
+        head : tail ->  if ( value < head ) then  
+                            value : head : tail 
+                        else
+                            head : orderedInsert value tail;
+    ;
+@}
+
+Using a function isOrdered, defined (naively) as follows:
+{@code
+isOrdered :: Prelude.Ord a => [a] -> Boolean;
+isOrdered list = List.sort list == list;
+@}                      
+  
+the property of orderedInsert can be expressed as:
+{@code
+prop_orderedInsert :: Int -> [Int] -> Property;
+prop_orderedInsert value list =
+    (isOrdered list) `{@link implies@}` (isOrdered (orderedInsert value list));
+@}
+  This property can be verified by running quickCheck as before, i.e.:
+  {@code quickCheck prop_orderedInsert@}. If you examine the results using
+  {@code show $ verboseCheck prop_orderedInsert@} you will see that for many
+  of the generated inputs there is no test result, i.e. it is {@link Nothing@}. This is because the
+  generated data does not meet the precondition, so the test cannot be preformed. If the 
+  precondition is hard to meet with random data the testing procedure may fail
+  completely. There is also a more subtle problem we will address shortly, 
+  but first we must introduce the {@link classify@} and {@link summarize@} functions.
+  
+  The {@link classify@} function allows us to assign a label to test cases. For example:
+ 
+{@code
+prop_reverse_classify :: [Int] -> Property;
+prop_reverse_classify list = {@link classify@} (List.length list <= 1) "trivial" (reverse (reverse list) == list);
+@}
+
+  will classify all tests for which the length of the randomly generated list is 0 or 1 as trivial.
+  Now if you examine the results using verbose check you will see that some tests are labeled as trivial.
+  It is also possible to use {@link summarize@} to display the percentage of tests with each label.
+  For example:
+  {@code summarize (verboseCheck prop_reverse_classify) @}
+  will show the percentage of tests that have been marked as trivial. In this example it is 14%. 
+  
+  It is possible to update the classification to provide even more information as follows:
+{@code
+prop_reverse_classify2 :: [Int] -> Property;
+prop_reverse_classify2 list = {@link classify@} True ("length: " ++ (show (List.length list))) (reverse (reverse list) == list);
+@}
+
+  This will classify every test with a label representing the length of the list used for testing.
+  
+   Now we can return to the ordered list example, and update the property to classify the test 
+   cases as follows:
+ 
+{@code
+prop_orderedInsert_classify :: Int -> [Int] -> Property;
+prop_orderedInsert_classify value list =
+    {@link classify@} True ("length: " ++ (show (List.length list))) $
+    (isOrdered list) `{@link implies@}` (isOrdered (orderedInsert value list));
+@}
+  
+  If we get the summary information for this property using:
+  {@code summarize (verboseCheck prop_orderedInsert_classify)@}
+  we see that it has been tested with significantly shorter lists than the reverse property. 
+  In fact, over 30% of the
+  test cases are with lists of length 0! This is because
+  longer lists are less likely to satisfy the precondition, so the testing is biased 
+  towards shorter lists.
+  
+  In cases such as this, where a precondition may skew the test data distribution, or
+  where random data will rarely satisfy the precondition, the {@link forAll@} operator should be
+  used. This allows the user to specify a custom generator for test data. For example:
+ 
+{@code 
+prop_orderedInsert_forAll :: Int -> Property;
+prop_orderedInsert_forAll value =
+    {@link forAll@}
+    ({@link mapGen@} List.sort arbitrary)
+    (\list -> (isOrdered (orderedInsert value list)));
+@}
+
+  Here the {@link mapGen@} function is used to take an existing generator and create a new one that will
+  apply a function, in this case sort, to each output that is created. Again we can include 
+  {@link classify@} in the property to label the generated test data:
+ 
+{@code 
+prop_orderedInsert_forAll_classify :: Int -> Property;
+prop_orderedInsert_forAll_classify value =
+    {@link forAll@}
+    ({@link mapGen@} List.sort arbitrary)
+    (\list -> {@link classify@} True ("length: " ++ (show (List.length list))) 
+             (isOrdered (orderedInsert value list)));
+@}
+
+ 
+  Now summarizing the results with
+  {@code summarize (verboseCheck prop_orderedInsert_forAll_classify) @}
+  we see that the distribution of the lengths of the testing lists is more
+  in line with what we would expect.
+ 
+  {@strong Arbitrary Instances@}
+  
+  In order for QuickCheck to generate arguments they must be instances of
+  the {@link Arbitrary@} type class (unless a custom generator is supplied with {@link forAll@}). 
+  Most of the basic types have arbitrary instances already
+  defined for them, e.g Record, List, Int, Short, Long, Char, String, Function etc, but in
+  order to test with new user defined types it is necessary to define an Arbitrary
+  instance. The Arbitrary instance has two function which must be defined:
+  
+{@code
+public arbitrary :: Gen a;
+public coarbitrary :: a -> Gen b -> Gen b;
+@}
+  
+  The first function returns a generator for the type, which can be used to create instances. 
+  When defining new {@link arbitrary@} functions it is usually easiest to define them in terms of existing arbitrary types.
+  
+  The {@link coarbitrary@} function is used to modify a generator based on an instance of the type class. This is used by 
+  QuickCheck for the creation of arbitrary functions - i.e. when a property has functions as arguments. For example:
+
+{@code
+prop_memoize :: [Double] -> (Double -> Int) -> Prelude.Boolean;
+prop_memoize testArgs tesFunc=
+    List.map tesFunc testArgs == List.map (memo tesFunc) testArgs;
+@}
+  In order to test this property QuickCheck must create arbitrary functions of type {@code Double -> Int@}. In order to
+  do this QuickCheck uses the coarbitrary function to modify an Int generator so that it is dependent on a Double.
+  A general pattern for implementing coarbitrary is to chain together
+  coarbitrary for each of the constituent parts of the type. This ensures that arbitrary functions
+  depend on all parts of their input parameters.
+   
+  For example, given the type person, defined as follows:
+ 
+{@code
+data public Person = 
+    public Person  
+        name :: String
+        age :: Int;
+
+instance Show Person where
+    show = showPerson;
+    ;
+
+showPerson :: Person -> String;
+showPerson person =
+    (show person.Person.name) ++ ", " ++ (show person.Person.age);
+@}
+
+we can define the arbitrary instance as: 
+{@code
+instance Arbitrary Person where
+    arbitrary = arbitraryPerson;
+    coarbitrary = coarbitraryPerson;
+    ;
+
+arbitraryPerson :: Gen Person;
+arbitraryPerson = 
+    {@link zipWithGen@} 
+        (\name age -> Person name age)
+        ({@link zipWithGen@} 
+            (\first second -> first ++ " " ++ second)
+            ({@link makeChooseOneOfGen@} ["Peter", "Mary", "Mark", "Susan"])
+            ({@link makeChooseOneOfGen@} ["Smith", "Jones", "Williams", "Brown"]))    
+        ({@link makeBoundedIntGen@} 0 100); 
+
+coarbitraryPerson :: Person -> Gen a -> Gen a;
+coarbitraryPerson person = {@link coarbitrary@} person.Person.age # {@link coarbitrary@} person.Person.name;
+@}
+  
+  In order to see some arbitrary people, it is possible to use the 
+  {@link generateNInstances@} function as follows:
+  
+  {@code generateNInstances 10 makeDefaultGenParams (arbitrary::Gen Person)@}
+  
+  which shows output such as:
+{@code
+"Mary Jones", 83
+"Mark Williams", 19
+"Peter Smith", 98
+"Peter Smith", 77
+"Mark Williams", 35
+"Susan Jones", 39
+"Susan Brown", 42
+"Mark Williams", 43
+"Mary Jones", 96
+"Susan Williams", 37
+@}
+  
+  Implementing Arbitrary for Enum types is easy - you can simply use the deriving clause.
+  
+  It is typical to implement Arbitrary instances for types in their defining modules.
+  This prevents other code from redefining the Arbitrary instances, which may be desirable in certain cases.
+  For example consider testing the {@link sqrt@} function, which does not support negative doubles.
+  To overcome this it is possible to create a new type. For example:
+  
+{@code
+data Positive = 
+    public Positive value :: !Double
+    deriving Show;
+
+instance QuickCheck.Arbitrary Positive where
+    arbitrary = arbitraryPositive;
+    coarbitrary = coarbitraryPositive;
+    ;
+
+arbitraryPositive :: Gen (Positive);
+arbitraryPositive =
+    {@link mapGen@} (\value -> Positive (abs value)) arbitrary;
+ 
+coarbitraryPositive :: Positive -> Gen b -> Gen b;
+coarbitraryPositive pos = 
+    coarbitrary pos.Positive.value; 
+@}
+
+We can then write properties in terms of the Positive type. For example:
+
+{@code
+prop_sqrt :: Positive -> Boolean;
+prop_sqrt x = 
+    let 
+      double = x.Positive.value;
+    in
+        sqrt ( double * double ) == double;
+@}
+
+This is similar to supplying a custom generator with {@link forAll@}, but can be more convenient
+when the generator is widely used. 
+
+@author Magnus Byne
+*/
+module Cal.Tutorials.QuickCheck;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;    
+    function = abs;
+    ;
+
+import Cal.Collections.List using
+    function = reverse;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Property, Gen;
+    function = implies, quickCheck, forAll, classify, makeChooseOneOfGen, summarize,  showResults,
+               arbitrary, mapGen, makeBoundedIntGen, coarbitrary, zipWithGen, generateNInstances, check, testResults, defaultConfig, formatResults;
+    ; 
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Utilities.Math using
+    function = sqrt;
+    ;
+   
+/**
+ * A simple property of reverse.
+ */
+prop_reverse :: [Int] -> Boolean;
+public prop_reverse list = reverse (reverse list) == list;
+
+
+/**
+ * A function to insert an item into an ordered list.
+ */
+orderedInsert :: Prelude.Ord a => a -> [a] -> [a];
+public orderedInsert value list =
+    case list of
+        [] -> [value];
+        head : tail ->  if ( value < head ) then  
+                            value : head : tail 
+                        else
+                            head : orderedInsert value tail;
+    ;
+
+/**
+ * A simple (and inefficient) function to check if a list is ordered. 
+ */
+isOrdered :: Prelude.Ord a => [a] -> Boolean;
+public isOrdered list = List.sort list == list;
+
+/**
+ * Property of ordered insert showing how implies can be used to specify a
+ * precondition.
+ */
+prop_orderedInsert :: Int -> [Int] -> Property;
+public prop_orderedInsert value list =
+    (isOrdered list) `implies` (isOrdered (orderedInsert value list));
+
+/**Property of reverse showing how classify can be used to mark
+ * trivial cases.
+ */
+prop_reverse_classify :: [Int] -> Property;
+public prop_reverse_classify list = classify (List.length list <= 1) "trivial" (reverse (reverse list) == list);
+
+/** Property of reverse showing how classify can be used to record the length of
+ * the arbitrary lists used for testing.
+ */
+prop_reverse_classify2 :: [Int] -> Property;
+public prop_reverse_classify2 list = classify True ("length: " ++ (show (List.length list))) (reverse (reverse list) == list);
+
+/**
+ * Property of ordered insert showing classify to record the length
+ * of the generated lists
+ */
+prop_orderedInsert_classify :: Int -> [Int] -> Property;
+public prop_orderedInsert_classify value list =
+    classify True ("length: " ++ (show (List.length list))) $
+    (isOrdered list) `implies` (isOrdered (orderedInsert value list));
+
+/**
+ * Property of ordered insert showing how a custom generator can be used to create
+ * ordered lists.
+ */
+prop_orderedInsert_forAll :: Int -> Property;
+public prop_orderedInsert_forAll value =
+    forAll
+    (mapGen List.sort arbitrary)
+    (\list -> (isOrdered (orderedInsert value list)));
+
+/**
+ * Property of ordered insert using custom generator for ordered lists
+ * and {@link classify@} to record the length of the test data.
+ */
+prop_orderedInsert_forAll_classify :: Int -> Property;
+public prop_orderedInsert_forAll_classify value =
+    forAll
+    (mapGen List.sort arbitrary)
+    (\list -> classify True ("length: " ++ (show (List.length list))) 
+             (isOrdered (orderedInsert value list)));
+
+/**
+ * Person is a simple user defined type used to demonstrate how 
+ * {@link Arbitrary@} instances can be defined.
+ */
+data public Person = 
+    public Person  
+        name :: String
+        age :: Int;
+
+instance Show Person where
+    show = showPerson;
+    ;
+
+showPerson :: Person -> String;
+showPerson person =
+    (show person.Person.name) ++ ", " ++ (show person.Person.age);
+
+/**
+ * This is the {@link Arbitrary@} instance for the {@link typeConstructor = Person@} type. It shows
+ * how existing generators can be used to define new ones.
+ */
+instance Arbitrary Person where
+    arbitrary = arbitraryPerson;
+    coarbitrary = coarbitraryPerson;
+    ;
+
+arbitraryPerson :: Gen Person;
+arbitraryPerson = 
+    zipWithGen 
+        (\name age -> Person name age)
+        (zipWithGen 
+            (\first second -> first ++ " " ++ second)
+            (makeChooseOneOfGen ["Peter", "Mary", "Mark", "Susan"])
+            (makeChooseOneOfGen ["Smith", "Jones", "Williams", "Brown"]))    
+        (makeBoundedIntGen 0 100); 
+
+coarbitraryPerson :: Person -> Gen a -> Gen a;
+coarbitraryPerson person = coarbitrary person.Person.age # coarbitrary person.Person.name;
+
+
+/**
+ * The Positive data type is used as an example of how a new type 
+ * can be introduced to aid testing.
+ */
+data public Positive = 
+    public Positive value :: !Double
+    deriving Show;
+    
+/**
+ * Arbitrary instance for the Positive data type.
+ */
+instance Arbitrary Positive where
+    arbitrary = arbitraryPositive;
+    coarbitrary = coarbitraryPositive;
+    ;
+
+arbitraryPositive :: Gen (Positive);
+arbitraryPositive =
+    mapGen (\value -> Positive (abs value)) arbitrary;
+ 
+coarbitraryPositive :: Positive -> Gen b -> Gen b;
+coarbitraryPositive pos = 
+    coarbitrary pos.Positive.value; 
+
+/**
+ * Property for verifying sqrt x * x == x for positive numbers.
+ */
+prop_sqrt :: Positive -> Boolean;
+public prop_sqrt x = 
+    let 
+      d = x.Positive.value;
+    in
+        sqrt ( d * d ) == d;

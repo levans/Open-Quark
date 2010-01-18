@@ -1,0 +1,916 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Debug_Tests.cal
+ * Creation date: Oct 20, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for the {@link module = Debug@} module.
+ *
+ * Note that *examples functions can and should still go into the Debug module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Debug_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = 
+        Boolean, Byte, Char, Decimal, Double, Either, Float, Int, Integer, JList, JObject, Long, Maybe, Ordering, 
+        Short, String;
+    dataConstructor = False, True, Left, Right, Nothing, Just, LT, EQ, GT;
+    function = assert, deepSeq, eager, output, seq, typeOf, upFrom;
+    ;
+import Cal.Collections.List using
+    function = head, outputList, take;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    dataConstructor = MachineType_Lecc, MachineType_G;
+    function = machineType, show, showInternal, showInternalGraph, sleep;
+    ;
+import Cal.Utilities.Math;
+import Cal.Core.String using
+    function = endsWith;
+    ;
+
+/**
+ * This function should take about 1 second to run. If it takes substantially more, such as 15 seconds,
+ * there is something wrong.
+ */    
+oneSecond :: () -> Int;
+oneSecond ignored =
+    let
+        x = sleep 1000 (1 :: Int);
+    
+        countDown !n = 
+            if n == (0 :: Int) then
+                0
+            else
+                x + countDown (n - 1);
+    in
+        countDown 15; 
+
+/**
+ * This is like oneSecond above, but the definition of the local let variable 'x' has been
+ * inlined. Note that it now take 15 seconds. In particular note that naive inlining of single
+ * usage let variables is not a valid optimization. In the example, above, countDown is lifted
+ * to a top level function before the single usage let variable analysis is applied and hence
+ * this inlining does not happen.
+ */    
+fifteenSeconds :: () -> Int;
+fifteenSeconds ignored =
+    let       
+        countDown !n = 
+            if n == (0 :: Int) then
+                0
+            else
+                (sleep 1000 (1 :: Int)) + countDown (n - 1);
+    in
+        countDown 15;       
+    
+/**
+ * This function should take about 1 second to run. If it takes substantially more, such as 15 seconds,
+ * there is something wrong.
+ */    
+oneSecond2 :: () -> JObject;
+oneSecond2 ignored =
+    let
+        x = sleep 1000 "abc";
+    
+        countDown :: Int -> [String];
+        countDown !n = 
+            if n == (0 :: Int) then
+                []
+            else
+                x : (countDown (n-1));
+    in
+        Prelude.output (countDown 15);
+    
+/**
+ * This function should take about 1 second to run. If it takes substantially more, such as 15 seconds,
+ * there is something wrong.
+ */    
+oneSecond3 :: () -> Int;
+oneSecond3 ignored =
+    let
+        x = sleep 1000 (1 :: Int);
+    
+        ones = x : ones;        
+    in
+        List.sum (List.take 15 ones);     
+    
+// Testing functions for the Show class 
+foreign unsafe import jvm "constructor java.awt.Color" 
+    private jColor_new :: Int -> Int -> Int -> Int -> JObject;
+
+foreign unsafe import jvm "static method java.lang.Float.parseFloat"
+    private stringToFloat :: String -> Float;
+
+foreign unsafe import jvm "static method java.lang.Byte.parseByte"
+    private stringToByte :: String -> Byte;
+
+foreign unsafe import jvm "static method java.lang.Short.parseShort"
+    private stringToShort :: String -> Short;
+
+foreign unsafe import jvm "static method java.lang.Long.parseLong"
+    private stringToLong :: String -> Long;    
+    
+testDebugModule =
+    let
+        e1 :: Either String Ordering;
+        e1 = Left "strval";
+        
+        e2 :: Either String Ordering;
+        e2 = Right LT;
+        
+        m1 :: Maybe Ordering;
+        m1 = Nothing;
+        
+        m2 = Just EQ;
+                       
+        nonEmptyList :: [Int];
+        nonEmptyList = [1,1,2,2,5,6,7,8];
+        
+        emptyList :: [Int];
+        emptyList = [];
+        
+        emptyJObjectList :: [JObject];
+        emptyJObjectList = [];
+    in
+        assert (show e1 == "Cal.Core.Prelude.Left \"strval\"") &&
+        assert (show e2 == "Cal.Core.Prelude.Right Cal.Core.Prelude.LT") &&
+        assert (show m1 == "Cal.Core.Prelude.Nothing") &&
+        assert (show m2 == "Cal.Core.Prelude.Just Cal.Core.Prelude.EQ") &&
+        assert (show () == "()") &&
+        assert (show (1.0,2.0) == "(1.0, 2.0)") &&
+        assert (show (1.0,2.0,3.0) == "(1.0, 2.0, 3.0)") &&
+        assert (show (1.0,2.0,3.0,4.0) == "(1.0, 2.0, 3.0, 4.0)") &&
+        assert (show (1.0,2.0,3.0,4.0,5.0) == "(1.0, 2.0, 3.0, 4.0, 5.0)") &&
+        assert (show (1.0,2.0,3.0,4.0,5.0,6.0) == "(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)") &&
+        assert (show (1.0,2.0,3.0,4.0,5.0,6.0,7.0) == "(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0)") &&
+        assert (show (1.0, "abc") == (show {#2 = "abc", #1 = 1.0})) &&
+        assert (show (2.0 * 4.0, {#1 = "abc" ++ "def", #2 = m1}, "ghi") == "(8.0, (\"abcdef\", Cal.Core.Prelude.Nothing), \"ghi\")") &&
+        assert (show {#1 = "abc", f2 = (1.0 + 2.0), r1 = {f1 = 1.0, f2 = "def"}} == "{#1 = \"abc\", f2 = 3.0, r1 = {f1 = 1.0, f2 = \"def\"}}") &&
+        assert (show {foobar = "abc", #2 = {#1 = m1, #2 = nonEmptyList, #3 = 1.0}} == "{#2 = (Cal.Core.Prelude.Nothing, [1, 1, 2, 2, 5, 6, 7, 8], 1.0), foobar = \"abc\"}") &&
+        assert (show 'C' == "'C'") &&
+        assert (show '\'' == "'''") &&
+        assert (show (45::Long) == "45") &&       
+        assert (show (typeOf "str") == "Cal.Core.Prelude.String") &&
+        assert (show (typeOf Cal.Core.Prelude.intToString) == "Cal.Core.Prelude.Int -> Cal.Core.Prelude.String") &&
+        assert (show (jColor_new 12 13 14 255) == "java.awt.Color[r=12,g=13,b=14]") &&
+        assert (show (stringToFloat "9.0") == "9.0") &&
+        assert (show (stringToByte "58") == "58") &&
+        assert (show (stringToShort "9876") == "9876") &&
+        assert (show (stringToLong "80000000009") == "80000000009") &&
+        assert (show nonEmptyList == "[1, 1, 2, 2, 5, 6, 7, 8]") &&
+        assert (show emptyList == "[]") &&
+        assert (show ["singleton"] == "[\"singleton\"]") &&
+        assert (show (outputList emptyJObjectList) == "[]") &&
+        assert (show (outputList [jColor_new 10 7 8 0, jColor_new 50 60 70 255]) == "[java.awt.Color[r=10,g=7,b=8], java.awt.Color[r=50,g=60,b=70]]")
+        ;    
+    
+
+/** foreign field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullBigDecimal */
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullBigDecimal"
+    nullDecimal :: Decimal;
+
+/** foreign field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullBigInteger */
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullBigInteger"
+    nullInteger :: Integer;
+
+/** foreign field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullList */
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullList"
+    nullList :: JList;
+
+/** foreign field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullObject */
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullObject"
+    nullObject :: JObject;
+
+/** foreign field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullString */
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullString"
+    nullString :: String;
+
+
+/** foreign method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullBigDecimal */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullBigDecimal"
+    getNullDecimal :: Decimal;
+
+/** foreign method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullBigInteger */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullBigInteger"
+    getNullInteger :: Integer;
+
+/** foreign method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullList */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullList"
+    getNullList :: JList;
+
+/** foreign method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullObject */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullObject"
+    getNullObject :: JObject;
+
+/** foreign method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullString */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullString"
+    getNullString :: String;
+
+data foreign unsafe import jvm "java.lang.Object"
+    MyObject deriving Show;
+
+data foreign unsafe import jvm "java.util.List"
+    MyList deriving Show;
+
+/** foreign field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullList */
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullList"
+    nullMyList :: MyList;
+
+/** foreign field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullObject */
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.nullObject"
+    nullMyObject :: MyObject;
+
+/** foreign method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullList */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullList"
+    getNullMyList :: MyList;
+
+/** foreign method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullObject */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Debug_Tests.DebugTestsSupport.getNullObject"
+    getNullMyObject :: MyObject;
+
+
+/**
+ * Tests showing Java object values that are actually null for the Prelude types JObject, Decimal, Integer, JList
+ * as well as for derived Show instances of foreign object types. 
+ */
+testShowNullValues =
+    assert (show nullObject == "null")
+    && assert (show nullList == "null")
+    && assert (show nullInteger == "null")
+    && assert (show nullDecimal == "null")
+    && assert (show nullString == "null")
+    && assert (show getNullObject == "null")
+    && assert (show getNullList == "null")
+    && assert (show getNullInteger == "null")
+    && assert (show getNullDecimal == "null") 
+    && assert (show getNullString == "null") 
+    && assert (show nullMyObject == "null")
+    && assert (show nullMyList == "null")
+    && assert (show nullMyObject == "null")
+    && assert (show nullMyList == "null")
+    && assert (show [nullObject, getNullObject] == "[null, null]")
+    && assert (show {nullList = nullList, nullMyList = nullMyList} == "{nullList = null, nullMyList = null}")
+    ;
+
+
+// Some records for use in testing showInternal
+nameEqualsBob = {name = "Bob"};
+ord3Equalsabc = {#3 = "abc"};
+antonTuple = (2.5, "Anton", True);
+antonTextual = {name = "Anton", age = 2.5};
+antonMixed = {#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5};
+/**
+ * Tests the showInternal function for the lecc machine.
+ */
+testShowInternalLecc = 
+    assert
+        //showInternal on literals
+        (showInternal (True, 'c' :: Char, 10 :: Byte, 20 :: Short, 30 :: Int, 40 :: Long, 70.5 :: Double, "abc", 1212121212 :: Integer)
+         == "(true, c, 10, 20, 30, 40, 70.5, abc, 1212121212)")
+    && assert
+        //the internal representation has no syntactic sugar.
+        (showInternal [10, 20, 30 :: Int]
+         == "(Cal.Core.Prelude.Cons 10 (Cal.Core.Prelude.Cons 20 (Cal.Core.Prelude.Cons 30 Cal.Core.Prelude.Nil)))")
+    && assert
+        //Prelude.append has been resolved to Prelude.appendString at compile time.
+        (showInternal ("abc" ++ "def")
+         == "(Cal.Core.Prelude.appendString abc def)")
+    && assert
+        //addDouble and cos are optimized eager functions. They don't allocate lazy graph
+        (showInternal (2.0 + 3.0, Math.cos 0, ((2 :: Int) / 0))
+         == "(5.0, 1.0, (Cal.Core.Prelude.divideInt 2 0))")
+    && assert
+        //List.take is an alias of Prelude.take
+        (showInternal (List.take 10 [1, 2, 3 :: Int])
+         == "(Cal.Core.Prelude.take 10 (Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 Cal.Core.Prelude.Nil))))")
+    && assert
+        //notice that data constructors of enumerated types (Ordering, Unit) are internally represented as an int value.
+        //Boolean is a special case.
+        (showInternal (Prelude.Cons, Prelude.Nil, Left, Right, LT, GT, EQ, (), False, True)
+         == "(Cal.Core.Prelude.Cons, Cal.Core.Prelude.Nil, Cal.Core.Prelude.Left, Cal.Core.Prelude.Right, 0, 2, 1, 0, false, true)")
+    && assert 
+        //empty record
+        (showInternal {}
+         == "{}")  
+    && assert 
+        //tuple record: 1-tuple
+        (showInternal {#1 = Just 'a'}
+         == "{#1 = (Cal.Core.Prelude.Just a)}")   
+    && assert
+        //tuple record: tuples are displayed in their canonical form
+        (showInternal {#2 = "harry", #1 = Just 'a'}
+         == "((Cal.Core.Prelude.Just a), harry)")
+    && assert
+        //tuple-mixed record
+        (showInternal {#1 = 2.0, #2 = List.zip5, name = "Anton", age = 2.0}
+         == "{#1 = 2.0, #2 = Cal.Collections.List.zip5, age = 2.0, name = Anton}")
+    && assert
+        //mixed record. Partial application of zipWith in the #3 field.
+        (showInternal {#1 = 2.0, #3 = List.zipWith Prelude.tuple2, name = "Anton", age = 2.0}
+         == "{#1 = 2.0, #3 = (Cal.Collections.List.zipWith Cal.Core.Prelude.tuple2), age = 2.0, name = Anton}")   
+    && assert
+        //textual record. Non-saturated application of the data constructor Cons in the name field.
+        (showInternal {name = Prelude.Cons "Anton", age = 2.0}
+         == "{age = 2.0, name = (Cal.Core.Prelude.Cons Anton)}")     
+    && assert
+        //ordinal record. Notice the difference that the use of Prelude.eager makes- the lazy application is not created.
+        (showInternal {#10 = Prelude.eager (typeOf [3.0]), #5 = typeOf [4.0]}
+         == "{#5 = (Cal.Core.Prelude.$typeOf$List Cal.Core.Prelude.$typeOf$Double (Cal.Core.Prelude.Cons 4.0 Cal.Core.Prelude.Nil)), #10 = (Cal.Core.Prelude.ListTypeRep Cal.Core.Prelude.DoubleTypeRep)}")
+    && assert
+        //showing an unevaluated CAF
+        (showInternal naturalNumbersCAF
+         == "Cal.Test.Core.Debug_Tests.naturalNumbersCAF")                           
+    && assert
+        //evaluate the above CAF a bit, and then showInternal
+        (Prelude.output (List.take 3 naturalNumbersCAF) `seq` showInternal naturalNumbersCAF
+         == "(Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 (Cal.Core.Prelude.upFromInt 4))))")
+    && assert
+        //evaluate the above CAF some more, and then call showInternal, in a way that would overflow stack for a java stack based
+        //traversal of the value graph.
+        (Prelude.output (List.take 5000 naturalNumbersCAF) `seq` endsWith "))))))))" (showInternal naturalNumbersCAF))               
+    && assert
+        //sharing is shown for nodes with children.
+        (showInternal (let x = Just 'a'; in (x, x)) 
+         == "(<@1 = (Cal.Core.Prelude.Just a)>, <@1>)")
+    && assert
+        //data constructor field selection.
+        (showInternal (Just 2.0).Just.value
+         == "(Cal.Core.Prelude.Just 2.0).Cal.Core.Prelude.Just.value")         
+    && assert       
+        //test of the custom generated TYPE_Test_Strictness_Type InternalValue.debug* methods
+        (showInternal (eager (testStrictnessTypeValue ()))
+         == "(Cal.Test.Core.Debug_Tests.MakeTestStrictnessType a b false true 10 20 30 40 50 60 70 80 90.0 100.0 110.5 120.5 Fred Fong (Cal.Core.Prelude.Just a) [2.0, a] [2.0, 3.0] [2.0, 3.0] (Cal.Core.Prelude.Just 3) (Cal.Core.Prelude.Just 7) (Cal.Core.Prelude.Left a) (Cal.Core.Prelude.Right (Cal.Core.Prelude.Just 2.0)))")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternal (eager (MakeClash1 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash1 1 2 3)")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternal (eager (MakeClash2 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash2 1 2 3)")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternal (eager (MakeClash3 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash3 1 2 3)") 
+    && assert
+        (showInternal (let x = sillyFunc :: Int -> Int -> Int; in x (x 1 2) (x 3 4))
+         == "(Cal.Test.Core.Debug_Tests.sillyFunc (Cal.Test.Core.Debug_Tests.sillyFunc 1 2) (Cal.Test.Core.Debug_Tests.sillyFunc 3 4))")
+    && assert
+        //record extension
+        (showInternal {head [{name = "bob", age = 3.0}] | height = 6.0}
+         == "{(Cal.Collections.List.head (Cal.Core.Prelude.Cons {age = 3.0, name = bob} Cal.Core.Prelude.Nil)) | height = 6.0}")  
+    && assert
+        // record field selection. We optimize field selection on literal records and 
+        // simple resolve to the field value
+        (showInternal {name = "Bob"}.name
+        == "Bob")
+    && assert 
+        // check field selection on a non-literal record.
+        (Prelude.seq nameEqualsBob 
+        (showInternal nameEqualsBob.name 
+        == "{name = Bob}.name"))
+    && assert
+        (showInternal (let x = [10 :: Int, 10 :: Int]; in (x, x))
+         == "(<@1 = (Cal.Core.Prelude.Cons 10 (Cal.Core.Prelude.Cons 10 Cal.Core.Prelude.Nil))>, <@1>)")
+    && assert 
+        (showInternal fivesCAF
+         == "Cal.Test.Core.Debug_Tests.fivesCAF")
+    && assert
+        //an example of a cyclic value graph.
+        (output (take 10 fivesCAF) `seq` showInternal fivesCAF
+         == "<@1 = (Cal.Core.Prelude.Cons 5.0 <@1>)>")
+    && assert
+        //partial application and unsaturated functions
+        (showInternal (List.map, Math.sin, List.map Math.sin)
+         == "(Cal.Core.Prelude.map, Cal.Utilities.Math.sin, (Cal.Core.Prelude.map Cal.Utilities.Math.sin))")
+    && assert
+        //the let variable definition of the Fibonacci numbers shows an interesting example of sharing        
+        (let fibs = 1 : 1 : List.zipWith Prelude.add fibs (List.tail fibs) :: [Integer]; in (deepSeq (take 7 fibs) (showInternal fibs))
+          == "(Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 (Cal.Core.Prelude.Cons 5 <@1 = (Cal.Core.Prelude.Cons 8 <@2 = (Cal.Core.Prelude.Cons 13 (Cal.Collections.List.zipWith Cal.Core.Prelude.addInteger <@1> <@2>))>)>)))))")
+    && assert
+        // We optimize extensions of literal records
+        (showInternal {{#3 = "abc"} | #1 = Just "Roger", #2 = 2.0}
+          == "((Cal.Core.Prelude.Just Roger), 2.0, abc)")
+    && assert
+        // Test extensions on non literal records
+        (Prelude.seq ord3Equalsabc 
+            (showInternal {ord3Equalsabc | #1 = Just "Roger", #2 = 2.0} 
+              == "{{#3 = abc} | #1 = (Cal.Core.Prelude.Just Roger), #2 = 2.0}"))
+    && assert
+        //tuple record update on literal record this is optimized to just do the update.
+        (showInternal {(2.5, "Anton", True) | #2 := 2.5, #1 := "Anton"}
+         == "(Anton, 2.5, true)")
+    && assert
+        //tuple record update
+        (Prelude.seq antonTuple
+          (showInternal {antonTuple | #2 := 2.5, #1 := "Anton"}
+           == "{(2.5, Anton, true) | #1 := Anton, #2 := 2.5}"))
+    && assert
+        //ordinal record update on literal record.  This is optmized to just do the update.
+        (showInternal {(2.5, "Anton", True) | #1 := "Fred", #3 := 40 :: Int}
+          == "(Fred, Anton, 40)")
+    && assert
+        //ordinal record update
+        (Prelude.seq antonTuple
+          (showInternal {antonTuple | #1 := "Fred", #3 := 40 :: Int}
+           == "{(2.5, Anton, true) | #1 := Fred, #3 := 40}"))
+    && assert
+        //textual record update, along with a record extension on a literal record value.
+        (showInternal {{name = "Anton", age = 2.5} | name := "Fred", age := Just (40 :: Int), shoeSize = 10 :: Int}
+          == "{age = (Cal.Core.Prelude.Just 40), name = Fred, shoeSize = 10}")
+    && assert
+        //textual record update, along with a record extension
+        (Prelude.seq antonTextual
+          (showInternal {antonTextual | name := "Fred", age := Just (40 :: Int), shoeSize = 10 :: Int}
+           == "{{{age = 2.5, name = Anton} | age := (Cal.Core.Prelude.Just 40), name := Fred} | shoeSize = 10}"))
+    && assert
+        //tuple-mixed record update on a literal record value.
+        (showInternal {{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | age := Just (40 :: Int), name := "Fred", #1 := Just GT, #2 := "arg", #4 = "zaphod"}
+          == "{#1 = (Cal.Core.Prelude.Just 2), #2 = arg, #3 = 100.0, #4 = zaphod, age = (Cal.Core.Prelude.Just 40), name = Fred}")
+    && assert
+        //tuple-mixed record update
+        (Prelude.seq antonMixed
+          (showInternal {antonMixed | age := Just (40 :: Int), name := "Fred", #1 := Just GT, #2 := "arg", #4 = "zaphod"}
+           == "{{{#1 = (Cal.Core.Prelude.Cons 10.0 (Cal.Core.Prelude.Cons 20.0 Cal.Core.Prelude.Nil)), #2 = (0, 2), #3 = 100.0, age = 2.5, name = Anton} | #1 := (Cal.Core.Prelude.Just 2), #2 := arg, age := (Cal.Core.Prelude.Just 40), name := Fred} | #4 = zaphod}"))
+    && assert
+        //mixed record update on literal record value.
+        (showInternal {{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | name := "Fred", #2 := "arg", #5 = "zaphod", #6 = 600.0}
+          == "{#1 = (Cal.Core.Prelude.Cons 10.0 (Cal.Core.Prelude.Cons 20.0 Cal.Core.Prelude.Nil)), #2 = arg, #3 = 100.0, #5 = zaphod, #6 = 600.0, age = 2.5, name = Fred}")          
+    && assert
+        //mixed record update
+        (Prelude.seq antonMixed
+          (showInternal {antonMixed | name := "Fred", #2 := "arg", #5 = "zaphod", #6 = 600.0}
+           == "{{{#1 = (Cal.Core.Prelude.Cons 10.0 (Cal.Core.Prelude.Cons 20.0 Cal.Core.Prelude.Nil)), #2 = (0, 2), #3 = 100.0, age = 2.5, name = Anton} | #2 := arg, name := Fred} | #5 = zaphod, #6 = 600.0}"))          
+   ;          
+
+/**
+ * Tests the showInternal function for the g-machine. 
+ * Some current differences with the lecc machine are:
+ * -there are far fewer special purpose application nodes so that more parentheses are in the output
+ * -functions such as Prelude.addInt are not automatically eagerly evaluated (provided their arguments are evaluated) as in the lecc
+ * -data constructor field selection syntax is nicer since the required information is available.
+ */
+testShowInternalG = 
+    assert
+        //showInternal on literals
+        (showInternal (True, 'c' :: Char, 10 :: Byte, 20 :: Short, 30 :: Int, 40 :: Long, 70.5 :: Double, "abc", 1212121212 :: Integer)
+         == "(true, c, 10, 20, 30, 40, 70.5, abc, 1212121212)")
+    && assert
+        //the internal representation has no syntactic sugar.
+        (showInternal [10, 20, 30 :: Int]
+         == "(Cal.Core.Prelude.Cons 10 (Cal.Core.Prelude.Cons 20 (Cal.Core.Prelude.Cons 30 Cal.Core.Prelude.Nil)))")
+    && assert
+        //Prelude.append has been resolved to Prelude.appendString at compile time.
+        (showInternal ("abc" ++ "def")
+         == "((Cal.Core.Prelude.appendString abc) def)")
+    && assert
+        // addDouble and cos are optimized eager functions. They don't allocate lazy graph
+        (showInternal (2.0 + 3.0, Math.cos 0, ((2 :: Int) / 0))
+         == "(5.0, 1.0, ((Cal.Core.Prelude.divideInt 2) 0))")
+    && assert
+        //List.take is an alias of Prelude.take
+        (showInternal (List.take 10 [1, 2, 3 :: Int])
+         == "((Cal.Core.Prelude.take 10) (Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 Cal.Core.Prelude.Nil))))")
+    && assert
+        //notice that data constructors of enumerated types (Ordering, Unit) are internally represented as an int value.
+        //Boolean is a special case.
+        (showInternal (Prelude.Cons, Prelude.Nil, Left, Right, LT, GT, EQ, (), False, True)
+         == "(Cal.Core.Prelude.Cons, Cal.Core.Prelude.Nil, Cal.Core.Prelude.Left, Cal.Core.Prelude.Right, 0, 2, 1, 0, false, true)")
+    && assert 
+        //empty record
+        (showInternal {}
+         == "{}")  
+    && assert 
+        //tuple record: 1-tuple
+        (showInternal {#1 = Just 'a'}
+         == "{#1 = (Cal.Core.Prelude.Just a)}")   
+    && assert
+        //tuple record: tuples are displayed in their canonical form
+        (showInternal {#2 = "harry", #1 = Just 'a'}
+         == "((Cal.Core.Prelude.Just a), harry)")
+    && assert
+        //tuple-mixed record
+        (showInternal {#1 = 2.0, #2 = List.zip5, name = "Anton", age = 2.0}
+         == "{#1 = 2.0, #2 = Cal.Collections.List.zip5, age = 2.0, name = Anton}")
+    && assert
+        //mixed record. Partial application of zipWith in the #3 field.
+        (showInternal {#1 = 2.0, #3 = List.zipWith Prelude.tuple2, name = "Anton", age = 2.0}
+         == "{#1 = 2.0, #3 = (Cal.Collections.List.zipWith Cal.Core.Prelude.tuple2), age = 2.0, name = Anton}")   
+    && assert
+        //textual record. Non-saturated application of the data constructor Cons in the name field.
+        (showInternal {name = Prelude.Cons "Anton", age = 2.0}
+         == "{age = 2.0, name = (Cal.Core.Prelude.Cons Anton)}")     
+    && assert
+        //ordinal record. Notice the difference that the use of Prelude.eager makes- the lazy application is not created.
+        (showInternal {#10 = Prelude.eager (typeOf [3.0]), #5 = typeOf [4.0]}
+         == "{#5 = ((Cal.Core.Prelude.$typeOf$List Cal.Core.Prelude.$typeOf$Double) (Cal.Core.Prelude.Cons 4.0 Cal.Core.Prelude.Nil)), #10 = (Cal.Core.Prelude.ListTypeRep Cal.Core.Prelude.DoubleTypeRep)}")
+    && assert
+        //showing an unevaluated CAF
+        (showInternal naturalNumbersCAF
+         == "Cal.Test.Core.Debug_Tests.naturalNumbersCAF") 
+    && assert
+        //evaluate the above CAF a bit, and then showInternal
+        (Prelude.output (List.take 3 naturalNumbersCAF) `seq` showInternal naturalNumbersCAF
+         == "(Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 (Cal.Core.Prelude.upFromInt ((Cal.Core.Prelude.addInt 3) 1)))))")  
+    && assert
+        //evaluate the above CAF some more, and then call showInternal, in a way that would overflow stack for a java stack based
+        //traversal of the value graph.
+        (Prelude.output (List.take 5000 naturalNumbersCAF) `seq` endsWith "))))))))" (showInternal naturalNumbersCAF))      
+    && assert
+        //duplicated graphs are repeated in the String output of showInternal.
+        (showInternal (let x = Just 'a'; in (x, x)) 
+         == "(<@1 = (Cal.Core.Prelude.Just a)>, <@1>)")
+    && assert
+        //data constructor field selection.
+        (showInternal (Just 2.0).Just.value
+         == "(Cal.Core.Prelude.Just 2.0).Cal.Core.Prelude.Just.value")         
+    && assert       
+        //test of the custom generated TYPE_Test_Strictness_Type.showInternal() method
+        (showInternal (eager (testStrictnessTypeValue ()))
+         == "(Cal.Test.Core.Debug_Tests.MakeTestStrictnessType a b false true 10 20 30 40 50 60 70 80 90.0 100.0 110.5 120.5 Fred Fong (Cal.Core.Prelude.Just a) [2.0, a] [2.0, 3.0] [2.0, 3.0] (Cal.Core.Prelude.Just 3) (Cal.Core.Prelude.Just 7) (Cal.Core.Prelude.Left a) (Cal.Core.Prelude.Right (Cal.Core.Prelude.Just 2.0)))")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternal (eager (MakeClash1 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash1 1 2 3)")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternal (eager (MakeClash2 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash2 1 2 3)")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternal (eager (MakeClash3 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash3 1 2 3)") 
+    && assert
+        (showInternal (let x = sillyFunc :: Int -> Int -> Int; in x (x 1 2) (x 3 4))
+         == "((Cal.Test.Core.Debug_Tests.sillyFunc ((Cal.Test.Core.Debug_Tests.sillyFunc 1) 2)) ((Cal.Test.Core.Debug_Tests.sillyFunc 3) 4))")
+    && assert
+        //record extension
+        (showInternal {head [{name = "bob", age = 3.0}] | height = 6.0}
+         == "{(Cal.Collections.List.head (Cal.Core.Prelude.Cons {age = 3.0, name = bob} Cal.Core.Prelude.Nil)) | height = 6.0}")   
+    && assert
+        //record field selection.  We optimize selection on literal records.
+        (showInternal {name = "Bob"}.name
+         == "Bob")  
+     && assert
+     //record field selection
+     (Prelude.seq nameEqualsBob
+       (showInternal nameEqualsBob.name
+        == "{name = Bob}.name"))  
+    && assert
+        //partial application and unsaturated functions
+        (showInternal (List.map, Math.sin, List.map Math.sin)   
+         == "(Cal.Core.Prelude.map, Cal.Utilities.Math.sin, (Cal.Core.Prelude.map Cal.Utilities.Math.sin))")
+    && assert
+        (showInternal (let x = [10 :: Int, 10 :: Int]; in (x, x))
+         == "(<@1 = (Cal.Core.Prelude.Cons 10 (Cal.Core.Prelude.Cons 10 Cal.Core.Prelude.Nil))>, <@1>)")
+    && assert
+        (showInternal fivesCAF
+         == "Cal.Test.Core.Debug_Tests.fivesCAF")
+    && assert
+        //an example of a cyclic value graph.
+        (output (take 10 fivesCAF) `seq` showInternal fivesCAF
+         == "<@1 = (Cal.Core.Prelude.Cons 5.0 <@1>)>")
+    && assert
+        //partial application and unsaturated functions
+        (showInternal (List.map, Math.sin, List.map Math.sin)
+         == "(Cal.Core.Prelude.map, Cal.Utilities.Math.sin, (Cal.Core.Prelude.map Cal.Utilities.Math.sin))")
+    && assert
+        //the let variable definition of the Fibonacci numbers shows an interesting example of sharing        
+        (let fibs = 1 : 1 : List.zipWith Prelude.add fibs (List.tail fibs) :: [Integer]; in (deepSeq (take 7 fibs) (showInternal fibs))
+          == "(Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 (Cal.Core.Prelude.Cons 5 <@1 = (Cal.Core.Prelude.Cons 8 <@2 = (Cal.Core.Prelude.Cons 13 (((Cal.Collections.List.zipWith Cal.Core.Prelude.addInteger) <@1>) <@2>))>)>)))))")
+    && assert
+        //this was a bug May 4, 2006 in the g-machine
+        // We optimize extension of literal record values.
+          (showInternal {{#3 = "abc"} | #1 = Just "Roger", #2 = 2.0}
+            == "((Cal.Core.Prelude.Just Roger), 2.0, abc)")
+    && assert
+        //this was a bug May 4, 2006 in the g-machine
+        (Prelude.seq ord3Equalsabc
+            (showInternal  {ord3Equalsabc | #1 = Just "Roger", #2 = 2.0}
+              == "{{#3 = abc} | #1 = (Cal.Core.Prelude.Just Roger), #2 = 2.0}"))
+    && assert
+        //tuple record update.  We optimize updates to literal tuple values.
+        (showInternal {(2.5, "Anton", True) | #2 := 2.5, #1 := "Anton"}
+         == "(Anton, 2.5, true)")
+    && assert
+        //tuple record update
+        (Prelude.seq antonTuple
+            (showInternal {antonTuple | #2 := 2.5, #1 := "Anton"}
+            == "{(2.5, Anton, true) | #1 := Anton, #2 := 2.5}"))
+    && assert
+        //ordinal record update.  We optimize updates to literal record values.
+        (showInternal {(2.5, "Anton", True) | #1 := "Fred", #3 := 40 :: Int}
+         == "(Fred, Anton, 40)")
+    && assert
+        //ordinal record update
+        (Prelude.seq antonTuple
+            (showInternal {antonTuple | #1 := "Fred", #3 := 40 :: Int}
+            == "{(2.5, Anton, true) | #1 := Fred, #3 := 40}"))
+    && assert
+        //textual record update, along with a record extension.
+        // We optimize updates/extensions to literal record values.
+        (showInternal {{name = "Anton", age = 2.5} | name := "Fred", age := Just (40 :: Int), shoeSize = 10 :: Int}
+         == "{age = (Cal.Core.Prelude.Just 40), name = Fred, shoeSize = 10}")
+    && assert
+        //textual record update, along with a record extension
+        (Prelude.seq antonTextual
+            (showInternal {antonTextual | name := "Fred", age := Just (40 :: Int), shoeSize = 10 :: Int}
+            == "{{{age = 2.5, name = Anton} | age := (Cal.Core.Prelude.Just 40), name := Fred} | shoeSize = 10}"))
+    && assert
+        //tuple-mixed record update.  We optimize updates on literal record values.
+        (showInternal {{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | age := Just (40 :: Int), name := "Fred", #1 := Just GT, #2 := "arg", #4 = "zaphod"}
+         == "{#1 = (Cal.Core.Prelude.Just 2), #2 = arg, #3 = 100.0, #4 = zaphod, age = (Cal.Core.Prelude.Just 40), name = Fred}")
+    && assert
+        //tuple-mixed record update
+        (Prelude.seq antonMixed
+            (showInternal {antonMixed | age := Just (40 :: Int), name := "Fred", #1 := Just GT, #2 := "arg", #4 = "zaphod"}
+            == "{{{#1 = (Cal.Core.Prelude.Cons 10.0 (Cal.Core.Prelude.Cons 20.0 Cal.Core.Prelude.Nil)), #2 = (0, 2), #3 = 100.0, age = 2.5, name = Anton} | #1 := (Cal.Core.Prelude.Just 2), #2 := arg, age := (Cal.Core.Prelude.Just 40), name := Fred} | #4 = zaphod}"))
+    && assert
+        //mixed record update.  We optimize updates on literal record values.
+        (showInternal {{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | name := "Fred", #2 := "arg", #5 = "zaphod", #6 = 600.0}
+         == "{#1 = (Cal.Core.Prelude.Cons 10.0 (Cal.Core.Prelude.Cons 20.0 Cal.Core.Prelude.Nil)), #2 = arg, #3 = 100.0, #5 = zaphod, #6 = 600.0, age = 2.5, name = Fred}")
+    && assert
+        //mixed record update
+        (Prelude.seq antonMixed
+            (showInternal {antonMixed | name := "Fred", #2 := "arg", #5 = "zaphod", #6 = 600.0}
+            == "{{{#1 = (Cal.Core.Prelude.Cons 10.0 (Cal.Core.Prelude.Cons 20.0 Cal.Core.Prelude.Nil)), #2 = (0, 2), #3 = 100.0, age = 2.5, name = Anton} | #2 := arg, name := Fred} | #5 = zaphod, #6 = 600.0}"))
+   ;
+ 
+data TestStrictnessType a =
+    MakeTestStrictnessType
+
+        lazyChar :: Char 
+        strictChar :: !Char 
+    
+        lazyBoolean :: Boolean 
+        strictBoolean :: !Boolean         
+    
+        lazyByte :: Byte     
+        strictByte :: !Byte 
+        
+        lazyShort :: Short 
+        strictShort :: !Short 
+                
+        lazyInt :: Int 
+        strictInt :: !Int 
+        
+        lazyLong :: Long 
+        strictLong :: !Long 
+        
+        lazyFloat :: Float 
+        strictFloat :: !Float 
+        
+        lazyDouble :: Double 
+        strictDouble :: !Double 
+        
+        lazyString :: String 
+        strictString :: !String 
+        
+        lazyJObject :: JObject 
+        strictJObject :: !JObject 
+        
+        lazyJList :: JList 
+        strictJList :: !JList 
+        
+        lazyMaybeInt :: (Maybe Int) 
+        strictMaybeInt :: !(Maybe Int) 
+        
+        lazyA :: a 
+        strictA :: !a
+        ;
+
+testStrictnessTypeValue x =
+    MakeTestStrictnessType
+        'a' 'b'
+        False True 
+        (10::Byte) (20::Byte)
+        (30::Short) (40::Short)
+        (50::Int) (60::Int)
+        (70::Long) (80::Long)
+        (90 :: Float) (100 :: Float)
+        110.5 120.5
+        ("Fred") ("Fong")
+        (eager (Prelude.output (Just 'a'))) (eager (Prelude.output (2.0, 'a')))
+        (eager (List.outputList [2.0, 3.0])) (eager (List.outputList [2.0, 3.0]))
+        (eager (Just 3)) (eager (Just 7))
+        (eager (Left 'a')) (eager (Right (Just 2.0)))        
+    ;
+
+data TestStrictnessClashes =
+    MakeClash1
+       strictInt :: !Int
+       lazyInt :: Int
+       mixedInt :: Int
+    |       
+    MakeClash2
+       strictInt :: !Int
+       lazyInt :: Int
+       mixedInt :: !Int //strict in 2, lazy in 1 and 3.
+    |
+    MakeClash3
+       lazyInt :: Int
+       mixedInt :: Int
+       strictInt :: !Int
+    ;
+
+
+//warning: only for use within testShowInternal
+fivesCAF :: [Double];
+fivesCAF = List.repeat 5.0;
+
+//warning: only for use within testShowInternal
+naturalNumbersCAF :: [Int];
+naturalNumbersCAF = upFrom 1;
+
+//warning: only for use within testShowInternalGraph
+fivesCAF2 :: [Double];
+fivesCAF2 = List.repeat 5.0;
+
+//warning: only for use within testShowInternalGraph
+naturalNumbersCAF2 :: [Int];
+naturalNumbersCAF2 = upFrom 1;
+
+/**
+ * Tests the showInternalGraph function for the lecc machine.
+ */
+testShowInternalGraphLecc = 
+    assert
+        //showInternalGraph on literals
+        (showInternalGraph (True, 'c' :: Char, 10 :: Byte, 20 :: Short, 30 :: Int, 40 :: Long, 70.5 :: Double, "abc", 1212121212 :: Integer)
+         == "(true, c, 10, 20, 30, 40, 70.5, abc, 1212121212)")
+    && assert
+        //the internal representation has no syntactic sugar.
+        (showInternalGraph [10, 20, 30 :: Int]
+         == "(Cal.Core.Prelude.Cons 10 (Cal.Core.Prelude.Cons 20 (Cal.Core.Prelude.Cons 30 Cal.Core.Prelude.Nil)))")
+    && assert
+        //Prelude.append has been resolved to Prelude.appendString at compile time.
+        (showInternalGraph ("abc" ++ "def")
+         == "(Cal.Core.Prelude.appendString abc def)")
+    && assert
+        //addDouble and cos are optimized eager functions. They don't allocate lazy graph
+        (showInternalGraph (2.0 + 3.0, Math.cos 0, ((2 :: Int) / 0))
+         == "(5.0, 1.0, (Cal.Core.Prelude.divideInt 2 0))")
+    && assert
+        //List.take is an alias of Prelude.take
+        (showInternalGraph (List.take 10 [1, 2, 3 :: Int])
+         == "(Cal.Core.Prelude.take 10 (Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 Cal.Core.Prelude.Nil))))")
+    && assert
+        //notice that data constructors of enumerated types (Ordering, Unit) are internally represented as an int value.
+        //Boolean is a special case.
+        (showInternalGraph (Prelude.Cons, Prelude.Nil, Left, Right, LT, GT, EQ, (), False, True)
+         == "(Cal.Core.Prelude.Cons, Cal.Core.Prelude.Nil, Cal.Core.Prelude.Left, Cal.Core.Prelude.Right, <@1 = 0>, 2, 1, <@1>, false, true)")
+    && assert 
+        //empty record
+        (showInternalGraph {}
+         == "{}")  
+    && assert 
+        //tuple record: 1-tuple
+        (showInternalGraph {#1 = Just 'a'}
+         == "{#1 = (Cal.Core.Prelude.Just a)}")   
+    && assert
+        //tuple record: tuples are displayed in their canonical form
+        (showInternalGraph {#2 = "harry", #1 = Just 'a'}
+         == "((Cal.Core.Prelude.Just a), harry)")
+    && assert
+        //tuple-mixed record
+        (showInternalGraph {#1 = 2.0, #2 = List.zip5, name = "Anton", age = 2.0}
+         == "{#1 = <@1 = 2.0>, #2 = Cal.Collections.List.zip5, age = <@1>, name = Anton}")
+    && assert
+        //mixed record. Partial application of zipWith in the #3 field.
+        (showInternalGraph {#1 = 2.0, #3 = List.zipWith Prelude.tuple2, name = "Anton", age = 2.0}
+         == "{#1 = <@1 = 2.0>, #3 = (Cal.Collections.List.zipWith Cal.Core.Prelude.tuple2), age = <@1>, name = Anton}")   
+    && assert
+        //textual record. Non-saturated application of the data constructor Cons in the name field.
+        (showInternalGraph {name = Cal.Core.Prelude.Cons "Anton", age = 2.0}
+         == "{age = 2.0, name = (Cal.Core.Prelude.Cons Anton)}")     
+    && assert
+        //ordinal record. Notice the difference that the use of Prelude.eager makes- the lazy application is not created.
+        (showInternalGraph {#10 = Prelude.eager (typeOf [3.0]), #5 = typeOf [4.0]}
+         == "{#5 = (Cal.Core.Prelude.$typeOf$List Cal.Core.Prelude.$typeOf$Double (Cal.Core.Prelude.Cons 4.0 Cal.Core.Prelude.Nil)), #10 = (Cal.Core.Prelude.ListTypeRep Cal.Core.Prelude.DoubleTypeRep)}")
+    && assert
+        //showing an unevaluated CAF
+        (showInternalGraph naturalNumbersCAF2
+         == "Cal.Test.Core.Debug_Tests.naturalNumbersCAF2") 
+    && assert
+        //evaluate the above CAF a bit, and then showInternalGraph
+        //notice that indirectons are shown
+        (Prelude.output (List.take 3 naturalNumbersCAF2) `seq` showInternalGraph naturalNumbersCAF2
+         == "*(Cal.Core.Prelude.Cons 1 *(Cal.Core.Prelude.Cons 2 *(Cal.Core.Prelude.Cons 3 (Cal.Core.Prelude.upFromInt 4))))")
+    && assert
+        //same as above
+        //notice that the indirectons in front of Cons 2 and Cons 3 have been cleaned up on the second traversal of the
+        //previously evaluated piece of graph
+        (Prelude.output (List.take 4 naturalNumbersCAF2) `seq` showInternalGraph naturalNumbersCAF2
+         == "*(Cal.Core.Prelude.Cons 1 (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 *(Cal.Core.Prelude.Cons 4 (Cal.Core.Prelude.upFromInt 5)))))")         
+    && assert
+        //evaluate the above CAF some more, and then call showInternal, in a way that would overflow stack for a java stack based
+        //traversal of the value graph.
+        (Prelude.output (List.take 5000 naturalNumbersCAF2) `seq` endsWith "))))))))" (showInternalGraph naturalNumbersCAF2))               
+    && assert
+        //duplicated graphs are repeated in the String output of showInternalGraph.
+        (showInternalGraph (let x = Just 'a'; in (x, x)) 
+         == "(<@1 = (Cal.Core.Prelude.Just a)>, <@1>)")
+    && assert
+        //data constructor field selection.
+        (showInternalGraph (Just 2.0).Just.value
+         == "(Cal.Core.Prelude.Just 2.0).Cal.Core.Prelude.Just.value")         
+    && assert       
+        //test of the custom generated TYPE_Test_Strictness_Type CalValue.debug* methods
+        (showInternalGraph (eager (testStrictnessTypeValue ()))         
+         == "(Cal.Test.Core.Debug_Tests.MakeTestStrictnessType <@1 = a> b false true 10 20 30 40 50 60 70 80 90.0 100.0 110.5 120.5 Fred Fong (Cal.Core.Prelude.Just a) [2.0, a] [2.0, 3.0] [2.0, 3.0] (Cal.Core.Prelude.Just 3) (Cal.Core.Prelude.Just 7) (Cal.Core.Prelude.Left <@1>) (Cal.Core.Prelude.Right (Cal.Core.Prelude.Just 2.0)))")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternalGraph (eager (MakeClash1 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash1 1 2 3)")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternalGraph (eager (MakeClash2 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash2 1 2 3)")
+    && assert
+        //TestStrictnessClashes type has conflicting strictness annotations on fields
+        (showInternalGraph (eager (MakeClash3 1 2 3))
+         == "(Cal.Test.Core.Debug_Tests.MakeClash3 1 2 3)") 
+    && assert
+        (showInternalGraph (let x = sillyFunc :: Int -> Int -> Int; in x (x 1 2) (x 3 4))
+         == "(Cal.Test.Core.Debug_Tests.sillyFunc (Cal.Test.Core.Debug_Tests.sillyFunc 1 2) (Cal.Test.Core.Debug_Tests.sillyFunc 3 4))")
+    && assert
+        //record extension
+        (showInternalGraph {head [{name = "bob", age = 3.0}] | height = 6.0}
+         == "{(Cal.Collections.List.head (Cal.Core.Prelude.Cons {age = 3.0, name = bob} Cal.Core.Prelude.Nil)) | height = 6.0}")  
+    && assert
+        //record field selection
+        (showInternalGraph {name = "Bob"}.name
+         == "Bob")       
+    && assert
+        (showInternalGraph (let x = [10 :: Int, 10 :: Int]; in (x, x))
+         == "(<@1 = (Cal.Core.Prelude.Cons <@2 = 10> (Cal.Core.Prelude.Cons <@2> Cal.Core.Prelude.Nil))>, <@1>)")
+    && assert
+        (showInternalGraph fivesCAF2
+         == "Cal.Test.Core.Debug_Tests.fivesCAF2")
+    && assert
+        //an example of a cyclic value graph.
+        (output (take 10 fivesCAF2) `seq` showInternalGraph fivesCAF2
+         == "*<@1 = (Cal.Core.Prelude.Cons 5.0 <@1>)>")
+    && assert
+        //partial application and unsaturated functions
+        (showInternalGraph (List.map, Math.sin, List.map Math.sin)
+         == "(Cal.Core.Prelude.map, <@1 = Cal.Utilities.Math.sin>, (Cal.Core.Prelude.map <@1>))")
+    && assert
+        //the let variable definition of the Fibonacci numbers shows an interesting example of sharing        
+        (let fibs = 1 : 1 : List.zipWith Cal.Core.Prelude.add fibs (List.tail fibs) :: [Integer]; in (deepSeq (take 7 fibs) (showInternalGraph fibs))
+          == "*(Cal.Core.Prelude.Cons <@1 = 1> (Cal.Core.Prelude.Cons <@1> (Cal.Core.Prelude.Cons 2 (Cal.Core.Prelude.Cons 3 (Cal.Core.Prelude.Cons 5 <@2 = (Cal.Core.Prelude.Cons 8 <@3 = *(Cal.Core.Prelude.Cons *13 (Cal.Collections.List.zipWith Cal.Core.Prelude.addInteger <@2> <@3>))>)>)))))")
+   ;
+
+sillyFunc :: Int -> Int -> Int;
+sillyFunc x y =  x * x - y * y + 2;
+
+
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule = 
+    assert testDebugModule
+    && assert testShowNullValues
+    && assert (machineType == MachineType_Lecc && testShowInternalLecc || machineType == MachineType_G && testShowInternalG)
+    && assert (machineType == MachineType_Lecc && testShowInternalGraphLecc || machineType == MachineType_G)
+    ;
+//please leave testModule last!
+

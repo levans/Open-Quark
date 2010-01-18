@@ -1,0 +1,2002 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * ArrayPrimitives.cal
+ * Created: Dec 20, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * This module is a helper module for the Array module, defining the necessary functions and
+ * types to support the various Java primitive arrays. It does not export a public api- its
+ * purpose is only to make the Array module itself more readable by encapsulating a self
+ * contained unit.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Collections.ArrayPrimitives;
+import Cal.Core.Prelude using
+    typeClass = Appendable, Eq, Inputable, Ord, Outputable;
+    typeConstructor = 
+        Boolean, Byte, Char, Double, Float, Int, CalValue, JList, JObject, 
+        Long, Ordering, Short, String;
+    dataConstructor = LT, EQ, GT;
+    function = eager, error, input, output, seq, unsafeCoerce;    
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+//we want to maintain the generality and functional independence of the ArrayPrimitives module.
+//Please do not add more imports.
+friend Cal.Collections.Array;
+friend Cal.Test.Core.Array_Tests;
+
+/*
+The primitive Java array types below are intended to remain hidden from general use (hence their protected scope).
+The instance definitions for them below (such as for Appendable) assume that they will not have their elements mutated,
+which is only valid in the context of their use here as part of the Array type, in which such mutations are done safely.
+To input Java arrays into the Array type, use Prelude.input with an Array type target.
+*/
+
+data foreign unsafe import jvm "char[]"
+    protected JCharArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "boolean[]"
+    protected JBooleanArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "byte[]"
+    protected JByteArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "short[]"
+    protected JShortArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "int[]"
+    protected JIntArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "long[]"
+    protected JLongArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "float[]"
+    protected JFloatArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "double[]"
+    protected JDoubleArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "java.lang.Object[]" 
+    protected JObjectArray deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "org.openquark.cal.runtime.CalValue[]"
+    protected JCalValueArray deriving Inputable, Outputable;
+
+/**
+ * Contains a variety of useful methods for working with primitive arrays. This would be more useful if
+ * multi-parameter type classes were supported. For example, then array_subscript could be a method (which in can't be
+ * currently since the container type, such as {@link JCharArray@}, is not directly related to the element type
+ * {@link typeConstructor = Char@}).
+ */
+protected class Array a where
+    protected array_length :: a -> Int;
+    protected array_makeDefault :: Int -> a;
+    protected array_cloneReplacingNullArray :: a -> a;
+    //array_subscript :: containerType -> Int -> elementType;
+    protected array_listToArray :: JList -> a;
+    //array_listToArrayWithFirstElement :: containerType -> JList -> a;
+    protected array_arrayToList :: a -> JList;  
+    protected array_concatList :: JList -> a;
+    protected array_reverse :: a -> a;
+    protected array_subArray :: a -> Int -> Int -> a;
+    protected array_removeRange :: a -> Int -> Int -> a;
+    protected array_toCalValueArray :: a -> JCalValueArray;
+    protected array_fromCalValueArray :: JCalValueArray -> a;    
+    ;
+
+/** 
+ * similar to {@link Prelude.intToOrdering@} but only handles the intValues -1, 0, 1. This is an optimization for some well-used
+ * functions implemented in terms of Java primitives where the underlying Java primitive is known to return one of
+ * -1, 0, or 1.
+ */
+signumIntToOrdering :: Int -> Ordering;
+private signumIntToOrdering !intValue =
+    case intValue of
+    -1 -> LT;
+    0 -> EQ;
+    1 -> GT;
+    _ -> error ("intValue must be -1, 0 or 1 and not " ++ show intValue);
+    ;
+
+
+//foreign support functions for empty arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$EmptyArray.throwArrayIndexOutOfBoundsException" 
+    emptyArray_throwArrayIndexOutOfBoundsException :: Int -> ();
+
+emptyArray_subscript :: Int -> a;
+protected emptyArray_subscript !index = emptyArray_throwArrayIndexOutOfBoundsException index `seq` Prelude.undefined;
+
+emptyArray_update :: Int -> a -> a;
+protected emptyArray_update !index !value = unsafeCoerce (emptyArray_throwArrayIndexOutOfBoundsException index);
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$EmptyArray.isSubArrayOK" 
+    protected emptyArray_isSubArrayOK :: Int -> Int -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$EmptyArray.isRemoveRangeOK" 
+    protected emptyArray_isRemoveRangeOK :: Int -> Int -> Boolean;    
+    
+//the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+    
+foreign unsafe import jvm "method toCharArray" 
+    protected charArray_fromString :: String -> JCharArray;
+foreign unsafe import jvm "static method java.lang.String.valueOf"
+    protected charArray_toString :: JCharArray -> String;    
+
+//foreign support functions for native Java char arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.toString" 
+    charArray_toShowString :: JCharArray -> String;   
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.empty" 
+    charArray_empty :: JCharArray; 
+foreign unsafe import jvm "newArray" 
+    charArray_makeDefault :: Int -> JCharArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.array1" 
+    protected charArray_array1 :: Char -> JCharArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.array2" 
+    protected charArray_array2 :: Char -> Char -> JCharArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.array3" 
+    protected charArray_array3 :: Char -> Char -> Char -> JCharArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.array4" 
+    protected charArray_array4 :: Char -> Char -> Char -> Char -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.array5" 
+    protected charArray_array5 :: Char -> Char -> Char -> Char -> Char -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.array6" 
+    protected charArray_array6 :: Char -> Char -> Char -> Char -> Char -> Char -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.array7" 
+    protected charArray_array7 :: Char -> Char -> Char -> Char -> Char -> Char -> Char -> JCharArray;    
+    
+foreign unsafe import jvm "lengthArray" 
+    charArray_length :: JCharArray -> Int;
+charArray_isEmpty :: JCharArray -> Boolean;
+charArray_isEmpty !array = charArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.cloneReplacingNullArray" 
+    charArray_cloneReplacingNullArray :: JCharArray -> JCharArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected charArray_subscript :: JCharArray -> Int -> Char;
+foreign unsafe import jvm "updateArray" 
+    protected charArray_update :: JCharArray -> Int -> Char -> Char;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.listToArray" 
+    charArray_listToArray :: JList -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.listToArrayWithFirstElement" 
+    protected charArray_listToArrayWithFirstElement :: Char -> JList -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.arrayToList" 
+    charArray_arrayToList :: JCharArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.concat" 
+    charArray_append :: JCharArray -> JCharArray -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.concatList" 
+    charArray_concatList :: JList -> JCharArray; 
+charArray_concat :: [JCharArray] -> JCharArray;
+charArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.reverse" 
+    charArray_reverse :: JCharArray -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.subArray" 
+    charArray_subArray :: JCharArray -> Int -> Int -> JCharArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.removeRange" 
+    charArray_removeRange :: JCharArray -> Int -> Int -> JCharArray;    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.replicate" 
+    protected charArray_replicate :: Int -> Char -> JCharArray;
+    
+/**
+ * Converts a Java array of primitive Java chars to a Java array of CAL {@link typeConstructor = Char@}s.
+ */
+charArray_toCalValueArray :: JCharArray -> JCalValueArray;
+charArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Char correspoding to the Java char at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (charArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link typeConstructor = Char@}s to a Java array of primitive Java chars. 
+ */    
+charArray_fromCalValueArray :: JCalValueArray -> JCharArray;
+charArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JCharArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java char correspoding to the CAL Char at the ith element of calValueArray.        
+        init :: Int -> JCharArray;
+        init !index =
+            if index < size then
+                charArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;     
+  
+//the following function assume details about the implementation of Eq Char and Ord Char    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.equals" 
+    charArray_equals :: JCharArray -> JCharArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.notEquals" 
+    charArray_notEquals :: JCharArray -> JCharArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.compare" 
+    charArray_compareHelper :: JCharArray -> JCharArray -> Int;      
+charArray_compare :: JCharArray -> JCharArray -> Ordering;
+charArray_compare !array1 !array2 = signumIntToOrdering (charArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.lessThan" 
+    charArray_lessThan :: JCharArray -> JCharArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.lessThanEquals" 
+    charArray_lessThanEquals :: JCharArray -> JCharArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.greaterThanEquals" 
+    charArray_greaterThanEquals :: JCharArray -> JCharArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.greaterThan" 
+    charArray_greaterThan :: JCharArray -> JCharArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.max" 
+    charArray_max :: JCharArray -> JCharArray -> JCharArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.min" 
+    charArray_min :: JCharArray -> JCharArray -> JCharArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.indexOf" 
+    charArray_indexOf :: JCharArray -> Char -> Int;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.indexOf" 
+    protected charArray_indexOf2 :: JCharArray -> Char -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.lastIndexOf" 
+    charArray_lastIndexOf :: JCharArray -> Char -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.lastIndexOf" 
+    protected charArray_lastIndexOf2 :: JCharArray -> Char -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.replace" 
+    charArray_replace :: JCharArray -> Char -> Char -> JCharArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CharArray.sort" 
+    protected charArray_sort :: JCharArray -> JCharArray; 
+foreign unsafe import jvm "static method java.util.Arrays.binarySearch" 
+    protected charArray_binarySearch :: JCharArray -> Char -> Int;                                                     
+    
+instance Eq JCharArray where
+    equals = charArray_equals;
+    notEquals = charArray_notEquals;
+    ;
+    
+instance Ord JCharArray where
+    lessThan = charArray_lessThan;
+    lessThanEquals = charArray_lessThanEquals;
+    greaterThanEquals = charArray_greaterThanEquals;
+    greaterThan = charArray_greaterThan;
+    compare = charArray_compare;    
+    max = charArray_max;
+    min = charArray_min;
+    ;
+        
+instance Appendable JCharArray where
+    empty = charArray_empty;  
+    isEmpty = charArray_isEmpty;
+    append = charArray_append;
+    concat = charArray_concat;
+    ;
+    
+instance Show JCharArray where
+    show = charArray_toShowString;
+    ;
+    
+instance Array JCharArray where
+    array_length = charArray_length;
+    array_makeDefault = charArray_makeDefault;
+    array_cloneReplacingNullArray = charArray_cloneReplacingNullArray;
+    array_listToArray = charArray_listToArray;
+    array_arrayToList = charArray_arrayToList;
+    array_concatList = charArray_concatList;
+    array_reverse = charArray_reverse;
+    array_subArray = charArray_subArray;
+    array_removeRange = charArray_removeRange;
+    array_toCalValueArray = charArray_toCalValueArray;
+    array_fromCalValueArray = charArray_fromCalValueArray;
+    ;
+
+////////////////////////////////////////////////////////////////////////////////////
+//BEGIN AUTOMATICALLY GENERATED CODE- DO NOT MODIFY
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java boolean arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.toString" 
+    booleanArray_toShowString :: JBooleanArray -> String; 
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.empty" 
+    booleanArray_empty :: JBooleanArray; 
+foreign unsafe import jvm "newArray" 
+    booleanArray_makeDefault :: Int -> JBooleanArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.array1" 
+    protected booleanArray_array1 :: Boolean -> JBooleanArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.array2" 
+    protected booleanArray_array2 :: Boolean -> Boolean -> JBooleanArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.array3" 
+    protected booleanArray_array3 :: Boolean -> Boolean -> Boolean -> JBooleanArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.array4" 
+    protected booleanArray_array4 :: Boolean -> Boolean -> Boolean -> Boolean -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.array5" 
+    protected booleanArray_array5 :: Boolean -> Boolean -> Boolean -> Boolean -> Boolean -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.array6" 
+    protected booleanArray_array6 :: Boolean -> Boolean -> Boolean -> Boolean -> Boolean -> Boolean -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.array7" 
+    protected booleanArray_array7 :: Boolean -> Boolean -> Boolean -> Boolean -> Boolean -> Boolean -> Boolean -> JBooleanArray;  
+    
+foreign unsafe import jvm "lengthArray" 
+    booleanArray_length :: JBooleanArray -> Int;
+booleanArray_isEmpty :: JBooleanArray -> Boolean; 
+booleanArray_isEmpty !array = booleanArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.cloneReplacingNullArray" 
+    booleanArray_cloneReplacingNullArray :: JBooleanArray -> JBooleanArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected booleanArray_subscript :: JBooleanArray -> Int -> Boolean;
+foreign unsafe import jvm "updateArray" 
+    protected booleanArray_update :: JBooleanArray -> Int -> Boolean -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.listToArray" 
+    booleanArray_listToArray :: JList -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.listToArrayWithFirstElement"
+    protected booleanArray_listToArrayWithFirstElement :: Boolean -> JList -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.arrayToList" 
+    booleanArray_arrayToList :: JBooleanArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.concat" 
+    booleanArray_append :: JBooleanArray -> JBooleanArray -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.concatList" 
+    booleanArray_concatList :: JList -> JBooleanArray; 
+booleanArray_concat :: [JBooleanArray] -> JBooleanArray;
+booleanArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.reverse" 
+    booleanArray_reverse :: JBooleanArray -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.subArray" 
+    booleanArray_subArray :: JBooleanArray -> Int -> Int -> JBooleanArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.removeRange" 
+    booleanArray_removeRange :: JBooleanArray -> Int -> Int -> JBooleanArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.replicate" 
+    protected booleanArray_replicate :: Int -> Boolean -> JBooleanArray;
+    
+/**
+ * Converts a Java array of primitive Java booleans to a Java array of CAL {@link Boolean@}s.
+ */
+booleanArray_toCalValueArray :: JBooleanArray -> JCalValueArray;
+booleanArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Boolean correspoding to the Java boolean at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (booleanArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link Boolean@}s to a Java array of primitive Java booleans. 
+ */    
+booleanArray_fromCalValueArray :: JCalValueArray -> JBooleanArray;
+booleanArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JBooleanArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java boolean correspoding to the CAL Boolean at the ith element of calValueArray.        
+        init :: Int -> JBooleanArray;
+        init !index =
+            if index < size then
+                booleanArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;
+      
+//the following function assume details about the implementation of Eq Boolean and Ord Boolean    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.equals" 
+    booleanArray_equals :: JBooleanArray -> JBooleanArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.notEquals" 
+    booleanArray_notEquals :: JBooleanArray -> JBooleanArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.compare" 
+    booleanArray_compareHelper :: JBooleanArray -> JBooleanArray -> Int;      
+booleanArray_compare :: JBooleanArray -> JBooleanArray -> Ordering;
+booleanArray_compare !array1 !array2 = signumIntToOrdering (booleanArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.lessThan" 
+    booleanArray_lessThan :: JBooleanArray -> JBooleanArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.lessThanEquals" 
+    booleanArray_lessThanEquals :: JBooleanArray -> JBooleanArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.greaterThanEquals" 
+    booleanArray_greaterThanEquals :: JBooleanArray -> JBooleanArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.greaterThan" 
+    booleanArray_greaterThan :: JBooleanArray -> JBooleanArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.max" 
+    booleanArray_max :: JBooleanArray -> JBooleanArray -> JBooleanArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.min" 
+    booleanArray_min :: JBooleanArray -> JBooleanArray -> JBooleanArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.indexOf" 
+    protected booleanArray_indexOf :: JBooleanArray -> Boolean -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.indexOf" 
+    protected booleanArray_indexOf2 :: JBooleanArray -> Boolean -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.lastIndexOf" 
+    booleanArray_lastIndexOf :: JBooleanArray -> Boolean -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.lastIndexOf" 
+    protected booleanArray_lastIndexOf2 :: JBooleanArray -> Boolean -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.replace" 
+    booleanArray_replace :: JBooleanArray -> Boolean -> Boolean -> JBooleanArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$BooleanArray.sort" 
+    protected booleanArray_sort :: JBooleanArray -> JBooleanArray; 
+//todoBI can implement this for efficiency sake. It is not implemented in java.util.Arrays...   
+//booleanArray_binarySearch :: JBooleanArray -> Boolean -> Int;
+                                                 
+instance Eq JBooleanArray where
+    equals = booleanArray_equals;
+    notEquals = booleanArray_notEquals;
+    ;
+    
+instance Ord JBooleanArray where
+    lessThan = booleanArray_lessThan;
+    lessThanEquals = booleanArray_lessThanEquals;
+    greaterThanEquals = booleanArray_greaterThanEquals;
+    greaterThan = booleanArray_greaterThan;
+    compare = booleanArray_compare;    
+    max = booleanArray_max;
+    min = booleanArray_min;
+    ;
+        
+instance Appendable JBooleanArray where
+    empty = booleanArray_empty;  
+    isEmpty = booleanArray_isEmpty;
+    append = booleanArray_append;
+    concat = booleanArray_concat;
+    ;
+    
+instance Show JBooleanArray where
+    show = booleanArray_toShowString;
+    ;
+    
+instance Array JBooleanArray where
+    array_length = booleanArray_length;
+    array_makeDefault = booleanArray_makeDefault;
+    array_cloneReplacingNullArray = booleanArray_cloneReplacingNullArray;
+    array_listToArray = booleanArray_listToArray;
+    array_arrayToList = booleanArray_arrayToList;
+    array_concatList = booleanArray_concatList;
+    array_reverse = booleanArray_reverse;
+    array_subArray = booleanArray_subArray;
+    array_removeRange = booleanArray_removeRange;
+    array_toCalValueArray = booleanArray_toCalValueArray;
+    array_fromCalValueArray = booleanArray_fromCalValueArray;    
+    ;    
+
+
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java byte arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.toString" 
+    byteArray_toShowString :: JByteArray -> String;  
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.empty" 
+    byteArray_empty :: JByteArray; 
+foreign unsafe import jvm "newArray" 
+    byteArray_makeDefault :: Int -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.array1" 
+    protected byteArray_array1 :: Byte -> JByteArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.array2" 
+    protected byteArray_array2 :: Byte -> Byte -> JByteArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.array3" 
+    protected byteArray_array3 :: Byte -> Byte -> Byte -> JByteArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.array4" 
+    protected byteArray_array4 :: Byte -> Byte -> Byte -> Byte -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.array5" 
+    protected byteArray_array5 :: Byte -> Byte -> Byte -> Byte -> Byte -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.array6" 
+    protected byteArray_array6 :: Byte -> Byte -> Byte -> Byte -> Byte -> Byte -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.array7" 
+    protected byteArray_array7 :: Byte -> Byte -> Byte -> Byte -> Byte -> Byte -> Byte -> JByteArray;      
+    
+foreign unsafe import jvm "lengthArray" 
+    byteArray_length :: JByteArray -> Int;
+byteArray_isEmpty :: JByteArray -> Boolean; 
+byteArray_isEmpty !array = byteArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.cloneReplacingNullArray" 
+    byteArray_cloneReplacingNullArray :: JByteArray -> JByteArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected byteArray_subscript :: JByteArray -> Int -> Byte;
+foreign unsafe import jvm "updateArray" 
+    protected byteArray_update :: JByteArray -> Int -> Byte -> Byte;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.listToArray" 
+    byteArray_listToArray :: JList -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.listToArrayWithFirstElement" 
+    protected byteArray_listToArrayWithFirstElement :: Byte -> JList -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.arrayToList" 
+    byteArray_arrayToList :: JByteArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.concat" 
+    byteArray_append :: JByteArray -> JByteArray -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.concatList" 
+    byteArray_concatList :: JList -> JByteArray; 
+byteArray_concat :: [JByteArray] -> JByteArray;
+byteArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.reverse" 
+    byteArray_reverse :: JByteArray -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.subArray" 
+    byteArray_subArray :: JByteArray -> Int -> Int -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.removeRange" 
+    byteArray_removeRange :: JByteArray -> Int -> Int -> JByteArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.replicate" 
+    protected byteArray_replicate :: Int -> Byte -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.compress" 
+    protected byteArray_compress :: JByteArray -> JByteArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.decompress" 
+    protected byteArray_decompress :: JByteArray -> JByteArray;
+    
+/**
+ * Converts a Java array of primitive Java bytes to a Java array of CAL {@link Byte@}s.
+ */
+byteArray_toCalValueArray :: JByteArray -> JCalValueArray;
+byteArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Byte correspoding to the Java byte at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (byteArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link Byte@}s to a Java array of primitive Java bytes. 
+ */    
+byteArray_fromCalValueArray :: JCalValueArray -> JByteArray;
+byteArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JByteArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java byte correspoding to the CAL Byte at the ith element of calValueArray.        
+        init :: Int -> JByteArray;
+        init !index =
+            if index < size then
+                byteArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0; 
+    
+//the following function assume details about the implementation of Eq Byte and Ord Byte    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.equals" 
+    byteArray_equals :: JByteArray -> JByteArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.notEquals" 
+    byteArray_notEquals :: JByteArray -> JByteArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.compare" 
+    byteArray_compareHelper :: JByteArray -> JByteArray -> Int;      
+byteArray_compare :: JByteArray -> JByteArray -> Ordering;
+byteArray_compare !array1 !array2 = signumIntToOrdering (byteArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.lessThan" 
+    byteArray_lessThan :: JByteArray -> JByteArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.lessThanEquals" 
+    byteArray_lessThanEquals :: JByteArray -> JByteArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.greaterThanEquals" 
+    byteArray_greaterThanEquals :: JByteArray -> JByteArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.greaterThan" 
+    byteArray_greaterThan :: JByteArray -> JByteArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.max" 
+    byteArray_max :: JByteArray -> JByteArray -> JByteArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.min" 
+    byteArray_min :: JByteArray -> JByteArray -> JByteArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.indexOf" 
+    byteArray_indexOf :: JByteArray -> Byte -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.indexOf" 
+    protected byteArray_indexOf2 :: JByteArray -> Byte -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.lastIndexOf" 
+    byteArray_lastIndexOf :: JByteArray -> Byte -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.lastIndexOf" 
+    protected byteArray_lastIndexOf2 :: JByteArray -> Byte -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.replace" 
+    byteArray_replace :: JByteArray -> Byte -> Byte -> JByteArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ByteArray.sort" 
+    protected byteArray_sort :: JByteArray -> JByteArray; 
+foreign unsafe import jvm "static method java.util.Arrays.binarySearch" 
+    protected byteArray_binarySearch :: JByteArray -> Byte -> Int;                                                     
+    
+instance Eq JByteArray where
+    equals = byteArray_equals;
+    notEquals = byteArray_notEquals;
+    ;
+    
+instance Ord JByteArray where
+    lessThan = byteArray_lessThan;
+    lessThanEquals = byteArray_lessThanEquals;
+    greaterThanEquals = byteArray_greaterThanEquals;
+    greaterThan = byteArray_greaterThan;
+    compare = byteArray_compare;    
+    max = byteArray_max;
+    min = byteArray_min;
+    ;
+        
+instance Appendable JByteArray where
+    empty = byteArray_empty;  
+    isEmpty = byteArray_isEmpty;
+    append = byteArray_append;
+    concat = byteArray_concat;
+    ;
+    
+instance Show JByteArray where
+    show = byteArray_toShowString;
+    ;
+    
+instance Array JByteArray where
+    array_length = byteArray_length;
+    array_makeDefault = byteArray_makeDefault;
+    array_cloneReplacingNullArray = byteArray_cloneReplacingNullArray;
+    array_listToArray = byteArray_listToArray;
+    array_arrayToList = byteArray_arrayToList;
+    array_concatList = byteArray_concatList;
+    array_reverse = byteArray_reverse;
+    array_subArray = byteArray_subArray;
+    array_removeRange = byteArray_removeRange;
+    array_toCalValueArray = byteArray_toCalValueArray;
+    array_fromCalValueArray = byteArray_fromCalValueArray;    
+    ;    
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java short arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.toString" 
+    shortArray_toShowString :: JShortArray -> String; 
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.empty" 
+    shortArray_empty :: JShortArray; 
+foreign unsafe import jvm "newArray" 
+    shortArray_makeDefault :: Int -> JShortArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.array1" 
+    protected shortArray_array1 :: Short -> JShortArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.array2" 
+    protected shortArray_array2 :: Short -> Short -> JShortArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.array3" 
+    protected shortArray_array3 :: Short -> Short -> Short -> JShortArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.array4" 
+    protected shortArray_array4 :: Short -> Short -> Short -> Short -> JShortArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.array5" 
+    protected shortArray_array5 :: Short -> Short -> Short -> Short -> Short -> JShortArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.array6" 
+    protected shortArray_array6 :: Short -> Short -> Short -> Short -> Short -> Short -> JShortArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.array7" 
+    protected shortArray_array7 :: Short -> Short -> Short -> Short -> Short -> Short -> Short -> JShortArray; 
+    
+foreign unsafe import jvm "lengthArray" 
+    shortArray_length :: JShortArray -> Int;
+shortArray_isEmpty :: JShortArray -> Boolean;  
+shortArray_isEmpty !array = shortArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.cloneReplacingNullArray" 
+    shortArray_cloneReplacingNullArray :: JShortArray -> JShortArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected shortArray_subscript :: JShortArray -> Int -> Short;
+foreign unsafe import jvm "updateArray" 
+    protected shortArray_update :: JShortArray -> Int -> Short -> Short;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.listToArray" 
+    shortArray_listToArray :: JList -> JShortArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.listToArrayWithFirstElement" 
+    protected shortArray_listToArrayWithFirstElement :: Short -> JList -> JShortArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.arrayToList" 
+    shortArray_arrayToList :: JShortArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.concat" 
+    shortArray_append :: JShortArray -> JShortArray -> JShortArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.concatList" 
+    shortArray_concatList :: JList -> JShortArray; 
+shortArray_concat :: [JShortArray] -> JShortArray;
+shortArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.reverse" 
+    shortArray_reverse :: JShortArray -> JShortArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.subArray" 
+    shortArray_subArray :: JShortArray -> Int -> Int -> JShortArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.removeRange" 
+    shortArray_removeRange :: JShortArray -> Int -> Int -> JShortArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.replicate" 
+    protected shortArray_replicate :: Int -> Short -> JShortArray;
+    
+/**
+ * Converts a Java array of primitive Java shorts to a Java array of CAL {@link Short@}s.
+ */
+shortArray_toCalValueArray :: JShortArray -> JCalValueArray;
+shortArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Short correspoding to the Java short at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (shortArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link Short@}s to a Java array of primitive Java shorts. 
+ */    
+shortArray_fromCalValueArray :: JCalValueArray -> JShortArray;
+shortArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JShortArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java short correspoding to the CAL Short at the ith element of calValueArray.        
+        init :: Int -> JShortArray;
+        init !index =
+            if index < size then
+                shortArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;   
+  
+//the following function assume details about the implementation of Eq Short and Ord Short    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.equals" 
+    shortArray_equals :: JShortArray -> JShortArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.notEquals" 
+    shortArray_notEquals :: JShortArray -> JShortArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.compare" 
+    shortArray_compareHelper :: JShortArray -> JShortArray -> Int;      
+shortArray_compare :: JShortArray -> JShortArray -> Ordering;
+shortArray_compare !array1 !array2 = signumIntToOrdering (shortArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.lessThan" 
+    shortArray_lessThan :: JShortArray -> JShortArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.lessThanEquals" 
+    shortArray_lessThanEquals :: JShortArray -> JShortArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.greaterThanEquals" 
+    shortArray_greaterThanEquals :: JShortArray -> JShortArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.greaterThan" 
+    shortArray_greaterThan :: JShortArray -> JShortArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.max" 
+    shortArray_max :: JShortArray -> JShortArray -> JShortArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.min" 
+    shortArray_min :: JShortArray -> JShortArray -> JShortArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.indexOf" 
+    shortArray_indexOf :: JShortArray -> Short -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.indexOf" 
+    protected shortArray_indexOf2 :: JShortArray -> Short -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.lastIndexOf" 
+    shortArray_lastIndexOf :: JShortArray -> Short -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.lastIndexOf" 
+    protected shortArray_lastIndexOf2 :: JShortArray -> Short -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.replace" 
+    shortArray_replace :: JShortArray -> Short -> Short -> JShortArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ShortArray.sort" 
+    protected shortArray_sort :: JShortArray -> JShortArray;  
+foreign unsafe import jvm "static method java.util.Arrays.binarySearch" 
+    protected shortArray_binarySearch :: JShortArray -> Short -> Int;                                                     
+    
+instance Eq JShortArray where
+    equals = shortArray_equals;
+    notEquals = shortArray_notEquals;
+    ;
+    
+instance Ord JShortArray where
+    lessThan = shortArray_lessThan;
+    lessThanEquals = shortArray_lessThanEquals;
+    greaterThanEquals = shortArray_greaterThanEquals;
+    greaterThan = shortArray_greaterThan;
+    compare = shortArray_compare;    
+    max = shortArray_max;
+    min = shortArray_min;
+    ;
+        
+instance Appendable JShortArray where
+    empty = shortArray_empty;  
+    isEmpty = shortArray_isEmpty;
+    append = shortArray_append;
+    concat = shortArray_concat;
+    ;
+    
+instance Show JShortArray where
+    show = shortArray_toShowString;
+    ;
+    
+instance Array JShortArray where
+    array_length = shortArray_length;
+    array_makeDefault = shortArray_makeDefault;
+    array_cloneReplacingNullArray = shortArray_cloneReplacingNullArray;
+    array_listToArray = shortArray_listToArray;
+    array_arrayToList = shortArray_arrayToList;
+    array_concatList = shortArray_concatList;
+    array_reverse = shortArray_reverse;
+    array_subArray = shortArray_subArray;
+    array_removeRange = shortArray_removeRange;
+    array_toCalValueArray = shortArray_toCalValueArray;
+    array_fromCalValueArray = shortArray_fromCalValueArray;    
+    ;    
+
+
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java int arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.toString" 
+    intArray_toShowString :: JIntArray -> String;     
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.empty" 
+    intArray_empty :: JIntArray; 
+foreign unsafe import jvm "newArray" 
+    intArray_makeDefault :: Int -> JIntArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.array1" 
+    protected intArray_array1 :: Int -> JIntArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.array2" 
+    protected intArray_array2 :: Int -> Int -> JIntArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.array3" 
+    protected intArray_array3 :: Int -> Int -> Int -> JIntArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.array4" 
+    protected intArray_array4 :: Int -> Int -> Int -> Int -> JIntArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.array5" 
+    protected intArray_array5 :: Int -> Int -> Int -> Int -> Int -> JIntArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.array6" 
+    protected intArray_array6 :: Int -> Int -> Int -> Int -> Int -> Int -> JIntArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.array7" 
+    protected intArray_array7 :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> JIntArray;      
+    
+foreign unsafe import jvm "lengthArray" 
+    intArray_length :: JIntArray -> Int; 
+intArray_isEmpty :: JIntArray -> Boolean;  
+intArray_isEmpty !array = intArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.cloneReplacingNullArray" 
+    intArray_cloneReplacingNullArray :: JIntArray -> JIntArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected intArray_subscript :: JIntArray -> Int -> Int;
+foreign unsafe import jvm "updateArray" 
+    protected intArray_update :: JIntArray -> Int -> Int -> Int;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.listToArray" 
+    intArray_listToArray :: JList -> JIntArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.listToArrayWithFirstElement" 
+    protected intArray_listToArrayWithFirstElement :: Int -> JList -> JIntArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.arrayToList" 
+    intArray_arrayToList :: JIntArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.concat" 
+    intArray_append :: JIntArray -> JIntArray -> JIntArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.concatList" 
+    intArray_concatList :: JList -> JIntArray; 
+intArray_concat :: [JIntArray] -> JIntArray;
+intArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.reverse" 
+    intArray_reverse :: JIntArray -> JIntArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.subArray" 
+    intArray_subArray :: JIntArray -> Int -> Int -> JIntArray;   
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.removeRange" 
+    intArray_removeRange :: JIntArray -> Int -> Int -> JIntArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.replicate" 
+    protected intArray_replicate :: Int -> Int -> JIntArray;
+    
+/**
+ * Converts a Java array of primitive Java ints to a Java array of CAL {@link Int@}s.
+ */
+intArray_toCalValueArray :: JIntArray -> JCalValueArray;
+intArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Int correspoding to the Java int at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (intArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link Int@}s to a Java array of primitive Java ints. 
+ */    
+intArray_fromCalValueArray :: JCalValueArray -> JIntArray;
+intArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JIntArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java int correspoding to the CAL Int at the ith element of calValueArray.        
+        init :: Int -> JIntArray;
+        init !index =
+            if index < size then
+                intArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;
+  
+//the following function assume details about the implementation of Eq Int and Ord Int    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.equals" 
+    intArray_equals :: JIntArray -> JIntArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.notEquals" 
+    intArray_notEquals :: JIntArray -> JIntArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.compare" 
+    intArray_compareHelper :: JIntArray -> JIntArray -> Int;      
+intArray_compare :: JIntArray -> JIntArray -> Ordering;
+intArray_compare !array1 !array2 = signumIntToOrdering (intArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.lessThan" 
+    intArray_lessThan :: JIntArray -> JIntArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.lessThanEquals" 
+    intArray_lessThanEquals :: JIntArray -> JIntArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.greaterThanEquals" 
+    intArray_greaterThanEquals :: JIntArray -> JIntArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.greaterThan" 
+    intArray_greaterThan :: JIntArray -> JIntArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.max" 
+    intArray_max :: JIntArray -> JIntArray -> JIntArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.min" 
+    intArray_min :: JIntArray -> JIntArray -> JIntArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.indexOf" 
+    intArray_indexOf :: JIntArray -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.indexOf" 
+    protected intArray_indexOf2 :: JIntArray -> Int -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.lastIndexOf" 
+    intArray_lastIndexOf :: JIntArray -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.lastIndexOf" 
+    protected intArray_lastIndexOf2 :: JIntArray -> Int -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.replace" 
+    intArray_replace :: JIntArray -> Int -> Int -> JIntArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$IntArray.sort" 
+    protected intArray_sort :: JIntArray -> JIntArray;
+foreign unsafe import jvm "static method java.util.Arrays.binarySearch" 
+    protected intArray_binarySearch :: JIntArray -> Int -> Int;    
+                                                 
+    
+instance Eq JIntArray where
+    equals = intArray_equals;
+    notEquals = intArray_notEquals;
+    ;
+    
+instance Ord JIntArray where
+    lessThan = intArray_lessThan;
+    lessThanEquals = intArray_lessThanEquals;
+    greaterThanEquals = intArray_greaterThanEquals;
+    greaterThan = intArray_greaterThan;
+    compare = intArray_compare;    
+    max = intArray_max;
+    min = intArray_min;
+    ;
+        
+instance Appendable JIntArray where
+    empty = intArray_empty;  
+    isEmpty = intArray_isEmpty;
+    append = intArray_append;
+    concat = intArray_concat;
+    ;
+    
+instance Show JIntArray where
+    show = intArray_toShowString;
+    ;
+    
+instance Array JIntArray where
+    array_length = intArray_length;
+    array_makeDefault = intArray_makeDefault;
+    array_cloneReplacingNullArray = intArray_cloneReplacingNullArray;
+    array_listToArray = intArray_listToArray;
+    array_arrayToList = intArray_arrayToList;
+    array_concatList = intArray_concatList;
+    array_reverse = intArray_reverse;
+    array_subArray = intArray_subArray;
+    array_removeRange = intArray_removeRange;
+    array_toCalValueArray = intArray_toCalValueArray;
+    array_fromCalValueArray = intArray_fromCalValueArray;    
+    ;    
+
+
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java long arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.toString" 
+    longArray_toShowString :: JLongArray -> String;    
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.empty" 
+    longArray_empty :: JLongArray; 
+foreign unsafe import jvm "newArray" 
+    longArray_makeDefault :: Int -> JLongArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.array1" 
+    protected longArray_array1 :: Long -> JLongArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.array2" 
+    protected longArray_array2 :: Long -> Long -> JLongArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.array3" 
+    protected longArray_array3 :: Long -> Long -> Long -> JLongArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.array4" 
+    protected longArray_array4 :: Long -> Long -> Long -> Long -> JLongArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.array5" 
+    protected longArray_array5 :: Long -> Long -> Long -> Long -> Long -> JLongArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.array6" 
+    protected longArray_array6 :: Long -> Long -> Long -> Long -> Long -> Long -> JLongArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.array7" 
+    protected longArray_array7 :: Long -> Long -> Long -> Long -> Long -> Long -> Long -> JLongArray;      
+    
+foreign unsafe import jvm "lengthArray" 
+    longArray_length :: JLongArray -> Int;
+longArray_isEmpty :: JLongArray -> Boolean;   
+longArray_isEmpty !array = longArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.cloneReplacingNullArray" 
+    longArray_cloneReplacingNullArray :: JLongArray -> JLongArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected longArray_subscript :: JLongArray -> Int -> Long;
+foreign unsafe import jvm "updateArray" 
+    protected longArray_update :: JLongArray -> Int -> Long -> Long;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.listToArray" 
+    longArray_listToArray :: JList -> JLongArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.listToArrayWithFirstElement" 
+    protected longArray_listToArrayWithFirstElement :: Long -> JList -> JLongArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.arrayToList" 
+    longArray_arrayToList :: JLongArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.concat" 
+    longArray_append :: JLongArray -> JLongArray -> JLongArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.concatList" 
+    longArray_concatList :: JList -> JLongArray; 
+longArray_concat :: [JLongArray] -> JLongArray;
+longArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.reverse" 
+    longArray_reverse :: JLongArray -> JLongArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.subArray" 
+    longArray_subArray :: JLongArray -> Int -> Int -> JLongArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.removeRange" 
+    longArray_removeRange :: JLongArray -> Int -> Int -> JLongArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.replicate" 
+    protected longArray_replicate :: Int -> Long -> JLongArray;
+    
+/**
+ * Converts a Java array of primitive Java longs to a Java array of CAL {@link Long@}s.
+ */
+longArray_toCalValueArray :: JLongArray -> JCalValueArray;
+longArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Long correspoding to the Java long at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (longArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link Long@}s to a Java array of primitive Java longs. 
+ */    
+longArray_fromCalValueArray :: JCalValueArray -> JLongArray;
+longArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JLongArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java long correspoding to the CAL Long at the ith element of calValueArray.        
+        init :: Int -> JLongArray;
+        init !index =
+            if index < size then
+                longArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;
+  
+//the following function assume details about the implementation of Eq Long and Ord Long    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.equals" 
+    longArray_equals :: JLongArray -> JLongArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.notEquals" 
+    longArray_notEquals :: JLongArray -> JLongArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.compare" 
+    longArray_compareHelper :: JLongArray -> JLongArray -> Int;      
+longArray_compare :: JLongArray -> JLongArray -> Ordering;
+longArray_compare !array1 !array2 = signumIntToOrdering (longArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.lessThan" 
+    longArray_lessThan :: JLongArray -> JLongArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.lessThanEquals" 
+    longArray_lessThanEquals :: JLongArray -> JLongArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.greaterThanEquals" 
+    longArray_greaterThanEquals :: JLongArray -> JLongArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.greaterThan" 
+    longArray_greaterThan :: JLongArray -> JLongArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.max" 
+    longArray_max :: JLongArray -> JLongArray -> JLongArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.min" 
+    longArray_min :: JLongArray -> JLongArray -> JLongArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.indexOf" 
+    longArray_indexOf :: JLongArray -> Long -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.indexOf" 
+    protected longArray_indexOf2 :: JLongArray -> Long -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.lastIndexOf" 
+    longArray_lastIndexOf :: JLongArray -> Long -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.lastIndexOf" 
+    protected longArray_lastIndexOf2 :: JLongArray -> Long -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.replace" 
+    longArray_replace :: JLongArray -> Long -> Long -> JLongArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$LongArray.sort" 
+    protected longArray_sort :: JLongArray -> JLongArray;
+foreign unsafe import jvm "static method java.util.Arrays.binarySearch" 
+    protected longArray_binarySearch :: JLongArray -> Long -> Int;    
+                                                 
+    
+instance Eq JLongArray where
+    equals = longArray_equals;
+    notEquals = longArray_notEquals;
+    ;
+    
+instance Ord JLongArray where
+    lessThan = longArray_lessThan;
+    lessThanEquals = longArray_lessThanEquals;
+    greaterThanEquals = longArray_greaterThanEquals;
+    greaterThan = longArray_greaterThan;
+    compare = longArray_compare;    
+    max = longArray_max;
+    min = longArray_min;
+    ;
+        
+instance Appendable JLongArray where
+    empty = longArray_empty;  
+    isEmpty = longArray_isEmpty;
+    append = longArray_append;
+    concat = longArray_concat;
+    ;
+    
+instance Show JLongArray where
+    show = longArray_toShowString;
+    ;
+    
+instance Array JLongArray where
+    array_length = longArray_length;
+    array_makeDefault = longArray_makeDefault;
+    array_cloneReplacingNullArray = longArray_cloneReplacingNullArray;
+    array_listToArray = longArray_listToArray;
+    array_arrayToList = longArray_arrayToList;
+    array_concatList = longArray_concatList;
+    array_reverse = longArray_reverse;
+    array_subArray = longArray_subArray;
+    array_removeRange = longArray_removeRange;
+    array_toCalValueArray = longArray_toCalValueArray;
+    array_fromCalValueArray = longArray_fromCalValueArray;    
+    ;    
+
+
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java float arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.toString" 
+    floatArray_toShowString :: JFloatArray -> String; 
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.empty" 
+    floatArray_empty :: JFloatArray; 
+foreign unsafe import jvm "newArray" 
+    floatArray_makeDefault :: Int -> JFloatArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.array1" 
+    protected floatArray_array1 :: Float -> JFloatArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.array2" 
+    protected floatArray_array2 :: Float -> Float -> JFloatArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.array3" 
+    protected floatArray_array3 :: Float -> Float -> Float -> JFloatArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.array4" 
+    protected floatArray_array4 :: Float -> Float -> Float -> Float -> JFloatArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.array5" 
+    protected floatArray_array5 :: Float -> Float -> Float -> Float -> Float -> JFloatArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.array6" 
+    protected floatArray_array6 :: Float -> Float -> Float -> Float -> Float -> Float -> JFloatArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.array7" 
+    protected floatArray_array7 :: Float -> Float -> Float -> Float -> Float -> Float -> Float -> JFloatArray;      
+    
+foreign unsafe import jvm "lengthArray" 
+    floatArray_length :: JFloatArray -> Int;
+floatArray_isEmpty :: JFloatArray -> Boolean; 
+floatArray_isEmpty !array = floatArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.cloneReplacingNullArray" 
+    floatArray_cloneReplacingNullArray :: JFloatArray -> JFloatArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected floatArray_subscript :: JFloatArray -> Int -> Float;
+foreign unsafe import jvm "updateArray" 
+    protected floatArray_update :: JFloatArray -> Int -> Float -> Float;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.listToArray" 
+    floatArray_listToArray :: JList -> JFloatArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.listToArrayWithFirstElement" 
+    protected floatArray_listToArrayWithFirstElement :: Float -> JList -> JFloatArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.arrayToList" 
+    floatArray_arrayToList :: JFloatArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.concat" 
+    floatArray_append :: JFloatArray -> JFloatArray -> JFloatArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.concatList" 
+    floatArray_concatList :: JList -> JFloatArray; 
+floatArray_concat :: [JFloatArray] -> JFloatArray;
+floatArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.reverse" 
+    floatArray_reverse :: JFloatArray -> JFloatArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.subArray" 
+    floatArray_subArray :: JFloatArray -> Int -> Int -> JFloatArray;   
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.removeRange" 
+    floatArray_removeRange :: JFloatArray -> Int -> Int -> JFloatArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.replicate" 
+    protected floatArray_replicate :: Int -> Float -> JFloatArray;
+    
+/**
+ * Converts a Java array of primitive Java floats to a Java array of CAL {@link Float@}s.
+ */
+floatArray_toCalValueArray :: JFloatArray -> JCalValueArray;
+floatArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Float correspoding to the Java float at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (floatArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link Float@}s to a Java array of primitive Java floats. 
+ */    
+floatArray_fromCalValueArray :: JCalValueArray -> JFloatArray;
+floatArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JFloatArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java float correspoding to the CAL Float at the ith element of calValueArray.        
+        init :: Int -> JFloatArray;
+        init !index =
+            if index < size then
+                floatArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;      
+  
+//the following function assume details about the implementation of Eq Float and Ord Float    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.equals" 
+    floatArray_equals :: JFloatArray -> JFloatArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.notEquals" 
+    floatArray_notEquals :: JFloatArray -> JFloatArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.compare" 
+    floatArray_compareHelper :: JFloatArray -> JFloatArray -> Int;      
+floatArray_compare :: JFloatArray -> JFloatArray -> Ordering;
+floatArray_compare !array1 !array2 = signumIntToOrdering (floatArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.lessThan" 
+    floatArray_lessThan :: JFloatArray -> JFloatArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.lessThanEquals" 
+    floatArray_lessThanEquals :: JFloatArray -> JFloatArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.greaterThanEquals" 
+    floatArray_greaterThanEquals :: JFloatArray -> JFloatArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.greaterThan" 
+    floatArray_greaterThan :: JFloatArray -> JFloatArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.max" 
+    floatArray_max :: JFloatArray -> JFloatArray -> JFloatArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.min" 
+    floatArray_min :: JFloatArray -> JFloatArray -> JFloatArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.indexOf" 
+    floatArray_indexOf :: JFloatArray -> Float -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.indexOf" 
+    protected floatArray_indexOf2 :: JFloatArray -> Float -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.lastIndexOf" 
+    floatArray_lastIndexOf :: JFloatArray -> Float -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.lastIndexOf" 
+    protected floatArray_lastIndexOf2 :: JFloatArray -> Float -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.replace" 
+    floatArray_replace :: JFloatArray -> Float -> Float -> JFloatArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$FloatArray.sort" 
+    protected floatArray_sort :: JFloatArray -> JFloatArray;
+foreign unsafe import jvm "static method java.util.Arrays.binarySearch" 
+    protected floatArray_binarySearch :: JFloatArray -> Float -> Int;    
+                                                 
+    
+instance Eq JFloatArray where
+    equals = floatArray_equals;
+    notEquals = floatArray_notEquals;
+    ;
+    
+instance Ord JFloatArray where
+    lessThan = floatArray_lessThan;
+    lessThanEquals = floatArray_lessThanEquals;
+    greaterThanEquals = floatArray_greaterThanEquals;
+    greaterThan = floatArray_greaterThan;
+    compare = floatArray_compare;    
+    max = floatArray_max;
+    min = floatArray_min;
+    ;
+        
+instance Appendable JFloatArray where
+    empty = floatArray_empty;  
+    isEmpty = floatArray_isEmpty;
+    append = floatArray_append;
+    concat = floatArray_concat;
+    ;
+    
+instance Show JFloatArray where
+    show = floatArray_toShowString;
+    ;
+    
+instance Array JFloatArray where
+    array_length = floatArray_length;
+    array_makeDefault = floatArray_makeDefault;
+    array_cloneReplacingNullArray = floatArray_cloneReplacingNullArray;
+    array_listToArray = floatArray_listToArray;
+    array_arrayToList = floatArray_arrayToList;
+    array_concatList = floatArray_concatList;
+    array_reverse = floatArray_reverse;
+    array_subArray = floatArray_subArray;
+    array_removeRange = floatArray_removeRange;
+    array_toCalValueArray = floatArray_toCalValueArray;
+    array_fromCalValueArray = floatArray_fromCalValueArray;    
+    ;    
+
+
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java double arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.toString" 
+    doubleArray_toShowString :: JDoubleArray -> String; 
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.empty" 
+    doubleArray_empty :: JDoubleArray; 
+foreign unsafe import jvm "newArray" 
+    doubleArray_makeDefault :: Int -> JDoubleArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.array1" 
+    protected doubleArray_array1 :: Double -> JDoubleArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.array2" 
+    protected doubleArray_array2 :: Double -> Double -> JDoubleArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.array3" 
+    protected doubleArray_array3 :: Double -> Double -> Double -> JDoubleArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.array4" 
+    protected doubleArray_array4 :: Double -> Double -> Double -> Double -> JDoubleArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.array5" 
+    protected doubleArray_array5 :: Double -> Double -> Double -> Double -> Double -> JDoubleArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.array6" 
+    protected doubleArray_array6 :: Double -> Double -> Double -> Double -> Double -> Double -> JDoubleArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.array7" 
+    protected doubleArray_array7 :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> JDoubleArray;  
+    
+foreign unsafe import jvm "lengthArray" 
+    doubleArray_length :: JDoubleArray -> Int;
+doubleArray_isEmpty :: JDoubleArray -> Boolean;    
+doubleArray_isEmpty !array = doubleArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.cloneReplacingNullArray" 
+    doubleArray_cloneReplacingNullArray :: JDoubleArray -> JDoubleArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected doubleArray_subscript :: JDoubleArray -> Int -> Double;
+foreign unsafe import jvm "updateArray" 
+    protected doubleArray_update :: JDoubleArray -> Int -> Double -> Double;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.listToArray" 
+    doubleArray_listToArray :: JList -> JDoubleArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.listToArrayWithFirstElement" 
+    protected doubleArray_listToArrayWithFirstElement :: Double -> JList -> JDoubleArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.arrayToList" 
+    doubleArray_arrayToList :: JDoubleArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.concat" 
+    doubleArray_append :: JDoubleArray -> JDoubleArray -> JDoubleArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.concatList" 
+    doubleArray_concatList :: JList -> JDoubleArray; 
+doubleArray_concat :: [JDoubleArray] -> JDoubleArray;
+doubleArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.reverse" 
+    doubleArray_reverse :: JDoubleArray -> JDoubleArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.subArray" 
+    doubleArray_subArray :: JDoubleArray -> Int -> Int -> JDoubleArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.removeRange" 
+    doubleArray_removeRange :: JDoubleArray -> Int -> Int -> JDoubleArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.replicate" 
+    protected doubleArray_replicate :: Int -> Double -> JDoubleArray;
+    
+/**
+ * Converts a Java array of primitive Java doubles to a Java array of CAL {@link Double@}s.
+ */
+doubleArray_toCalValueArray :: JDoubleArray -> JCalValueArray;
+doubleArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Double correspoding to the Java double at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (doubleArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL {@link Double@}s to a Java array of primitive Java doubles. 
+ */    
+doubleArray_fromCalValueArray :: JCalValueArray -> JDoubleArray;
+doubleArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JDoubleArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java double correspoding to the CAL Double at the ith element of calValueArray.        
+        init :: Int -> JDoubleArray;
+        init !index =
+            if index < size then
+                doubleArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;
+  
+//the following function assume details about the implementation of Eq Double and Ord Double    
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.equals" 
+    doubleArray_equals :: JDoubleArray -> JDoubleArray -> Boolean;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.notEquals" 
+    doubleArray_notEquals :: JDoubleArray -> JDoubleArray -> Boolean;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.compare" 
+    doubleArray_compareHelper :: JDoubleArray -> JDoubleArray -> Int;      
+doubleArray_compare :: JDoubleArray -> JDoubleArray -> Ordering;
+doubleArray_compare !array1 !array2 = signumIntToOrdering (doubleArray_compareHelper array1 array2);
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.lessThan" 
+    doubleArray_lessThan :: JDoubleArray -> JDoubleArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.lessThanEquals" 
+    doubleArray_lessThanEquals :: JDoubleArray -> JDoubleArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.greaterThanEquals" 
+    doubleArray_greaterThanEquals :: JDoubleArray -> JDoubleArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.greaterThan" 
+    doubleArray_greaterThan :: JDoubleArray -> JDoubleArray -> Boolean; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.max" 
+    doubleArray_max :: JDoubleArray -> JDoubleArray -> JDoubleArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.min" 
+    doubleArray_min :: JDoubleArray -> JDoubleArray -> JDoubleArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.indexOf" 
+    doubleArray_indexOf :: JDoubleArray -> Double -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.indexOf" 
+    protected doubleArray_indexOf2 :: JDoubleArray -> Double -> Int -> Int;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.lastIndexOf" 
+    doubleArray_lastIndexOf :: JDoubleArray -> Double -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.lastIndexOf" 
+    protected doubleArray_lastIndexOf2 :: JDoubleArray -> Double -> Int -> Int; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.replace" 
+    doubleArray_replace :: JDoubleArray -> Double -> Double -> JDoubleArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$DoubleArray.sort" 
+    protected doubleArray_sort :: JDoubleArray -> JDoubleArray;
+foreign unsafe import jvm "static method java.util.Arrays.binarySearch" 
+    protected doubleArray_binarySearch :: JDoubleArray -> Double -> Int;                                                     
+    
+instance Eq JDoubleArray where
+    equals = doubleArray_equals;
+    notEquals = doubleArray_notEquals;
+    ;
+    
+instance Ord JDoubleArray where
+    lessThan = doubleArray_lessThan;
+    lessThanEquals = doubleArray_lessThanEquals;
+    greaterThanEquals = doubleArray_greaterThanEquals;
+    greaterThan = doubleArray_greaterThan;
+    compare = doubleArray_compare;    
+    max = doubleArray_max;
+    min = doubleArray_min;
+    ;
+        
+instance Appendable JDoubleArray where
+    empty = doubleArray_empty;  
+    isEmpty = doubleArray_isEmpty;
+    append = doubleArray_append;
+    concat = doubleArray_concat;
+    ;
+    
+instance Show JDoubleArray where
+    show = doubleArray_toShowString;
+    ;
+    
+instance Array JDoubleArray where
+    array_length = doubleArray_length;
+    array_makeDefault = doubleArray_makeDefault;
+    array_cloneReplacingNullArray = doubleArray_cloneReplacingNullArray;
+    array_listToArray = doubleArray_listToArray;
+    array_arrayToList = doubleArray_arrayToList;
+    array_concatList = doubleArray_concatList;
+    array_reverse = doubleArray_reverse;
+    array_subArray = doubleArray_subArray;
+    array_removeRange = doubleArray_removeRange;
+    array_toCalValueArray = doubleArray_toCalValueArray;
+    array_fromCalValueArray = doubleArray_fromCalValueArray;    
+    ;    
+
+
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java JObject arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.toString" 
+    objectArray_toShowString :: JObjectArray -> String;  
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.empty" 
+    objectArray_empty :: JObjectArray; 
+foreign unsafe import jvm "newArray" 
+    objectArray_makeDefault :: Int -> JObjectArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.array1" 
+    protected objectArray_array1 :: JObject -> JObjectArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.array2" 
+    protected objectArray_array2 :: JObject -> JObject -> JObjectArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.array3" 
+    protected objectArray_array3 :: JObject -> JObject -> JObject -> JObjectArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.array4" 
+    protected objectArray_array4 :: JObject -> JObject -> JObject -> JObject -> JObjectArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.array5" 
+    protected objectArray_array5 :: JObject -> JObject -> JObject -> JObject -> JObject -> JObjectArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.array6" 
+    protected objectArray_array6 :: JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JObjectArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.array7" 
+    protected objectArray_array7 :: JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JObjectArray;  
+  
+foreign unsafe import jvm "lengthArray" 
+    objectArray_length :: JObjectArray -> Int;
+objectArray_isEmpty :: JObjectArray -> Boolean; 
+objectArray_isEmpty !array = objectArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.cloneReplacingNullArray" 
+    objectArray_cloneReplacingNullArray :: JObjectArray -> JObjectArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected objectArray_subscript :: JObjectArray -> Int -> JObject;
+foreign unsafe import jvm "updateArray" 
+    protected objectArray_update :: JObjectArray -> Int -> JObject -> JObject;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.listToArray" 
+    objectArray_listToArray :: JList -> JObjectArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.listToArrayWithFirstElement" 
+    protected objectArray_listToArrayWithFirstElement :: JObject -> JList -> JObjectArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.arrayToList" 
+    objectArray_arrayToList :: JObjectArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.concat" 
+    objectArray_append :: JObjectArray -> JObjectArray -> JObjectArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.concatList" 
+    objectArray_concatList :: JList -> JObjectArray; 
+objectArray_concat :: [JObjectArray] -> JObjectArray;
+objectArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.reverse" 
+    objectArray_reverse :: JObjectArray -> JObjectArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.subArray" 
+    objectArray_subArray :: JObjectArray -> Int -> Int -> JObjectArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.removeRange" 
+    objectArray_removeRange :: JObjectArray -> Int -> Int -> JObjectArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$ObjectArray.replicate" 
+    protected objectArray_replicate :: Int -> JObject -> JObjectArray;
+    
+/**
+ * Converts a Java array of primitive Java Objects to a Java array of CAL Objects.
+ */
+objectArray_toCalValueArray :: JObjectArray -> JCalValueArray;
+objectArray_toCalValueArray !array =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init                 
+        size :: Int;
+        size = eager (array_length array); 
+
+        //resultArray will be initialized by a call to init.              
+        resultArray :: JCalValueArray;
+        resultArray = eager (array_makeDefault size);
+
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the CAL Object correspoding to the Java Object at the ith element of array.
+        init :: Int -> JCalValueArray;
+        init !index =
+            if index < size then
+                calValueArray_update resultArray index (unsafeCoerce (objectArray_subscript array index))
+                `seq`
+                init (index + 1)                          
+            else
+                resultArray;
+    in
+        init 0;
+
+/**
+ * Converts a Java array of CAL Objects to a Java array of primitive Java Objects. 
+ */    
+objectArray_fromCalValueArray :: JCalValueArray -> JObjectArray;
+objectArray_fromCalValueArray !calValueArray =
+    let 
+        //size and resultArray are computed eagerly because
+        //a) it is safe to compute them out of order to weak-head normal form     
+        //b) we know they will eventually be used in init, so it is an efficiency gain to dispense with
+        //   creating a thunk for them only to certainly evaluate that thunk later.
+        //c) so they can be lifted as plinged arguments of the local function init         
+        size :: Int;
+        size = eager (array_length calValueArray);
+        
+        //resultArray will be initialized by a call to init.
+        resultArray :: JObjectArray;
+        resultArray = eager (array_makeDefault size);
+           
+        //initializes each element of resultArray.
+        //the ith element of resultArray will be the Java Object correspoding to the CAL Object at the ith element of calValueArray.        
+        init :: Int -> JObjectArray;
+        init !index =
+            if index < size then
+                objectArray_update resultArray index (unsafeCoerce (calValueArray_subscript calValueArray index))
+                `seq`
+                init (index + 1)                           
+            else
+                resultArray;
+    in
+        init 0;
+                                                              
+instance Appendable JObjectArray where
+    empty = objectArray_empty;  
+    isEmpty = objectArray_isEmpty;
+    append = objectArray_append;
+    concat = objectArray_concat;
+    ;
+    
+instance Show JObjectArray where
+    show = objectArray_toShowString;
+    ;
+    
+instance Array JObjectArray where
+    array_length = objectArray_length;
+    array_makeDefault = objectArray_makeDefault;
+    array_cloneReplacingNullArray = objectArray_cloneReplacingNullArray;
+    array_listToArray = objectArray_listToArray;
+    array_arrayToList = objectArray_arrayToList;
+    array_concatList = objectArray_concatList;
+    array_reverse = objectArray_reverse;
+    array_subArray = objectArray_subArray;
+    array_removeRange = objectArray_removeRange;
+    array_toCalValueArray = objectArray_toCalValueArray;
+    array_fromCalValueArray = objectArray_fromCalValueArray;    
+    ; 
+    
+foreign unsafe import jvm "static method java.util.Arrays.sort"
+    protected objectArray_sort :: JObjectArray -> Prelude.JComparator -> ();       
+
+
+
+
+///the functions for char arrays are hand written. Functions for the other types are mainly a copy-replace.
+
+//foreign support functions for native Java CalValue arrays.
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.toString" 
+    calValueArray_toShowString :: JCalValueArray -> String; 
+    
+foreign unsafe import jvm "static field org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.empty" 
+    calValueArray_empty :: JCalValueArray; 
+foreign unsafe import jvm "newArray" 
+    calValueArray_makeDefault :: Int -> JCalValueArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.array1" 
+    protected calValueArray_array1 :: CalValue -> JCalValueArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.array2" 
+    protected calValueArray_array2 :: CalValue -> CalValue -> JCalValueArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.array3" 
+    protected calValueArray_array3 :: CalValue -> CalValue -> CalValue -> JCalValueArray; 
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.array4" 
+    protected calValueArray_array4 :: CalValue -> CalValue -> CalValue -> CalValue -> JCalValueArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.array5" 
+    protected calValueArray_array5 :: CalValue -> CalValue -> CalValue -> CalValue -> CalValue -> JCalValueArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.array6" 
+    protected calValueArray_array6 :: CalValue -> CalValue -> CalValue -> CalValue -> CalValue -> CalValue -> JCalValueArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.array7" 
+    protected calValueArray_array7 :: CalValue -> CalValue -> CalValue -> CalValue -> CalValue -> CalValue -> CalValue -> JCalValueArray;  
+   
+foreign unsafe import jvm "lengthArray" 
+    calValueArray_length :: JCalValueArray -> Int;
+calValueArray_isEmpty :: JCalValueArray -> Boolean;
+calValueArray_isEmpty !array = calValueArray_length array == 0;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.cloneReplacingNullArray" 
+    calValueArray_cloneReplacingNullArray :: JCalValueArray -> JCalValueArray;  
+foreign unsafe import jvm "subscriptArray" 
+    protected calValueArray_subscript :: JCalValueArray -> Int -> CalValue;
+foreign unsafe import jvm "updateArray" 
+    protected calValueArray_update :: JCalValueArray -> Int -> CalValue -> CalValue;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.listToArray" 
+    calValueArray_listToArray :: JList -> JCalValueArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.listToArrayWithFirstElement" 
+    protected calValueArray_listToArrayWithFirstElement :: CalValue -> JList -> JCalValueArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.arrayToList" 
+    calValueArray_arrayToList :: JCalValueArray -> JList;            
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.concat" 
+    calValueArray_append :: JCalValueArray -> JCalValueArray -> JCalValueArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.concatList" 
+    calValueArray_concatList :: JList -> JCalValueArray; 
+calValueArray_concat :: [JCalValueArray] -> JCalValueArray;
+calValueArray_concat !list = array_concatList (input (output list));  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.reverse" 
+    calValueArray_reverse :: JCalValueArray -> JCalValueArray;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.subArray" 
+    calValueArray_subArray :: JCalValueArray -> Int -> Int -> JCalValueArray;  
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.removeRange" 
+    calValueArray_removeRange :: JCalValueArray -> Int -> Int -> JCalValueArray;     
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives.Array$CalValueArray.replicate" 
+    protected calValueArray_replicate :: Int -> CalValue -> JCalValueArray;
+    
+/**
+ * copies the container Java array of CAL values.
+ */
+calValueArray_toCalValueArray :: JCalValueArray -> JCalValueArray;
+calValueArray_toCalValueArray !array = array_cloneReplacingNullArray array;   
+
+/**
+ * Identity on the container Java array of CAL values.
+ */ 
+calValueArray_fromCalValueArray :: JCalValueArray -> JCalValueArray;
+calValueArray_fromCalValueArray !calValueArray = calValueArray;                                                    
+        
+instance Appendable JCalValueArray where
+    empty = calValueArray_empty;  
+    isEmpty = calValueArray_isEmpty;
+    append = calValueArray_append;
+    concat = calValueArray_concat;
+    ;
+    
+instance Show JCalValueArray where
+    show = calValueArray_toShowString;
+    ;
+    
+instance Array JCalValueArray where
+    array_length = calValueArray_length;
+    array_makeDefault = calValueArray_makeDefault;
+    array_cloneReplacingNullArray = calValueArray_cloneReplacingNullArray;
+    array_listToArray = calValueArray_listToArray;
+    array_arrayToList = calValueArray_arrayToList;
+    array_concatList = calValueArray_concatList;
+    array_reverse = calValueArray_reverse;
+    array_subArray = calValueArray_subArray;
+    array_removeRange = calValueArray_removeRange;
+    array_toCalValueArray = calValueArray_toCalValueArray;
+    array_fromCalValueArray = calValueArray_fromCalValueArray;    
+    ;    
+
+//END AUTOMATICALLY GENERATED CODE
+////////////////////////////////////////////////////////////////////////////////////

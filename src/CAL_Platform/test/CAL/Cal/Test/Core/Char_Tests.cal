@@ -1,0 +1,396 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Char_Tests.cal
+ * Creation date: Jan 5/2006
+ * By: James Wright
+ */
+
+/**
+ * This module contains test cases for the {@link module = Char@} module that do more in-depth tests
+ * than are appropriate for inline checked examples.
+ * 
+ * @author James Wright
+ */
+module Cal.Test.Core.Char_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Byte, Int;
+    function = assert, input, output, unsafeCoerce;
+    ;
+import Cal.Core.Char using
+    dataConstructor = 
+        DIRECTIONALITY_UNDEFINED, DIRECTIONALITY_LEFT_TO_RIGHT, DIRECTIONALITY_RIGHT_TO_LEFT, 
+        DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC, DIRECTIONALITY_EUROPEAN_NUMBER, DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR, 
+        DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR, DIRECTIONALITY_ARABIC_NUMBER, 
+        DIRECTIONALITY_COMMON_NUMBER_SEPARATOR, DIRECTIONALITY_NONSPACING_MARK, DIRECTIONALITY_BOUNDARY_NEUTRAL, 
+        DIRECTIONALITY_PARAGRAPH_SEPARATOR, DIRECTIONALITY_SEGMENT_SEPARATOR, DIRECTIONALITY_WHITESPACE, 
+        DIRECTIONALITY_OTHER_NEUTRALS, DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING, DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE, 
+        DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING, DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE, 
+        DIRECTIONALITY_POP_DIRECTIONAL_FORMAT, TYPE_UNASSIGNED, TYPE_UPPERCASE_LETTER, TYPE_LOWERCASE_LETTER, 
+        TYPE_TITLECASE_LETTER, TYPE_MODIFIER_LETTER, TYPE_OTHER_LETTER, TYPE_NON_SPACING_MARK, TYPE_ENCLOSING_MARK, 
+        TYPE_COMBINING_SPACING_MARK, TYPE_DECIMAL_DIGIT_NUMBER, TYPE_LETTER_NUMBER, TYPE_OTHER_NUMBER, 
+        TYPE_SPACE_SEPARATOR, TYPE_LINE_SEPARATOR, TYPE_PARAGRAPH_SEPARATOR, TYPE_CONTROL, TYPE_FORMAT, 
+        TYPE_PRIVATE_USE, TYPE_SURROGATE, TYPE_DASH_PUNCTUATION, TYPE_START_PUNCTUATION, TYPE_END_PUNCTUATION, 
+        TYPE_CONNECTOR_PUNCTUATION, TYPE_OTHER_PUNCTUATION, TYPE_MATH_SYMBOL, TYPE_CURRENCY_SYMBOL, 
+        TYPE_MODIFIER_SYMBOL, TYPE_OTHER_SYMBOL, TYPE_INITIAL_QUOTE_PUNCTUATION, TYPE_FINAL_QUOTE_PUNCTUATION;
+    ;
+
+    
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_UNDEFINED" 
+    private jDIRECTIONALITY_UNDEFINED :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_LEFT_TO_RIGHT" 
+    private jDIRECTIONALITY_LEFT_TO_RIGHT :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT_ARABIC :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_EUROPEAN_NUMBER" 
+    private jDIRECTIONALITY_EUROPEAN_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR" 
+    private jDIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR" 
+    private jDIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_ARABIC_NUMBER" 
+    private jDIRECTIONALITY_ARABIC_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_COMMON_NUMBER_SEPARATOR" 
+    private jDIRECTIONALITY_COMMON_NUMBER_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_NONSPACING_MARK" 
+    private jDIRECTIONALITY_NONSPACING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_BOUNDARY_NEUTRAL" 
+    private jDIRECTIONALITY_BOUNDARY_NEUTRAL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_PARAGRAPH_SEPARATOR" 
+    private jDIRECTIONALITY_PARAGRAPH_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_SEGMENT_SEPARATOR" 
+    private jDIRECTIONALITY_SEGMENT_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_WHITESPACE" 
+    private jDIRECTIONALITY_WHITESPACE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_OTHER_NEUTRALS" 
+    private jDIRECTIONALITY_OTHER_NEUTRALS :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING" 
+    private jDIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE" 
+    private jDIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE" 
+    private jDIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DIRECTIONALITY_POP_DIRECTIONAL_FORMAT" 
+    private jDIRECTIONALITY_POP_DIRECTIONAL_FORMAT :: Byte;
+
+//------------------------------------------------------------------------------------------
+
+foreign unsafe import jvm "static field java.lang.Character.UNASSIGNED"
+    private jTYPE_UNASSIGNED :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.UPPERCASE_LETTER"
+    private jTYPE_UPPERCASE_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.LOWERCASE_LETTER"
+    private jTYPE_LOWERCASE_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.TITLECASE_LETTER"
+    private jTYPE_TITLECASE_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.MODIFIER_LETTER"
+    private jTYPE_MODIFIER_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_LETTER"
+    private jTYPE_OTHER_LETTER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.NON_SPACING_MARK"
+    private jTYPE_NON_SPACING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.ENCLOSING_MARK"
+    private jTYPE_ENCLOSING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.COMBINING_SPACING_MARK"
+    private jTYPE_COMBINING_SPACING_MARK :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DECIMAL_DIGIT_NUMBER"
+    private jTYPE_DECIMAL_DIGIT_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.LETTER_NUMBER"
+    private jTYPE_LETTER_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_NUMBER"
+    private jTYPE_OTHER_NUMBER :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.SPACE_SEPARATOR"
+    private jTYPE_SPACE_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.LINE_SEPARATOR"
+    private jTYPE_LINE_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.PARAGRAPH_SEPARATOR"
+    private jTYPE_PARAGRAPH_SEPARATOR :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.CONTROL"
+    private jTYPE_CONTROL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.FORMAT"
+    private jTYPE_FORMAT :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.PRIVATE_USE"
+    private jTYPE_PRIVATE_USE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.SURROGATE"
+    private jTYPE_SURROGATE :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.DASH_PUNCTUATION"
+    private jTYPE_DASH_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.START_PUNCTUATION"
+    private jTYPE_START_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.END_PUNCTUATION"
+    private jTYPE_END_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.CONNECTOR_PUNCTUATION"
+    private jTYPE_CONNECTOR_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_PUNCTUATION"
+    private jTYPE_OTHER_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.MATH_SYMBOL"
+    private jTYPE_MATH_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.CURRENCY_SYMBOL"
+    private jTYPE_CURRENCY_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.MODIFIER_SYMBOL"
+    private jTYPE_MODIFIER_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.OTHER_SYMBOL"
+    private jTYPE_OTHER_SYMBOL :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.INITIAL_QUOTE_PUNCTUATION"
+    private jTYPE_INITIAL_QUOTE_PUNCTUATION :: Byte;
+foreign unsafe import jvm "static field java.lang.Character.FINAL_QUOTE_PUNCTUATION"
+    private jTYPE_FINAL_QUOTE_PUNCTUATION :: Byte;
+
+//------------------------------------------------------------------------------------------
+
+testDirectionalityInput =
+    assert (input (output jDIRECTIONALITY_UNDEFINED) == DIRECTIONALITY_UNDEFINED) &&
+    assert (input (output jDIRECTIONALITY_LEFT_TO_RIGHT) == DIRECTIONALITY_LEFT_TO_RIGHT) &&
+    assert (input (output jDIRECTIONALITY_RIGHT_TO_LEFT) == DIRECTIONALITY_RIGHT_TO_LEFT) &&
+    assert (input (output jDIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) == DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) &&
+    assert (input (output jDIRECTIONALITY_EUROPEAN_NUMBER) == DIRECTIONALITY_EUROPEAN_NUMBER) &&
+    assert (input (output jDIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR) == DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR) &&
+    assert (input (output jDIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR) == DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR) &&
+    assert (input (output jDIRECTIONALITY_ARABIC_NUMBER) == DIRECTIONALITY_ARABIC_NUMBER) &&
+    assert (input (output jDIRECTIONALITY_COMMON_NUMBER_SEPARATOR) == DIRECTIONALITY_COMMON_NUMBER_SEPARATOR) &&
+    assert (input (output jDIRECTIONALITY_NONSPACING_MARK) == DIRECTIONALITY_NONSPACING_MARK) &&
+    assert (input (output jDIRECTIONALITY_BOUNDARY_NEUTRAL) == DIRECTIONALITY_BOUNDARY_NEUTRAL) &&
+    assert (input (output jDIRECTIONALITY_PARAGRAPH_SEPARATOR) == DIRECTIONALITY_PARAGRAPH_SEPARATOR) &&
+    assert (input (output jDIRECTIONALITY_SEGMENT_SEPARATOR) == DIRECTIONALITY_SEGMENT_SEPARATOR) &&
+    assert (input (output jDIRECTIONALITY_WHITESPACE) == DIRECTIONALITY_WHITESPACE) &&
+    assert (input (output jDIRECTIONALITY_OTHER_NEUTRALS) == DIRECTIONALITY_OTHER_NEUTRALS) &&
+    assert (input (output jDIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING) == DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING) &&
+    assert (input (output jDIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE) == DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE) &&
+    assert (input (output jDIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING) == DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING) &&
+    assert (input (output jDIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE) == DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE) &&
+    assert (input (output jDIRECTIONALITY_POP_DIRECTIONAL_FORMAT) == DIRECTIONALITY_POP_DIRECTIONAL_FORMAT);
+
+testDirectionalityOutput =
+    assert (input (output DIRECTIONALITY_UNDEFINED) == jDIRECTIONALITY_UNDEFINED) &&
+    assert (input (output DIRECTIONALITY_LEFT_TO_RIGHT) == jDIRECTIONALITY_LEFT_TO_RIGHT) &&
+    assert (input (output DIRECTIONALITY_RIGHT_TO_LEFT) == jDIRECTIONALITY_RIGHT_TO_LEFT) &&
+    assert (input (output DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) == jDIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) &&
+    assert (input (output DIRECTIONALITY_EUROPEAN_NUMBER) == jDIRECTIONALITY_EUROPEAN_NUMBER) &&
+    assert (input (output DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR) == jDIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR) &&
+    assert (input (output DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR) == jDIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR) &&
+    assert (input (output DIRECTIONALITY_ARABIC_NUMBER) == jDIRECTIONALITY_ARABIC_NUMBER) &&
+    assert (input (output DIRECTIONALITY_COMMON_NUMBER_SEPARATOR) == jDIRECTIONALITY_COMMON_NUMBER_SEPARATOR) &&
+    assert (input (output DIRECTIONALITY_NONSPACING_MARK) == jDIRECTIONALITY_NONSPACING_MARK) &&
+    assert (input (output DIRECTIONALITY_BOUNDARY_NEUTRAL) == jDIRECTIONALITY_BOUNDARY_NEUTRAL) &&
+    assert (input (output DIRECTIONALITY_PARAGRAPH_SEPARATOR) == jDIRECTIONALITY_PARAGRAPH_SEPARATOR) &&
+    assert (input (output DIRECTIONALITY_SEGMENT_SEPARATOR) == jDIRECTIONALITY_SEGMENT_SEPARATOR) &&
+    assert (input (output DIRECTIONALITY_WHITESPACE) == jDIRECTIONALITY_WHITESPACE) &&
+    assert (input (output DIRECTIONALITY_OTHER_NEUTRALS) == jDIRECTIONALITY_OTHER_NEUTRALS) &&
+    assert (input (output DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING) == jDIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING) &&
+    assert (input (output DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE) == jDIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE) &&
+    assert (input (output DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING) == jDIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING) &&
+    assert (input (output DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE) == jDIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE) &&
+    assert (input (output DIRECTIONALITY_POP_DIRECTIONAL_FORMAT) == jDIRECTIONALITY_POP_DIRECTIONAL_FORMAT);
+    
+testTypeInput =
+    assert (input (output jTYPE_UNASSIGNED) == TYPE_UNASSIGNED) &&
+    assert (input (output jTYPE_UPPERCASE_LETTER) == TYPE_UPPERCASE_LETTER) &&
+    assert (input (output jTYPE_LOWERCASE_LETTER) == TYPE_LOWERCASE_LETTER) &&
+    assert (input (output jTYPE_TITLECASE_LETTER) == TYPE_TITLECASE_LETTER) &&
+    assert (input (output jTYPE_MODIFIER_LETTER) == TYPE_MODIFIER_LETTER) &&
+    assert (input (output jTYPE_OTHER_LETTER) == TYPE_OTHER_LETTER) &&
+    assert (input (output jTYPE_NON_SPACING_MARK) == TYPE_NON_SPACING_MARK) &&
+    assert (input (output jTYPE_ENCLOSING_MARK) == TYPE_ENCLOSING_MARK) &&
+    assert (input (output jTYPE_COMBINING_SPACING_MARK) == TYPE_COMBINING_SPACING_MARK) &&
+    assert (input (output jTYPE_DECIMAL_DIGIT_NUMBER) == TYPE_DECIMAL_DIGIT_NUMBER) &&
+    assert (input (output jTYPE_LETTER_NUMBER) == TYPE_LETTER_NUMBER) &&
+    assert (input (output jTYPE_OTHER_NUMBER) == TYPE_OTHER_NUMBER) &&
+    assert (input (output jTYPE_SPACE_SEPARATOR) == TYPE_SPACE_SEPARATOR) &&
+    assert (input (output jTYPE_LINE_SEPARATOR) == TYPE_LINE_SEPARATOR) &&
+    assert (input (output jTYPE_PARAGRAPH_SEPARATOR) == TYPE_PARAGRAPH_SEPARATOR) &&
+    assert (input (output jTYPE_CONTROL) == TYPE_CONTROL) &&
+    assert (input (output jTYPE_FORMAT) == TYPE_FORMAT) &&
+    assert (input (output jTYPE_PRIVATE_USE) == TYPE_PRIVATE_USE) &&
+    assert (input (output jTYPE_SURROGATE) == TYPE_SURROGATE) &&
+    assert (input (output jTYPE_DASH_PUNCTUATION) == TYPE_DASH_PUNCTUATION) &&
+    assert (input (output jTYPE_START_PUNCTUATION) == TYPE_START_PUNCTUATION) &&
+    assert (input (output jTYPE_END_PUNCTUATION) == TYPE_END_PUNCTUATION) &&
+    assert (input (output jTYPE_CONNECTOR_PUNCTUATION) == TYPE_CONNECTOR_PUNCTUATION) &&
+    assert (input (output jTYPE_OTHER_PUNCTUATION) == TYPE_OTHER_PUNCTUATION) &&
+    assert (input (output jTYPE_MATH_SYMBOL) == TYPE_MATH_SYMBOL) &&
+    assert (input (output jTYPE_CURRENCY_SYMBOL) == TYPE_CURRENCY_SYMBOL) &&
+    assert (input (output jTYPE_MODIFIER_SYMBOL) == TYPE_MODIFIER_SYMBOL) &&
+    assert (input (output jTYPE_OTHER_SYMBOL) == TYPE_OTHER_SYMBOL) &&
+    assert (input (output jTYPE_INITIAL_QUOTE_PUNCTUATION) == TYPE_INITIAL_QUOTE_PUNCTUATION) &&
+    assert (input (output jTYPE_FINAL_QUOTE_PUNCTUATION) == TYPE_FINAL_QUOTE_PUNCTUATION);
+
+testTypeOutput =
+    assert (input (output TYPE_UNASSIGNED) == jTYPE_UNASSIGNED) &&
+    assert (input (output TYPE_UPPERCASE_LETTER) == jTYPE_UPPERCASE_LETTER) &&
+    assert (input (output TYPE_LOWERCASE_LETTER) == jTYPE_LOWERCASE_LETTER) &&
+    assert (input (output TYPE_TITLECASE_LETTER) == jTYPE_TITLECASE_LETTER) &&
+    assert (input (output TYPE_MODIFIER_LETTER) == jTYPE_MODIFIER_LETTER) &&
+    assert (input (output TYPE_OTHER_LETTER) == jTYPE_OTHER_LETTER) &&
+    assert (input (output TYPE_NON_SPACING_MARK) == jTYPE_NON_SPACING_MARK) &&
+    assert (input (output TYPE_ENCLOSING_MARK) == jTYPE_ENCLOSING_MARK) &&
+    assert (input (output TYPE_COMBINING_SPACING_MARK) == jTYPE_COMBINING_SPACING_MARK) &&
+    assert (input (output TYPE_DECIMAL_DIGIT_NUMBER) == jTYPE_DECIMAL_DIGIT_NUMBER) &&
+    assert (input (output TYPE_LETTER_NUMBER) == jTYPE_LETTER_NUMBER) &&
+    assert (input (output TYPE_OTHER_NUMBER) == jTYPE_OTHER_NUMBER) &&
+    assert (input (output TYPE_SPACE_SEPARATOR) == jTYPE_SPACE_SEPARATOR) &&
+    assert (input (output TYPE_LINE_SEPARATOR) == jTYPE_LINE_SEPARATOR) &&
+    assert (input (output TYPE_PARAGRAPH_SEPARATOR) == jTYPE_PARAGRAPH_SEPARATOR) &&
+    assert (input (output TYPE_CONTROL) == jTYPE_CONTROL) &&
+    assert (input (output TYPE_FORMAT) == jTYPE_FORMAT) &&
+    assert (input (output TYPE_PRIVATE_USE) == jTYPE_PRIVATE_USE) &&
+    assert (input (output TYPE_SURROGATE) == jTYPE_SURROGATE) &&
+    assert (input (output TYPE_DASH_PUNCTUATION) == jTYPE_DASH_PUNCTUATION) &&
+    assert (input (output TYPE_START_PUNCTUATION) == jTYPE_START_PUNCTUATION) &&
+    assert (input (output TYPE_END_PUNCTUATION) == jTYPE_END_PUNCTUATION) &&
+    assert (input (output TYPE_CONNECTOR_PUNCTUATION) == jTYPE_CONNECTOR_PUNCTUATION) &&
+    assert (input (output TYPE_OTHER_PUNCTUATION) == jTYPE_OTHER_PUNCTUATION) &&
+    assert (input (output TYPE_MATH_SYMBOL) == jTYPE_MATH_SYMBOL) &&
+    assert (input (output TYPE_CURRENCY_SYMBOL) == jTYPE_CURRENCY_SYMBOL) &&
+    assert (input (output TYPE_MODIFIER_SYMBOL) == jTYPE_MODIFIER_SYMBOL) &&
+    assert (input (output TYPE_OTHER_SYMBOL) == jTYPE_OTHER_SYMBOL) &&
+    assert (input (output TYPE_INITIAL_QUOTE_PUNCTUATION) == jTYPE_INITIAL_QUOTE_PUNCTUATION) &&
+    assert (input (output TYPE_FINAL_QUOTE_PUNCTUATION) == jTYPE_FINAL_QUOTE_PUNCTUATION);
+
+testDirectionalityJavaConstantsOrdering =
+    assert (jDIRECTIONALITY_UNDEFINED < jDIRECTIONALITY_LEFT_TO_RIGHT) &&
+    assert (jDIRECTIONALITY_LEFT_TO_RIGHT < jDIRECTIONALITY_RIGHT_TO_LEFT) &&
+    assert (jDIRECTIONALITY_RIGHT_TO_LEFT < jDIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) &&
+    assert (jDIRECTIONALITY_RIGHT_TO_LEFT_ARABIC < jDIRECTIONALITY_EUROPEAN_NUMBER) &&
+    assert (jDIRECTIONALITY_EUROPEAN_NUMBER < jDIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR) &&
+    assert (jDIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR < jDIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR) &&
+    assert (jDIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR < jDIRECTIONALITY_ARABIC_NUMBER) &&
+    assert (jDIRECTIONALITY_ARABIC_NUMBER < jDIRECTIONALITY_COMMON_NUMBER_SEPARATOR) &&
+    assert (jDIRECTIONALITY_COMMON_NUMBER_SEPARATOR < jDIRECTIONALITY_NONSPACING_MARK) &&
+    assert (jDIRECTIONALITY_NONSPACING_MARK < jDIRECTIONALITY_BOUNDARY_NEUTRAL) &&
+    assert (jDIRECTIONALITY_BOUNDARY_NEUTRAL < jDIRECTIONALITY_PARAGRAPH_SEPARATOR) &&
+    assert (jDIRECTIONALITY_PARAGRAPH_SEPARATOR < jDIRECTIONALITY_SEGMENT_SEPARATOR) &&
+    assert (jDIRECTIONALITY_SEGMENT_SEPARATOR < jDIRECTIONALITY_WHITESPACE) &&
+    assert (jDIRECTIONALITY_WHITESPACE < jDIRECTIONALITY_OTHER_NEUTRALS) &&
+    assert (jDIRECTIONALITY_OTHER_NEUTRALS < jDIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING) &&
+    assert (jDIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING < jDIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE) &&
+    assert (jDIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE < jDIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING) &&
+    assert (jDIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING < jDIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE) &&
+    assert (jDIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE < jDIRECTIONALITY_POP_DIRECTIONAL_FORMAT);
+
+testDirectionalityDataconsOrdering =
+    assert ((unsafeCoerce DIRECTIONALITY_UNDEFINED :: Int) < unsafeCoerce DIRECTIONALITY_LEFT_TO_RIGHT) &&
+    assert ((unsafeCoerce DIRECTIONALITY_LEFT_TO_RIGHT :: Int) < unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT) &&
+    assert ((unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT :: Int) < unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC) &&
+    assert ((unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC :: Int) < unsafeCoerce DIRECTIONALITY_EUROPEAN_NUMBER) &&
+    assert ((unsafeCoerce DIRECTIONALITY_EUROPEAN_NUMBER :: Int) < unsafeCoerce DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR) &&
+    assert ((unsafeCoerce DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR :: Int) < unsafeCoerce DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR) &&
+    assert ((unsafeCoerce DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR :: Int) < unsafeCoerce DIRECTIONALITY_ARABIC_NUMBER) &&
+    assert ((unsafeCoerce DIRECTIONALITY_ARABIC_NUMBER :: Int) < unsafeCoerce DIRECTIONALITY_COMMON_NUMBER_SEPARATOR) &&
+    assert ((unsafeCoerce DIRECTIONALITY_COMMON_NUMBER_SEPARATOR :: Int) < unsafeCoerce DIRECTIONALITY_NONSPACING_MARK) &&
+    assert ((unsafeCoerce DIRECTIONALITY_NONSPACING_MARK :: Int) < unsafeCoerce DIRECTIONALITY_BOUNDARY_NEUTRAL) &&
+    assert ((unsafeCoerce DIRECTIONALITY_BOUNDARY_NEUTRAL :: Int) < unsafeCoerce DIRECTIONALITY_PARAGRAPH_SEPARATOR) &&
+    assert ((unsafeCoerce DIRECTIONALITY_PARAGRAPH_SEPARATOR :: Int) < unsafeCoerce DIRECTIONALITY_SEGMENT_SEPARATOR) &&
+    assert ((unsafeCoerce DIRECTIONALITY_SEGMENT_SEPARATOR :: Int) < unsafeCoerce DIRECTIONALITY_WHITESPACE) &&
+    assert ((unsafeCoerce DIRECTIONALITY_WHITESPACE :: Int) < unsafeCoerce DIRECTIONALITY_OTHER_NEUTRALS) &&
+    assert ((unsafeCoerce DIRECTIONALITY_OTHER_NEUTRALS :: Int) < unsafeCoerce DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING) &&
+    assert ((unsafeCoerce DIRECTIONALITY_LEFT_TO_RIGHT_EMBEDDING :: Int) < unsafeCoerce DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE) &&
+    assert ((unsafeCoerce DIRECTIONALITY_LEFT_TO_RIGHT_OVERRIDE :: Int) < unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING) &&
+    assert ((unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT_EMBEDDING :: Int) < unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE) &&
+    assert ((unsafeCoerce DIRECTIONALITY_RIGHT_TO_LEFT_OVERRIDE :: Int) < unsafeCoerce DIRECTIONALITY_POP_DIRECTIONAL_FORMAT);
+    
+testTypeJavaConstantOrdering = 
+    assert (jTYPE_UNASSIGNED < jTYPE_UPPERCASE_LETTER) &&
+    assert (jTYPE_UPPERCASE_LETTER < jTYPE_LOWERCASE_LETTER) &&
+    assert (jTYPE_LOWERCASE_LETTER < jTYPE_TITLECASE_LETTER) &&
+    assert (jTYPE_TITLECASE_LETTER < jTYPE_MODIFIER_LETTER) &&
+    assert (jTYPE_MODIFIER_LETTER < jTYPE_OTHER_LETTER) &&
+    assert (jTYPE_OTHER_LETTER < jTYPE_NON_SPACING_MARK) &&
+    assert (jTYPE_NON_SPACING_MARK < jTYPE_ENCLOSING_MARK) &&
+    assert (jTYPE_ENCLOSING_MARK < jTYPE_COMBINING_SPACING_MARK) &&
+    assert (jTYPE_COMBINING_SPACING_MARK < jTYPE_DECIMAL_DIGIT_NUMBER) &&
+    assert (jTYPE_DECIMAL_DIGIT_NUMBER < jTYPE_LETTER_NUMBER) &&
+    assert (jTYPE_LETTER_NUMBER < jTYPE_OTHER_NUMBER) &&
+    assert (jTYPE_OTHER_NUMBER < jTYPE_SPACE_SEPARATOR) &&
+    assert (jTYPE_SPACE_SEPARATOR < jTYPE_LINE_SEPARATOR) &&
+    assert (jTYPE_LINE_SEPARATOR < jTYPE_PARAGRAPH_SEPARATOR) &&
+    assert (jTYPE_PARAGRAPH_SEPARATOR < jTYPE_CONTROL) &&
+    assert (jTYPE_CONTROL < jTYPE_FORMAT) &&
+    assert (jTYPE_FORMAT < jTYPE_PRIVATE_USE) &&
+    assert (jTYPE_PRIVATE_USE < jTYPE_SURROGATE) &&
+    assert (jTYPE_SURROGATE < jTYPE_DASH_PUNCTUATION) &&
+    assert (jTYPE_DASH_PUNCTUATION < jTYPE_START_PUNCTUATION) &&
+    assert (jTYPE_START_PUNCTUATION < jTYPE_END_PUNCTUATION) &&
+    assert (jTYPE_END_PUNCTUATION < jTYPE_CONNECTOR_PUNCTUATION) &&
+    assert (jTYPE_CONNECTOR_PUNCTUATION < jTYPE_OTHER_PUNCTUATION) &&
+    assert (jTYPE_OTHER_PUNCTUATION < jTYPE_MATH_SYMBOL) &&
+    assert (jTYPE_MATH_SYMBOL < jTYPE_CURRENCY_SYMBOL) &&
+    assert (jTYPE_CURRENCY_SYMBOL < jTYPE_MODIFIER_SYMBOL) &&
+    assert (jTYPE_MODIFIER_SYMBOL < jTYPE_OTHER_SYMBOL) &&
+    assert (jTYPE_OTHER_SYMBOL < jTYPE_INITIAL_QUOTE_PUNCTUATION) &&
+    assert (jTYPE_INITIAL_QUOTE_PUNCTUATION < jTYPE_FINAL_QUOTE_PUNCTUATION);
+
+testTypeDataconsOrdering = 
+    assert ((unsafeCoerce TYPE_UNASSIGNED :: Int) < unsafeCoerce TYPE_UPPERCASE_LETTER) &&
+    assert ((unsafeCoerce TYPE_UPPERCASE_LETTER :: Int) < unsafeCoerce TYPE_LOWERCASE_LETTER) &&
+    assert ((unsafeCoerce TYPE_LOWERCASE_LETTER :: Int) < unsafeCoerce TYPE_TITLECASE_LETTER) &&
+    assert ((unsafeCoerce TYPE_TITLECASE_LETTER :: Int) < unsafeCoerce TYPE_MODIFIER_LETTER) &&
+    assert ((unsafeCoerce TYPE_MODIFIER_LETTER :: Int) < unsafeCoerce TYPE_OTHER_LETTER) &&
+    assert ((unsafeCoerce TYPE_OTHER_LETTER :: Int) < unsafeCoerce TYPE_NON_SPACING_MARK) &&
+    assert ((unsafeCoerce TYPE_NON_SPACING_MARK :: Int) < unsafeCoerce TYPE_ENCLOSING_MARK) &&
+    assert ((unsafeCoerce TYPE_ENCLOSING_MARK :: Int) < unsafeCoerce TYPE_COMBINING_SPACING_MARK) &&
+    assert ((unsafeCoerce TYPE_COMBINING_SPACING_MARK :: Int) < unsafeCoerce TYPE_DECIMAL_DIGIT_NUMBER) &&
+    assert ((unsafeCoerce TYPE_DECIMAL_DIGIT_NUMBER :: Int) < unsafeCoerce TYPE_LETTER_NUMBER) &&
+    assert ((unsafeCoerce TYPE_LETTER_NUMBER :: Int) < unsafeCoerce TYPE_OTHER_NUMBER) &&
+    assert ((unsafeCoerce TYPE_OTHER_NUMBER :: Int) < unsafeCoerce TYPE_SPACE_SEPARATOR) &&
+    assert ((unsafeCoerce TYPE_SPACE_SEPARATOR :: Int) < unsafeCoerce TYPE_LINE_SEPARATOR) &&
+    assert ((unsafeCoerce TYPE_LINE_SEPARATOR :: Int) < unsafeCoerce TYPE_PARAGRAPH_SEPARATOR) &&
+    assert ((unsafeCoerce TYPE_PARAGRAPH_SEPARATOR :: Int) < unsafeCoerce TYPE_CONTROL) &&
+    assert ((unsafeCoerce TYPE_CONTROL :: Int) < unsafeCoerce TYPE_FORMAT) &&
+    assert ((unsafeCoerce TYPE_FORMAT :: Int) < unsafeCoerce TYPE_PRIVATE_USE) &&
+    assert ((unsafeCoerce TYPE_PRIVATE_USE :: Int) < unsafeCoerce TYPE_SURROGATE) &&
+    assert ((unsafeCoerce TYPE_SURROGATE :: Int) < unsafeCoerce TYPE_DASH_PUNCTUATION) &&
+    assert ((unsafeCoerce TYPE_DASH_PUNCTUATION :: Int) < unsafeCoerce TYPE_START_PUNCTUATION) &&
+    assert ((unsafeCoerce TYPE_START_PUNCTUATION :: Int) < unsafeCoerce TYPE_END_PUNCTUATION) &&
+    assert ((unsafeCoerce TYPE_END_PUNCTUATION :: Int) < unsafeCoerce TYPE_CONNECTOR_PUNCTUATION) &&
+    assert ((unsafeCoerce TYPE_CONNECTOR_PUNCTUATION :: Int) < unsafeCoerce TYPE_OTHER_PUNCTUATION) &&
+    assert ((unsafeCoerce TYPE_OTHER_PUNCTUATION :: Int) < unsafeCoerce TYPE_MATH_SYMBOL) &&
+    assert ((unsafeCoerce TYPE_MATH_SYMBOL :: Int) < unsafeCoerce TYPE_CURRENCY_SYMBOL) &&
+    assert ((unsafeCoerce TYPE_CURRENCY_SYMBOL :: Int) < unsafeCoerce TYPE_MODIFIER_SYMBOL) &&
+    assert ((unsafeCoerce TYPE_MODIFIER_SYMBOL :: Int) < unsafeCoerce TYPE_OTHER_SYMBOL) &&
+    assert ((unsafeCoerce TYPE_OTHER_SYMBOL :: Int) < unsafeCoerce TYPE_INITIAL_QUOTE_PUNCTUATION) &&
+    assert ((unsafeCoerce TYPE_INITIAL_QUOTE_PUNCTUATION :: Int) < unsafeCoerce TYPE_FINAL_QUOTE_PUNCTUATION);
+
+
+public testModule =
+    assert testDirectionalityDataconsOrdering &&
+    assert testDirectionalityInput &&
+    assert testDirectionalityJavaConstantsOrdering &&
+    assert testDirectionalityOutput &&
+    assert testTypeDataconsOrdering &&
+    assert testTypeInput &&
+    assert testTypeJavaConstantOrdering &&
+    assert testTypeOutput;

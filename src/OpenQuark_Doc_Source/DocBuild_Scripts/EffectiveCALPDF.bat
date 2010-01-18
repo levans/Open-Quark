@@ -1,0 +1,1 @@
+@call buildPDF-base.bat EffectiveCAL.xml "Effective CAL.pdf" article-docbook.xsl

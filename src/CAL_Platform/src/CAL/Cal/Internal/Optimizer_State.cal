@@ -1,0 +1,1908 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Optimizer.cal
+ * Created: August 12, 2005
+ * By: Greg McClement
+ */
+
+/**
+ * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WAR 
+ * 
+ * This file is part of the compiler and not to be modified. 
+ * 
+ * ING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+ *  
+ * The file contains data objects that hold state for the traversal functions. There are two main types. 
+ * 
+ * TransformState -> This contains the information about the context of the traversal. For 
+ *      example when processing a given expression this will contain information about the 
+ *      type of given symbols if known. This variable is not threaded but maintained on the stack.
+ *      
+ * TransformHistory -> This is threaded throughout the call and contains information about the history of the
+ *      current traversal. For example, if a fusion of two functions has been attempted but had failed then
+ *      there is information in the history about this failure to avoid repeating the attempt.
+ *      
+ * This file also contains helper functions that involve types, expression and the current state. For example,
+ * getting the type an expression requires the current state that contains information mapping symbols to types.
+ * 
+ * @author Greg McClement
+ * 
+*/
+
+module Cal.Internal.Optimizer_State;
+
+import Cal.Core.Prelude using
+    typeConstructor = String, Int, Boolean, JObject, JList, Double, Char, Maybe, Long, Ordering;
+    dataConstructor = True, False, Just, Nothing, GT, LT, EQ;
+    typeClass = Eq, Outputable, Inputable, Ord;
+    function = deepSeq, seq, max, typeOf, empty, input, output, intToString, uncurry, assert, snd, fst, error, concat, or, isNothing, isJust, compare, and, not, undefined, compose, upFrom, isEmpty, upFromTo, append, isStringType, isIntType, isBooleanType, isDoubleType, isCharType;
+    ;
+
+import Cal.Collections.List using
+    function = insertBy, isElem, zipWith, zipWith4, find, foldLeft, foldLeft1, andList, intersect, map, zip3, filter, orList, sortBy, tail, head, zip, reverse, length;
+    ;
+    
+import Cal.Core.String using
+    function = indexOfString;
+    ;
+    
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = trace, show;
+    ;
+import Cal.Internal.Optimizer_Type using
+    typeConstructor = Type, JTypeExpr;
+    dataConstructor = TypeConst, TypeConstTest, TypeVar, TypeId, FunctionType, ListType, AppType;
+    function = types_hasStrictArguments, type_specializeArguments, optimizerHelper_typeExpr_getName,
+               type_isStrict, unflattenFunctionTypes, type_hasStrictArguments, type_applyStrictness,
+               type_unify, type_applyBindings, inputType, flattenType, outputType, type_atLeastAsStrict,
+               type_listToType, type_isFunctionType, unflattenAppTypes, optimizerHelper_newTypeVar; 
+    ;
+    
+import Cal.Internal.Optimizer_Expression using
+    typeConstructor = Expression, QualifiedName, FieldName, Alt, CoreFunction, 
+                      DataCons, Literal, CaseConst, JFunctionalAgent, JCompiler_RecordType_RecordType;
+    dataConstructor = FNOrdinal, Alt, Alts, CoreFunction, 
+                      Var, Literal, App, Lambda, Let, Switch, RecordCase, 
+                      Opaque, RecordSelection, RecordExtensionLiteral, ChainOfSeqs,  
+                      RecordExtensionPolymorphic, DataConsSelection, DataConstructor, 
+                      LetInlinable, ErrorInfo, QN,
+                      LitString, LitInt, LitInteger, LitShort, LitFloat, LitBoolean, LitDouble, LitChar, LitOpaque, LitByte, LitLong,
+                      CaseLiteral, CaseDataCons, DataCons;
+                      
+    function = flattenExpression, unflattenExpression, showExpressionStructure, prelude_seq, 
+               qualifiedName_getName, qualifiedName_isTopLevel, optimizerHelper_functionalAgent_getTypeExprExact,
+               dataCons_getType, optimizerHelper_type_asRecordType, outputFieldName, 
+               compiler_RecordType_RecordType_getHasFieldType, isLambdaExpression, alt_getExpr, containsFree, 
+               expression_setType, qualifiedName_compare, getFunctor, expression_isConstant;
+    ;
+    
+friend Cal.Internal.Optimizer_Transformations;
+friend Cal.Internal.Optimizer_Traversers;
+friend Cal.Internal.Optimizer;
+friend Cal.Test.Internal.Optimizer_Test;    
+
+trace2 :: String -> a -> a;
+trace2 unused v = v;
+
+foreign unsafe import jvm "static method java.lang.System.currentTimeMillis"
+protected system_currentTimeMillis :: Prelude.Long;
+/**
+ * Information kept about the history of the transformation attempt.
+ */    
+data protected TransformHistory =
+    /**
+     * @arg counter Used to generate unique variable names.
+     * @arg currentIteration The number of times that the optimizer has run.
+     * @arg failedFusions Functions that are known to not be fusable.
+     * @arg recursiveFunctions Newly created recursive functions used by fusion and specialization code.
+     * @arg liftedLetFunctions Let functions that are created by lifting
+     * @arg newCoreFunctions List of all newly created helper functions.
+     * @arg startTime The time that the transformation was start. 
+     */
+    protected TransformHistory
+        counter::!Int
+        currentIteration::!Int        
+        failedFusions::[(QualifiedName, QualifiedName)]
+        recursiveFunctions::[(QualifiedName, Expression, Maybe [Type], Boolean, [Boolean])]
+        liftedLetFunctions::[QualifiedName]
+        newCoreFunctions::[CoreFunction] 
+        startTime:: (Maybe Long)       
+        deriving Show;
+
+transformHistory_takingTooLong :: TransformHistory -> Boolean;
+protected transformHistory_takingTooLong history =
+    let
+        maxTimeInMillis :: Long;    
+        maxTimeInMillis = 180000;    // three minutes.
+    in
+        case history.TransformHistory.startTime of
+        Nothing -> False;   // don't care about time
+        Just startTime ->
+            if (system_currentTimeMillis - startTime) > maxTimeInMillis then
+                error "Too much time"
+            else
+                False;
+        ;
+
+/**
+ * Set the time that the optimization starts. This is used to stop transforming after too much time
+ * has passed.
+ */
+ 
+transformHistory_setStartTime :: TransformHistory -> Long -> TransformHistory;
+protected transformHistory_setStartTime history startTime =
+    case history of
+    TransformHistory counter nIterations failedFusion recursiveFunctions llv newCoreFunction _ ->
+        TransformHistory counter nIterations failedFusion recursiveFunctions llv newCoreFunction (Just startTime);
+    ;
+   
+/**
+ * Add the given function to the list of recursive functions.
+ */
+
+transformHistory_addRecursiveFunction :: TransformHistory -> TransformHistory;
+transformHistory_addRecursiveFunction history =
+    case history of
+    TransformHistory counter nIterations failedFusion recursiveFunctions llv newCoreFunction startTime ->
+        TransformHistory counter nIterations failedFusion recursiveFunctions llv newCoreFunction startTime;
+    ;
+    
+/**
+ * Return the type of the given name if present. 
+ * 
+ * @arg history The history of the current transformation.
+ * @arg name The name of the function to get the type of
+ * @return Maybe the type of the given name.
+ */
+transformHistory_getType :: TransformHistory -> QualifiedName -> Maybe Type;
+transformHistory_getType history !name = 
+    let
+        maybeDef :: Maybe CoreFunction;
+        maybeDef = find (\cf -> cf.CoreFunction.name == name) history.TransformHistory.newCoreFunctions;
+    in
+        case maybeDef of
+        Nothing -> Nothing;
+        Just value ->
+            Just (unflattenFunctionTypes value.CoreFunction.type);
+        ;
+        
+transformHistory_init :: TransformHistory;    
+protected transformHistory_init = TransformHistory 1 1 [] [] [] [] Nothing;
+
+/**
+ * Lookup the type of the name of the function if present.
+ * 
+ * @arg history The history of the transformation.
+ * @arg name The name to get the type of.
+ */
+transformHistory_findType :: TransformHistory -> QualifiedName -> Maybe [Type];
+transformHistory_findType history !name =
+    let
+        maybeDef :: Maybe (QualifiedName, Expression, Maybe [Type], Boolean, [Boolean]);
+        maybeDef = find (\def -> def.#1 == name) history.TransformHistory.recursiveFunctions;
+    in
+        case maybeDef of
+        Nothing -> Nothing;
+        Just value -> value.#3;
+        ;
+    
+transformHistory_addCoreFunction :: TransformHistory -> CoreFunction -> TransformHistory;    
+protected transformHistory_addCoreFunction !history cf =
+    case history of
+    TransformHistory c i ff rf llv cfs st -> TransformHistory c i ff rf llv (cf:cfs) st;
+    ;
+   
+transformHistory_updateLiftedLetVar :: TransformHistory -> QualifiedName -> TransformHistory;    
+protected transformHistory_updateLiftedLetVar !history var =
+    case history of
+    TransformHistory c i ff rf llv cfs st -> TransformHistory c i ff rf (var:llv) cfs st;
+    ;
+
+transformHistory_isLiftedLetVar :: TransformHistory -> QualifiedName -> Boolean;    
+protected transformHistory_isLiftedLetVar !history var =
+    case history of
+    TransformHistory {liftedLetFunctions} -> 
+        isElem var liftedLetFunctions;
+    ;
+
+transformHistory_setCoreFunction :: TransformHistory -> [CoreFunction] -> TransformHistory;    
+protected transformHistory_setCoreFunction !history cfs =
+    case history of
+    TransformHistory c i ff rf llv _ st -> TransformHistory c i ff rf llv cfs st;
+    ;
+    
+/**
+ * Increment the identifier counter
+ * 
+ * @arg history The transform history to increment the identified counter in.
+ * @return The new history with incremented counter.
+ */
+
+transformHistory_incrementCounter :: TransformHistory -> TransformHistory;
+transformHistory_incrementCounter !history = 
+    case history of
+    TransformHistory counter ic failedFusions recursiveFunctions llv newCoreFunctions startTime ->
+        TransformHistory (counter+1) ic failedFusions recursiveFunctions llv newCoreFunctions startTime ;
+    ;
+    
+/**
+ * Increment the iteration counter
+ * 
+ * @arg history The transform history to increment the identified counter in.
+ * @return The new history with incremented counter.
+ */
+
+transformHistory_incrementCurrentIteration :: TransformHistory -> TransformHistory;
+protected transformHistory_incrementCurrentIteration !history = 
+    case history of
+    TransformHistory counter ic failedFusions recursiveFunctions llv newCoreFunctions startTime ->
+        TransformHistory counter (ic+1) failedFusions recursiveFunctions llv newCoreFunctions startTime;
+    ;
+    
+/**
+ * Set the iteration counter
+ * 
+ * @arg history The transform history to increment the identified counter in.
+ * @return The new history with given counter.
+ */
+
+transformHistory_setCurrentIteration :: TransformHistory -> Int -> TransformHistory;
+protected transformHistory_setCurrentIteration !history ic = 
+    case history of
+    TransformHistory counter _ failedFusions recursiveFunctions llv newCoreFunctions startTime ->
+        TransformHistory counter ic failedFusions recursiveFunctions llv newCoreFunctions startTime;
+    ;
+    
+
+/**
+ * Get the current value of the identifier counter.
+ * 
+ * @arg history The transformation history.
+ * @return The current value of the indentifier counter.
+ */    
+transformHistory_getCounter :: TransformHistory -> Int;    
+transformHistory_getCounter !history = history.TransformHistory.counter;
+
+/**
+ * Add a function to the list of fusions that failed.
+ * 
+ * @arg history The history of the transformation attempt
+ * @arg f1 The name of one of the functions used by the failed fusion attempt.
+ * @arg f2 The name of one of the functions used by the failed fusion attempt.
+ * @return The new history with information about the failed attemp. 
+ */
+transformHistory_fusionFailed :: TransformHistory -> QualifiedName -> QualifiedName -> TransformHistory;
+protected transformHistory_fusionFailed !history !f1 !f2 =
+    case history of
+    TransformHistory counter ic failedFusion recursiveFunctions llv newCoreFunctions startTime ->
+        TransformHistory counter ic ((f1,f2):failedFusion) recursiveFunctions llv newCoreFunctions startTime;
+    ;
+    
+/**
+ * Check if the fusion between the given functions had been attempted before and failed.
+ * @arg history The transformation history.
+ * @arg f1 The name of one of the functions used by the fusion attempt.
+ * @arg f2 The name of one of the functions used by the fusion attempt.
+ * @return True if the fusion of f1 and f2 had failed before.
+ */    
+    
+transformHistory_didFusionFail :: TransformHistory -> QualifiedName -> QualifiedName -> Boolean;
+protected transformHistory_didFusionFail !history !f1 !f2 =
+    not (isNothing (find (\tuple -> tuple.#1 == f1 && tuple.#2 == f2) history.TransformHistory.failedFusions));
+
+/**        
+ * Add the given function to the list of currently defined symbols
+ * 
+ * @arg var Name of the variable defined.
+ * @arg expr The expression that defined the variable.
+ * @arg type The type of the expression.
+ * @arg isConstArgs Flags indicating if the correspond argument of the expression is passes unchanged to recursive calls of the function.
+ * @arg history The context of the current expression.
+ * @return The context with this function definition added.
+ */
+        
+transformHistory_update :: QualifiedName -> Expression -> Maybe [Type] -> [Boolean] -> TransformHistory -> TransformHistory;
+protected transformHistory_update !var !expr !type !isConstArgs !history =
+    case history of
+    TransformHistory counter ic ffs rfs llv ncfs st ->
+        let 
+            rfsPrime :: [(QualifiedName, Expression, Maybe [Type], Boolean, [Boolean])];
+            rfsPrime = 
+                ((var, expr, type, containsFree var expr, isConstArgs):rfs);
+//                if contains var expr then
+//                    ((var, expr, type, contains var expr, isConstArgs):rfs)
+//                else
+//                    rfs;
+        in
+//        trace ("adding function: " ++ show var ++ "\n")
+            TransformHistory counter ic ffs rfsPrime llv ncfs st;
+    ;
+
+data protected TransformState =
+    /**
+     * @arg name The name of the function being optimized
+     * @arg currentFunctionName The name last function being defined. TODO Remove this.
+     * @arg recursiveFunctions Core function that are recursive. (QualifiedName, Expression, Maybe Type, [Int]) == (functionName, functionBody, expressionType, trueIfArgumentIsConstant).
+     * @arg topLevelBoundNames Names that are known to be bound at the top level scope. This is for the lambda lifter. Expressions that are moving to the top level can only assume that these names are bound.
+     * @arg inContextBoundNames Names that are known to be bound in the current expression context. These can be assumed to be bound in components that are not being lifted to the top level. 
+     * @arg nameToTypeList Maps function name to type.
+     * @arg debugPath A hierarchy of the function names from the root expression to the current one.
+     * @arg typeConstants TypeConstants object used to get type expressions for some basic types.
+     * @arg traverseCoreFunctions Core functions will be traversed only if this flag is set.
+     * @arg safeForInliningVars Names that are lambda, case, or let vars. This is used to help the inliner know that certain variables can be inlined because they have no side effects. TODO Have the program compute if a variable thatis a CAL is also okay
+     * @arg fusionContext The context of the fusion being performed if any.
+     * @arg knownForms Maps variable name to a data constructor or value that the name is known to have. This case arise after traversing a switch statement. In the Alt the form of the case variable is known.
+     * @arg knownToNotBeForms The expression is know to now have any of the given forms. This is used to eliminate case alternatives when possible.
+     * @arg parentExpr The parent expression of the current expression.
+     * @arg grandParentExpr The grandparent expression of the current expression.
+     * @arg inlinedContext Information about the functions that this expression was inlined from.
+     * @arg knownToBeWHNF The given expression is known to be in WHNF. This is used to eliminate unused seq's.
+     * @arg alreadySeqed List of expressions that are already seq'ed and do not need to be sequed again.
+     * @arg nonCalFunctions The name of primitive or foreign functions.
+     * @arg inlinableState If the current expression is going to be evaluated
+     *      strictly. This is used to avoid inlining case expression in the
+     *      wrong spot. Problems can arise using just the Johnsonn names for
+     *      this case (f a1 && f a2). Each instance of f will create a new
+     *      specialization and the Johnsonn names are the same. So there will be
+     *      two different functions with the same name. The uniqueNumberPath is
+     *      used to make the name unique. If you imagine the expression as a
+     *      tree each element in the path is a number indicating the child
+     *      number of the node to take in order to reach the current node. For
+     *      example the first occurence of f is path [1,1] and the second is
+     *      [2,1]
+     * 
+     * TODO Change recursive function to a core function with extra bits.
+     */
+    
+    protected TransformState
+        name :: !QualifiedName
+        currentFunctionName :: QualifiedName
+        /*
+         * QualifiedName: Name of the function.
+         * Expression: The body of the function.
+         * Maybe [Type]: The type of the function.
+         * Boolean: Is the function recursive
+         * [Boolean]: Is the corresponding argument a constant in recursive calls.
+         */
+        recursiveFunctions::[(QualifiedName, Expression, Maybe [Type], Boolean, [Boolean])]
+        topLevelBoundNames::[QualifiedName]
+        inContextBoundNames::[QualifiedName]
+        nameToTypeList::[(QualifiedName, Type)]
+        debugPath::[QualifiedName]                    
+        typeConstants::JPreludeTypeConstants
+        traverseCoreFunctions::Boolean
+        safeForInliningVars::[QualifiedName]
+        fusionContext::(Maybe FusionContext)
+        knownForms::[(Expression, CaseConst, [(FieldName, QualifiedName, Type)])]
+        knownToNotBeForms::[(Expression, [CaseConst])]
+        parentExpr::(Maybe Expression)
+        grandParentExpr::(Maybe Expression)
+        inlinedContext::[QualifiedName]
+        knownToBeWHNF::[Expression]
+        alreadySeqed::[Expression]
+        nonCalFunctions::[QualifiedName]
+        inlinableState::InlinableState;
+
+/**
+ * Information about the fusion being attempted.
+ */
+data protected FusionContext =
+    protected FusionContext
+        isFusionCall :: (Expression -> Boolean)
+        f1_name :: QualifiedName
+        f2_name :: QualifiedName;
+
+showFusionContext :: FusionContext -> String;
+showFusionContext fc =
+    case fc of
+    FusionContext {f1_name, f2_name} ->
+        "FusionContext(" ++ show f1_name ++ ", " ++ show f2_name ++ ")";
+    ;
+
+instance Show FusionContext where
+    show = showFusionContext;
+;
+
+/**
+ * 
+ * Used to determine if an expression containing a case can be inlined. 
+ * 
+ */
+
+data protected InlinableState =
+    protected TopLevel | 
+    protected InApp | 
+    protected InCaseAlt |
+    protected InCaseExpr |
+    protected NotAllowed deriving Show, Eq;
+
+data protected InlinableTransition =
+    protected SeeAlt |
+    protected SeeCaseExpr | 
+    protected SeeLeftApp |
+    protected SeeRightApp |
+    protected SeeKeepableOldLetDef |
+    protected Other deriving Show, Eq;
+
+/**
+ * Check if case expression can be inlined.
+ */
+inlinableState_canInlineCaseExpression :: InlinableState -> Boolean;
+protected inlinableState_canInlineCaseExpression state =
+    state != NotAllowed;
+
+/**
+ * Update the inlinableness of case expression state
+ */
+
+inlinableState_update :: InlinableState -> InlinableTransition -> InlinableState;
+inlinableState_update state transition =
+    if state == NotAllowed then
+        NotAllowed
+    else if transition == SeeKeepableOldLetDef then
+        NotAllowed
+    else
+    case state of
+    TopLevel ->
+        case transition of
+        SeeAlt -> InCaseAlt;
+        SeeLeftApp -> InApp;
+        SeeRightApp -> NotAllowed;
+        SeeCaseExpr -> InCaseExpr;
+        ;
+    InApp ->
+        case transition of
+        SeeAlt -> NotAllowed;
+        SeeLeftApp -> InApp;
+        SeeRightApp -> NotAllowed;
+        SeeCaseExpr -> NotAllowed;
+        ;
+    InCaseAlt ->
+        case transition of
+        SeeLeftApp -> NotAllowed;
+        SeeRightApp -> NotAllowed;
+        SeeAlt -> InCaseAlt;
+        SeeCaseExpr -> NotAllowed;
+        ;
+    InCaseExpr ->
+        case transition of
+        SeeLeftApp -> InCaseExpr;
+        SeeRightApp -> NotAllowed;
+        SeeAlt -> NotAllowed;
+        SeeCaseExpr -> InCaseExpr;
+        ;
+    ;
+    
+compareNameToType :: (QualifiedName, Type) -> (QualifiedName, Type) -> Ordering;    
+compareNameToType qnt1 qnt2 =
+    qualifiedName_compare qnt1.#1 qnt2.#1;
+        
+transformState_init :: QualifiedName -> JPreludeTypeConstants -> [(QualifiedName, Type)] -> [QualifiedName] -> [QualifiedName] -> Expression -> [Expression] -> [QualifiedName] -> TransformState; 
+protected transformState_init !name typeConstants nameToTypeList topLevelBoundNames safeForInliningVars topLevelExpr knownToBeWHNF nonCalFunctions = 
+    TransformState 
+        name 
+        name 
+        [] 
+        topLevelBoundNames 
+        [] 
+//        (List.sortBy compareNameToType nameToTypeList)
+        nameToTypeList 
+        [] 
+        typeConstants 
+        False 
+        safeForInliningVars 
+        Nothing
+        []
+        []
+        Nothing
+        Nothing
+        []
+        knownToBeWHNF
+        []
+        nonCalFunctions
+        TopLevel;
+
+transformState_getTopLevelBoundNames :: TransformState -> [QualifiedName];
+protected transformState_getTopLevelBoundNames !state = state.TransformState.topLevelBoundNames; 
+
+transformState_isTopLevelBoundName :: TransformState -> QualifiedName -> Boolean;
+protected transformState_isTopLevelBoundName !state name = 
+    isJust (find (\qn -> qn == name) state.TransformState.topLevelBoundNames); 
+
+transformState_getInContextBoundNames :: TransformState -> [QualifiedName];
+protected transformState_getInContextBoundNames !state = state.TransformState.inContextBoundNames; 
+
+transformState_getType :: TransformState -> QualifiedName -> Maybe Type;
+protected transformState_getType state name =
+    let
+        match list = find (\elem -> name == elem.#1) list;
+    in
+        case match state.TransformState.nameToTypeList of
+        Nothing -> Nothing;
+        Just value -> Just (value.#2);
+        ;
+
+/**
+ * Add the give name and type pair to the list in the transform state.
+ * 
+ * @arg state The state to update.
+ * @arg name The name of the variable that has the given type.
+ * @arg type The type of the variable with the given name.
+ * @return A state where the name, name has the type, type.
+ */        
+        
+transformState_setType :: TransformState -> QualifiedName -> Type -> TransformState;
+protected transformState_setType !state name type =
+    case state of
+    TransformState v1 v2 v3 v4 v5 nameToType v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 ((name,type):nameToType) v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20;
+    ;
+
+transformState_removeTypes :: TransformState -> [QualifiedName] -> TransformState;
+protected transformState_removeTypes !state names =
+    case state of
+    TransformState v1 v2 v3 v4 v5 nameToType v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 ->
+        let
+            nameToType2 = 
+                filter 
+                    (\pair -> not (isElem pair.#1 names))
+                    nameToType;
+        in
+            TransformState v1 v2 v3 v4 v5 nameToType2 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20;
+    ;
+
+transformState_setTraverseCoreFunctions :: TransformState -> Boolean -> TransformState;
+protected transformState_setTraverseCoreFunctions !state value =
+    case state of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 _ v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 value v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20;
+    ;
+
+transformState_setCurrentFunctionName :: TransformState -> QualifiedName -> TransformState;
+protected transformState_setCurrentFunctionName !state name =
+    case state of
+    TransformState v1 _ v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 ->
+        TransformState v1 name v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20;
+    ;
+
+transformState_setPerformingFusion :: TransformState -> (Expression -> Boolean) -> QualifiedName -> QualifiedName -> TransformState;
+protected transformState_setPerformingFusion !state test f1 f2 =
+    case state of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 _ v12 v13 v14 v15 v16 v17 v18 v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 (Just (FusionContext test f1 f2)) v12 v13 v14 v15 v16 v17 v18 v19 v20;
+    ;
+
+transformState_addKnownToBeWHFN :: Expression -> TransformState -> TransformState;
+protected transformState_addKnownToBeWHFN expr !state =
+    case state of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 kwhnf as v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 (expr:kwhnf) as v19 v20;
+    ;
+
+transformState_addKnownToBeWHFNs :: [Expression] -> TransformState -> TransformState;
+protected transformState_addKnownToBeWHFNs exprs !state =
+    case state of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 kwhnf as v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 (append exprs kwhnf) as v19 v20;
+    ;
+
+
+transformState_isKnownToBeWHNF :: Expression -> TransformState -> Boolean;
+protected transformState_isKnownToBeWHNF testExpr state =
+    case find (\expr -> expr == testExpr) state.TransformState.knownToBeWHNF of
+    Nothing -> expression_isConstant testExpr;
+    Just {} -> True;
+    ;
+
+transformState_addAlreadySeqed :: Expression -> TransformState -> TransformState;
+protected transformState_addAlreadySeqed expr !state =
+    case state of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 as v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 (expr:as) v19 v20;
+    ;
+
+transformState_isAlreadySeqed :: Expression -> TransformState -> Boolean;
+protected transformState_isAlreadySeqed testExpr state =
+    case find (\expr -> expr == testExpr) state.TransformState.alreadySeqed of
+    Nothing -> expression_isConstant testExpr;
+    Just {} -> True;
+    ;
+
+transformState_getBoundNames :: TransformState -> [QualifiedName];
+protected transformState_getBoundNames !state =
+    case state of
+    TransformState _ _ _ tlbns icbns _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ -> append tlbns icbns;
+    ;
+
+/**
+ * Is the given name know to be bound. 
+ */
+transformState_isBoundName :: TransformState -> QualifiedName -> Boolean;
+protected transformState_isBoundName !state name =
+    case state of
+    TransformState _ _ _ tlbns icbns _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ -> 
+        case find (\n -> n == name)  icbns of
+        Nothing ->
+            case find (\n -> n == name) tlbns of
+            Nothing -> False;
+            _ -> True;
+            ;
+        _ -> True;
+        ;
+    ;
+
+transformState_setParentExpr :: TransformState -> Expression -> TransformState;
+protected transformState_setParentExpr !state parentExpr =
+    case state of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 parent v15 v16 v17 v18 v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 (Just parentExpr) parent v16 v17 v18 v19 v20;
+    ;
+
+/**        
+ * Add the given function to the list of currently defined symbols
+ * 
+ * @arg var Name of the variable defined.
+ * @arg expr The expression that defined the variable.
+ * @arg type The type of the expression.
+ * @arg isConstArgs Flags indicating if the correspond argument of the expression is passes unchanged to recursive calls of the function.
+ * @arg isTopLevelName Determines is the name is added to the top level name list of the inContext name list.
+ * @arg ts The context of the current expression.
+ * @return The context with this function definition added.
+ */
+        
+transformState_update :: QualifiedName -> Expression -> Maybe [Type] -> [Boolean] -> Boolean -> TransformState -> TransformState;
+protected transformState_update var expr type isConstArgs isTopLevelName !ts =
+    let
+        tlbnsPrime :: [QualifiedName] -> [QualifiedName];
+        tlbnsPrime tlbns = 
+            if isTopLevelName then
+                var:tlbns
+            else
+                tlbns;
+
+        icbnsPrime :: [QualifiedName] -> [QualifiedName];
+        icbnsPrime icbns =
+            if isTopLevelName then
+                icbns
+            else
+                var:icbns;
+
+        /**
+         * Add an entry to the given name to type list if the given type is known.
+         */
+        updateNameToTypeList :: [(QualifiedName, Type)] -> [(QualifiedName, Type)]; 
+        updateNameToTypeList ntt =
+            case type of
+            Nothing -> ntt;
+            Just types -> (var, unflattenFunctionTypes types) : ntt;
+            ;
+            
+    in    
+        if True || containsFree var expr then   // DEBUG CHANGE
+            case ts of
+            TransformState moduleName cfn rfs tlbns icbns ntt dp tc tcf sfiv fc kf knf pil gp ic kwhnf as ncf isc ->
+                let
+                    /**
+                     * The new value for the name to type list.
+                     */
+                    nttPrime :: [(QualifiedName, Type)];
+                    nttPrime = 
+                        updateNameToTypeList 
+                            (
+                                case type of
+                                    Nothing -> ntt;
+//                                    Just types -> insertBy compareNameToType (var, unflattenFunctionTypes types) ntt;
+                                    Just types -> (var, unflattenFunctionTypes types):ntt;
+                            )
+                        ;
+                in
+                    TransformState moduleName cfn ((var, expr, type, containsFree var expr, isConstArgs):rfs) (tlbnsPrime tlbns) (icbnsPrime icbns) nttPrime dp tc tcf (var:sfiv) fc kf knf pil gp ic kwhnf as ncf isc;
+        else
+            case ts of
+            TransformState moduleName cfn rfs tlbns icbns ntt dp tc tcf sfiv fc kf knf pil gp ic kwhnf as ncf isc -> TransformState moduleName cfn rfs (tlbnsPrime tlbns) (icbnsPrime icbns) (updateNameToTypeList ntt) dp tc tcf (var:sfiv) fc kf knf pil gp ic kwhnf as ncf isc;
+            ;
+
+/**
+ * Add the given name to the list of defined names. This is used for the lambda lifter
+ * to determine if a variable is free.
+ * 
+ * @arg name The name of the bound name.
+ * @arg state The current expression context.
+ * @return The state with the newly bound name.
+ */        
+        
+transformState_updateTopLevelBoundNames :: QualifiedName -> TransformState -> TransformState;
+protected transformState_updateTopLevelBoundNames name !state =
+    case state of
+    TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+        TransformState moduleName cfn recursiveFunctions (name:topLevelBoundNames) inContextBoundNames nameToTypeMap dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;    
+    ;
+
+transformState_updateType :: QualifiedName -> Type -> TransformState -> TransformState;
+protected transformState_updateType name type state =
+    case state of
+    TransformState v1 v2 v3 v4 icbn nttl v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 ->
+        TransformState v1 v2 v3 v4 (name:icbn) ((name, type):nttl) v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20;
+    ;
+
+transformState_updateDerivation :: QualifiedName -> TransformState -> TransformState;
+protected transformState_updateDerivation name !state =
+    case state of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 ic v17 v18 v19 v20 ->
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 (name:ic) v17 v18 v19 v20;
+    ;
+
+transformState_updateInContextBoundNames :: QualifiedName -> TransformState -> TransformState;
+protected transformState_updateInContextBoundNames name !state =
+        case state of
+        TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp rc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+            TransformState moduleName cfn recursiveFunctions topLevelBoundNames (name:inContextBoundNames) nameToTypeMap dp rc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;    
+        ;
+
+transformState_updateLambdaVars :: QualifiedName -> Type -> TransformState -> TransformState;
+protected transformState_updateLambdaVars name type !state =
+        case state of
+        TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp rc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+            TransformState moduleName cfn recursiveFunctions topLevelBoundNames (name:inContextBoundNames) ((name,type):nameToTypeMap) dp rc tcf (name:lv) fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;    
+        ;
+
+transformState_updateSafeForInliningVars :: QualifiedName -> TransformState -> TransformState;
+protected transformState_updateSafeForInliningVars name !state =
+        case state of
+        TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp rc tcf sfiv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+            TransformState moduleName cfn recursiveFunctions topLevelBoundNames (name:inContextBoundNames) nameToTypeMap dp rc tcf (name:sfiv) fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;    
+        ;
+
+transformState_setInContextBoundNames :: QualifiedName -> TransformState -> TransformState;
+transformState_setInContextBoundNames name !state =
+        case state of
+        TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp rc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+            TransformState moduleName cfn recursiveFunctions topLevelBoundNames [name] nameToTypeMap dp rc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;    
+        ;
+                
+transformState_clearInContextBoundNames :: TransformState -> TransformState;
+protected transformState_clearInContextBoundNames !state =
+        case state of
+        TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+            TransformState moduleName cfn recursiveFunctions topLevelBoundNames [] nameToTypeMap dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;
+        ;
+                
+transformState_clearLambdaVars :: TransformState -> TransformState;
+protected transformState_clearLambdaVars !state =
+        case state of
+        TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+            TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp tc tcf [] fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;
+        ;
+                
+transformState_isInContextBoundNames :: TransformState -> QualifiedName -> Boolean;
+protected transformState_isInContextBoundNames !state name =
+    not (isNothing (find (\bn -> bn == name) state.TransformState.inContextBoundNames));
+
+transformState_isBeingFused :: TransformState -> QualifiedName -> Boolean;
+protected transformState_isBeingFused state name =
+    case state.TransformState.fusionContext of
+    Nothing -> False;
+    Just fusionContext ->
+        case fusionContext of
+        FusionContext {f1_name, f2_name} -> f1_name == name || f2_name == name;
+        ;
+    ;
+
+/**
+ * This is for the case of going into the _ alternative.
+ */
+transformState_addKnownToNotBeForm :: TransformState -> Expression -> [CaseConst] -> TransformState;
+protected transformState_addKnownToNotBeForm state expression forms = 
+    case state of
+    TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+        TransformState moduleName cfn recursiveFunctions topLevelBoundNames [] nameToTypeMap dp tc tcf lv fc kf ((expression,forms):knf) pil gp ic kwhnf as ncf safeForCaseInlining;
+    ;
+
+transformState_findKnownForm :: TransformState -> Expression -> Maybe (Expression, CaseConst, [(FieldName, QualifiedName, Type)]);
+protected transformState_findKnownForm !state name =
+    case state of
+    TransformState {knownForms} ->
+        find (\pair -> pair.#1 == name) knownForms;
+    ;
+
+transformState_findKnownToNotBeForm :: TransformState -> Expression -> Maybe (Expression, [CaseConst]);
+protected transformState_findKnownToNotBeForm !state name = 
+    case state of
+    TransformState {knownToNotBeForms} ->
+        find (\pair -> pair.#1 == name) knownToNotBeForms;
+    ;
+
+/**
+ * This is for the case of going into the _ alternative.
+ */
+transformState_addKnownForm :: TransformState -> Expression -> CaseConst -> [(FieldName, QualifiedName, Type)] -> TransformState;
+protected transformState_addKnownForm !state name form vars =
+    let
+        isDefaultCase :: Boolean;
+        isDefaultCase = 
+            case form of
+            CaseLiteral literal ->
+                case literal of
+                LitString {} -> True;
+                _ -> False;
+                ;
+            _ -> False;
+            ;
+    in
+        if isDefaultCase then
+            state
+        else
+            case state of
+            TransformState moduleName cfn recursiveFunctions topLevelBoundNames inContextBoundNames nameToTypeMap dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining ->
+                TransformState moduleName cfn recursiveFunctions topLevelBoundNames [] nameToTypeMap dp tc tcf lv fc ((name, form, vars):kf) knf pil gp ic kwhnf as ncf safeForCaseInlining;
+            ;
+
+/**
+ * See if the given name has a known data constructor.
+ * 
+ * @arg state The current state of the transformation.
+ * @arg name The name of the variable to search for the data constructor of.
+ * @arg value A value that defines the expression.
+ */
+
+transformState_findKnownDC :: TransformState -> Expression -> Expression -> Maybe DataCons;
+protected transformState_findKnownDC !state name value =
+    case state of
+    TransformState {knownForms} ->
+        case find (\pair -> pair.#1 == name) knownForms of
+        Just entry ->
+            case entry of
+            (_, caseConst, _) ->
+                case caseConst of
+                CaseDataCons {value} -> Just value;
+                _ -> Nothing;
+                ;
+            ;
+        _ -> 
+            case getFunctor value of
+            DataConstructor {dc} -> Just dc;
+            _ -> Nothing;
+            ;
+        ;
+    ;
+
+instance Show TransformState where
+    show = showTransformState;
+;
+
+showTransformState :: TransformState -> String;
+showTransformState !state =
+    case state of
+    TransformState moduleName _ recursiveFunctions _ _ nameToTypeList dp _ _ _ _ _ _ _ _ _ _ _ _ safeForCaseInlining ->
+        "TransformState" ++
+        "    recursive functions: " ++ show (map (\tuple -> (tuple.#1, tuple.#3)) recursiveFunctions) ++ "\n" ++
+        "    debug path: " ++ show dp ++ "\n" ++
+        "    safeForCaseInlining: " ++ show safeForCaseInlining ++ "\n" ++ 
+        "    nameToTypeList: " ++ show (
+                map 
+                     (\tuple -> trace (show tuple.#1++"\n") (trace (show tuple.#2++"\n") tuple))
+                     nameToTypeList)
+                 ++ "\n";
+    ;
+    
+transformState_findDef :: TransformState -> TransformHistory -> QualifiedName -> Maybe (QualifiedName, Expression, Maybe [Type], Boolean, [Boolean]);
+protected transformState_findDef !state !history varName =
+    let
+        find :: [(QualifiedName, Expression, Maybe [Type], Boolean, [Boolean])] -> Maybe (QualifiedName, Expression, Maybe [Type], Boolean, [Boolean]);
+        find !list =
+            case list of
+            [] -> Nothing;
+            listHead : listTail ->
+                if listHead.#1 == varName then
+                    Just listHead
+                else
+                    find listTail;
+            ; 
+    in
+        case state of
+        TransformState {recursiveFunctions} ->
+            let
+                def1 :: Maybe (QualifiedName, Expression, Maybe [Type], Boolean, [Boolean]);
+                def1 = find recursiveFunctions;
+            in
+                case def1 of 
+                Nothing -> find history.TransformHistory.recursiveFunctions;
+                _ -> def1;
+                ;
+        ;    
+
+transformState_findType :: TransformState -> TransformHistory -> QualifiedName -> Maybe (QualifiedName, Type);
+protected transformState_findType !state history varName =
+    let
+        typeFromState :: Maybe (QualifiedName, Type);
+        typeFromState = find (\pair -> pair.#1 == varName) state.TransformState.nameToTypeList;
+    in
+        case typeFromState of
+        Nothing -> //Nothing;
+            let
+                typeFromHistory :: Maybe (QualifiedName, Expression, Maybe [Type], Boolean, [Boolean]);
+                typeFromHistory = find (\def -> def.#1 == varName) history.TransformHistory.recursiveFunctions;
+            in
+                case typeFromHistory of
+                Nothing -> Nothing;
+                Just def ->
+                    case def of
+                    (qualifiedName, _, maybeType, _, _) ->
+                        case maybeType of
+                        Nothing -> Nothing;
+                        Just type -> Just (qualifiedName, unflattenFunctionTypes type);
+                        ;
+                    ;
+                ;                
+        _ -> typeFromState;
+        ;
+
+transformState_getName :: TransformState -> QualifiedName;
+protected transformState_getName !state = state.TransformState.name;
+
+transformState_getCurrentFunctionName :: TransformState -> QualifiedName;
+protected transformState_getCurrentFunctionName !state = state.TransformState.currentFunctionName;
+
+/**
+ * Keeps track of the 'path' of names to the current context. This is used to generate
+ * new variable names.
+ */
+transformState_deeper :: TransformState -> QualifiedName -> TransformState;
+protected transformState_deeper !ts !qn =
+    case ts of
+    TransformState mn cfn rf tlbns icbns ntt dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf isc ->
+        let
+            /* 
+             * When let variables come over from Java they are missing the module name. 
+             * This code is to ensure the correct module name is available. 
+             */
+            qnPrime :: QualifiedName;
+            qnPrime = 
+                case qn of
+                QN moduleName functionName ->
+                    if moduleName == "" then
+                        QN cfn.QN.moduleName functionName // The top level module name is always there.
+                    else
+                        qn;
+                ;
+            
+        in
+            TransformState mn qnPrime rf tlbns icbns ntt (qnPrime:dp) tc tcf lv fc kf knf pil gp ic kwhnf as ncf isc;            
+    ;
+
+/**    
+ * Case expression can only be inlined at the top level or in the case alternative body.
+ */
+inlinableState_transition :: TransformState -> InlinableTransition -> TransformState;
+protected inlinableState_transition ts transition =    
+    case ts of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 state -> 
+        TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 (inlinableState_update state transition);            
+    ;
+    
+/**    
+ * Case expression can only be inlined at the top level or in the case alternative body.
+ */
+    
+inlinableState_set :: TransformState -> InlinableState -> TransformState;
+protected inlinableState_set ts state =    
+    case ts of
+    TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 _ -> TransformState v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 state;            
+    ;
+    
+dp :: TransformState -> QualifiedName -> TransformState;
+protected dp ts cp =    
+    case ts of
+    TransformState mn cfn rf tlbns icbns ntt dp tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining -> TransformState mn cfn rf tlbns icbns ntt (cp:dp) tc tcf lv fc kf knf pil gp ic kwhnf as ncf safeForCaseInlining;            
+    ;
+    
+/**
+ * Get the current module name.
+ */
+transformState_getModuleName :: TransformState -> String;
+protected transformState_getModuleName !ts = ts.TransformState.name.QN.moduleName;
+
+/**
+ * PreludeTypeConstants definitions and associated functions. 
+ */
+
+data foreign unsafe import jvm protected "org.openquark.cal.compiler.PreludeTypeConstants"
+protected JPreludeTypeConstants deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getStringType"
+preludeTypeConstants_getStringType :: JPreludeTypeConstants -> JTypeExpr;
+
+/**
+ * Generates a unique variable name from the given name.
+ *
+ * @arg ts The context of the current expression.
+ * @arg history The history of the current transformation.
+ * @arg oldVar The name of the variable to use to generate the new variable name
+ * @arg extraNameBits String that will be included as part of the name.
+ * @return A new variable name that is unique and generated off the old variable name.
+ */
+
+newVar :: TransformState -> TransformHistory -> QualifiedName -> String -> (TransformHistory, QualifiedName);
+protected newVar !ts !history !oldVar !extraNameBits =
+    let
+        currentFunctionName :: QualifiedName;
+        currentFunctionName = ts.TransformState.name;
+    in
+        case currentFunctionName of
+        QN moduleName functionName ->
+            (
+                transformHistory_incrementCounter history,
+                QN 
+                    moduleName 
+                    (functionName ++ "$" ++ qualifiedName_getName oldVar ++ intToString (transformHistory_getCounter history) ++ extraNameBits)
+            );
+        ;
+
+/**
+ * Replace the given variable with the given expression in the main expression. This function
+ * will notice if the variable is redefined and not perform the replacement under such contexts.
+ *
+ * @arg state The context of the current expression.
+ * @arg history The history of the current transformation.
+ * @arg var The variable to replace.
+ * @arg varExpr The value to replace Var with.
+ * @arg expr The expression to perform the substitution in.
+ * @return The expression to replace the variable in.
+ */
+
+substitute :: TransformState -> TransformHistory -> QualifiedName -> Expression -> Expression -> (TransformHistory, Expression);
+protected substitute state history !var varExpr !expr =
+    case substituteHelper state history var varExpr expr of
+    (history, _, expr) -> (history, expr);
+    ;
+
+substituteHelper :: TransformState -> TransformHistory -> QualifiedName -> Expression -> Expression -> (TransformHistory, Boolean, Expression);
+protected substituteHelper state history !var varExpr !expr =
+    let
+        noChange :: (TransformHistory, Boolean, Expression);
+        noChange = (history, False, expr);
+    in
+        case expr of
+        Var {name, type} ->
+            if name == var then
+                (history, True, expression_setType varExpr type)     
+            else
+                noChange;
+
+        DataConsSelection dcValueExpr dc fi err ->
+            case substituteHelper state history var varExpr dcValueExpr of
+            (history1, wasChanged, dcValueExprPrime) ->
+                if wasChanged then                
+                    (history1, True, DataConsSelection dcValueExprPrime dc fi err)
+                else
+                    noChange;                
+            ;
+            
+        DataConstructor {} -> noChange;
+        
+        Literal {} -> noChange;
+        
+        ErrorInfo {} -> noChange;
+        
+        App expr1 expr2 ->
+            case substituteHelper state history var varExpr expr1 of
+            (history1, wasChanged1, expr1Prime) ->
+                case substituteHelper state history1 var varExpr expr2 of
+                (history2, wasChanged2, expr2Prime) ->
+                    if wasChanged1 || wasChanged2 then
+                        (history2, True, App expr1Prime expr2Prime)
+                    else
+                        noChange;
+                ;    
+            ;    
+            
+        Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+            if lambdaVar == var then
+                noChange
+            else
+                // Does the expression we are inserting contain the lambda variable? If so
+                // then we must rename it to avoid name capture
+                if containsFree lambdaVar varExpr then
+                    case newVar state history lambdaVar "" of
+                    (history1, newLambdaVar) ->
+                        case substituteHelper state history1 lambdaVar (Var newLambdaVar [] Nothing Nothing) lambdaExpr of
+                        (history2, wasChanged2, newLambdaExpr) ->
+                            case substituteHelper state history2 var varExpr newLambdaExpr of
+                            (history3, wasChanged3, newLambdaExprPrime) ->
+                                if wasChanged2 || wasChanged3 then
+                                    (history3, True, Lambda newLambdaVar lambdaType lambdaArgIsWHNF newLambdaExprPrime)
+                                else
+                                    noChange;
+                            ;
+                        ;
+                else
+                    case substituteHelper state history var varExpr lambdaExpr of
+                    (history1, wasChanged1, lambdaExprPrime) ->
+                        if wasChanged1 then                        
+                            (history1, True, Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExprPrime)
+                        else
+                            noChange;
+                    ;    
+            
+        Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constVars _ _ ->
+            if letVar == var then
+                case substituteHelper state history var varExpr letExpr of
+                (history1, wasChanged1, letExpr1) ->
+                    if wasChanged1 then
+                        (history1, True, Let letVar isNew isKeepable isTopLevel letType letExpr1 letBody isRecursive arity isCoreFunction constVars history.TransformHistory.currentIteration False)
+                    else
+                        noChange;
+            else
+                // Does the expression we are inserting contain the let variable? If so
+                // then we must rename it in the body to avoid name capture unless the
+                // name was top level. 
+                if containsFree letVar varExpr && not isTopLevel then
+                    case newVar state history letVar "" of
+                    (history1, newLetVar) ->
+                        case substituteHelper (transformState_deeper state letVar) history1 letVar (Var newLetVar [] Nothing Nothing) letBody of
+                        (history2, wasChanged2, newLetBody) ->
+                            case substituteHelper state history2 var varExpr letExpr of
+                            (history3, wasChanged3, letExprPrime) ->
+                                case substituteHelper state history3 var varExpr newLetBody of
+                                (history4, wasChanged4, newLetBodyPrime) ->
+                                    if wasChanged2 || wasChanged3 || wasChanged4 then
+                                        (history4, True, Let newLetVar isNew isKeepable isTopLevel letType letExprPrime newLetBodyPrime isRecursive arity isCoreFunction constVars history.TransformHistory.currentIteration False)
+                                    else
+                                        noChange;
+                                ;
+                            ;
+                        ;    
+                else
+                    case substituteHelper state history var varExpr letExpr of
+                    (history1, wasChanged1, letExprPrime) ->
+                        case substituteHelper state history1 var varExpr letBody of
+                        (history2, wasChanged2, letBodyPrime) ->
+                            if wasChanged1 || wasChanged2 then
+                                (history2, True, Let letVar isNew isKeepable isTopLevel letType letExprPrime letBodyPrime isRecursive arity isCoreFunction constVars history.TransformHistory.currentIteration False)
+                            else
+                                noChange;
+                        ;
+                    ;    
+            
+        LetInlinable letVar letType letExpr letBody arity counter constArgs ->
+            case substituteHelper state history var varExpr (Let letVar False False False Nothing letExpr letBody False arity False [] 1 False) of
+            (history1, wasChanged1, expr1) ->
+                case expr1 of 
+                Let {variable=letVar1, expr=letExpr1, body=letBody1} ->
+                    if wasChanged1 then
+                        (history1, True, LetInlinable letVar1 letType letExpr1 letBody1 arity counter constArgs)
+                    else
+                        noChange;
+                ;    
+            ;
+            
+        Switch switchExpr switchAlts ->
+            let
+                substituteAlt :: TransformHistory -> Alt -> (TransformHistory, Boolean, Alt);
+                substituteAlt history alt =
+                    case alt of 
+                    Alt caseConst isPositional vars expr ->
+                        case substituteHelper state history var varExpr expr of
+                        (history1, wasChanged1, expr1) ->
+                            if wasChanged1 then
+                                (history1, True, Alt caseConst isPositional vars expr1)
+                            else
+                                (history, False, alt);
+                        ;    
+
+                    Alts caseConsts isPositional vars expr ->
+                        case substituteHelper state history var varExpr expr of
+                        (history1, wasChanged1, expr1) ->
+                            if wasChanged1 then
+                                (history1, True, Alts caseConsts isPositional vars expr1)
+                            else
+                                (history, False, alt);
+                        ;    
+                    ;
+                    
+                substituteAlts :: TransformHistory -> [Alt] -> (TransformHistory, Boolean, [Alt]);
+                substituteAlts history alts =
+                    case alts of
+                    [] -> (history, False, alts);
+                    x:xs ->
+                        case substituteAlt history x of
+                        (history1, wasChanged1, xPrime) ->
+                            case substituteAlts history1 xs of
+                            (history2, wasChanged2, xsPrime) ->
+                                (history2, wasChanged1 || wasChanged2, xPrime : xsPrime);
+                            ;
+                        ;    
+                    ;
+            in
+                case substituteHelper state history var varExpr switchExpr of
+                (history1, wasChanged1, switchExprPrime) ->
+                    case substituteAlts history1 switchAlts of
+                    (history2, wasChanged2, switchAltsPrime) ->
+                        if wasChanged1 || wasChanged2 then
+                            (history2, True, Switch switchExprPrime switchAltsPrime)
+                        else
+                            noChange;
+                    ;
+                ;        
+//            ;
+            
+        Opaque {} ->
+                // make sure none of these have variables defined in them.
+            noChange;
+            
+        RecordExtensionLiteral extensionFieldsMap ->
+            case substitute_extensionFieldsMap state history var varExpr extensionFieldsMap of
+            (history1, wasChanged1, extensionFieldsMapPrime) ->
+                if wasChanged1 then
+                    (history1, True, RecordExtensionLiteral extensionFieldsMapPrime)
+                else
+                    noChange;
+            ;
+            
+        RecordExtensionPolymorphic body extensionFieldsMap ->
+            case substitute_extensionFieldsMap state history var varExpr extensionFieldsMap of
+            (history1, wasChanged1, extensionFieldsMapPrime) ->
+                case substituteHelper state history1 var varExpr body of
+                (history2, wasChanged2, bodyPrime) ->
+                    if wasChanged1 || wasChanged2 then
+                        (history2, True, RecordExtensionPolymorphic bodyPrime extensionFieldsMapPrime)
+                    else
+                        noChange;
+                ;    
+            ;
+            
+        RecordSelection rsExpr rsFieldName ->
+            case substituteHelper state history var varExpr rsExpr of
+            (history1, wasChanged1, rsExprPrime) ->
+                if wasChanged1 then
+                    (history1, True, RecordSelection rsExprPrime rsFieldName)
+                else
+                    noChange;
+            ;    
+        ;
+
+/**        
+ * Helper function to do a substitute on the given extension field.
+ */
+        
+substitute_extensionField :: TransformState -> TransformHistory -> QualifiedName -> Expression -> (FieldName, Expression) -> (TransformHistory, Boolean, (FieldName, Expression));         
+substitute_extensionField state history var varExpr ef =
+    case ef of
+    (fieldName, expr) ->
+        case substituteHelper state history var varExpr expr of
+        (history1, wasChanged1, exprPrime) ->
+            (history1, wasChanged1, (fieldName, exprPrime));
+        ;    
+    ;
+
+/**
+ * Helper function to do a substitute on the given list of extension fields.
+ */
+            
+substitute_extensionFieldsMap :: TransformState -> TransformHistory -> QualifiedName -> Expression -> [(FieldName, Expression)] -> (TransformHistory, Boolean, [(FieldName, Expression)]); 
+substitute_extensionFieldsMap state history var varExpr extensionFieldsMap =
+    case extensionFieldsMap of
+    [] -> (history, False, []);
+    ef:efs ->
+        case substitute_extensionField state history var varExpr ef of
+        (history1, wasChanged1, efPrime) ->
+            case substitute_extensionFieldsMap state history1 var varExpr efs of
+            (history2, wasChanged2, efsPrime) ->
+                (history2, wasChanged1 || wasChanged2, efPrime : efsPrime);
+            ;
+        ;    
+    ;
+
+/**
+ * Is the given expression an unsatured lambda expression.
+ * 
+ * @arg state The context of the current transformation.
+ * @arg history The history of the current transformation.
+ * @arg expr The expression to check if it is an unsaturated lambda expression.
+ * @return True iff the expression is an unsatured lambda expression.
+ */    
+expression_isUnsaturatedExpression :: TransformState -> TransformHistory -> Expression -> Boolean;     
+protected expression_isUnsaturatedExpression state history expr =
+    case expr of
+    Lambda {} -> True;
+    App {} ->
+        let
+            /**
+             * Flatten the call to get the functor and args
+             */
+            flat :: [Expression];
+            flat = flattenExpression expr [];
+          
+            functor :: Expression;
+            functor = head flat;
+            
+            args :: [Expression];
+            args = tail flat;
+            
+            /**
+             * Convert from a value expression to a type expression.
+             */
+            argTypes :: [Type];
+            argTypes = 
+                map (\arg ->
+                        let
+                            maybeType :: Maybe Type;
+                            maybeType = expression_getType state history arg;
+                        in
+                            case maybeType of
+                            Nothing -> TypeVar optimizerHelper_newTypeVar False;
+                            Just value -> value;
+                    ) args;
+            
+            functorType :: Maybe Type;
+            functorType = expression_getType state history functor;
+            
+            hasMissingType :: Boolean;
+            hasMissingType = isNothing functorType;
+            
+            /**
+             * A list of the type expressions.
+             */
+            
+            types :: [Type];
+            types = functorType.Just.value : argTypes;
+            
+            /**
+             * Convert the list of types to a type expression.
+             */
+            typeExpr :: Type;
+            typeExpr = unflattenAppTypes types;
+            
+            /**
+             * Reduce the type expression to the irreducable type expression.
+             */
+            unification :: [(Type, Type)];
+            unification = type_unify [(TypeId 1 False, typeExpr)];
+          
+            /**
+             * Pick the result type out of the mess.
+             */
+            resultType :: Type;
+            resultType = (find (\pair -> pair.#1 == TypeId 1 False) unification).Just.value.#2;
+            
+        in
+            /*
+             * If the result type is a function then the expression is an
+             * unsatured one.
+             */
+            if hasMissingType then
+                False
+            else
+                type_isFunctionType resultType;
+    _ -> 
+        case expression_getType state history expr of
+        Nothing -> False;
+        Just type -> type_isFunctionType type;
+        ;    
+    ;
+
+/**
+ * Look for the type of the given symbol in the state and history.
+ * 
+ * @arg state The context of the current traversal
+ * @arg history Information from the history of the current traversal.
+ * @arg name The name to find the type for.
+ * @return Maybe the type of the symbols if available.
+ */
+    
+qualifiedName_getType :: TransformState -> TransformHistory -> QualifiedName -> Maybe Type;    
+protected qualifiedName_getType state history name =
+    let
+        typeFromState :: Maybe Type;
+        typeFromState = transformState_getType state name;
+    in        
+        if isNothing typeFromState then
+            transformHistory_getType history name 
+        else
+            typeFromState;
+
+/**
+ * Return the type of the given expression if possible.
+ *
+ * 
+ * TODO This does not do everything but enough for specialization.
+ * TODO This does not update the type information in the state during traversal.
+ */
+protected expression_getType state history expr =
+    case expr of
+    Var {name, type} ->
+        case type of
+        Nothing -> qualifiedName_getType state history name;
+        Just {} -> type;
+        ;
+    App e1 e2 -> 
+        let
+            e1MaybeType :: Maybe Type;
+            e1MaybeType = expression_getType state history e1;
+            
+            e2MaybeType :: Maybe Type;
+            e2MaybeType = expression_getType state history e2;
+        in
+            if isNothing e1MaybeType || isNothing e2MaybeType then
+                Nothing
+            else
+                let
+                    /**
+                     * The type of the expression as a type formula.
+
+                     */
+                    appType :: Type;
+                    appType = AppType e1MaybeType.Just.value e2MaybeType.Just.value;
+        
+                    /** 
+                     * The type variable that will correspond to the answer.
+                     */
+                    typeId1 :: Type;
+                    typeId1 = TypeId 1 False;
+                    
+                    /**
+                     * Reduce the type expression using unification.
+                     */
+                    unified :: [(Type, Type)];
+                    unified = type_unify [(typeId1, appType)];
+                    
+                    /**
+                     * Substitute values for the logic type variables.786
+                     * 
+                     */
+                    applied :: [(Type, Type)];
+                    applied = type_applyBindings unified unified;
+                    
+                    /**
+                     * Pick out the type after unification and variable substitution.
+                     */
+                    type :: Type;
+                    type = 
+                        (find (\pair -> pair.#1 == typeId1) applied).Just.value.#2;
+                in
+                    Just type;
+    
+    Let {variable, expr, body, type, constArgs, isKeepable} ->
+        let
+            statePrime :: TransformState;
+            statePrime =
+                transformState_update variable expr type constArgs (not isKeepable) state;
+//                case expression_getType state history expr of
+//                Nothing -> state;
+//                Just type -> transformState_updateType variable type state;
+//                ;
+        in
+            expression_getType statePrime history body;
+    
+    Literal {value} ->  
+        (literal_getType (state.TransformState.typeConstants) value);
+    
+    DataConsSelection dcValueExpr dc fi err ->
+        let
+            dcType :: Type;
+            dcType = inputType (optimizerHelper_functionalAgent_getTypeExprExact dc.DataCons.dataCons);
+            
+            flatType :: [Type];
+            flatType = flattenType dcType;
+                        
+        in
+            Just (List.subscript flatType fi);
+    
+    DataConstructor dc -> (Just (dataCons_getType dc));
+    
+    RecordSelection expr fieldName ->
+        let
+            /**
+             * The type of the expression.
+             */
+            exprType :: Maybe Type;
+            exprType = expression_getType state history expr;
+
+            /**
+             * The type of the expression as a record type.
+             */
+            recordType :: JCompiler_RecordType_RecordType ;
+            recordType = optimizerHelper_type_asRecordType (outputType exprType.Just.value); 
+                
+            /**
+             * The type of the field in the given record type.
+             */
+            fieldType :: Type;
+            fieldType = (inputType (compiler_RecordType_RecordType_getHasFieldType recordType (outputFieldName fieldName)));
+        in
+            if isNothing exprType then
+                Nothing
+            else
+                Just fieldType;
+    
+    Switch {alts} ->
+        let
+            getTypeFromAlt :: Alt -> Maybe Type;
+            getTypeFromAlt alt =
+                case alt of
+                Alt {vars, expr} ->
+                    let
+                        statePrime :: TransformState;
+                        statePrime = foldLeft 
+                                     (\state fnqn ->
+                                         case fnqn of
+                                         (_, name, type) ->
+                                             transformState_updateType name type state;) state vars;
+                    in
+                        expression_getType statePrime history expr;
+                ;
+            
+            getTypeFromAlts :: [Alt] -> Maybe Type;
+            getTypeFromAlts alts =
+                case alts of
+                [] -> Nothing;
+                a:as ->
+                    let                       
+                        aType :: Maybe Type;
+                        aType = getTypeFromAlt a;
+                    in
+                        case aType of
+                        Nothing -> getTypeFromAlts as;
+                        Just {} -> aType;
+                    ;
+                ;
+        in
+            getTypeFromAlts alts;
+    
+    Lambda letVar letType letArgIsWHNF letBody ->
+        case expression_getType state history letBody of
+        Nothing -> Nothing;
+        Just bodyType -> Just (FunctionType letType bodyType False);
+        ;
+
+    ChainOfSeqs {expression} -> expression_getType state history expression;
+    
+    _ -> Nothing;
+    ;
+
+literal_getStringType :: JPreludeTypeConstants -> Maybe Type;
+literal_getStringType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getStringType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getIntType"
+    preludeTypeConstants_getIntType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getIntType :: JPreludeTypeConstants -> Maybe Type;
+literal_getIntType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getIntType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getShortType"
+    preludeTypeConstants_getShortType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getShortType :: JPreludeTypeConstants -> Maybe Type;
+literal_getShortType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getShortType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getFloatType"
+    preludeTypeConstants_getFloatType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getFloatType :: JPreludeTypeConstants -> Maybe Type;
+literal_getFloatType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getFloatType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getIntegerType"
+    preludeTypeConstants_getIntegerType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getIntegerType :: JPreludeTypeConstants -> Maybe Type;
+literal_getIntegerType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getIntegerType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getBooleanType"
+preludeTypeConstants_getBooleanType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getBooleanType :: JPreludeTypeConstants -> Maybe Type;
+literal_getBooleanType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getBooleanType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getDoubleType"
+    preludeTypeConstants_getDoubleType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getDoubleType :: JPreludeTypeConstants -> Maybe Type;
+literal_getDoubleType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getDoubleType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getCharType"
+    preludeTypeConstants_getCharType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getCharType :: JPreludeTypeConstants -> Maybe Type;
+literal_getCharType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getCharType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getByteType"
+    preludeTypeConstants_getByteType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getByteType :: JPreludeTypeConstants -> Maybe Type;
+literal_getByteType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getByteType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+foreign unsafe import jvm "method getLongType"
+    preludeTypeConstants_getLongType :: JPreludeTypeConstants -> JTypeExpr;
+
+literal_getLongType :: JPreludeTypeConstants -> Maybe Type;
+literal_getLongType jPreludeTypeConstants =
+    let
+        jType :: JTypeExpr;
+        jType = preludeTypeConstants_getLongType jPreludeTypeConstants;
+        
+        type :: Type;
+        type = TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+    in
+        Just type;
+
+/**
+ * Maybe returns the type of the given literal.
+ * @arg jPreludeTypeConstants The PreludeTypeConstants argument to use to get CAL type objects.
+ * @arg literal The listeral to get the type of.
+ * @return Maybe the type of the given literal. 
+ */
+literal_getType :: JPreludeTypeConstants -> Literal -> Maybe Type;
+protected literal_getType jPreludeTypeConstants literal =
+    case literal of
+    LitString {} -> literal_getStringType jPreludeTypeConstants;
+    LitInt {} -> literal_getIntType jPreludeTypeConstants;
+    LitShort {} -> literal_getShortType jPreludeTypeConstants;
+    LitFloat {} -> literal_getFloatType jPreludeTypeConstants;
+    LitInteger {} -> literal_getIntegerType jPreludeTypeConstants;
+    LitBoolean {} -> literal_getBooleanType jPreludeTypeConstants;
+    LitDouble {} -> literal_getDoubleType jPreludeTypeConstants;
+    LitChar {} -> literal_getCharType jPreludeTypeConstants;
+    LitOpaque {} -> Nothing;
+    LitByte {} -> literal_getByteType jPreludeTypeConstants;
+    LitLong {} -> literal_getLongType jPreludeTypeConstants;
+    ;
+
+/**
+ * Could have side effect when evaluated to WHNF.
+ */
+expression_couldHaveSideEffects :: Boolean -> TransformState -> TransformHistory -> Expression -> Boolean;
+protected expression_couldHaveSideEffects appsAreAllowed state history expr =
+    case expr of
+    Lambda {} -> False;
+    
+    Var {name=varName} -> 
+        case find (\name -> name == varName) state.TransformState.safeForInliningVars of
+        Nothing -> True;
+        Just {} -> False;
+        ;    
+    
+    App {} ->
+        let
+            flat :: [Expression];
+            flat = flattenExpression expr [];
+        in
+            case expression_getType state history expr of
+            Nothing -> True; // not sure so could have side effects
+            Just type ->
+//            if appsAreAllowed then 
+                if type_isFunctionType type then
+                    // this is for test12
+//                    False // might have side effect but for inlining they are not relevant
+//                    ||
+                    // this is for M2.testStrictDataConstructors
+                    orList (map (expression_couldHaveSideEffects appsAreAllowed state history) flat)
+                else
+                // IntMap_Tests.testModule works with this
+                    True
+//            else
+//                // test108 works with this
+//                False
+                ;
+        ;
+    
+    Literal {} -> False;
+    _ -> True;
+    ;
+
+convertQualifiedName :: TransformState -> TransformHistory -> QualifiedName -> (TransformHistory, Boolean, QualifiedName);
+convertQualifiedName state history qn = 
+    case qn of
+    QN moduleName functionName ->
+        if functionName == "$_" then
+            case newVar state history qn "UNQ" of
+            (historyPrime, qnPrime) ->
+                (historyPrime, True, qnPrime);                                    
+        else
+            (history, False, qn);
+    ;
+
+convertVar :: Show a => TransformState -> TransformHistory -> (a, QualifiedName, b) -> (TransformHistory, Boolean, (a, QualifiedName, b));
+convertVar state history var = 
+    case var of
+    (fieldName, qualifiedName, type) ->
+        case convertQualifiedName state history qualifiedName of
+        (historyPrime, wasChanged, qualifiedNamePrime) ->
+            (
+                historyPrime,
+                wasChanged, 
+                (
+                    fieldName,
+                    qualifiedNamePrime,
+                    type
+                )
+            );
+        ;
+    ;
+
+convertVars :: Show a => TransformState -> TransformHistory -> [(a, QualifiedName, b)] -> Boolean -> (TransformHistory, Boolean, [(a, QualifiedName, b)]);
+convertVars state history vars !wasChanged =
+    case vars of
+    [] -> (history, wasChanged, []);
+    v:vs ->
+        case convertVar state history v of
+        (history1, wasChanged1, vPrime) ->
+            case convertVars state history1 vs (wasChanged1 || wasChanged) of
+            (history2, wasChanged, vsPrime) -> 
+                (history2, wasChanged, vPrime:vsPrime);
+            ;
+        ;
+    ;
+
+convertAlt :: TransformState -> TransformHistory -> Alt -> (TransformHistory, Boolean, Alt);
+convertAlt state history alt =
+    case alt of
+    Alt caseConst isPositional vars expr ->
+        case convertVars state history vars False of
+        (historyPrime, wasChanged, varsPrime) ->
+            (historyPrime, wasChanged, Alt caseConst isPositional varsPrime expr);
+        ;
+    _ -> (history, False, alt);
+    ;
+
+convertAlts :: TransformState -> TransformHistory -> Boolean -> [Alt] -> (TransformHistory, Boolean, [Alt]);
+convertAlts state history !wasChanged alts =
+    case alts of
+    [] -> (history, wasChanged, []);    
+    a:as ->
+        case convertAlt state history a of
+        (history1, wasChanged1, aPrime) ->
+            case convertAlts state history1 (wasChanged || wasChanged1) as of
+            (history2, wasChanged2, asPrime) -> (history2, wasChanged2, aPrime:asPrime);
+            ;
+        ;
+    ;
+
+/**
+ * Converts the variables named "_" in case expression to unique names. 
+ */
+convertToUniqueName :: TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);    
+protected convertToUniqueName state history expr =
+    case expr of
+    Switch switchExpr switchAlts ->
+        case convertAlts state history False switchAlts of
+        (historyPrime, wasChangedPrime, switchAltsPrime) ->
+            (historyPrime, wasChangedPrime, Switch switchExpr switchAltsPrime);
+        ;
+    _ -> (history, False, expr);
+    ;
+
+prelude_seq_expr :: TransformState -> Expression;
+protected prelude_seq_expr state =
+    let
+        type :: Maybe Type;
+        type = transformState_getType state prelude_seq;
+    in
+        Var prelude_seq [] Nothing type;
+
+/**
+ * Take the given list of seq'ed expression and the given inner expression and build an expression of 
+ * the form (seq e1 (seq e2 (... )))
+ */
+
+buildSeq2 :: TransformState -> [Expression] -> Expression -> Expression;
+protected buildSeq2 state seqedExprs innerExpr = 
+    case seqedExprs of
+    [] -> innerExpr;
+    se1 : ses1 -> (App (App (prelude_seq_expr state) se1) (buildSeq2 state ses1 innerExpr));
+    ;
+
+buildSeq3 :: TransformState -> [Expression] -> Expression;
+protected buildSeq3 state seqedExprs = 
+    case seqedExprs of
+    se1 : ses1 ->
+        case ses1 of
+        [] -> se1;
+        se2 : ses2 ->
+            (App (App (prelude_seq_expr state) se1) (buildSeq3 state ses1));
+        ;        
+    ;
+

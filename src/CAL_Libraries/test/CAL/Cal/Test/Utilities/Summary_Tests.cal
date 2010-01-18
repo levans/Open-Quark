@@ -1,0 +1,1495 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Summary_Tests.cal
+ * Created: May 20, 2005
+ * By: James Wright
+ */
+
+/**
+ * Tests for the {@link module = Summary@} module. 
+ * 
+ * This module also contains some experimental code for calculating a combination of moments
+ * using a single pass over the data set.
+ * 
+ * @author James Wright
+ */
+module Cal.Test.Utilities.Summary_Tests;
+import Cal.Core.Prelude using
+    typeClass = Eq, Num, Ord;
+    typeConstructor = Boolean, Double, Int, Integer, Maybe;
+    dataConstructor = False, True, Nothing, Just;
+    function = 
+        abs, append, assert, compose, const, error, field1, field2, fromJust, greaterThan, greaterThanEquals, isEmpty, 
+        isJust, isNotANumber, lessThan, max, min, not, notANumber, seq, toDouble, truncate, upFromTo;
+    ;
+import Cal.Collections.List using
+    function = 
+        filter, head, last, length, lookup, map, maximum, orList, repeat, reverse, subscript, sum, take, zip, zipWith;
+    ;      
+import Cal.Core.Debug;
+import Cal.Utilities.Summary using
+    function = 
+        average, averageIgnoreNaN, countIgnoreNaN, maximumIgnoreNaN, median, minimumIgnoreNaN, percentile, 
+        populationVariance, sampleVariance, selectNthRankedElement, sumIgnoreNaN, weightedAverageIgnoreNaN;
+    ;
+import Cal.Collections.Set;
+import Cal.Utilities.Math using
+    function = power, roundToNPlaces, sqrt;
+    ;
+
+//////////////////////////////////////////////////////////////////////
+// Simpler (and less efficient) versions of the statistical functions in the Summary module.
+
+simpleAverage :: [Double] -> Double;
+simpleAverage xs = sum xs / toDouble (length xs);
+
+simplePopulationVariance :: [Double] -> Double;
+simplePopulationVariance !xs =
+    let
+        square :: Double -> Double;
+        square !x = x * x; 
+   
+        nValues :: Double;
+        nValues = toDouble (length xs);
+
+        sumSquares :: Double;
+        sumSquares = sum (map square xs);
+    in
+        if nValues == 0 then
+            0.0
+        else
+            Prelude.abs (nValues * sumSquares - square (sum xs)) / (square nValues);        
+
+simpleSampleVariance :: [Double] -> Double;
+simpleSampleVariance !xs =
+    let
+        square :: Double -> Double;
+        square !x = x * x;
+                
+        nValues :: Double;
+        nValues = toDouble (length xs);
+
+        sumSquares :: Double;
+        sumSquares = sum (map square xs);
+    in
+        if nValues <= 1 then
+            0.0
+        else
+            Prelude.abs (nValues * sumSquares - square (sum xs)) / (nValues * (nValues - 1));
+
+simplePopulationSkewness values =
+    (Summary.nthMoment values 3) / Math.power (Summary.populationVariance values) 1.5;
+
+simpleSampleSkewness values = 
+    let 
+        n = toDouble (length values);
+    in
+        n * n * (Summary.nthMoment values 3) / ((n-2) * (n-1) * (Math.power (Summary.sampleVariance values) 1.5));
+
+simplePopulationKurtosis values =
+    (Summary.nthMoment values 4) / Math.power (Summary.nthMoment values 2) 2; 
+
+simpleSampleKurtosis !values = 
+    let
+        n = toDouble (length values);
+        coefficient = (n * (n+1)) / ((n-1)*(n-2)*(n-3));
+        termTwo = (3 * (Math.power (n-1) 2)) / ((n-2)*(n-3));
+        numerator = n * Summary.nthMoment values 4;
+        denominator = Math.power (Summary.sampleVariance values) 2;
+    in
+        coefficient * (numerator / denominator) - termTwo; 
+
+simpleCorrelation !xs !ys = 
+    let
+        square x = x * x;
+        xMean = Summary.average xs;
+        yMean = Summary.average ys;
+        xDiffs = map (\x -> x - xMean) xs;
+        yDiffs = map (\y -> y - yMean) ys;
+        
+        numerator = sum (zipWith Prelude.multiply xDiffs yDiffs);
+        lowerProduct = (sum (map square xDiffs)) * (sum (map square yDiffs));
+    in
+        numerator / sqrt lowerProduct;
+    
+
+
+//------- Testing code
+testingList n =
+    let
+        baseList = map (\x -> toDouble (truncate (x * 15))) (randomList n);
+    in
+        seq (last baseList) baseList;
+
+force !x = seq x ();
+    
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Summary_Tests.Math.random" 
+    private random :: Double;
+
+randomList :: Int -> [Double];
+randomList n =
+    let
+        randAcc n acc =
+            if n == 0 then
+                acc
+            else
+                randAcc (n-1) (random : acc);
+    in
+        randAcc n [];
+
+//------- General versions of sweepTotals
+    
+// Version A
+// This general version conses a lot and is beween 3x and 4x as slow as sweepTotals4
+sweepTotalsA :: Num a => Int -> [a] -> SweptTotals;
+sweepTotalsA !n !values =
+    let
+        buildTotals :: [Double] -> Double -> Double -> [Double] -> [Double]; 
+        buildTotals !oldTotals !x !valAccum !acc =
+            case oldTotals of
+            [] -> reverse acc;
+            oHead : oTail ->
+                let
+                    newHead :: Double;
+                    newHead = oHead + valAccum;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotals oTail x (toDouble x * valAccum) (newHead : acc);
+            ;
+            
+        sweepHelper :: Num a => [a] -> [Double] -> [Double];
+        sweepHelper !values !acc =
+            case values of
+            [] -> acc;
+            vHead : vTail ->
+                let
+                    partialTotals = (buildTotals acc (toDouble vHead) 1.0 []);
+                in
+                    sweepHelper vTail partialTotals;
+            ;
+    in
+        SweptTotals n (sweepHelper values (List.take (n+1) (List.repeat 0.0))) [];
+
+// Version B
+// This general version conses a lot and is beween 3x and 4x as slow as sweepTotals4
+// It's a bit faster than version A because it converts each list element to a Double
+// once instead of n times.
+sweepTotalsB :: Num a => Int -> [a] -> SweptTotals;
+sweepTotalsB !n !values =
+    let
+        buildTotals :: [Double] -> Double -> Double -> [Double] -> [Double]; 
+        buildTotals !oldTotals !x !valAccum !acc =
+            case oldTotals of
+            [] -> reverse acc;
+            oHead : oTail ->
+                let
+                    newHead :: Double;
+                    newHead = oHead + valAccum;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotals oTail x (toDouble x * valAccum) (newHead : acc);
+            ;
+            
+        sweepHelper :: Num a => [a] -> [Double] -> [Double];
+        sweepHelper !values !acc =
+            case values of
+            [] -> acc;
+            vHead : vTail ->
+                let
+                    partialTotals = (buildTotals acc (toDouble vHead) 1.0 []);
+                in
+                    sweepHelper vTail partialTotals;
+            ;
+    in
+        SweptTotals n (sweepHelper values (List.take (n+1) (List.repeat 0.0))) [];
+        
+// Version C
+// This general version conses about half as much as version A and B (by swapping back and
+// forth between buildTotalsForward and buildTotalsBackward rather than forcing a 
+// forward-ordered list at each stage by calling reverse) and is roughly 2x as slow as sweepTotals4
+// It seems to have some precision issues, since (power x n) / x is occasionally different from
+// (power x (n-1)).
+sweepTotalsC :: Num a => Int -> [a] -> SweptTotals;
+sweepTotalsC !n !values =
+    let
+        // oldTotals is in forward ([x^0, x^1, x^2, x^3]) order; return value is in reverse ([x^3, x^2, x^1, x^0]) order
+        buildTotalsForward :: [Double] -> Double -> Double -> [Double] -> [Double];     
+        buildTotalsForward !oldTotals !x !valAccum !sumAccum =
+            case oldTotals of
+            [] -> sumAccum;
+            oHead : oTail ->
+                let
+                    newHead :: Double;
+                    newHead = oHead + valAccum;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotalsForward oTail x (x * valAccum) (newHead : sumAccum);
+            ;
+            
+        // oldTotals is in reverse order; return value is in forward order
+        buildTotalsBackward :: [Double] -> Double -> Double -> [Double] -> [Double];
+        buildTotalsBackward !oldTotals !x !valAccum !sumAccum =
+            case oldTotals of
+            [] -> sumAccum;
+            oHead : oTail ->
+                let
+                    newHead :: Double;
+                    newHead = oHead + valAccum;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotalsBackward oTail x (valAccum / x) (newHead : sumAccum);
+            ;
+            
+        sweepHelper :: Num a => [a] -> Boolean -> [Double] -> [Double];
+        sweepHelper !values !accIsForward !acc =
+            case values of
+            [] -> 
+                if accIsForward then
+                    acc
+                else
+                    reverse acc;
+            vHead : vTail ->
+                let
+                    partialTotals = 
+                        if accIsForward then
+                            buildTotalsForward acc (toDouble vHead) 1.0 []
+                        else
+                            buildTotalsBackward acc (toDouble vHead) (power (toDouble vHead) (toDouble n)) [];
+                in
+                    sweepHelper vTail (not accIsForward) partialTotals;
+            ;
+    in
+        SweptTotals n (sweepHelper values True (List.take (n+1) (List.repeat 0.0))) [];
+
+// Version D
+// This general version conses about half as much as version A (for the same reason as version C).
+// It is about 2.4x slower than sweepTotals4.  The precision problem of version C does not appear
+// in this version.
+sweepTotals :: Num a => Int -> [a] -> SweptTotals;
+sweepTotals !n !values =
+    let
+        // oldTotals is in forward ([x^0, x^1, x^2, x^3]) order; return value is in reverse ([x^3, x^2, x^1, x^0]) order
+        buildTotalsForward :: [Double] -> Double -> Double -> [Double] -> [Double];     
+        buildTotalsForward !oldTotals !x !valAccum !sumAccum =
+            case oldTotals of
+            [] -> sumAccum;
+            oHead : oTail ->
+                let
+                    newHead :: Double;
+                    newHead = oHead + valAccum;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotalsForward oTail x (x * valAccum) (newHead : sumAccum);
+            ;
+            
+        // oldTotals is in reverse order; return value is in forward order
+        buildTotalsBackward :: [Double] -> Double -> Double -> [Double] -> [Double];
+        buildTotalsBackward !oldTotals !x !n !sumAccum =
+            case oldTotals of
+            [] -> sumAccum;
+            oHead : oTail ->
+                let
+                    powerVal = power x n;
+                
+                    newHead :: Double;
+                    newHead = oHead + powerVal;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotalsBackward oTail x (n-1) (newHead : sumAccum);
+            ;
+            
+        sweepHelper :: Num a => [a] -> Boolean -> [Double] -> [Double];
+        sweepHelper !values !accIsForward !acc =
+            case values of
+            [] -> 
+                if accIsForward then
+                    acc
+                else
+                    reverse acc;
+            vHead : vTail ->
+                let
+                    partialTotals = 
+                        if accIsForward then
+                            buildTotalsForward acc (toDouble vHead) 1.0 []
+                        else
+                            buildTotalsBackward acc (toDouble vHead) (toDouble n) [];
+                in
+                    sweepHelper vTail (not accIsForward) partialTotals;
+            ;
+    in
+        SweptTotals n (sweepHelper values True (List.take (n+1) (List.repeat 0.0))) [];    
+    
+sweepTotalsWithMinMax :: Num a => Int -> [a] -> SweptTotals;
+sweepTotalsWithMinMax !n !values =
+    let
+        // oldTotals is in forward ([x^0, x^1, x^2, x^3]) order; return value is in reverse ([x^3, x^2, x^1, x^0]) order
+        buildTotalsForward :: [Double] -> Double -> Double -> [Double] -> [Double];     
+        buildTotalsForward !oldTotals !x !valAccum !sumAccum =
+            case oldTotals of
+            [] -> sumAccum;
+            oHead : oTail ->
+                let
+                    newHead :: Double;
+                    newHead = oHead + valAccum;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotalsForward oTail x (x * valAccum) (newHead : sumAccum);
+            ;
+            
+        // oldTotals is in reverse order; return value is in forward order
+        buildTotalsBackward :: [Double] -> Double -> Double -> [Double] -> [Double];
+        buildTotalsBackward !oldTotals !x !n !sumAccum =
+            case oldTotals of
+            [] -> sumAccum;
+            oHead : oTail ->
+                let
+                    powerVal = power x n;
+                
+                    newHead :: Double;
+                    newHead = oHead + powerVal;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotalsBackward oTail x (n-1) (newHead : sumAccum);
+            ;
+            
+        sweepHelper :: Num a => [a] -> Boolean -> [Double] -> Double -> Double -> SweptTotals ;
+        sweepHelper !values !accIsForward !acc !minAcc !maxAcc =
+            case values of
+            [] -> 
+                if accIsForward then
+                    SweptTotals n acc [(1, minAcc), (truncate (head acc), maxAcc)]
+                else
+                    SweptTotals n (reverse acc) [(1, minAcc), (truncate (head (reverse acc)), maxAcc)];
+            vHead : vTail ->
+                let
+                    x :: Double;
+                    x = toDouble vHead;
+        
+                    partialTotals = 
+                        if accIsForward then
+                            buildTotalsForward acc x 1.0 []
+                        else
+                            buildTotalsBackward acc x (toDouble n) [];
+                in
+                    sweepHelper vTail (not accIsForward) partialTotals (min x minAcc) (max x maxAcc);
+            ;
+        
+    in
+        case values of
+        [] -> 
+            SweptTotals n (List.take (n+1) (List.repeat 0.0)) [];
+        vHead : vTail -> 
+            sweepHelper values True (List.take (n+1) (List.repeat 0.0)) (toDouble vHead) (toDouble vHead);
+        ;
+
+
+// Benchmarks run May 26/2005
+//                              with /n/=   5000        100000          1000000
+// :pt sweepTotals4   (upFromTo 1.0 /n/)    15ms s=0    226ms s=11      2308ms s=52
+// :pt sweepTotalsA 4 (upFromTo 1.0 /n/)    43ms s=7    801ms s=27      7855ms s=142
+// :pt sweepTotalsB 4 (upFromTo 1.0 /n/)    35ms s=7    677ms s=17      6689ms s=96    
+// :pt sweepTotalsC 4 (upFromTo 1.0 /n/)    29ms s=5    482ms s=9       4753ms s=70
+// :pt sweepTotalsD 4 (upFromTo 1.0 /n/)    29ms s=5    553ms s=0       5546ms s=76
+
+// Benchmarks run May 31/2005
+//                                       with /n/=   5000           100000          1000000        
+// :pt sweepTotals4WithMinMax  (upFromTo 1.0 /n/)    17ms s=5       255ms s=18      2328ms s=27
+// :pt sweepTotalsWithMinMax 4 (upFromTo 1.0 /n/)    35ms s=10      609ms s=8       6158ms s=289       
+
+////////////////////////////////////////////////////////////////////////
+// Functions for the efficient calculation of multiple moments with a 
+// single pass over a dataset.
+//
+// The general usage pattern is to call one of the sweepTotalsN functions to
+// accumulate a list of totals from the dataset, and then call one or 
+// more of the *FromTotals functions on the resulting SweptTotals.
+//
+// The *FromTotals functions are private.  External clients should use
+// the makeStatisticsFinder call to create statistics sweepers for whichever set of 
+// statistics they wish to calculate.
+//
+// These functions are currently experimental.
+    
+// Contains a list of totals that have been swept across a list of data.
+data public SweptTotals = 
+    private SweptTotals 
+        maxDegree       :: Int 
+        degreeTotals    :: [Double] 
+        cachedRanks     :: [(Int, Double)] 
+    deriving Eq, Debug.Show; 
+
+// Extract the total of x^n (for all x in a dataset) from the provided totals
+nthDegreeTotal :: SweptTotals -> Int -> Maybe Double;
+public nthDegreeTotal !totals !n =
+    case totals of
+    SweptTotals maxDegree totalList _ -> 
+        if n >= 0 && n <= maxDegree then
+            Just (subscript totalList n)
+        else
+            Nothing;
+    ;
+
+totalsList :: SweptTotals -> [Double];
+private totalsList !totals =
+    case totals of
+    SweptTotals _ totalsList _ -> totalsList;
+    ;
+    
+    
+// Extract the element that would be element nth if a dataset were sorted in ascending order,
+// based upon totals that have been swept across the dataset.
+nthRankedElement :: SweptTotals -> Int -> Maybe Double;
+nthRankedElement !totals !n =
+    case totals of
+    SweptTotals _ _ cachedRanks ->
+        (lookup n cachedRanks);
+    ;
+
+// (SweptTotals -> Double, Int, (Int -> [Int]), Boolean
+data public Statistic = 
+    public Statistic 
+        fcn             :: (SweptTotals -> Double) 
+        maxDegree       :: Int 
+        predictor       :: (Int -> [Int]) 
+        wantsMinMax     :: Boolean;
+
+statisticFunction :: Statistic -> (SweptTotals -> Double);
+public statisticFunction !statistic =
+    case statistic of
+    Statistic fcn _ _ _ -> fcn;
+    ;
+    
+statisticMaxDegreeTotal :: Statistic -> Int;
+public statisticMaxDegreeTotal !statistic = 
+    case statistic of
+    Statistic _ maxDegree _ _ -> maxDegree;
+    ;
+    
+statisticRankPredictor :: Statistic -> Int -> [Int];
+public statisticRankPredictor !statistic =
+    case statistic of
+    Statistic _ _ predictor _ -> predictor;
+    ;
+    
+statisticWantsMinMax :: Statistic -> Boolean;
+public statisticWantsMinMax !statistic =
+    case statistic of
+    Statistic _ _ _ wantsMinMax -> wantsMinMax;
+    ;
+
+// Accumulate length only for a dataset 
+sweepTotals0 :: Num a => [a] -> SweptTotals;
+sweepTotals0 !values =
+    SweptTotals (length values) [toDouble (length values)] [];
+
+// Accumulate length, min, and max for a dataset 
+sweepTotals0WithMinMax :: Num a => [a] -> SweptTotals;
+public sweepTotals0WithMinMax !values =
+    let
+        sweepHelper :: Num a => [a] -> Double -> Double -> Double -> SweptTotals;
+        sweepHelper !values !acc0 !minAcc !maxAcc =
+            case values of
+            [] -> SweptTotals 0 [acc0] [(1, minAcc), (truncate acc0, maxAcc)];
+            vHead : vTail ->
+                let 
+                    x = toDouble vHead;
+                in
+                    sweepHelper vTail (acc0 + 1) (min x minAcc) (max x maxAcc);
+            ;
+    in
+        case values of
+        [] -> SweptTotals 0 [0] [];
+        x : _ ->
+            sweepHelper values 0 (toDouble x) (toDouble x);    
+        ;
+
+// Accumulate x^0, x^1, x^2 totals for a dataset 
+sweepTotals2 :: Num a => [a] -> SweptTotals;
+public sweepTotals2 !values =
+    let
+        sweepHelper :: Num a => [a] -> Double -> Double -> Double -> SweptTotals;
+        sweepHelper !values !acc0 !acc1 !acc2 =
+            case values of
+            [] -> SweptTotals 2 [acc0, acc1, acc2] [];
+            vHead : vTail ->
+                let 
+                    x = toDouble vHead;
+                    x2 = x * x;
+                in
+                    sweepHelper vTail (acc0 + 1) (acc1 + x) (acc2 + x2);
+            ;
+    in
+        sweepHelper values 0 0 0;
+
+// Accumulate x^0, x^1, x^2 totals and minimum/maximum for a dataset 
+sweepTotals2WithMinMax :: Num a => [a] -> SweptTotals;
+public sweepTotals2WithMinMax !values =
+    let
+        sweepHelper :: Num a => [a] -> Double -> Double -> Double -> Double -> Double -> SweptTotals;
+        sweepHelper !values !acc0 !acc1 !acc2 !minAcc !maxAcc =
+            case values of
+            [] -> SweptTotals 2 [acc0, acc1, acc2] [(1, minAcc), (truncate acc0, maxAcc)];
+            vHead : vTail ->
+                let 
+                    x = toDouble vHead;
+                    x2 = x * x;
+                in
+                    sweepHelper vTail (acc0 + 1) (acc1 + x) (acc2 + x2) (min x minAcc) (max x maxAcc);
+            ;
+    in
+        case values of
+        [] -> SweptTotals 2 [0,0,0] [];
+        x : _ ->
+            sweepHelper values 0 0 0 (toDouble x) (toDouble x);    
+        ;
+        
+// Accumulate x^0, x^1, x^2, x^3, x^4 totals for a dataset 
+sweepTotals4 :: Num a => [a] -> SweptTotals;
+public sweepTotals4 !values =
+    let
+        sweepHelper :: Num a => [a]  -> Double -> Double -> Double -> Double -> Double -> SweptTotals;
+        sweepHelper !values !acc0 !acc1 !acc2 !acc3 !acc4 =
+            case values of
+            [] -> SweptTotals 4 [acc0, acc1, acc2, acc3, acc4] [];
+            vHead : vTail ->
+                let 
+                    x = toDouble vHead;
+                    x2 = x * x;
+                    x3 = x2 * x;
+                    x4 = x3 * x;
+                in
+                    sweepHelper vTail (acc0 + 1) (acc1 + x) (acc2 + x2) (acc3 + x3) (acc4 + x4);
+            ;
+    in
+        sweepHelper values 0 0 0 0 0;
+
+// Accumulate x^0, x^1, x^2, x^3, x^4 totals and minimum/maximum for a dataset 
+sweepTotals4WithMinMax :: Num a => [a] -> SweptTotals;
+public sweepTotals4WithMinMax !values =
+    let
+        sweepHelper :: Num a => [a] -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> SweptTotals;
+        sweepHelper !values !acc0 !acc1 !acc2 !acc3 !acc4 !minAcc !maxAcc =
+            case values of
+            [] -> SweptTotals 4 [acc0, acc1, acc2, acc3, acc4] [(1, minAcc), (truncate acc0, maxAcc)];
+            vHead : vTail ->
+                let 
+                    x = toDouble vHead;
+                    x2 = x * x;
+                    x3 = x2 * x;
+                    x4 = x3 * x;
+                in
+                    sweepHelper vTail (acc0 + 1) (acc1 + x) (acc2 + x2) (acc3 + x3) (acc4 + x4) (min x minAcc) (max x maxAcc);
+            ;
+    in
+        case values of
+        [] -> SweptTotals 4 [0,0,0,0,0] [];
+        x : _ ->
+            sweepHelper values 0 0 0 0 0 (toDouble x) (toDouble x);    
+        ;
+        
+// Accumulate x^0, x^1, x^2, x^3, x^4, x^5, x^6 totals for a dataset 
+sweepTotals6 :: Num a => [a] -> SweptTotals;
+public sweepTotals6 !values =
+    let
+        sweepHelper :: Num a => [a] -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> SweptTotals;
+        sweepHelper !values !acc0 !acc1 !acc2 !acc3 !acc4 !acc5 !acc6 =
+            case values of
+            [] -> SweptTotals 6 [acc0, acc1, acc2, acc3, acc4, acc5, acc6] [];
+            vHead : vTail ->
+                let 
+                    x = toDouble vHead;
+                    x2 = x * x;
+                    x3 = x2 * x;
+                    x4 = x3 * x;
+                    x5 = x4 * x;
+                    x6 = x5 * x;
+                in
+                    sweepHelper vTail (acc0 + 1) (acc1 + x) (acc2 + x2) (acc3 + x3) (acc4 + x4) (acc5 + x5) (acc6 + x6);
+            ;
+    in
+        sweepHelper values 0 0 0 0 0 0 0;    
+
+// Accumulate x^0, x^1, x^2, x^3, x^4, x^5, x^6 totals and minimum/maximum for a dataset 
+sweepTotals6WithMinMax :: Num a => [a] -> SweptTotals;
+public sweepTotals6WithMinMax !values =
+    let
+        sweepHelper :: Num a => [a] -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> SweptTotals;
+        sweepHelper !values !acc0 !acc1 !acc2 !acc3 !acc4 !acc5 !acc6 !minAcc !maxAcc =
+            case values of
+            [] -> SweptTotals 6 [acc0, acc1, acc2, acc3, acc4, acc5, acc6] [(1, minAcc), (truncate acc0, maxAcc)];
+            vHead : vTail ->
+                let 
+                    x = toDouble vHead;
+                    x2 = x * x;
+                    x3 = x2 * x;
+                    x4 = x3 * x;
+                    x5 = x4 * x;
+                    x6 = x5 * x;
+                in
+                    sweepHelper vTail (acc0 + 1) (acc1 + x) (acc2 + x2) (acc3 + x3) (acc4 + x4) (acc5 + x5) (acc6 + x6) (min x minAcc) (max x maxAcc);
+            ;
+    in
+        case values of
+        [] -> SweptTotals 6 [0,0,0,0,0,0,0] [];
+        x : _ ->
+            sweepHelper values 0 0 0 0 0 0 0 (toDouble x) (toDouble x);    
+        ;
+        
+sweepTotalsExamples = 
+    sweepTotals2 [1,1,5,2,3,5.0] == SweptTotals 2 [6, 17, 65] [] &&
+    sweepTotals4 [1,1,5,2,3,5.0] == SweptTotals 4 [6, 17, 65, 287, 1349] [] &&
+    sweepTotals6 [1,1,5,2,3,5.0] == SweptTotals 6 [6, 17, 65, 287, 1349, 6527, 32045] [] &&
+    nthDegreeTotal (sweepTotals6 [1,1,5,2,3,5.0]) 0 == Just 6 && 
+    nthDegreeTotal (sweepTotals6 [1,1,5,2,3,5.0]) 2 == Just 65 && 
+    nthDegreeTotal (sweepTotals6 [1,1,5,2,3,5.0]) 3 == Just 287 && 
+    nthDegreeTotal (sweepTotals6 [1,1,5,2,3,5.0]) 6 == Just 32045 &&
+    nthDegreeTotal (sweepTotals6 [1,1,5,2,3,5.0]) (-1) == Nothing &&
+    nthDegreeTotal (sweepTotals6 [1,1,5,2,3,5.0]) 9 == Nothing 
+    || error "Summary.sweepTotalsExamples failed";
+    
+// Calculate the population variance using the totals accumulated from a dataset
+populationVarianceFromTotals :: SweptTotals -> Double;
+public populationVarianceFromTotals !totals =
+    let
+        n = fromJust (nthDegreeTotal totals 0);
+        sum = fromJust (nthDegreeTotal totals 1);
+        sumSquares = fromJust (nthDegreeTotal totals 2);
+    in
+        if n == 0 then
+            0.0
+        else
+            abs (n * sumSquares - (sum * sum)) / (n * n);
+
+private populationVarianceFromTotalsExamples =
+    populationVarianceFromTotals (sweepTotals4 [70.0, 130.0, 80.0, 120.0]) == 650.0 &&
+    populationVarianceFromTotals (sweepTotals4 [70 :: Int, 130, 80, 120]) == 650  &&
+    populationVarianceFromTotals (sweepTotals4 [70 :: Integer, 130, 80, 120]) == 650 && 
+    isNotANumber (populationVarianceFromTotals (sweepTotals4 [1.0, notANumber])) &&
+    populationVarianceFromTotals (sweepTotals4 ([] :: [Int])) == 0.0
+    || error "Summary.populationVarianceExamples failed.";
+    
+// Calculate the sample variance using the totals accumulated from a dataset
+sampleVarianceFromTotals :: SweptTotals -> Double;
+public sampleVarianceFromTotals !totals =
+    let
+        n = fromJust (nthDegreeTotal totals 0);
+        sum = fromJust (nthDegreeTotal totals 1);
+        sumSquares = fromJust (nthDegreeTotal totals 2);
+    in
+        if n <= 1 then
+            0.0
+        else
+            abs (n * sumSquares - (sum * sum)) / (n * (n-1));
+
+private sampleVarianceFromTotalsExamples =
+    sampleVarianceFromTotals (sweepTotals4 [60.0, 120.0, 80.0, 120.0]) == 900.0 &&
+    sampleVarianceFromTotals (sweepTotals4 [60 :: Int, 120, 80, 120]) == 900 &&
+    sampleVarianceFromTotals (sweepTotals4 [60 :: Integer, 120, 80, 120]) == 900 &&
+    isNotANumber (sampleVarianceFromTotals (sweepTotals4 [notANumber, 12.0])) &&
+    sampleVarianceFromTotals (sweepTotals4 ([] :: [Integer])) == 0.0
+    || error "Summary.sampleVarianceExamples failed.";
+
+// Calculate the average using the totals accumulated from a dataset
+averageFromTotals :: SweptTotals -> Double;
+public averageFromTotals !totals =
+    let
+        n = fromJust (nthDegreeTotal totals 0);
+        sum = fromJust (nthDegreeTotal totals 1);
+    in
+        sum / n;
+
+private averageFromTotalsExamples =
+    averageFromTotals (sweepTotals4 [70.0, 130.0, 80.0, 120.0]) == 100.0 &&
+    averageFromTotals (sweepTotals4 [70 :: Int, 130, 80, 120]) == 100.0 &&
+    averageFromTotals (sweepTotals4 [70 :: Integer, 130, 80, 120]) == 100.0 &&
+    isNotANumber (averageFromTotals (sweepTotals4 [1, notANumber, 3]))  &&
+    isNotANumber (averageFromTotals (sweepTotals4 ([] :: [Double])))
+    || error "Summary.averageExamples failed.";
+    
+// Calculate the population kurtosis from totals accumulated from a dataset
+// (requires totals from x^0 up to x^4)
+populationKurtosisFromTotals :: SweptTotals -> Double;
+public populationKurtosisFromTotals !totals =
+    let
+        n = fromJust (nthDegreeTotal totals 0);
+        v = populationVarianceFromTotals totals;
+        v2 = v * v;
+        mean = averageFromTotals totals;
+        mean2 = mean * mean;
+        mean3 = mean2 * mean;
+        mean4 = mean3 * mean;
+        sum = fromJust (nthDegreeTotal totals 1);
+        sum2 = fromJust (nthDegreeTotal totals 2);
+        sum3 = fromJust (nthDegreeTotal totals 3);
+        sum4 = fromJust (nthDegreeTotal totals 4);
+        numerator = sum4 - (4 * mean * sum3) + (6 * mean2 * sum2) - (4 * mean3 * sum) + (n * mean4);
+        denominator = n * v2;
+    in
+        numerator / denominator;
+
+// Calculate the sample kurtosis from totals accumulated from a dataset
+// (requires totals from x^0 up to x^4)
+sampleKurtosisFromTotals :: SweptTotals -> Double;
+public sampleKurtosisFromTotals !totals =
+    let
+        n = fromJust (nthDegreeTotal totals 0);
+        v = sampleVarianceFromTotals totals;
+        v2 = v * v;
+        mean = averageFromTotals totals;
+        mean2 = mean * mean;
+        mean3 = mean2 * mean;
+        sum = fromJust (nthDegreeTotal totals 1);
+        sum2 = fromJust (nthDegreeTotal totals 2);
+        sum3 = fromJust (nthDegreeTotal totals 3);
+        sum4 = fromJust (nthDegreeTotal totals 4);
+        coefficient = (n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0));
+        termTwo =(3.0 * (Math.power (n - 1) 2.0)) / ((n - 2) * (n - 3));
+        numerator = (sum4 - (4 * mean * sum3) + (6 * mean2 * sum2) - (4 * mean3 * sum) + (n * mean2 * mean2));
+        denominator = (v2);
+    in
+        coefficient * (numerator / denominator) - termTwo; 
+    
+// Calculate the sample skewness from totals accumulated from a dataset
+// (requires totals from x^0 up to x^4)
+sampleSkewnessFromTotals :: SweptTotals -> Double;
+public sampleSkewnessFromTotals !totals =    
+    let
+        n = fromJust (nthDegreeTotal totals 0);
+        mean = averageFromTotals totals;
+        mean2 = mean * mean;
+        mean3 = mean2 * mean;
+        v = sampleVarianceFromTotals totals;
+        dev3 = power v 1.5;
+        sum = fromJust (nthDegreeTotal totals 1);
+        sum2 = fromJust (nthDegreeTotal totals 2);
+        sum3 = fromJust (nthDegreeTotal totals 3);
+        
+        num = (n * n) * (sum3 - (3 * mean * sum2) + (3 * mean2 * sum) - (n * mean3));
+        denom = (dev3 * (n-2) * (n-1) * n);
+    in
+        num / denom;
+    
+// Calculate the population skewness from totals accumulated from a dataset
+// (requires totals from x^0 up to x^4)
+populationSkewnessFromTotals :: SweptTotals -> Double;
+populationSkewnessFromTotals !totals =
+    let
+        n = fromJust (nthDegreeTotal totals 0);
+        mean = averageFromTotals totals;
+        mean2 = mean * mean;
+        mean3 = mean2 * mean;
+        v = populationVarianceFromTotals totals;
+        dev3 = power v 1.5;
+        sum = fromJust (nthDegreeTotal totals 1);
+        sum2 = fromJust (nthDegreeTotal totals 2);
+        sum3 = fromJust (nthDegreeTotal totals 3);
+    in
+        (sum3 - (3 * mean * sum2) + (3 * mean2 * sum) - (n * mean3)) / (n * dev3); 
+
+// Test data for kurtosis and skewness
+testData = [2443.6, 2460.2, 2448.2, 2470.4, 2484.7, 2466.8, 2487.9, 2508.4, 2510.5, 2497.4, 2532.5, 2556.8, 2561, 2547.3, 2541.5, 2558.5, 2587.9, 2580.5, 2579.6, 2589.3, 2595, 2595.6, 2588.8, 2591.7, 2601.7, 2585.4, 2573.3, 2597.4, 2600.6, 2570.6, 2569.4, 2584.9, 2608.8, 2617.2, 2621, 2540.5, 2554.5, 2601.9, 2623, 2640.7, 2640.7, 2619.8, 2624.2, 2638.2, 2645.7, 2679.6, 2669, 2664.6, 2663.3, 2667.4, 2653.2, 2630.8, 2626.6, 2641.9, 2625.8, 2606, 2594.4, 2583.6, 2588.7, 2600.3, 2579.5, 2576.6, 2597.8, 2595.6, 2599, 2621.7, 2645.6, 2644.2, 2625.6, 2624.6, 2596.2, 2599.5, 2584.1, 2570.8, 2555, 2574.5, 2576.7, 2579, 2588.7, 2601.1, 2575.7, 2559.5, 2561.1, 2528.3, 2514.7, 2558.5, 2553.3, 2577.1, 2566, 2549.5, 2527.8, 2540.9, 2534.2, 2538, 2559, 2554.9, 2575.5, 2546.5, 2561.6, 2546.6, 2502.9, 2463.1, 2472.6, 2463.5, 2446.3, 2456.2, 2471.5, 2447.5, 2428.6, 2420.2, 2414.9, 2420.2, 2423.8, 2407, 2388.7, 2409.6, 2392, 2380.2, 2423.3, 2451.6, 2440.8, 2432.9, 2413.6, 2391.6, 2358.1, 2345.4, 2384.4, 2384.4, 2384.4, 2418.7, 2420, 2493.1, 2493.1, 2492.8];    
+
+// These match Excel's values to 10 decimal places
+sampleSkewnessAndKurtosisFromTotalsExamples =
+    let
+        totals = sweepTotals4 testData;
+    in
+        roundToNPlaces (sampleKurtosisFromTotals totals) 9 == -0.703081207 &&
+        roundToNPlaces (sampleSkewnessFromTotals totals) 9 == -0.561856345
+        || error "Summary.sampleSkewnessAndKurtosisExamples failed!";
+
+populationSkewnessAndKurtosisFromTotalsExamples =    
+    let
+        totals = sweepTotals4 testData;
+    in
+        roundToNPlaces (populationKurtosisFromTotals totals) 6 == 2.278436 &&
+        roundToNPlaces (populationSkewnessFromTotals totals) 6 == -0.555547
+        || error "Summary.populationSkewnessAndKurtosisExamples failed!";
+
+//------- Performance testing for correlation
+    
+// Return the correlation coefficient between sequences xs and ys.  The return value ranges 
+// from -1.0 (for perfect negative correlation) to 1.0 (for perfect positive correlation), 
+// with perfectly uncorrelated sequences returning 0.0.  The sequences must be of equal length.
+// Values from both sequences are converted to Doubles before calculations begin.
+// Runtime performance is O(n).  Only one pass over the data is required.
+correlationOfLists :: (Num a, Num b) => [a] -> [b] -> Double;
+public correlationOfLists !xs !ys =
+    let
+        correlationHelper :: (Num a, Num b) => [a] -> [b] -> Int -> Double -> Double -> Double -> Double -> Double -> Double;
+        correlationHelper !xs !ys !partialLength !partialSumX !partialSumSquareX !partialSumY !partialSumSquareY !partialProductXY =
+            case xs of
+            [] ->
+                let
+                    n = toDouble partialLength;
+
+                    numerator = (n * partialProductXY - partialSumX * partialSumY);
+                    lowerProduct = ((n * partialSumSquareX - partialSumX * partialSumX)) *
+                                   ((n * partialSumSquareY - partialSumY * partialSumY));
+                in
+                    numerator / (sqrt lowerProduct);
+            xHead : xTail ->
+                case ys of
+                [] -> 
+                    // Ignore the addition y data
+                    correlationHelper [] ys partialLength partialSumX partialSumSquareX partialSumY partialSumSquareY partialProductXY;
+                yHead : yTail ->
+                    let
+                        x = toDouble xHead;
+                        y = toDouble yHead;
+                    in
+                        correlationHelper xTail yTail (partialLength + 1) (partialSumX + x) (partialSumSquareX + (x*x)) 
+                                                                          (partialSumY + y) (partialSumSquareY + (y*y)) (partialProductXY + (x*y));
+                ;
+            ;
+    in
+        correlationHelper xs ys (0 :: Int) 0 0 0 0 0;
+
+correlationOfPairs :: (Num a, Num b) => [(a, b)] -> Double;
+public correlationOfPairs !pairs =
+    let
+        correlationHelper :: (Num a, Num b) => [(a, b)] -> Int -> Double -> Double -> Double -> Double -> Double -> Double;
+        correlationHelper !pairs !partialLength !partialSumX !partialSumSquareX !partialSumY !partialSumSquareY !partialProductXY =
+            case pairs of
+            [] ->
+                let
+                    n = toDouble partialLength;
+
+                    numerator = (n * partialProductXY - partialSumX * partialSumY);
+                    lowerProduct = ((n * partialSumSquareX - partialSumX * partialSumX)) *
+                                   ((n * partialSumSquareY - partialSumY * partialSumY));
+                in
+                    numerator / (sqrt lowerProduct);
+            pHead : pTail ->
+                let
+                    x = toDouble pHead.#1;
+                    y = toDouble pHead.#2;
+                in
+                    correlationHelper pTail (partialLength + 1) (partialSumX + x) (partialSumSquareX + (x*x)) 
+                                                                (partialSumY + y) (partialSumSquareY + (y*y)) (partialProductXY + (x*y));
+            ;
+    in
+        correlationHelper pairs 0 0 0 0 0 0;
+    
+correlationPerfPairs n = 
+    let
+        list1 :: [Double];
+        list1 = testingList n;
+
+        list2 :: [Double];
+        list2 = testingList n;
+        
+        pairs :: [(Double,Double)];
+        pairs = zip list1 list2;
+    in
+        list1 `seq` list2 `seq` pairs `seq`
+        correlationOfPairs pairs;
+    
+correlationPerfLists n = 
+    let
+        list1 :: [Double];
+        list1 = testingList n;
+
+        list2 :: [Double];
+        list2 = testingList n;
+        
+        pairs :: [(Double,Double)];
+        pairs = zip list1 list2;
+    in
+        list1 `seq` list2 `seq` pairs `seq`
+        correlationOfLists list1 list2;
+    
+// Benchmarks run May 20/2005:
+//                    with /n/=     10000           100000          1000000
+// :pt correlationPerfPairs /n/     136ms s=23      1860ms s=14     27201ms s=570     
+// :pt correlationPerfLists /n/     140ms s=0       1267ms s=5      23547ms s=271
+
+badFactorial :: Integer -> Integer -> Integer;
+badFactorial n acc = 
+    if n == 0 then
+        acc
+    else
+        badFactorial (n-1) (acc*n);
+
+//----- Experimental statistics sweeper stuff
+countStatistic = Statistic (\x -> fromJust (nthDegreeTotal x 0)) 0 (const []) False;
+sumStatistic = Statistic (\x -> fromJust (nthDegreeTotal x 1)) 1 (const []) False;
+averageStatistic = Statistic averageFromTotals 1 (const []) False;
+sampleVarianceStatistic = Statistic sampleVarianceFromTotals 2 (const []) False;
+sampleSkewnessStatistic = Statistic sampleSkewnessFromTotals 3 (const []) False;
+sampleKurtosisStatistic = Statistic sampleKurtosisFromTotals 4 (const []) False;
+sumOfQuintsStatistic = Statistic (\x -> fromJust (nthDegreeTotal x 5)) 5 (const []) False;
+
+makeStatisticsFinderA :: Num a => [(SweptTotals -> Double, Int, (Int -> [Int]))] -> [a] -> [Double];
+makeStatisticsFinderA statisticsList =
+    let
+        maxDegree :: Int;
+        maxDegree = List.maximum (map field2 statisticsList); 
+    
+        totalsSweeper :: Num a => [a] -> SweptTotals;
+        totalsSweeper = 
+            if maxDegree <= 2 then
+                sweepTotals2
+            else if maxDegree <= 4 then
+                sweepTotals4
+            else if maxDegree <= 6 then
+                sweepTotals6
+            else
+                sweepTotals maxDegree;
+        
+        newStatisticsFinder :: Num a => [a] -> [Double];
+        newStatisticsFinder values =
+            let
+                totals :: SweptTotals;
+                totals = totalsSweeper values;
+            in
+                map (\x -> x.#1 totals) statisticsList;
+    in
+        newStatisticsFinder;
+
+dataSet1 :: [Int];
+dataSet1 = [5, 6, 7, 8];
+
+dataSet2Size = 100000;
+dataSet2 = testingList dataSet2Size;
+
+rankSet =     
+    let
+        genRandomIdx :: Int -> Int;
+        genRandomIdx dummy = truncate (random * dataSet2Size);
+        
+        rankList :: [Int];
+        rankList = (List.sort `compose` filter (\x -> x > 0)) (map genRandomIdx (upFromTo 1 60));
+    in
+        rankList;
+    
+//TEST
+testElms = [6.0, 8.0, 11.0, 4.0, 8.0, 1.0, 8.0, 0.0, 10.0, 5.0, 4.0, 9.0];    
+
+counter = makeStatisticsFinder [countStatistic];
+kurtosisAndSkewnessFinder = makeStatisticsFinder [sampleKurtosisStatistic, sampleSkewnessStatistic];
+kurtosisAndQuintSumFinder = makeStatisticsFinder [sampleKurtosisStatistic, sumOfQuintsStatistic];
+varianceFinder = makeStatisticsFinder [sampleVarianceStatistic];
+
+// A straightforward but not especially efficient implementation of selectMultipleRankedElements
+sortedSelectMultiple :: Ord a => [a] -> [Int] -> [Maybe a];
+sortedSelectMultiple !values !rankList =
+    let
+        sortedVals = List.sort values;
+        decrement idx = idx-1;
+    in
+        map (Just `compose` (subscript sortedVals) `compose` decrement) rankList; 
+    
+selectMultipleRankedElements :: Ord a => [a] -> [Int] -> [Maybe a];
+selectMultipleRankedElements !values !rankList =
+    if isEmpty rankList then
+        []
+    else if (List.isSingletonList rankList) then
+        [selectNthRankedElement values (head rankList)]
+    else if (length values) <= 5 then
+        map (selectNthRankedElement values) (List.sort rankList)
+    else
+        let
+            len :: Int;
+            len = length values;
+    
+            partition3 :: Ord a => (a -> Boolean) -> (a->Boolean) -> [a] -> [a] -> [a] -> [a] -> ([a], [a], [a]);
+            partition3 leftFn rightFn !values !acc1 !acc2 !acc3 =
+                case values of 
+                [] -> (acc1, acc2, acc3);
+                vHead : vTail ->
+                    if leftFn vHead then
+                        partition3 leftFn rightFn vTail (vHead : acc1) acc2 acc3
+                    else if rightFn vHead then
+                        partition3 leftFn rightFn vTail acc1 acc2 (vHead : acc3)
+                    else
+                        partition3 leftFn rightFn vTail acc1 (vHead : acc2) acc3;
+                ;
+
+            r :: Int;
+            r = truncate (random * toDouble len);
+            
+            pivotIdx :: Int;
+            pivotIdx = if r <= 1 then 1 else r-1; 
+            
+            //pivot :: Ord a => a; // Same 'a' as in selectMultipleRankedElements defn
+            pivot = (subscript values pivotIdx);
+            
+            //partitionedValues :: Ord a => ([a], [a], [a]); // Same 'a' as in selectMultipleRankedElements defn
+            partitionedValues = partition3 (greaterThan pivot) (lessThan pivot) values [] [] [];
+            
+            leftLen :: Int;
+            leftLen = length (field1 partitionedValues);
+            
+            midLen :: Int;
+            midLen = length (field2 partitionedValues);
+
+            partitionedRanks :: ([Int], [Int], [Int]);
+            partitionedRanks = partition3 (greaterThanEquals leftLen) (lessThan (leftLen + midLen)) rankList [] [] [];
+
+            rightRanks :: [Int];
+            rightRanks = map (\n -> n - (leftLen + midLen)) partitionedRanks.#3;
+        in
+            selectMultipleRankedElements partitionedValues.#1 partitionedRanks.#1 ++
+            map Just (map (const pivot) partitionedRanks.#2) ++
+            selectMultipleRankedElements partitionedValues.#3 rightRanks; 
+
+verifySelect =
+    let
+        genRandomIdx :: Int -> Int;
+        genRandomIdx dummy = truncate (random * 100000);
+        
+        rankList :: [Int];
+        rankList = List.sort (map genRandomIdx (upFromTo 1 60));
+        
+        multipleResults = selectMultipleRankedElements dataSet2 rankList;
+        mapResults = map (selectNthRankedElement dataSet2) rankList;
+    in
+        if multipleResults == mapResults then
+            ("success", rankList)
+        else
+            ("FAILED", rankList);
+        
+selectMultipleRankedElementsExamples =
+    selectMultipleRankedElements testElms [] == [] &&
+    selectMultipleRankedElements testElms [1] == [Just 0] &&
+    selectMultipleRankedElements testElms [1,2,5,7,8,9] == [Just 0, Just 1, Just 5, Just 8, Just 8, Just 8] &&
+    selectMultipleRankedElements testElms [1,12] == [Just 0, Just 11] &&
+    selectMultipleRankedElements testElms [3,10,11,12] == [Just 4, Just 9, Just 10, Just 11]
+    || error "selectMultipleRankedElementExamples failed!";
+
+// Given the size of a dataset, return the ranks that percentileFromTotals will query from 
+// the passed-in SweptTotals.
+percentileFromTotalsRankPredictor :: Double -> Int -> [Int];
+percentileFromTotalsRankPredictor !rank =
+    let
+        newPredictor :: Int -> [Int];
+        newPredictor !len =
+            let
+                idxIntPart :: Int;
+                idxIntPart = truncate (toDouble (len - 1) * rank);
+            in
+                if idxIntPart < 0 || idxIntPart >= len then
+                    []
+                else
+                    [idxIntPart + 1, idxIntPart + 2];
+    in
+        newPredictor;
+
+// Returns the percentile for values using interpolation.
+// Eg, the 0.6 (60%) percentile for a 5-element list of values
+// may differ from the 0.7 (70%) percentile for the same list.
+percentileFromTotals :: Double -> SweptTotals -> Double;
+public percentileFromTotals !rank !totals =
+    let
+        len :: Double;
+        len = fromJust (nthDegreeTotal totals 0);
+        
+        idx :: Double;
+        idx = (len - 1) * rank;
+        
+        idxIntPart :: Int;
+        idxIntPart = truncate idx;
+
+        idxFracPart :: Double;
+        idxFracPart = idx - (toDouble idxIntPart);         
+    in
+        if idxIntPart < 0 || idxIntPart >= (truncate len) then
+            notANumber
+        else if idxFracPart == 0 then
+            toDouble (fromJust (nthRankedElement totals (idxIntPart + 1)))
+        else
+            let
+                left = toDouble (fromJust (nthRankedElement totals (idxIntPart + 1)));
+                right = toDouble (fromJust (nthRankedElement totals (idxIntPart + 2)));
+                diff = right - left;
+            in
+                left + (idxFracPart * diff);
+
+// This version takes account of the third element of statistics specifications
+// (a "prediction" function that tells the statistics sweeper which ranked elements need to be cached)
+makeStatisticsFinder :: Num a => [Statistic] -> [a] -> [Double];
+makeStatisticsFinder statisticsList =
+    let
+        maxDegree :: Int;
+        maxDegree = List.maximum (map statisticMaxDegreeTotal statisticsList); 
+
+        minMaxRequired :: Boolean;
+        minMaxRequired = orList (map statisticWantsMinMax statisticsList);
+        
+        totalsSweeper :: Num a => [a] -> SweptTotals;
+        totalsSweeper =
+            if minMaxRequired then
+                if maxDegree <= 0 then
+                    sweepTotals0WithMinMax
+                else if maxDegree <= 2 then
+                    sweepTotals2WithMinMax
+                else if maxDegree <= 4 then
+                    sweepTotals4WithMinMax
+                else if maxDegree <= 6 then
+                    sweepTotals6WithMinMax
+                else
+                    sweepTotalsWithMinMax maxDegree
+            else
+                if maxDegree <= 0 then
+                    sweepTotals0
+                else if maxDegree <= 2 then
+                    sweepTotals2
+                else if maxDegree <= 4 then
+                    sweepTotals4
+                else if maxDegree <= 6 then
+                    sweepTotals6
+                else
+                    sweepTotals maxDegree;
+      
+        maybeToDouble :: Num a => Maybe a -> Double;
+        maybeToDouble !m =
+            case m of
+            Nothing -> notANumber;
+            Just x -> toDouble x;
+            ;
+        
+        addCachedRanks :: Num a => SweptTotals -> [a] -> SweptTotals; 
+        addCachedRanks !totals !values =
+            let
+                len :: Int;
+                len = truncate (fromJust (nthDegreeTotal totals 0)); 
+                
+                predictedRanks :: [Int];
+                predictedRanks = List.sort (Prelude.concat (map (\x -> statisticRankPredictor x len) statisticsList));
+
+                // If we are using the total-sweepers to find mins and maxes, then don't get
+                // selectMultipleRankedElements to do redundant checks
+                filteredRanks :: [Int];
+                filteredRanks = 
+                    if minMaxRequired then
+                        filter (\x -> x != 1 && x != len) predictedRanks
+                    else
+                        predictedRanks;
+            in
+                if isEmpty filteredRanks then
+                    totals
+                else
+                    let
+                        rankElements :: [Double];
+                        rankElements = map maybeToDouble (selectMultipleRankedElements values filteredRanks);
+                        
+                        rankCache :: [(Int, Double)];
+                        rankCache = zip filteredRanks rankElements;
+                    in
+                        case totals of
+                        SweptTotals _ sumList origCache ->
+                            SweptTotals maxDegree sumList (append origCache rankCache);
+                        ;
+        
+        newStatisticsFinder :: Num a => [a] -> [Double];
+        newStatisticsFinder !values =
+            let
+                totals :: SweptTotals;
+                totals = totalsSweeper values;
+
+                augmentedTotals :: SweptTotals;
+                augmentedTotals = addCachedRanks totals values;
+            in
+                map (\x -> statisticFunction x augmentedTotals) statisticsList;
+    in
+        newStatisticsFinder;
+
+// Some order-based statistics
+percentileStatistic :: Double -> Statistic;
+percentileStatistic !rank = Statistic (percentileFromTotals rank) 0 (percentileFromTotalsRankPredictor rank) (rank==0.0 || rank==1.0);
+medianStatistic = percentileStatistic 0.5;
+maximumStatistic = percentileStatistic 1.0;
+minimumStatistic = percentileStatistic 0.0;
+
+percentileFinder = makeStatisticsFinder [minimumStatistic, percentileStatistic 0.25, medianStatistic, percentileStatistic 0.75, maximumStatistic];
+minFinder = makeStatisticsFinder [minimumStatistic];
+
+// Test the statistics finder in terms of the equivalent monolithic functions
+testStatisticsFinder =
+    let
+        dataSet = testingList 25000;
+        results = makeStatisticsFinder [percentileStatistic 0.437, medianStatistic, sampleVarianceStatistic, averageStatistic, maximumStatistic] dataSet;
+    in
+        subscript results 0 == percentile dataSet 0.437 &&
+        subscript results 1 == median dataSet &&
+        subscript results 2 == sampleVariance dataSet &&
+        subscript results 3 == average dataSet &&
+        subscript results 4 == maximum dataSet
+        || error "Summary_Tests.makeStatisticsFinderExamples failed!";
+
+sweepRunningTotalValue :: Num a => [Statistic] -> SweptTotals -> a -> (SweptTotals, [Double]);
+sweepRunningTotalValue !statisticsList !totals !newValue =
+    let
+        x :: Double;
+        x = toDouble newValue;
+    
+        maxDegree :: Int;
+        maxDegree = maximum (map statisticMaxDegreeTotal statisticsList);
+        
+        wantsMinMax :: Boolean;
+        wantsMinMax = orList (map statisticWantsMinMax statisticsList);
+        
+        buildTotals :: [Double] -> Double -> Double -> [Double] -> [Double]; 
+        buildTotals !oldTotals !x !valAccum !acc =
+            case oldTotals of
+            [] -> reverse acc;
+            oHead : oTail ->
+                let
+                    newHead :: Double;
+                    newHead = oHead + valAccum;
+                in
+                    newHead `seq`   // Force evaluation of newHead at each stage to prevent us from building a godawful in-memory datastructure of delayed additions
+                    buildTotals oTail x (toDouble x * valAccum) (newHead : acc);
+            ;        
+
+        oldLen :: Int;
+        oldLen = truncate (fromJust (nthDegreeTotal totals 0));
+        
+        oldMin :: Maybe Double;
+        oldMin = nthRankedElement totals 1;
+        
+        oldMax :: Maybe Double;
+        oldMax = nthRankedElement totals oldLen;
+        
+        newMin :: Double;
+        newMin = 
+            if wantsMinMax && isJust oldMin && x >= fromJust oldMin then
+                fromJust oldMin
+            else
+                x;
+        
+        newMax :: Double;
+        newMax = 
+            if wantsMinMax && isJust oldMax && x <= fromJust oldMax then
+                fromJust oldMax
+            else
+                x;
+        
+        newTotals :: SweptTotals;
+        newTotals =
+            case totals of
+            SweptTotals origMaxDegree origTotalsList origRankCache ->
+                SweptTotals origMaxDegree (buildTotals origTotalsList x 1.0 []) [(1, newMin), (oldLen + 1, newMax)];
+            ;
+    in
+        (newTotals, map (\s -> statisticFunction s newTotals) statisticsList);
+
+sweepRunningTotals :: Num a => [Statistic] -> [a] ->[[Double]];
+sweepRunningTotals !statisticsList !values =
+    let
+        maxDegree :: Int;
+        maxDegree = maximum (map statisticMaxDegreeTotal statisticsList);
+            
+        emptySweptTotals :: SweptTotals;
+        emptySweptTotals =
+            SweptTotals maxDegree (take (maxDegree + 1) (repeat 0.0)) [];
+
+        //sweeper :: Num a => SweptTotals -> a -> (SweptTotals, [Double]);  // same 'a' as in sweepRunningTotals defn
+        sweeper = sweepRunningTotalValue statisticsList;
+    
+        sweepHelper :: Num a => (SweptTotals -> a -> (SweptTotals, [Double])) -> [a] -> SweptTotals -> [[Double]] -> [[Double]];
+        sweepHelper sweeper !values !totals !acc =
+            case values of
+            [] -> reverse acc;
+            vHead : vTail ->
+                let
+                    runningTotal :: (SweptTotals, [Double]);
+                    runningTotal = sweeper totals vHead;
+                in
+                    sweepHelper sweeper vTail runningTotal.#1 (runningTotal.#2 : acc);
+            ;
+    in
+        sweepHelper sweeper values emptySweptTotals [];
+
+////////////////////////////////////////////////////////////////////////
+// Unit tests below copied from OlapAggregationFunctions
+testSumIgnoreNaN :: Boolean;
+private testSumIgnoreNaN =
+  let
+      testEmpty = assert(isNotANumber (sumIgnoreNaN []));
+      testSingleValue = assert (sumIgnoreNaN [2.0] == 2.0);
+      testSingleNaN = assert (isNotANumber (sumIgnoreNaN [notANumber]));
+      testMultipleValues = assert (sumIgnoreNaN [2.0, 6.0, 8.0] == 16.0);
+      testMultipleNaNs = assert (isNotANumber (sumIgnoreNaN [notANumber, notANumber, notANumber]));
+      testMixedValues = assert (sumIgnoreNaN [2.0, notANumber, 8.0, notANumber] == 10.0);
+  in
+      testEmpty
+      && testSingleValue
+      && testSingleNaN
+      && testMultipleValues
+      && testMultipleNaNs
+      && testMixedValues;
+
+//Test that taking the average correctly deals with NaN values.
+testAverageIgnoreNaN :: Boolean;
+private testAverageIgnoreNaN =
+  let
+      testEmpty = assert (isNotANumber (averageIgnoreNaN []));
+      testSingleValue = assert (averageIgnoreNaN [2.0] == 2.0);
+      testSingleNaN = assert (isNotANumber (averageIgnoreNaN [notANumber]));
+      testMultipleValues = assert (averageIgnoreNaN [2.0, 5.0, 8.0] == 5.0);
+      testMultipleNaNs = assert (isNotANumber (averageIgnoreNaN [notANumber, notANumber, notANumber]));
+      testMixedValues = assert (averageIgnoreNaN [2.0, notANumber, 8.0, notANumber] == 5.0);
+  in
+      testEmpty
+      && testSingleValue
+      && testSingleNaN
+      && testMultipleValues
+      && testMultipleNaNs
+      && testMixedValues;
+
+//Test that taking the weighted average correctly deals with NaN values.
+testWeightedAverageIgnoreNaN :: Boolean;
+private testWeightedAverageIgnoreNaN =
+  let
+      testEmpty = assert (isNotANumber (weightedAverageIgnoreNaN ([] :: [Double]) []));
+      testSingleValue = assert (weightedAverageIgnoreNaN [2.0] [5.0] == 2.0);
+      testSingleNaN1 = assert (isNotANumber (weightedAverageIgnoreNaN [notANumber] [5.0]));
+      testSingleNaN2 = assert (isNotANumber (weightedAverageIgnoreNaN [notANumber] [notANumber]));
+      testSingleNaN3 = assert (isNotANumber (weightedAverageIgnoreNaN [5.0] [notANumber]));
+      testMultipleValues = assert (weightedAverageIgnoreNaN [2.0, 6.0, 8.0] [10.0, 10.0, 5.0] == 4.8);
+      testMultipleNaNs = assert (isNotANumber (weightedAverageIgnoreNaN [notANumber, notANumber, notANumber] [10.0, 10.0, 5.0]));
+      testMixedValues1 = assert (weightedAverageIgnoreNaN [2.0, notANumber, 8.0, notANumber] [10.0, 10.0, 10.0, 10.0] == 5.0);
+      testMixedValues2 = assert (weightedAverageIgnoreNaN [2.0, notANumber, 8.0, notANumber] [notANumber, 5.0, 5.0, notANumber] == 8.0);
+      testZeroWeight = assert (weightedAverageIgnoreNaN [2.0, 4.0] [0.0, 5.0] == 4.0);
+  in
+      testEmpty
+      && testSingleValue
+      && testSingleNaN1
+      && testSingleNaN2
+      && testSingleNaN3
+      && testMultipleValues
+      && testMultipleNaNs
+      && testMixedValues1
+      && testMixedValues2
+      && testZeroWeight;
+
+//Test that taking the count correctly deals with NaN values.
+testCountIgnoreNaN :: Boolean;
+private testCountIgnoreNaN =
+  let
+      testEmpty = assert (countIgnoreNaN [] == 0.0);
+      testSingleValue = assert (countIgnoreNaN [2.0] == 1.0);
+      testSingleNaN = assert (countIgnoreNaN [notANumber] == 0.0);
+      testMultipleValues = assert (countIgnoreNaN [2.0, 6.0, 8.0] == 3.0);
+      testMultipleNaNs = assert (countIgnoreNaN [notANumber, notANumber, notANumber] == 0.0);
+      testMixedValues = assert (countIgnoreNaN [2.0, notANumber, 8.0, notANumber] == 2.0);
+  in
+      testEmpty
+      && testSingleValue
+      && testSingleNaN
+      && testMultipleValues
+      && testMultipleNaNs
+      && testMixedValues;
+  
+//Test that taking the maximum correctly deals with NaN values.
+testMaximumIgnoreNaN :: Boolean;
+private testMaximumIgnoreNaN =
+  let
+      testEmpty = assert (isNotANumber (maximumIgnoreNaN []));
+      testSingleValue = assert (maximumIgnoreNaN [2.0] == 2.0);
+      testSingleNaN = assert (isNotANumber (maximumIgnoreNaN [notANumber]));
+      testMultipleValues = assert (maximumIgnoreNaN [2.0, 5.0, 8.0] == 8.0);
+      testMultipleNaNs = assert (isNotANumber (maximumIgnoreNaN [notANumber, notANumber, notANumber]));
+      testMixedValues = assert (maximumIgnoreNaN [2.0, notANumber, 8.0, notANumber] == 8.0);
+  in
+      testEmpty
+      && testSingleValue
+      && testSingleNaN
+      && testMultipleValues
+      && testMultipleNaNs
+      && testMixedValues;
+  
+//Test that taking the minimum correctly deals with NaN values.
+testMinimumIgnoreNaN :: Boolean;
+private testMinimumIgnoreNaN =
+  let
+      testEmpty = assert (isNotANumber (minimumIgnoreNaN []));
+      testSingleValue = assert (minimumIgnoreNaN [2.0] == 2.0);
+      testSingleNaN = assert (isNotANumber (minimumIgnoreNaN [notANumber]));
+      testMultipleValues = assert (minimumIgnoreNaN [2.0, 5.0, 8.0] == 2.0);
+      testMultipleNaNs = assert (isNotANumber (minimumIgnoreNaN [notANumber, notANumber, notANumber]));
+      testMixedValues = assert (minimumIgnoreNaN [2.0, notANumber, 8.0, notANumber] == 2.0);
+  in
+      testEmpty
+      && testSingleValue
+      && testSingleNaN
+      && testMultipleValues
+      && testMultipleNaNs
+      && testMixedValues;
+////////////////////////////////////////////////////////////////////////
+      
+      
+public testSummaryFunctions =
+    let
+        testData :: [Double];
+        testData = [15,15,6,7,8,9,10,11,12,13,14,5,5];
+    in
+        // Test that simple versions give the same results as fast functions 
+        simpleAverage testData == average testData &&
+        simplePopulationVariance testData == populationVariance testData &&
+        simpleSampleVariance testData == sampleVariance testData &&
+        
+        // Same tests for experimental functions
+        simplePopulationSkewness testData == populationSkewnessFromTotals (sweepTotals4 testData) &&
+        simpleSampleSkewness testData == sampleSkewnessFromTotals (sweepTotals4 testData) &&
+        simplePopulationKurtosis testData == populationKurtosisFromTotals (sweepTotals4 testData) &&
+        simpleSampleKurtosis testData == sampleKurtosisFromTotals (sweepTotals4 testData) &&
+    
+        // Test that various algebraic equalities hold
+        List.minimum testData == fromJust (Summary.selectNthRankedElement testData 1) &&
+        List.maximum testData == fromJust (Summary.selectNthRankedElement testData (length testData)) &&
+        Summary.mode testData == Summary.nthMostFrequent testData 1 &&
+    
+        // Test experimental functions
+        sweepTotalsExamples &&
+        averageFromTotalsExamples &&
+        populationVarianceFromTotalsExamples &&
+        sampleVarianceFromTotalsExamples &&
+        populationSkewnessAndKurtosisFromTotalsExamples &&
+        sampleSkewnessAndKurtosisFromTotalsExamples
+        
+        && assert testSumIgnoreNaN
+        && assert testAverageIgnoreNaN
+        && assert testWeightedAverageIgnoreNaN
+        && assert testCountIgnoreNaN
+        && assert testMaximumIgnoreNaN
+        && assert testMinimumIgnoreNaN
+        
+        || error "Summary_Tests.testSummaryFunctions failed";       
+
+
+
+

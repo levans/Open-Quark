@@ -1,0 +1,2415 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Set.cal
+ * Creation date: Dec 2, 2003.
+ * By: Bo Ilic
+ */
+
+/*
+
+An efficient implementation of sets of values based on
+Daan Leijen's DData collections library for Haskell.
+The library was obtained from: http://www.cs.uu.nl/~daan/ddata.html
+Author: Bo Ilic
+ 
+implementation notes:
+1. the CAL implementation has explicit strictness annotations on the functions. In particular, typically set arguments to functions
+   are marked as strict.
+2. certain functions is Daan's implementation have overloaded type signatures, even though they do not have an overloaded inferred
+type. Since the API is not broken by generalizing (i.e. cannot create corrupted Set values), and the functions improve in performance,
+we have used the non-overloaded more general type in CAL.  Examples are Map.filter, partition and validsize.
+*/
+ 
+/* 
+Daan's license:
+
+--------------------------------------------------------------------------------------------
+Copyright (c) 2003, Daan Leijen, All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1) Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2) Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+   in the documentation and/or other materials provided with the distribution.
+
+3) Neither the name of the Universiteit Utrecht nor the names of its contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+THE POSSIBILITY OF SUCH DAMAGE.
+--------------------------------------------------------------------------------------------
+*/ 
+ 
+//--------------------------------------------------------------------------------
+//{-| Module      :  Set
+//    Copyright   :  (c) Daan Leijen 2002
+//    License     :  BSD-style
+//
+//    Maintainer  :  daan@cs.uu.nl
+//    Stability   :  provisional
+//    Portability :  portable
+//
+//  An efficient implementation of sets. 
+//
+//  1) The 'filter' function clashes with the "Prelude". 
+//      If you want to use "Set" unqualified, this function should be hidden.
+//
+//      > import Prelude hiding (filter)
+//      > import Set
+//
+//      Another solution is to use qualified names. This is also the only way how
+//      a "Map", "Set", and "MultiSet" can be used within one module. 
+//
+//      > import qualified Set
+//      >
+//      > ... Set.single "Paris" 
+//
+//      Or, if you prefer a terse coding style:
+//
+//      > import qualified Set as S
+//      >
+//      > ... S.single "Berlin" 
+//  
+//  2) The implementation of "Set" is based on /size balanced/ binary trees (or
+//     trees of /bounded balance/) as described by:
+//
+//     * Stephen Adams, \"/Efficient sets: a balancing act/\", Journal of Functional
+//       Programming 3(4):553-562, October 1993, <http://www.swiss.ai.mit.edu/~adams/BB>.
+//
+//     * J. Nievergelt and E.M. Reingold, \"/Binary search trees of bounded balance/\",
+//       SIAM journal of computing 2(1), March 1973.
+//
+//  3) Note that the implementation /left-biased/ -- the elements of a first argument
+//      are always perferred to the second, for example in 'union' or 'insert'.
+//      Off course, left-biasing can only be observed when equality an equivalence relation
+//      instead of structural equality.
+//
+//  4) Another implementation of sets based on size balanced trees
+//      exists as "Data.Set" in the Ghc libraries. The good part about this library 
+//      is that it is highly tuned and thorougly tested. However, it is also fairly old, 
+//      it is implemented indirectly on top of "Data.FiniteMap" and only supports 
+//      the basic set operations.     
+//      The "Set" module overcomes some of these issues:
+//        
+//      * It tries to export a more complete and consistent set of operations, like
+//        'partition', 'subset' etc. 
+//
+//      * It uses the efficient /hedge/ algorithm for both 'union' and 'difference'
+//        (a /hedge/ algorithm is not applicable to 'intersection').
+//      
+//      * It converts ordered lists in linear time ('fromAscList').  
+//
+//      * It takes advantage of the module system with names like 'empty' instead of 'Data.Set.emptySet'.
+//      
+//      * It is implemented directly, instead of using a seperate finite map implementation. 
+//-}
+//---------------------------------------------------------------------------------
+//module Set  ( 
+//            -- * Set type
+//              Set          -- instance Eq,Show
+//
+//            -- * Operators
+//            , (\\)
+//
+//            -- * Query
+//            , isEmpty
+//            , size
+//            , member
+//            , subset
+//            , properSubset
+//            
+//            -- * Construction
+//            , empty
+//            , single
+//            , insert
+//            , delete
+//            
+//            -- * Combine
+//            , union, unions
+//            , difference
+//            , intersection
+//            
+//            -- * Filter
+//            , filter
+//            , partition
+//            , split
+//            , splitMember
+//
+//            -- * Fold
+//            , fold
+//
+//            -- * Min\/Max
+//            , findMin
+//            , findMax
+//            , deleteMin
+//            , deleteMax
+//            , deleteFindMin
+//            , deleteFindMax
+//
+//            -- * Conversion
+//
+//            -- ** List
+//            , elems
+//            , toList
+//            , fromList
+//            
+//            -- ** Ordered list
+//            , toAscList
+//            , fromAscList
+//            , fromDistinctAscList
+//                        
+//            -- * Debugging
+//            , showTree
+//            , showTreeWith
+//            , valid
+//            ) where
+//
+//import Prelude hiding (filter)
+//
+//{-
+//-- just for testing
+//import QuickCheck 
+//import List (nub,sort)
+//import qualified List
+//-}
+
+/**
+ * An efficient implementation of sets of values.
+ * 
+ * The implementation of Set is based on {@em size balanced@} binary trees (or trees of {@em bounded balance@}) as described by:
+ * 
+ * {@unorderedList
+ *  {@item
+ *   Stephen Adams, "Efficient sets: a balancing act", Journal of Functional
+ *   Programming 3(4):553-562, October 1993, {@url http://www.swiss.ai.mit.edu/~adams/BB @}.
+ *  @}
+ *  {@item
+ *   J. Nievergelt and E.M. Reingold, "Binary search trees of bounded balance",
+ *   SIAM journal of computing 2(1), March 1973.
+ *  @}
+ * @}
+ * 
+ * Note that the implementation is {@em left-biased@} -- the elements of a first argument
+ * are always preferred to the second, for example in {@link union@} or {@link insert@}.
+ * Of course, left-biasing can only be observed when equality an equivalence relation
+ * instead of structural equality.
+ * 
+ * This module is an adaptation of functionality from Daan Leijen's DData collections library for Haskell.
+ * The library was obtained from {@url http://www.cs.uu.nl/~daan/ddata.html@}.
+ * See the file {@code ThirdPartyComponents/ThirdPartyComponents.txt@} for the DData license.
+ * 
+ * @author Bo Ilic
+ * @see module = "Cal.Collections.Map", "Cal.Collections.IntMap", "Cal.Collections.LongMap"
+ */
+module Cal.Collections.Set;
+import Cal.Core.Prelude using
+    typeClass = Appendable, Eq, Inputable, Ord, Outputable, Typeable;
+    typeConstructor = Boolean, Int, JObject, Maybe, Ordering, String;
+    dataConstructor = False, True, Cons, Nothing, Just, LT, EQ, GT;
+    function = compare, concat, const, error, greaterThan, input, lessThan, not, output, seq;
+    ;
+import Cal.Collections.List using
+    function = foldLeftStrict, length;
+    ;
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Gen;
+    function = arbitrary, coarbitrary, mapGen;
+    ; 
+
+//
+//{--------------------------------------------------------------------
+//  Operators
+//--------------------------------------------------------------------}
+//infixl 9 \\
+//
+//-- | /O(n+m)/. See 'difference'.
+//(\\) :: Ord a => Set a -> Set a -> Set a
+//m1 \\ m2 = difference m1 m2
+//
+//{--------------------------------------------------------------------
+//  Sets are size balanced trees
+//--------------------------------------------------------------------}
+//-- | A set of values @a@.
+//data Set a    = Tip 
+//              | Bin !Size a !(Set a) !(Set a) 
+
+//implementation note: the value element is not marked as strict in the Set type, even
+//though the key of a Map is marked as strict. This perhaps should be changed.
+/** A set of values. */
+data public Set a =
+    private Tip |
+    private Bin 
+        size            :: !Int 
+        value           :: a 
+        leftSet         :: !(Set a) 
+        rightSet        :: !(Set a);
+
+//
+//type Size     = Int
+//
+//{--------------------------------------------------------------------
+//  Query
+//--------------------------------------------------------------------}
+//-- | /O(1)/. Is this the empty set?
+//isEmpty :: Set a -> Bool
+//isEmpty t
+//  = case t of
+//      Tip           -> True
+//      Bin sz x l r  -> False
+
+/**
+ * Returns whether the set is empty.
+ * 
+ * Complexity: O(1).
+ * 
+ * @arg t the set.
+ * @return {@link True@} if the set is empty; {@link False@} otherwise.
+ */
+isEmpty :: Set a  -> Boolean;
+public isEmpty !t =
+    case t of
+    Tip -> True;
+    Bin {}  -> False;
+    ;
+
+//
+//-- | /O(1)/. The number of elements in the set.
+//size :: Set a -> Int
+//size t
+//  = case t of
+//      Tip           -> 0
+//      Bin sz x l r  -> sz
+
+/**
+ * Returns the number of elements in the set.
+ * 
+ * Complexity: O(1).
+ * 
+ * @arg t the set.
+ * @return the number of elements in the set.
+ */
+size :: Set a -> Int;
+public size !t =
+    case t of
+    Tip -> 0;
+    Bin {size}  -> size;
+    ;
+
+//
+//-- | /O(log n)/. Is the element in the set?
+//member :: Ord a => a -> Set a -> Bool
+//member x t
+//  = case t of
+//      Tip -> False
+//      Bin sz y l r
+//          -> case compare x y of
+//               LT -> member x l
+//               GT -> member x r
+//               EQ -> True       
+//
+
+/**
+ * Returns whether the element is in the set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg x the element.
+ * @arg t the set.
+ * @return {@link True@} if the element is in the set; {@link False@} otherwise.
+ */
+member :: Ord a => a -> Set a -> Boolean;
+public member !x !t =
+    case t of
+    Tip -> False;
+    Bin {value, leftSet, rightSet} ->    
+        case compare x value of
+        LT -> member x leftSet;
+        GT -> member x rightSet;
+        EQ -> True;
+        ;
+    ;    
+
+//{--------------------------------------------------------------------
+//  Construction
+//--------------------------------------------------------------------}
+//-- | /O(1)/. The empty set.
+//empty  :: Set a
+//empty
+//  = Tip
+
+/**
+ * The empty set.
+ * 
+ * Complexity: O(1)
+ * 
+ * @return an empty set.
+ */ 
+empty :: Set a;
+public empty = Tip;
+
+//
+//-- | /O(1)/. Create a singleton set.
+//single :: a -> Set a
+//single x 
+//  = Bin 1 x Tip Tip
+
+/**
+ * Creates a singleton set.
+ * 
+ * Complexity: O(1)
+ * 
+ * @arg x the value.
+ * @return a set with the specified value as its single element.
+ */
+single :: a -> Set a;
+public single x = Bin 1 x Tip Tip;
+
+//
+//{--------------------------------------------------------------------
+//  Insertion, Deletion
+//--------------------------------------------------------------------}
+//-- | /O(log n)/. Insert an element in a set.
+//insert :: Ord a => a -> Set a -> Set a
+//insert x t
+//  = case t of
+//      Tip -> single x
+//      Bin sz y l r
+//          -> case compare x y of
+//               LT -> balance y (insert x l) r
+//               GT -> balance y l (insert x r)
+//               EQ -> Bin sz x l r
+//
+
+/**
+ * Inserts an element in a set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg x the element.
+ * @arg t the set into which the element is to be inserted.
+ * @return the set with the element inserted.
+ */
+insert :: Ord a => a -> Set a -> Set a;
+public insert x !t =
+    case t of
+    Tip -> single x;
+    Bin size value leftSet rightSet ->
+        case compare x value of
+        LT -> balance value (insert x leftSet) rightSet;
+        GT -> balance value leftSet (insert x rightSet);
+        EQ -> Bin size x leftSet rightSet;
+        ;
+    ;
+
+//
+//-- | /O(log n)/. Delete an element from a set.
+//delete :: Ord a => a -> Set a -> Set a
+//delete x t
+//  = case t of
+//      Tip -> Tip
+//      Bin sz y l r 
+//          -> case compare x y of
+//               LT -> balance y (delete x l) r
+//               GT -> balance y l (delete x r)
+//               EQ -> glue l r
+
+/**
+ * Deletes an element from a set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg x the element.
+ * @arg t the set.
+ * @return the set, with the specified element deleted if present.
+ */
+delete :: Ord a => a -> Set a -> Set a;
+public delete !x !t =
+    case t of
+    Tip -> Tip;
+    Bin {value, leftSet, rightSet} ->
+        case compare x value of
+        LT -> balance value (delete x leftSet) rightSet;
+        GT -> balance value leftSet (delete x rightSet);
+        EQ -> glue leftSet rightSet;
+        ;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Subset
+//--------------------------------------------------------------------}
+//-- | /O(n+m)/. Is this a proper subset? (ie. a subset but not equal).
+//properSubset :: Ord a => Set a -> Set a -> Bool
+//properSubset s1 s2
+//  = (size s1 < size s2) && (subset s1 s2)
+//
+
+/**
+ * Returns whether the first set is a proper subset of the second set (ie. a subset but not equal).
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg s1 the first set.
+ * @arg s2 the second set.
+ * @return {@link True@} if the first set is a proper subset of the second set; {@link False@} otherwise.
+ */
+isProperSubsetOf :: (Ord a) => Set a -> Set a -> Boolean;
+public isProperSubsetOf !s1 !s2 = (size s1 < size s2) && (isSubsetOf s1 s2);
+
+//
+//-- | /O(n+m)/. Is this a subset?
+//subset :: Ord a => Set a -> Set a -> Bool
+//subset t1 t2
+//  = (size t1 <= size t2) && (subsetX t1 t2)
+
+/**
+ * Returns whether the first set is a subset of the second set.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg t1 the first set.
+ * @arg t2 the second set.
+ * @return {@link True@} if the first set is a subset of the second set; {@link False@} otherwise.
+ */
+isSubsetOf :: Ord a => Set a -> Set a -> Boolean;
+public isSubsetOf !t1 !t2 = (size t1 <= size t2) && (isSubsetOfHelper t1 t2);
+
+//
+//subsetX Tip t = True
+//subsetX t Tip = False
+//subsetX (Bin _ x l r) t
+//  = found && subsetX l lt && subsetX r gt
+//  where
+//    (found,lt,gt) = splitMember x t
+
+isSubsetOfHelper :: Ord a => Set a -> Set a -> Boolean;
+private isSubsetOfHelper !t1 !t2 = 
+    if (isEmpty t1) then
+        True
+    else if (isEmpty t2) then
+        False
+    else
+        case t1 of
+        Bin {value, leftSet, rightSet} ->
+            let
+                found :: Boolean;
+                (found, lt, gt) = splitMember value t2;
+            in    
+                found && isSubsetOfHelper leftSet lt && isSubsetOfHelper rightSet gt;
+          ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Minimal, Maximal
+//--------------------------------------------------------------------}
+//-- | /O(log n)/. The minimal element of a set.
+//findMin :: Set a -> a
+//findMin (Bin _ x Tip r) = x
+//findMin (Bin _ x l r)   = findMin l
+//findMin Tip             = error "Set.findMin: empty set has no minimal element"
+
+/**
+ * Finds the minimal element of the set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg t the set.
+ * @return the minimal element of the set.
+ */
+findMin :: Set a -> a;
+public findMin !t =
+    case t of
+    Bin {value, leftSet} ->
+        if (isEmpty leftSet) then
+            value
+        else
+            findMin leftSet;
+    Tip -> error "Empty set has no minimal element.";
+    ;
+
+
+//
+//-- | /O(log n)/. The maximal element of a set.
+//findMax :: Set a -> a
+//findMax (Bin _ x l Tip)  = x
+//findMax (Bin _ x l r)    = findMax r
+//findMax Tip              = error "Set.findMax: empty set has no maximal element"
+//
+
+/**
+ * Finds the maximal element of the set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg t the set.
+ * @return the maximal element of the set.
+ */
+findMax :: Set a -> a;
+public findMax !t =
+    case t of
+    Bin {value, rightSet} ->
+        if (isEmpty rightSet) then
+             value
+         else
+             findMax rightSet;
+    Tip -> error "Empty set has no maximal element.";    
+    ;
+
+//-- | /O(log n)/. Delete the minimal element.
+//deleteMin :: Set a -> Set a
+//deleteMin (Bin _ x Tip r) = r
+//deleteMin (Bin _ x l r)   = balance x (deleteMin l) r
+//deleteMin Tip             = Tip
+//
+
+/**
+ * Deletes the minimal element of the set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg t the set.
+ * @return the set, with its minimal element deleted.
+ */
+deleteMin :: Set a -> Set a;
+public deleteMin !t = 
+    case t of
+    Bin {value, leftSet, rightSet} ->
+        if (isEmpty leftSet) then
+            rightSet
+        else
+            balance value (deleteMin leftSet) rightSet;
+    Tip -> Tip;
+    ;
+
+
+//-- | /O(log n)/. Delete the maximal element.
+//deleteMax :: Set a -> Set a
+//deleteMax (Bin _ x l Tip) = l
+//deleteMax (Bin _ x l r)   = balance x l (deleteMax r)
+//deleteMax Tip             = Tip
+//
+
+/**
+ * Deletes the maximal element of the set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg t the set.
+ * @return the set, with its maximal element deleted.
+ */
+deleteMax :: Set a -> Set a;
+public deleteMax !t =
+    case t of
+    Bin {value, leftSet, rightSet} ->
+        if (isEmpty rightSet) then
+            leftSet
+        else
+            balance value leftSet (deleteMax rightSet);
+    Tip -> Tip;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Union. 
+//--------------------------------------------------------------------}
+//-- | The union of a list of sets: (@unions == foldLeft union empty@).
+//unions :: Ord a => [Set a] -> Set a
+//unions ts
+//  = foldlStrict union empty ts
+//
+
+/**
+ * Returns the union of a list of sets.
+ * 
+ * @arg ts a list of sets.
+ * @return the union of the sets in the list.
+ */
+unions :: Ord a => [Set a] -> Set a;
+public unions !ts = foldLeftStrict union empty ts;
+
+//
+//-- | /O(n+m)/. The union of two sets. Uses the efficient /hedge-union/ algorithm.
+//union :: Ord a => Set a -> Set a -> Set a
+//union Tip t2  = t2
+//union t1 Tip  = t1
+//union t1 t2  -- hedge-union is more efficient on (bigset `union` smallset)
+//  | size t1 >= size t2  = hedgeUnion (const LT) (const GT) t1 t2
+//  | otherwise           = hedgeUnion (const LT) (const GT) t2 t1
+
+/**
+ * Returns the union of two sets. Uses the efficient {@em hedge-union@} algorithm.
+ * 
+ * @arg t1 the first set.
+ * @arg t2 the second set.
+ * @return the union of {@code t1@} and {@code t2@}.
+ */
+union :: Ord a => Set a -> Set a -> Set a;
+public union !t1 !t2 =
+    if (isEmpty t1) then
+        t2
+    else if (isEmpty t2) then
+        t1
+    else if (size t1 >= size t2) then //hedge-union is more efficient on (bigset `union` smallset)
+        hedgeUnion (const LT) (const GT) t1 t2
+    else
+        hedgeUnion (const LT) (const GT) t2 t1;
+
+//
+//hedgeUnion cmplo cmphi t1 Tip 
+//  = t1
+//hedgeUnion cmplo cmphi Tip (Bin _ x l r)
+//  = join x (filterGt cmplo l) (filterLt cmphi r)
+//hedgeUnion cmplo cmphi (Bin _ x l r) t2
+//  = join x (hedgeUnion cmplo cmpx l (trim cmplo cmpx t2)) 
+//           (hedgeUnion cmpx cmphi r (trim cmpx cmphi t2))
+//  where
+//    cmpx y  = compare x y
+//
+
+hedgeUnion :: Ord a => (a -> Ordering) -> (a -> Ordering) -> Set a -> Set a -> Set a;
+private hedgeUnion cmplo cmphi !t1 !t2 =
+    if (isEmpty t2) then
+        t1
+    else if (isEmpty t1) then
+        case t2 of
+        Bin {value, leftSet, rightSet} ->
+            join value (filterGt cmplo leftSet) (filterLt cmphi rightSet);                
+    else
+        case t1 of
+        Bin {value, leftSet, rightSet} ->
+            let
+                cmpx y = compare value y;
+            in            
+                join value (hedgeUnion cmplo cmpx leftSet (trim cmplo cmpx t2)) (hedgeUnion cmpx cmphi rightSet (trim cmpx cmphi t2));            
+    ;        
+
+//{--------------------------------------------------------------------
+//  Difference
+//--------------------------------------------------------------------}
+//-- | /O(n+m)/. Difference of two sets. 
+//-- The implementation uses an efficient /hedge/ algorithm comparable with /hedge-union/.
+//difference :: Ord a => Set a -> Set a -> Set a
+//difference Tip t2  = Tip
+//difference t1 Tip  = t1
+//difference t1 t2   = hedgeDiff (const LT) (const GT) t1 t2
+
+/**
+ * Returns the difference of two sets.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg t1 the first set.
+ * @arg t2 the second set.
+ * @return the difference of the two sets.
+ */
+difference :: Ord a => Set a -> Set a -> Set a;
+public difference !t1 !t2  =
+    if (isEmpty t1) then
+        Tip
+    else if (isEmpty t2) then
+        t1
+    else
+        hedgeDiff (const LT) (const GT) t1 t2;
+
+//
+//hedgeDiff cmplo cmphi Tip t     
+//  = Tip
+//hedgeDiff cmplo cmphi (Bin _ x l r) Tip 
+//  = join x (filterGt cmplo l) (filterLt cmphi r)
+//hedgeDiff cmplo cmphi t (Bin _ x l r) 
+//  = merge (hedgeDiff cmplo cmpx (trim cmplo cmpx t) l) 
+//          (hedgeDiff cmpx cmphi (trim cmpx cmphi t) r)
+//  where
+//    cmpx y = compare x y
+//
+
+hedgeDiff :: Ord a => (a -> Ordering) -> (a -> Ordering) -> Set a -> Set a -> Set a;
+private hedgeDiff cmplo cmphi !t1 !t2 =
+    if (isEmpty t1) then
+        Tip
+    else if (isEmpty t2) then
+        case t1 of
+        Bin {value, leftSet, rightSet} -> join value (filterGt cmplo leftSet) (filterLt cmphi rightSet);
+    else
+        case t2 of
+        Bin {value, leftSet, rightSet} ->
+            let
+                cmpx y = compare value y;
+            in
+                merge (hedgeDiff cmplo cmpx (trim cmplo cmpx t1) leftSet)
+                      (hedgeDiff cmpx cmphi (trim cmpx cmphi t1) rightSet);
+        ;  
+
+//{--------------------------------------------------------------------
+//  Intersection
+//--------------------------------------------------------------------}
+//-- | /O(n+m)/. The intersection of two sets.
+//intersection :: Ord a => Set a -> Set a -> Set a
+//intersection Tip t = Tip
+//intersection t Tip = Tip
+//intersection t1 t2  -- intersection is more efficient on (bigset `intersection` smallset)
+//  | size t1 >= size t2  = intersect t1 t2
+//  | otherwise           = intersect t2 t1
+
+/**
+ * Returns the intersection of two sets.
+ * 
+ * Complexity: O(n+m)
+ * 
+ * @arg t1 the first set.
+ * @arg t2 the second set.
+ * @return the intersection of the two sets.
+ */
+intersection :: Ord a => Set a -> Set a -> Set a;
+public intersection !t1 !t2 =
+    if (isEmpty t1 || isEmpty t2) then
+        Tip
+    else if (size t1 >= size t2) then //intersection is more efficient on (bigset `intersection` smallset)
+        intersect t1 t2
+    else
+        intersect t2 t1;
+
+//
+//intersect Tip t = Tip
+//intersect t Tip = Tip
+//intersect t (Bin _ x l r)
+//  | found     = join x tl tr
+//  | otherwise = merge tl tr
+//  where
+//    (found,lt,gt) = splitMember x t
+//    tl            = intersect lt l
+//    tr            = intersect gt r
+//
+
+intersect :: Ord a => Set a -> Set a -> Set a;
+private intersect !t1 !t2 = 
+    if (isEmpty t1 || isEmpty t2) then
+        Tip
+    else        
+        case t2 of
+        Bin {value, leftSet, rightSet} ->
+            let
+                found :: Boolean;
+                (found, lt, gt) = splitMember value t1;
+                
+                tl = intersect lt leftSet;
+                tr = intersect gt rightSet;
+            in
+                if (found) then
+                    join value tl tr
+                else
+                    merge tl tr;            
+        ;
+
+/**
+ * Returns the intersection of a list of sets.
+ * 
+ * @arg sets  a list of sets
+ * @return    the intersection of the sets in the list
+ */
+intersections :: Ord a => [Set a] -> Set a;
+public intersections !sets = 
+    case sets of
+    [] -> empty;
+    headSet : tailSets -> foldLeftStrict intersection headSet tailSets;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Filter and partition
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Filter all elements that satisfy the predicate.
+//filter :: Ord a => (a -> Bool) -> Set a -> Set a
+//filter p Tip = Tip
+//filter p (Bin _ x l r)
+//  | p x       = join x (filter p l) (filter p r)
+//  | otherwise = merge (filter p l) (filter p r)
+//
+
+/**
+ * Filters all elements that satisfy the predicate.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg p the predicate for testing the elements.
+ * @arg s the set.
+ * @return the set containing only those elements that satisfy the predicate.
+ */
+//filter :: Ord a => (a -> Boolean) -> Set a -> Set a;
+filter :: (a -> Boolean) -> Set a -> Set a;
+public filter p !s =
+    case s of
+    Tip -> Tip;
+    Bin {value, leftSet, rightSet} ->
+        if (p value) then
+            join value (filter p leftSet) (filter p rightSet)
+        else
+            merge (filter p leftSet) (filter p rightSet);
+    ;
+
+//-- | /O(n)/. Partition the set into two sets, one with all elements that satisfy
+//-- the predicate and one with all elements that don't satisfy the predicate.
+//-- See also 'split'.
+//partition :: Ord a => (a -> Bool) -> Set a -> (Set a,Set a)
+//partition p Tip = (Tip,Tip)
+//partition p (Bin _ x l r)
+//  | p x       = (join x l1 r1,merge l2 r2)
+//  | otherwise = (merge l1 r1,join x l2 r2)
+//  where
+//    (l1,l2) = partition p l
+//    (r1,r2) = partition p r
+//
+
+/**
+ * Partitions the set into two sets, one with all elements that satisfy the predicate
+ * and one with all elements that don't satisfy the predicate.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg p the predicate for testing the elements.
+ * @arg s the set.
+ * @return a pair of sets. The first set contains all elements that satisfy the
+ *         predicate, the second all elements that fail the predicate.
+ * 
+ * @see split
+ */
+//partition :: Ord a => (a -> Boolean) -> Set a -> (Set a, Set a);
+partition :: (a -> Boolean) -> Set a -> (Set a, Set a);
+public partition p !s =
+    case s of
+    Tip -> (Tip, Tip);
+    Bin {value, leftSet, rightSet} ->
+        let
+            (l1, l2) = partition p leftSet;
+            (r1, r2) = partition p rightSet;
+        in
+            if (p value) then
+                (join value l1 r1, merge l2 r2)
+            else
+                (merge l1 r1, join value l2 r2);
+    ;
+
+//{----------------------------------------------------------------------
+//    Map
+//  ----------------------------------------------------------------------}
+//
+//  -- | /O(n*log n)/. 
+//  -- @map f s@ is the set obtained by applying @f@ to each element of @s@.
+//  -- 
+//  -- It's worth noting that the size of the result may be smaller if,
+//  -- for some @(x,y)@, @x \/= y && f x == f y@
+//
+//  map :: (Ord a, Ord b) => (a->b) -> Set a -> Set b
+//  map f = fromList . List.map f . toList
+
+
+/**
+ * {@code map f s@} is the set obtained by applying {@code f@} to each element of {@code s@}. It is possible
+ * that the size of the result may be smaller if, for some {@code (x,y)@}, {@code x != y@} but
+ * {@code (f x) == (f y)@}.
+ * 
+ * Complexity: O(n*log n)
+ * 
+ * @arg f the function to be mapped over the elements in the set.
+ * @arg set the set.
+ * @return the set containing the mapped elements.
+ */
+map :: (Ord a, Ord b) => (a -> b) -> Set a -> Set b;
+public map f !set =  fromList (List.map f (toList set));
+
+/**
+ * {@code mapJust mapFunction set@} applies {@code mapFunction@} to each element of set, discarding the {@link Nothing@}
+ * values, and keeping the {@em Just@} values after removing the {@link Just@} constructor.
+ * 
+ * @arg mapFunction the mapping function.
+ * @arg set the Set whose elements are to be mapped.
+ * @return the Set of mapped values.
+ */
+mapJust :: Ord b => (a -> Maybe b) -> Set a -> Set b;
+public mapJust mapFunction !set =
+    fromList (List.mapJust mapFunction (toList set));
+
+//
+//  -- | /O(n)/. The 
+//  --
+//  -- @mapMonotonic f s == 'map' f s@, but works only when @f@ is monotonic.
+//  -- /The precondition is not checked./
+//  -- Semi-formally, we have:
+//  -- 
+//  -- > and [x < y ==> f x < f y | x <- ls, y <- ls] 
+//  -- >                     ==> mapMonotonic f s == map f s
+//  -- >     where ls = toList s
+//
+//  mapMonotonic :: (a->b) -> Set a -> Set b
+//  mapMonotonic f Tip = Tip
+//  mapMonotonic f (Bin sz x l r) =
+//      Bin sz (f x) (mapMonotonic f l) (mapMonotonic f r)
+
+//{--------------------------------------------------------------------
+//  Fold
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Fold the elements of a set.
+//fold :: (a -> b -> b) -> b -> Set a -> b
+//fold f z s
+//  = foldR f z s
+
+/**
+ * Folds over the elements of a set.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg f the function to be folded over the elements in the set.
+ * @arg z 
+ * @arg s the set.
+ * @return the summary value obtained from the fold.
+ */
+fold :: (a -> b -> b) -> b -> Set a -> b;
+public fold f z !s = foldR f z s;
+
+//
+//-- | /O(n)/. Post-order fold.
+//foldR :: (a -> b -> b) -> b -> Set a -> b
+//foldR f z Tip           = z
+//foldR f z (Bin _ x l r) = foldR f (f x (foldR f z r)) l
+//
+
+foldR :: (a -> b -> b) -> b -> Set a -> b;
+private foldR f z !s =
+    case s of
+    Tip -> z;
+    Bin {value, leftSet, rightSet} -> foldR f (f value (foldR f z rightSet)) leftSet;
+    ;
+
+
+//
+//{--------------------------------------------------------------------
+//  List variations 
+//--------------------------------------------------------------------}
+//-- | /O(n)/. The elements of a set.
+//elems :: Set a -> [a]
+//elems s
+//  = toList s
+
+/**
+ * Returns all elements of a set.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg s the set.
+ * @return a list of all elements of the set.
+ */
+elems :: Set a -> [a];
+public elems = toList;
+
+//
+//{--------------------------------------------------------------------
+//  Lists 
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Convert the set to an ascending list of elements.
+//toList :: Set a -> [a]
+//toList !s
+//  = toAscList s
+
+/**
+ * Converts the set to an ascending list of elements.
+ * 
+ * Complexity: O(n)
+ *
+ * @arg s the set.
+ * @return a list of elements in the set in ascending order.
+ */
+toList :: Set a -> [a];
+public toList = toAscList;
+
+/**
+ * Converts the set to a list of transformed
+ * elements.
+ * 
+ * @arg f - the function used to transform the Set elements.
+ * @arg set - the Set of elements.
+ * @return a List containing the transformed elements of the Set.
+ */
+toListWith :: (a -> b) -> Set a -> [b];
+public toListWith f !set = 
+    let
+        foldFunc x y = Cons (f x) y;
+    in
+        foldR foldFunc [] set;
+
+/**
+ * Converts a Set to an Array of elements.
+ * 
+ * @arg set - the Set of elements.
+ * @return an Array containing the elements in the set.
+ */
+toArray :: Typeable a => Set a -> Array a;
+public toArray !set = Array.fromList (toList set);
+
+/**
+ * Converts a Set to an Array of transformed elements.
+ * 
+ * @arg f - the function used to transform the Set elements.
+ * @arg set - the Set of elements.
+ * @return an Array containing the transformed elements of the set.
+ */
+toArrayWith :: Typeable b => (a -> b) -> Set a -> Array b;
+public toArrayWith f !set = Array.fromList (toListWith f set);
+    
+//
+//-- | /O(n)/. Convert the set to an ascending list of elements.
+//toAscList :: Set a -> [a]
+//toAscList t   
+//  = foldR (:) [] t
+//
+
+/**
+ * Converts the set to an ascending list of elements.
+ * 
+ * Complexity: O(n)
+ *
+ * @arg t the set.
+ * @return a list of elements in the set in ascending order.
+ */
+toAscList :: Set a -> [a];
+public toAscList !t = foldR Cons [] t;
+
+
+//
+//-- | /O(n*log n)/. Create a set from a list of elements.
+//fromList :: Ord a => [a] -> Set a 
+//fromList xs 
+//  = foldlStrict ins empty xs
+//  where
+//    ins t x = insert x t
+
+/**
+ * Creates a set from a list of elements.
+ * 
+ * Complexity: O(n*log n)
+ * 
+ * @arg xs the list of elements.
+ * @return a set containing the elements.
+ * @see fromAscList
+ */
+fromList :: Ord a => [a] -> Set a;
+public fromList !xs =
+    let        
+        ins :: Ord a => Set a -> a -> Set a;
+        ins t x = insert x t;            
+    in
+        foldLeftStrict ins empty xs;
+
+/**
+ * Creates a set from a list of elements with each
+ * element in the list being transformed by the provided function.
+ * 
+ * @arg func - the transformation function to apply to list elements.
+ * @arg xs - the list of elements.
+ * @return a set containing the transformed elements
+ * @see fromList
+ */
+fromListWith :: Ord b => (a -> b) -> [a] -> Set b;
+public fromListWith func !xs =
+    let        
+        ins :: Ord b => (a -> b) -> Set b -> a -> Set b;
+        ins f t x = insert (f x) t;            
+    in
+        foldLeftStrict (ins func) empty xs;
+    
+/**
+ * Creates a set from an array of elements.
+ * 
+ * @arg array - the array of elements
+ * @return a set containing the elements.
+ */
+fromArray :: Ord a => Array a -> Set a;
+public fromArray !array =
+    let        
+        ins :: Ord a => Set a -> a -> Set a;
+        ins t x = insert x t;            
+    in
+        Array.foldLeftStrict ins empty array;
+    
+/**
+ * Creates a set from an array of elements, with
+ * each element being transformed by the provided 
+ * function.
+ * 
+ * @arg f - the transformation function to apply to each array element.
+ * @arg array - the array of elements.
+ * @return a Set containing the transformed elements.
+ */
+fromArrayWith :: Ord b => (a -> b) -> Array a -> Set b;
+public fromArrayWith f !array =
+    let        
+        ins :: Ord b => (a -> b) -> Set b -> a -> Set b;
+        ins f t x = insert (f x) t;            
+    in
+        Array.foldLeftStrict (ins f) empty array;
+      
+//
+//{--------------------------------------------------------------------
+//  Building trees from ascending/descending lists can be done in linear time.
+//  
+//  Note that if [xs] is ascending that: 
+//    fromAscList xs == fromList xs
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Build a map from an ascending list in linear time.
+//-- /The precondition (input list is ascending) is not checked./
+//fromAscList :: Eq a => [a] -> Set a 
+//fromAscList xs
+//  = fromDistinctAscList (combineEq xs)
+//  where
+//  -- [combineEq xs] combines equal elements with [const] in an ordered list [xs]
+//  combineEq xs
+//    = case xs of
+//        []     -> []
+//        [x]    -> [x]
+//        (x:xx) -> combineEq' x xx
+//
+//  combineEq' z [] = [z]
+//  combineEq' z (x:xs)
+//    | z==x      = combineEq' z xs
+//    | otherwise = z:combineEq' x xs
+//
+
+/**
+ * Builds a set from an ascending list in linear time. The precondition (input
+ * list is ascending) is not checked.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg xs an ascending list of elements.
+ * @return a set containing the elements.
+ */
+fromAscList :: Eq a => [a] -> Set a;
+public fromAscList !xs = 
+    let
+        //[combineEq xs] combines equal elements with [const] in an ordered list [xs]
+        combineEq :: Eq a => [a] -> [a];
+        combineEq !xs =
+            case xs of
+            [] -> [];
+            xsHead : xsTail ->
+                if (Prelude.isEmpty xsTail) then
+                    xs
+                else
+                    combineEq2 xsHead xsTail;
+            ;
+                    
+        combineEq2 :: Eq a => a -> [a] -> [a];
+        combineEq2 z !list =
+            if (Prelude.isEmpty list) then
+                [z]
+            else
+                let                    
+                    x:xs = list;                    
+                in
+                    if (x == z) then                        
+                        combineEq2 z xs
+                    else
+                        z : combineEq2 x xs;
+    in
+        fromDistinctAscList (combineEq xs);
+
+/*
+
+//
+//-- | /O(n)/. Build a set from an ascending list of distinct elements in linear time.
+//-- /The precondition (input list is strictly ascending) is not checked./
+//fromDistinctAscList :: [a] -> Set a 
+//fromDistinctAscList xs
+//  = build const (length xs) xs
+//  where
+//    -- 1) use continutations so that we use heap space instead of stack space.
+//    -- 2) special case for n==5 to build bushier trees. 
+//    build c 0 xs   = c Tip xs 
+//    build c 5 xs   = case xs of
+//                       (x1:x2:x3:x4:x5:xx) 
+//                            -> c (bin x4 (bin x2 (single x1) (single x3)) (single x5)) xx
+//    build c n xs   = seq nr $ build (buildR nr c) nl xs
+//                   where
+//                     nl = n `div` 2
+//                     nr = n - nl - 1
+//
+//    buildR n c l (x:ys) = build (buildB l x c) n ys
+//    buildB l x c r zs   = c (bin x l r) zs
+
+fromDistinctAscList :: [a] -> Set a;
+public fromDistinctAscList !xs = build const (length xs) xs;
+
+// 1) use continutations so that we use heap space instead of stack space.
+// 2) special case for n==5 to build bushier trees. 
+build :: (Set a -> [a] -> b) -> Int -> [a] -> b;
+private build c !n !xs  =
+    if (n == 0) then
+         c Tip xs
+    else if (n == 5) then
+        let                    
+            x1 = head xs;
+            list2 = tail xs;
+            x2 = head list2;
+            list3 = tail list2;
+            x3 = head list3;
+            list4 = tail list3;
+            x4 = head list4;
+            list5 = tail list4;
+            x5 = head list5;
+            list6 = tail list5;                        
+        in
+            c ((bin x4) (bin x2 (single x1) (single x3)) (single x5)) list6
+    else
+        let
+            nl = n / 2;
+            nr = n - nl - 1;
+        in
+            seq nr (build (buildR nr c) nl xs);
+            
+private buildR n c l !xs =
+    let
+        x = head xs;            
+        ys = tail xs;
+    in
+        build (buildB l x c) n ys;
+        
+private buildB l x c r zs = c (bin x l r) zs;
+
+*/
+
+/**
+ * Builds a set from an ascending list of distinct elements in linear time.
+ * The precondition (input list is strictly ascending) is not checked.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg xs an ascending list of distinct elements.
+ * @return a set containing the elements.
+ */
+fromDistinctAscList :: [a] -> Set a;
+public fromDistinctAscList !xs = directBuild (length xs) xs;
+
+//an alternative direct implementation of build that is not in the continuation passing style.
+directBuild :: Int -> [a] -> Set a;
+private directBuild !n list =
+    case n of
+    0 -> Tip;
+    5 ->
+        //special case for n==5 to build bushier trees. 
+        case list of
+        y1 : list2 ->
+        case list2 of
+        y2 : list3 ->
+        case list3 of
+        y3 : list4 ->
+        case list4 of
+        y4 : list5 ->
+        case list5 of
+        y5 : _ ->                
+            Bin 5 y4 (Bin 3 y2 (single y1) (single y3)) (single y5);;;;;;
+    _ ->
+        let
+            nLeft :: Int;
+            nLeft = n / 2;
+            
+            nRight :: Int;
+            nRight = n - nLeft - 1;
+        in            
+            case (List.drop nLeft list) of
+            root : rightList ->                
+                seq nRight (Bin n root (directBuild nLeft list) (directBuild nRight rightList));        
+            ;
+        ;
+
+//
+//{--------------------------------------------------------------------
+//  Eq converts the set to a list. In a lazy setting, this 
+//  actually seems one of the faster methods to compare two trees 
+//  and it is certainly the simplest :-)
+//--------------------------------------------------------------------}
+//instance Eq a => Eq (Set a) where
+//  t1 == t2  = (size t1 == size t2) && (toAscList t1 == toAscList t2)
+
+instance (Eq a) => Eq (Set a) where
+    equals = equalsSet;
+    notEquals = notEqualsSet;
+    ;
+
+equalsSet :: (Eq a) => Set a -> Set a -> Boolean;    
+private equalsSet !s1 !s2 =
+    size s1 == size s2 && toAscList s1 == toAscList s2;
+
+notEqualsSet :: (Eq a) => Set a -> Set a -> Boolean;    
+private notEqualsSet !s1 !s2 = not (equalsSet s1 s2);
+
+instance Ord a => Appendable (Set a) where
+    empty = emptySpecialized;
+    isEmpty = isEmptySpecialized;
+    append = union;
+    concat = unions;
+    ;
+
+//todoBI we should not need to define emptySpecialized and isEmptySpecialized below if
+//the class instance resolution code is updated to ignore unneeded dictionary arguments.
+
+emptySpecialized :: Ord a => Set a;
+emptySpecialized = empty;    
+
+isEmptySpecialized :: Ord a => Set a -> Boolean;
+isEmptySpecialized = isEmpty;
+
+instance Outputable a => Outputable (Set a) where
+    //a map is output as a list values sorted in ascending order by key.
+    output = outputSet;
+    ;
+    
+outputSet :: (Outputable a) => Set a -> JObject;    
+private outputSet set = output (toList set);
+
+instance (Ord a, Inputable a) => Inputable (Set a) where
+    input = inputSet;
+    ;
+
+inputSet :: (Ord a, Inputable a) => JObject -> Set a;
+private inputSet list = fromList (input list);
+
+//
+//{--------------------------------------------------------------------
+//  Show
+//--------------------------------------------------------------------}
+//instance Show a => Show (Set a) where
+//  showsPrec d s  = showSet (toAscList s)
+//
+//showSet :: (Show a) => [a] -> ShowS
+//showSet []     
+//  = showString "{}" 
+//showSet (x:xs) 
+//  = showChar '{' . shows x . showTail xs
+//  where
+//    showTail []     = showChar '}'
+//    showTail (x:xs) = showChar ',' . shows x . showTail xs
+//    
+//
+//{--------------------------------------------------------------------
+//  Utility functions that return sub-ranges of the original
+//  tree. Some functions take a comparison function as argument to
+//  allow comparisons against infinite values. A function [cmplo x]
+//  should be read as [compare lo x].
+//
+//  [trim cmplo cmphi t]  A tree that is either empty or where [cmplo x == LT]
+//                        and [cmphi x == GT] for the value [x] of the root.
+//  [filterGt cmp t]      A tree where for all values [k]. [cmp k == LT]
+//  [filterLt cmp t]      A tree where for all values [k]. [cmp k == GT]
+//
+//  [split k t]           Returns two trees [l] and [r] where all values
+//                        in [l] are <[k] and all keys in [r] are >[k].
+//  [splitMember k t]     Just like [split] but also returns whether [k]
+//                        was found in the tree.
+//--------------------------------------------------------------------}
+//
+//{--------------------------------------------------------------------
+//  [trim lo hi t] trims away all subtrees that surely contain no
+//  values between the range [lo] to [hi]. The returned tree is either
+//  empty or the key of the root is between @lo@ and @hi@.
+//--------------------------------------------------------------------}
+//trim :: (a -> Ordering) -> (a -> Ordering) -> Set a -> Set a
+//trim cmplo cmphi Tip = Tip
+//trim cmplo cmphi t@(Bin sx x l r)
+//  = case cmplo x of
+//      LT -> case cmphi x of
+//              GT -> t
+//              le -> trim cmplo cmphi l
+//      ge -> trim cmplo cmphi r
+
+trim :: (a -> Ordering) -> (a -> Ordering) -> Set a -> Set a;
+private trim cmplo cmphi !t =
+    case t of
+    Tip -> Tip;
+    Bin {value, leftSet, rightSet} ->
+        case cmplo value of
+        LT ->
+            case cmphi value of
+            GT -> t;
+            _  -> trim cmplo cmphi leftSet;
+            ;
+        _  -> trim cmplo cmphi rightSet;
+        ;
+    ;
+
+//              
+//trimMemberLo :: Ord a => a -> (a -> Ordering) -> Set a -> (Bool, Set a)
+//trimMemberLo lo cmphi Tip = (False,Tip)
+//trimMemberLo lo cmphi t@(Bin sx x l r)
+//  = case compare lo x of
+//      LT -> case cmphi x of
+//              GT -> (member lo t, t)
+//              le -> trimMemberLo lo cmphi l
+//      GT -> trimMemberLo lo cmphi r
+//      EQ -> (True,trim (compare lo) cmphi r)
+
+trimMemberLo :: Ord a => a -> (a -> Ordering) -> Set a -> (Boolean, Set a);
+private trimMemberLo lo cmphi !t =
+    case t of
+    Tip -> (False, Tip);
+    Bin {value, leftSet, rightSet} ->    
+        case compare lo value of
+        LT ->
+            case cmphi value of
+            GT -> (member lo t, t);
+            _  -> trimMemberLo lo cmphi leftSet;
+            ;
+        GT -> trimMemberLo lo cmphi rightSet;
+        EQ -> (True, trim (compare lo) cmphi rightSet);
+        ;
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  [filterGt x t] filter all values >[x] from tree [t]
+//  [filterLt x t] filter all values <[x] from tree [t]
+//--------------------------------------------------------------------}
+//filterGt :: (a -> Ordering) -> Set a -> Set a
+//filterGt cmp Tip = Tip
+//filterGt cmp (Bin sx x l r)
+//  = case cmp x of
+//      LT -> join x (filterGt cmp l) r
+//      GT -> filterGt cmp r
+//      EQ -> r
+//
+
+filterGt :: (a -> Ordering) -> Set a -> Set a;
+private filterGt cmp !t =
+    case t of
+    Tip -> Tip;
+    Bin {value, leftSet, rightSet} ->    
+        case cmp value of
+        LT -> join value (filterGt cmp leftSet) rightSet;
+        GT -> filterGt cmp rightSet;
+        EQ -> rightSet;
+        ;
+    ;
+      
+//filterLt :: (a -> Ordering) -> Set a -> Set a
+//filterLt cmp Tip = Tip
+//filterLt cmp (Bin sx x l r)
+//  = case cmp x of
+//      LT -> filterLt cmp l
+//      GT -> join x l (filterLt cmp r)
+//      EQ -> l
+//
+
+filterLt :: (a -> Ordering) -> Set a -> Set a;
+private filterLt cmp !t =
+    case t of
+    Tip -> Tip;
+    Bin {value, leftSet, rightSet} ->
+        case cmp value of
+        LT -> filterLt cmp leftSet;
+        GT -> join value leftSet (filterLt cmp rightSet);
+        EQ -> leftSet;
+        ;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Split
+//--------------------------------------------------------------------}
+//-- | /O(log n)/. The expression (@split x set@) is a pair @(set1,set2)@
+//-- where all elements in @set1@ are lower than @x@ and all elements in
+//-- @set2@ larger than @x@. @x@ is not found in neither @set1@ nor @set2@.
+//split :: Ord a => a -> Set a -> (Set a,Set a)
+//split x Tip = (Tip,Tip)
+//split x (Bin sy y l r)
+//  = case compare x y of
+//      LT -> let (lt,gt) = split x l in (lt,join y gt r)
+//      GT -> let (lt,gt) = split x r in (join y l lt,gt)
+//      EQ -> (l,r)
+
+/**
+ * {@code split x set@} returns a pair {@code (set1,set2)@} where all elements in {@code set1@} are smaller
+ * than {@code x@} and all elements in {@code set2@} are larger than {@code x@}. The value {@code x@} itself is not to be found
+ * in either in {@code set1@} or {@code set2@}.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg x the pivot on which the set is to be split.
+ * @arg t the set.
+ * @return a pair {@code (set1,set2)@} where the elements in {@code set1@} are smaller than {@code x@} and the
+ *         elements in {@code set2@} larger than {@code x@}.
+ * @see splitMember
+ */
+split :: Ord a => a -> Set a -> (Set a, Set a);
+public split x !t =
+    case t of
+    Tip -> (Tip, Tip);
+    Bin {value, leftSet, rightSet} ->
+        case (compare x value) of
+          LT ->
+              let
+                  (lt, gt) = split x leftSet;
+              in
+                  (lt, join value gt rightSet);
+          GT ->
+              let
+                  (lt, gt) = split x rightSet;
+              in
+                  (join value leftSet lt, gt);
+          EQ -> (leftSet, rightSet);
+          ;
+    ;        
+
+//
+//-- | /O(log n)/. Performs a 'split' but also returns whether the pivot
+//-- element was found in the original set.
+//splitMember :: Ord a => a -> Set a -> (Bool,Set a,Set a)
+//splitMember x Tip = (False,Tip,Tip)
+//splitMember x (Bin sy y l r)
+//  = case compare x y of
+//      LT -> let (found,lt,gt) = splitMember x l in (found,lt,join y gt r)
+//      GT -> let (found,lt,gt) = splitMember x r in (found,join y l lt,gt)
+//      EQ -> (True,l,r)
+
+/**
+ * Performs a split but also returns whether the pivot element was found in the
+ * original set.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg x the pivot on which the set is to be split.
+ * @arg t the set.
+ * @return a triple {@code (b,set1,set2)@} where the elements in {@code set1@} are smaller than {@code x@} and the
+ *         elements in {@code set2@} larger than {@code x@}, and where {@code b@} is {@link True@} iff the pivot {@code x@} is
+ *         found in the set {@code t@}.
+ * @see split
+ */
+splitMember :: Ord a => a -> Set a -> (Boolean, Set a, Set a);
+public splitMember x !t =
+    case t of
+    Tip -> (False, Tip, Tip);
+    Bin {value, leftSet, rightSet} ->
+        case (compare x value) of
+          LT ->
+              let
+                  found :: Boolean;
+                  (found, lt, gt) = splitMember x leftSet;
+              in
+                  (found, lt, join value gt rightSet);                     
+          GT ->
+              let
+                  found :: Boolean;
+                  (found, lt, gt) = splitMember x rightSet;
+              in
+                  (found, join value leftSet lt, gt);
+          EQ -> (True, leftSet, rightSet);
+          ;
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  Utility functions that maintain the balance properties of the tree.
+//  All constructors assume that all values in [l] < [x] and all values
+//  in [r] > [x], and that [l] and [r] are valid trees.
+//  
+//  In order of sophistication:
+//    [Bin sz x l r]    The type constructor.
+//    [bin x l r]       Maintains the correct size, assumes that both [l]
+//                      and [r] are balanced with respect to each other.
+//    [balance x l r]   Restores the balance and size.
+//                      Assumes that the original tree was balanced and
+//                      that [l] or [r] has changed by at most one element.
+//    [join x l r]      Restores balance and size. 
+//
+//  Furthermore, we can construct a new tree from two trees. Both operations
+//  assume that all values in [l] < all values in [r] and that [l] and [r]
+//  are valid:
+//    [glue l r]        Glues [l] and [r] together. Assumes that [l] and
+//                      [r] are already balanced with respect to each other.
+//    [merge l r]       Merges two trees and restores balance.
+//
+//  Note: in contrast to Adam's paper, we use (<=) comparisons instead
+//  of (<) comparisons in [join], [merge] and [balance]. 
+//  Quickcheck (on [difference]) showed that this was necessary in order 
+//  to maintain the invariants. It is quite unsatisfactory that I haven't 
+//  been able to find out why this is actually the case! Fortunately, it 
+//  doesn't hurt to be a bit more conservative.
+//--------------------------------------------------------------------}
+//
+//{--------------------------------------------------------------------
+//  Join 
+//--------------------------------------------------------------------}
+//join :: a -> Set a -> Set a -> Set a
+//join x Tip r  = insertMin x r
+//join x l Tip  = insertMax x l
+//join x l@(Bin sizeL y ly ry) r@(Bin sizeR z lz rz)
+//  | delta*sizeL <= sizeR  = balance z (join x l lz) rz
+//  | delta*sizeR <= sizeL  = balance y ly (join x ry r)
+//  | otherwise             = bin x l r
+//
+
+join :: a -> Set a -> Set a -> Set a;
+private join x !l !r =
+    case l of
+    Tip -> insertMin x r;
+    Bin {size=sizeL, value=valueL, leftSet=leftSetL, rightSet=rightSetL} ->
+        case r of
+        Tip -> insertMax x l;
+        Bin {size=sizeR, value=valueR, leftSet=leftSetR, rightSet=rightSetR} ->
+            if (delta * sizeL <= sizeR) then
+                balance valueR (join x l leftSetR) rightSetR
+            else if (delta * sizeR <= sizeL) then
+                balance valueL leftSetL (join x rightSetL r)
+            else
+                bin x l r;
+        ;
+    ;
+
+//
+//-- insertMin and insertMax don't perform potentially expensive comparisons.
+//insertMax,insertMin :: a -> Set a -> Set a 
+//insertMax x t
+//  = case t of
+//      Tip -> single x
+//      Bin sz y l r
+//          -> balance y l (insertMax x r)
+// 
+
+insertMax :: a -> Set a -> Set a;
+private insertMax x !t =
+    case t of
+    Tip -> single x;
+    Bin {value, leftSet, rightSet} ->
+        balance value leftSet (insertMax x rightSet);
+    ;
+            
+//insertMin x t
+//  = case t of
+//      Tip -> single x
+//      Bin sz y l r
+//          -> balance y (insertMin x l) r
+// 
+
+insertMin :: a -> Set a -> Set a;
+private insertMin x !t =
+    case t of
+    Tip -> single x;
+    Bin {value, leftSet, rightSet} ->
+        balance value (insertMin x leftSet) rightSet;
+    ;
+            
+//{--------------------------------------------------------------------
+//  [merge l r]: merges two trees.
+//--------------------------------------------------------------------}
+//merge :: Set a -> Set a -> Set a
+//merge Tip r   = r
+//merge l Tip   = l
+//merge l@(Bin sizeL x lx rx) r@(Bin sizeR y ly ry)
+//  | delta*sizeL <= sizeR = balance y (merge l ly) ry
+//  | delta*sizeR <= sizeL = balance x lx (merge rx r)
+//  | otherwise            = glue l r
+//
+
+merge :: Set a -> Set a -> Set a;
+private merge !l !r =    
+    case l of
+    Tip -> r;
+    Bin {size=sizeL, value=valueL, leftSet=leftSetL, rightSet=rightSetL} ->
+        case r of
+        Tip -> l;
+        Bin {size=sizeR, value=valueR, leftSet=leftSetR, rightSet=rightSetR} ->
+            if (delta * sizeL <= sizeR) then
+                balance valueR (merge l leftSetR) rightSetR
+            else if (delta * sizeR <= sizeL) then
+                balance valueL leftSetL (merge rightSetL r)
+            else
+                glue l r;
+        ;
+    ;    
+
+//{--------------------------------------------------------------------
+//  [glue l r]: glues two trees together.
+//  Assumes that [l] and [r] are already balanced with respect to each other.
+//--------------------------------------------------------------------}
+//glue :: Set a -> Set a -> Set a
+//glue Tip r = r
+//glue l Tip = l
+//glue l r   
+//  | size l > size r = let (m,l') = deleteFindMax l in balance m l' r
+//  | otherwise       = let (m,r') = deleteFindMin r in balance m l r'
+//
+
+glue :: Set a -> Set a -> Set a;
+private glue !l !r =
+    if (isEmpty l) then
+        r
+    else if (isEmpty r) then
+        l
+    else if (size l > size r) then
+        let
+            (m, lNew) = deleteFindMax l;
+        in
+            balance m lNew r                
+    else
+        let 
+            (m, rNew) = deleteFindMin r;
+        in
+            balance m l rNew;
+
+//
+//-- | /O(log n)/. Delete and find the minimal element.
+//deleteFindMin :: Set a -> (a,Set a)
+//deleteFindMin t 
+//  = case t of
+//      Bin _ x Tip r -> (x,r)
+//      Bin _ x l r   -> let (xm,l') = deleteFindMin l in (xm,balance x l' r)
+//      Tip           -> (error "Set.deleteFindMin: can not return the minimal element of an empty set", Tip)
+//
+
+/**
+ * Deletes and finds the minimal element.
+ * 
+ * Complexity: O(log n)
+ * 
+ * @arg t the set.
+ * @return a pair containing the minimal element and the set with the minimal element removed.
+ */
+deleteFindMin :: Set a -> (a, Set a);
+public deleteFindMin !t =
+    case t of
+    Bin {value, leftSet, rightSet} ->
+        if (isEmpty leftSet) then
+            (value, rightSet)
+        else
+            let
+                (xm, lNew) = deleteFindMin leftSet;
+            in
+                (xm, balance value lNew rightSet);
+    Tip -> (error "Can not return the minimal element of an empty set.", Tip);
+    ;
+
+//-- | /O(log n)/. Delete and find the maximal element.
+//deleteFindMax :: Set a -> (a,Set a)
+//deleteFindMax t
+//  = case t of
+//      Bin _ x l Tip -> (x,l)
+//      Bin _ x l r   -> let (xm,r') = deleteFindMax r in (xm,balance x l r')
+//      Tip           -> (error "Set.deleteFindMax: can not return the maximal element of an empty set", Tip)
+//
+
+deleteFindMax :: Set a -> (a, Set a);
+public deleteFindMax !t =
+    case t of
+    Bin {value, leftSet, rightSet} ->
+        if (isEmpty rightSet) then
+            (value, leftSet)
+        else
+            let
+                (xm, rNew) = deleteFindMax rightSet;
+            in
+                (xm, balance value leftSet rNew);
+    Tip -> (error "Can not return the maximal element of an empty set.", Tip);
+    ;
+
+//
+//{--------------------------------------------------------------------
+//  [balance x l r] balances two trees with value x.
+//  The sizes of the trees should balance after decreasing the
+//  size of one of them. (a rotation).
+//
+//  [delta] is the maximal relative difference between the sizes of
+//          two trees, it corresponds with the [w] in Adams' paper,
+//          or equivalently, [1/delta] corresponds with the $\alpha$
+//          in Nievergelt's paper. Adams shows that [delta] should
+//          be larger than 3.745 in order to garantee that the
+//          rotations can always restore balance.         
+//
+//  [ratio] is the ratio between an outer and inner sibling of the
+//          heavier subtree in an unbalanced setting. It determines
+//          whether a double or single rotation should be performed
+//          to restore balance. It is correspondes with the inverse
+//          of $\alpha$ in Adam's article.
+//
+//  Note that:
+//  - [delta] should be larger than 4.646 with a [ratio] of 2.
+//  - [delta] should be larger than 3.745 with a [ratio] of 1.534.
+//  
+//  - A lower [delta] leads to a more 'perfectly' balanced tree.
+//  - A higher [delta] performs less rebalancing.
+//
+//  - Balancing is automatic for random data and a balancing
+//    scheme is only necessary to avoid pathological worst cases.
+//    Almost any choice will do in practice
+//    
+//  - Allthough it seems that a rather large [delta] may perform better 
+//    than smaller one, measurements have shown that the smallest [delta]
+//    of 4 is actually the fastest on a wide range of operations. It
+//    especially improves performance on worst-case scenarios like
+//    a sequence of ordered insertions.
+//
+//  Note: in contrast to Adams' paper, we use a ratio of (at least) 2
+//  to decide whether a single or double rotation is needed. Allthough
+//  he actually proves that this ratio is needed to maintain the
+//  invariants, his implementation uses a (invalid) ratio of 1. 
+//  He is aware of the problem though since he has put a comment in his 
+//  original source code that he doesn't care about generating a 
+//  slightly inbalanced tree since it doesn't seem to matter in practice. 
+//  However (since we use quickcheck :-) we will stick to strictly balanced 
+//  trees.
+//--------------------------------------------------------------------}
+//delta,ratio :: Int
+//delta = 4
+//ratio = 2
+//
+
+delta :: Int;
+private delta = 4;
+
+ratio :: Int;
+private ratio = 2;
+
+//balance :: a -> Set a -> Set a -> Set a
+//balance x l r
+//  | sizeL + sizeR <= 1    = Bin sizeX x l r
+//  | sizeR >= delta*sizeL  = rotateL x l r
+//  | sizeL >= delta*sizeR  = rotateR x l r
+//  | otherwise             = Bin sizeX x l r
+//  where
+//    sizeL = size l
+//    sizeR = size r
+//    sizeX = sizeL + sizeR + 1
+//
+
+balance :: a -> Set a -> Set a -> Set a;
+private balance x !l !r =
+    let
+        sizeL :: Int;
+        sizeL = size l;
+        
+        sizeR :: Int;
+        sizeR = size r;
+        
+        sizeX :: Int;
+        sizeX = sizeL + sizeR + 1;
+    in
+        if (sizeL + sizeR <= 1) then
+            Bin sizeX x l r
+        else if (sizeR >= delta * sizeL) then
+            rotateL x l r
+        else if (sizeL >= delta * sizeR) then
+            rotateR x l r
+        else
+            Bin sizeX x l r;
+
+//-- rotate
+//rotateL x l r@(Bin _ _ ly ry)
+//  | size ly < ratio*size ry = singleL x l r
+//  | otherwise               = doubleL x l r
+//
+
+rotateL :: a -> Set a -> Set a -> Set a;
+private rotateL x !l !r =
+    case r of
+    Bin {leftSet, rightSet} ->
+        if (size leftSet < ratio * size rightSet) then
+            singleL x l r
+        else
+            doubleL x l r;
+    ;
+
+//rotateR x l@(Bin _ _ ly ry) r
+//  | size ry < ratio*size ly = singleR x l r
+//  | otherwise               = doubleR x l r
+//
+
+rotateR :: a -> Set a -> Set a -> Set a;
+private rotateR x !l !r =
+    case l of
+    Bin {leftSet, rightSet} ->
+        if (size rightSet < ratio * size leftSet) then
+            singleR x l r
+        else
+            doubleR x l r;
+    ;
+
+//-- basic rotations
+//singleL x1 t1 (Bin _ x2 t2 t3)  = bin x2 (bin x1 t1 t2) t3
+
+singleL :: a -> Set a -> Set a -> Set a;
+private singleL x1 t1 !t4 =
+    case t4 of
+    Bin _ x2 t2 t3 -> bin x2 (bin x1 t1 t2) t3;
+    ;
+
+//singleR x1 (Bin _ x2 t1 t2) t3  = bin x2 t1 (bin x1 t2 t3)
+
+singleR :: a -> Set a -> Set a -> Set a;
+private singleR x1 !t4 t3  =
+    case t4 of
+    Bin _ x2 t1 t2 -> bin x2 t1 (bin x1 t2 t3);
+    ;
+
+//
+//doubleL x1 t1 (Bin _ x2 (Bin _ x3 t2 t3) t4) = bin x3 (bin x1 t1 t2) (bin x2 t3 t4)
+
+doubleL :: a -> Set a -> Set a -> Set a;
+private doubleL x1 t1 !t5 =
+    case t5 of
+    Bin _ x2 t6 t4 ->
+        case t6 of
+        Bin _ x3 t2 t3 ->
+            bin x3 (bin x1 t1 t2) (bin x2 t3 t4);
+        ;
+    ;
+
+//doubleR x1 (Bin _ x2 t1 (Bin _ x3 t2 t3)) t4 = bin x3 (bin x2 t1 t2) (bin x1 t3 t4)
+
+doubleR :: a -> Set a -> Set a -> Set a;
+private doubleR x1 !t5 t4 =
+    case t5 of
+    Bin _ x2 t1 t6 ->
+        case t6 of
+        Bin _ x3 t2 t3 ->
+             bin x3 (bin x2 t1 t2) (bin x1 t3 t4);
+         ;
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  The bin constructor maintains the size of the tree
+//--------------------------------------------------------------------}
+//bin :: a -> Set a -> Set a -> Set a
+//bin x l r
+//  = Bin (size l + size r + 1) x l r
+//
+
+bin :: a -> Set a -> Set a -> Set a;
+private bin x !l !r = Bin (size l + size r + 1) x l r;
+
+//
+//{--------------------------------------------------------------------
+//  Utilities
+//--------------------------------------------------------------------}
+//foldlStrict f z xs
+//  = case xs of
+//      []     -> z
+//      (x:xx) -> let z' = f z x in seq z' (foldlStrict f z' xx)
+//
+//
+//{--------------------------------------------------------------------
+//  Debugging
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Show the tree that implements the set. The tree is shown
+//-- in a compressed, hanging format.
+//showTree :: Show a => Set a -> String
+//showTree s
+//  = showTreeWith True False s
+//
+//
+//{- | /O(n)/. The expression (@showTreeWith hang wide map@) shows
+// the tree that implements the set. If @hang@ is
+// @True@, a /hanging/ tree is shown otherwise a rotated tree is shown. If
+// @wide@ is true, an extra wide version is shown.
+//
+//> Set> putStrLn $ showTreeWith True False $ fromDistinctAscList [1..5]
+//> 4
+//> +--2
+//> |  +--1
+//> |  +--3
+//> +--5
+//> 
+//> Set> putStrLn $ showTreeWith True True $ fromDistinctAscList [1..5]
+//> 4
+//> |
+//> +--2
+//> |  |
+//> |  +--1
+//> |  |
+//> |  +--3
+//> |
+//> +--5
+//> 
+//> Set> putStrLn $ showTreeWith False True $ fromDistinctAscList [1..5]
+//> +--5
+//> |
+//> 4
+//> |
+//> |  +--3
+//> |  |
+//> +--2
+//>    |
+//>    +--1
+//
+//-}
+//showTreeWith :: Show a => Bool -> Bool -> Set a -> String
+//showTreeWith hang wide t
+//  | hang      = (showsTreeHang wide [] t) ""
+//  | otherwise = (showsTree wide [] [] t) ""
+//
+//showsTree :: Show a => Bool -> [String] -> [String] -> Set a -> ShowS
+//showsTree wide lbars rbars t
+//  = case t of
+//      Tip -> showsBars lbars . showString "|\n"
+//      Bin sz x Tip Tip
+//          -> showsBars lbars . shows x . showString "\n" 
+//      Bin sz x l r
+//          -> showsTree wide (withBar rbars) (withEmpty rbars) r .
+//             showWide wide rbars .
+//             showsBars lbars . shows x . showString "\n" .
+//             showWide wide lbars .
+//             showsTree wide (withEmpty lbars) (withBar lbars) l
+//
+//showsTreeHang :: Show a => Bool -> [String] -> Set a -> ShowS
+//showsTreeHang wide bars t
+//  = case t of
+//      Tip -> showsBars bars . showString "|\n" 
+//      Bin sz x Tip Tip
+//          -> showsBars bars . shows x . showString "\n" 
+//      Bin sz x l r
+//          -> showsBars bars . shows x . showString "\n" . 
+//             showWide wide bars .
+//             showsTreeHang wide (withBar bars) l .
+//             showWide wide bars .
+//             showsTreeHang wide (withEmpty bars) r
+//
+//
+//showWide wide bars 
+//  | wide      = showString (concat (reverse bars)) . showString "|\n" 
+//  | otherwise = id
+//
+//showsBars :: [String] -> ShowS
+//showsBars bars
+//  = case bars of
+//      [] -> id
+//      _  -> showString (concat (reverse (tail bars))) . showString node
+//
+//node           = "+--"
+//withBar bars   = "|  ":bars
+//withEmpty bars = "   ":bars
+
+instance Show a => Show (Set a) where
+    show = showSet;
+    ;
+
+showSet :: (Show a) => Set a -> String;
+showSet !set = 
+    concat ["Set.Set{",
+            List.join ", " (List.map show $ toList set),
+            "}"];
+
+
+//{--------------------------------------------------------------------
+//  Assertions
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Test if the internal set structure is valid.
+//valid :: Ord a => Set a -> Bool
+//valid t
+//  = balanced t && ordered t && validsize t
+//
+
+valid :: Ord a => Set a -> Boolean;
+private valid !t = balanced t && ordered t && validsize t;
+
+//ordered t
+//  = bounded (const True) (const True) t
+//  where
+//    bounded lo hi t
+//      = case t of
+//          Tip           -> True
+//          Bin sz x l r  -> (lo x) && (hi x) && bounded lo (<x) l && bounded (>x) hi r
+//
+
+ordered :: Ord a => Set a -> Boolean;
+private ordered !t =
+    let
+        bounded :: Ord a => (a -> Boolean) -> (a -> Boolean) -> Set a -> Boolean;
+        bounded lo hi !t =
+            case t of
+            Tip -> True;
+            Bin {value, leftSet, rightSet} -> 
+                (lo value) && (hi value) && bounded lo (greaterThan value) leftSet && bounded (lessThan value) hi rightSet;
+            ;
+    in
+        bounded (const True) (const True) t;
+
+//balanced :: Set a -> Bool
+//balanced t
+//  = case t of
+//      Tip           -> True
+//      Bin sz x l r  -> (size l + size r <= 1 || (size l <= delta*size r && size r <= delta*size l)) &&
+//                       balanced l && balanced r
+//
+
+balanced :: Set a -> Boolean;
+private balanced !t =
+    case t of
+    Tip -> True;
+    Bin {leftSet, rightSet} ->
+        (size leftSet + size rightSet <= 1 || (size leftSet <= delta * size rightSet && size rightSet <= delta * size leftSet)) &&
+        balanced leftSet && balanced rightSet;
+    ;
+
+//
+//validsize t
+//  = (realsize t == Just (size t))
+//  where
+//    realsize t
+//      = case t of
+//          Tip          -> Just 0
+//          Bin sz x l r -> case (realsize l,realsize r) of
+//                            (Just n,Just m)  | n+m+1 == sz  -> Just sz
+//                            other            -> Nothing
+//
+
+validsize :: Set a -> Boolean;
+private validsize !t = 
+    let
+        realsize :: Set a -> Maybe Int;
+        realsize !t =
+            case t of
+            Tip -> Just 0;
+            Bin {size, leftSet, rightSet} ->
+                let
+                    rsl :: Maybe Int;
+                    rsl = realsize leftSet;
+                    
+                    rsr :: Maybe Int;
+                    rsr = realsize rightSet;
+                in
+                    case rsl of
+                    Nothing -> Nothing;
+                    Just n ->
+                        case rsr of
+                        Nothing -> Nothing;
+                        Just m ->
+                            if (n + m + 1 == size) then
+                                Just size
+                            else
+                                Nothing;
+                        ;
+                    ;
+            ;           
+    in
+        (realsize t == Just (size t));
+ 
+
+
+//
+//{--------------------------------------------------------------------
+//  QuickCheck
+//--------------------------------------------------------------------}
+//qcheck prop
+//  = check config prop
+//  where
+//    config = Config
+//      { configMaxTest = 500
+//      , configMaxFail = 5000
+//      , configSize    = \n -> (div n 2 + 3)
+//      , configEvery   = \n args -> let s = show n in s ++ [ '\b' | _ <- s ]
+//      }
+//
+//
+//{--------------------------------------------------------------------
+//  Arbitrary, reasonably balanced trees
+//--------------------------------------------------------------------}
+//instance (Enum a) => Arbitrary (Set a) where
+//  arbitrary = sized (arbtree 0 maxkey)
+//            where maxkey  = 10000
+//
+//arbtree :: (Enum a) => Int -> Int -> Int -> Gen (Set a)
+//arbtree lo hi n
+//  | n <= 0        = return Tip
+//  | lo >= hi      = return Tip
+//  | otherwise     = do{ i  <- choose (lo,hi)
+//                      ; m  <- choose (1,30)
+//                      ; let (ml,mr)  | m==(1::Int)= (1,2)
+//                                     | m==2       = (2,1)
+//                                     | m==3       = (1,1)
+//                                     | otherwise  = (2,2)
+//                      ; l  <- arbtree lo (i-1) (n `div` ml)
+//                      ; r  <- arbtree (i+1) hi (n `div` mr)
+//                      ; return (bin (toEnum i) l r)
+//                      }  
+//
+//
+//{--------------------------------------------------------------------
+//  Valid tree's
+//--------------------------------------------------------------------}
+//forValid :: (Enum a,Show a,Testable b) => (Set a -> b) -> Property
+//forValid f
+//  = forAll arbitrary $ \t -> 
+//--    classify (balanced t) "balanced" $
+//    classify (size t == 0) "empty" $
+//    classify (size t > 0  && size t <= 10) "small" $
+//    classify (size t > 10 && size t <= 64) "medium" $
+//    classify (size t > 64) "large" $
+//    balanced t ==> f t
+//
+//forValidIntTree :: Testable a => (Set Int -> a) -> Property
+//forValidIntTree f
+//  = forValid f
+//
+//forValidUnitTree :: Testable a => (Set Int -> a) -> Property
+//forValidUnitTree f
+//  = forValid f
+//
+//
+//prop_Valid 
+//  = forValidUnitTree $ \t -> valid t
+//
+//{--------------------------------------------------------------------
+//  Single, Insert, Delete
+//--------------------------------------------------------------------}
+//prop_Single :: Int -> Bool
+//prop_Single x
+//  = (insert x empty == single x)
+//
+//prop_InsertValid :: Int -> Property
+//prop_InsertValid k
+//  = forValidUnitTree $ \t -> valid (insert k t)
+//
+//prop_InsertDelete :: Int -> Set Int -> Property
+//prop_InsertDelete k t
+//  = not (member k t) ==> delete k (insert k t) == t
+//
+//prop_DeleteValid :: Int -> Property
+//prop_DeleteValid k
+//  = forValidUnitTree $ \t -> 
+//    valid (delete k (insert k t))
+//
+//{--------------------------------------------------------------------
+//  Balance
+//--------------------------------------------------------------------}
+//prop_Join :: Int -> Property 
+//prop_Join x
+//  = forValidUnitTree $ \t ->
+//    let (l,r) = split x t
+//    in valid (join x l r)
+//
+//prop_Merge :: Int -> Property 
+//prop_Merge x
+//  = forValidUnitTree $ \t ->
+//    let (l,r) = split x t
+//    in valid (merge l r)
+//
+//
+//{--------------------------------------------------------------------
+//  Union
+//--------------------------------------------------------------------}
+//prop_UnionValid :: Property
+//prop_UnionValid
+//  = forValidUnitTree $ \t1 ->
+//    forValidUnitTree $ \t2 ->
+//    valid (union t1 t2)
+//
+//prop_UnionInsert :: Int -> Set Int -> Bool
+//prop_UnionInsert x t
+//  = union t (single x) == insert x t
+//
+//prop_UnionAssoc :: Set Int -> Set Int -> Set Int -> Bool
+//prop_UnionAssoc t1 t2 t3
+//  = union t1 (union t2 t3) == union (union t1 t2) t3
+//
+//prop_UnionComm :: Set Int -> Set Int -> Bool
+//prop_UnionComm t1 t2
+//  = (union t1 t2 == union t2 t1)
+//
+//
+//prop_DiffValid
+//  = forValidUnitTree $ \t1 ->
+//    forValidUnitTree $ \t2 ->
+//    valid (difference t1 t2)
+//
+//prop_Diff :: [Int] -> [Int] -> Bool
+//prop_Diff xs ys
+//  =  toAscList (difference (fromList xs) (fromList ys))
+//    == List.sort ((List.\\) (nub xs)  (nub ys))
+//
+//prop_IntValid
+//  = forValidUnitTree $ \t1 ->
+//    forValidUnitTree $ \t2 ->
+//    valid (intersection t1 t2)
+//
+//prop_Int :: [Int] -> [Int] -> Bool
+//prop_Int xs ys
+//  =  toAscList (intersection (fromList xs) (fromList ys))
+//    == List.sort (nub ((List.intersect) (xs)  (ys)))
+//
+//{--------------------------------------------------------------------
+//  Lists
+//--------------------------------------------------------------------}
+//prop_Ordered
+//  = forAll (choose (5,100)) $ \n ->
+//    let xs = [0..n::Int]
+//    in fromAscList xs == fromList xs
+//
+//prop_List :: [Int] -> Bool
+//prop_List xs
+//  = (sort (nub xs) == toList (fromList xs))
+//-}
+
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = Set@} type. This creates Sets
+ * using the fromList method.
+ */
+instance (Prelude.Ord a, Arbitrary a) => Arbitrary (Set a) where
+    arbitrary = arbitrarySet;
+    coarbitrary = coarbitrarySet;
+    ;
+
+arbitrarySet :: (Prelude.Ord a,Arbitrary a) => Gen (Set a);
+arbitrarySet = 
+    mapGen fromList arbitrary;
+ 
+coarbitrarySet :: (Prelude.Ord a, Arbitrary a) => (Set a)-> Gen b -> Gen b;
+coarbitrarySet set = 
+    coarbitrary $ toList set; 
+
+

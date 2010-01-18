@@ -1,0 +1,1006 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * RelativeTime.cal
+ * Created: Oct 2003
+ * By: Rick Cameron
+ */
+
+/**
+ * This module contains the {@link RelativeDate@}, {@link typeConstructor = RelativeTime@} and
+ * {@link typeConstructor = RelativeDateTime@} types, together with the functions that operate on them.
+ * 
+ * These types represent dates, times and date-time values, without the notion of a specific time-zone. 
+ * In other words, they are not a precise moment in time, such as defined by the {@link typeConstructor = "Cal.Utilities.Time.Time"@} type,
+ * but rather a relative concept. For example, it is valid to speak of Sept 1, 2006 as being the first day of the
+ * month of September, but depending on where in the world one is at a specific moment in time, the actual date
+ * could be August 31, 2005 or September 2, 2005.
+ * 
+ * In addition, {@link RelativeDate@} and {@link typeConstructor = RelativeDateTime@} are implicitly with respect
+ * to the Gregorian calendar.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Utilities.RelativeTime;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Ord, Outputable;
+    typeConstructor = Boolean, Double, Int, JObject, Maybe, String;
+    dataConstructor = Nothing, Just;
+    function = assert, concat, error, fromMaybe, fst, input, intToString, negate, not, output, snd, toDouble, truncate;
+    ;
+import Cal.Collections.List using
+    function = join, subscript;
+    ;
+import Cal.Utilities.Math;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Gen;
+    function = coarbitrary, getBoundedInt, getNthBoundedInt, makeGen;
+    ; 
+
+/**
+ * Type to represent a date-time value without the notion of a time-zone. The date-time values are implicitly
+ * with respect to the Gregorian calendar.
+ */
+data public RelativeDateTime = 
+    private RelativeDateTime 
+        date    :: !RelativeDate 
+        time    :: !RelativeTime 
+    deriving Eq, Ord;
+
+/**
+ * Type to represent a date value without the notion of a time-zone. The date values are implicitly
+ * with respect to the Gregorian calendar.
+ */
+data foreign unsafe import jvm private "int"
+    public RelativeDate deriving Eq, Ord;
+
+/**
+ * Type to represent a time value in a single 24 hour day. The actual day is unspecified so it is a relative
+ * notion of time.
+ */
+data foreign unsafe import jvm private "int"
+    public RelativeTime deriving Eq, Ord;
+
+foreign unsafe import jvm "cast"
+    private relativeDate :: Int -> RelativeDate;
+
+foreign unsafe import jvm "cast"
+    private relativeTime :: Int -> RelativeTime;
+
+foreign unsafe import jvm "cast"
+    private getInternalDate :: RelativeDate -> Int;
+
+foreign unsafe import jvm "cast"
+    private getInternalTime :: RelativeTime -> Int;
+ 
+/**
+ * Integer division that rounds to the smallest value. e.g. {@code div (-24) 5 = -5@}
+ * 
+ * @arg x the dividend.
+ * @arg y the divisor.
+ * @return the quotient of the integer division, truncated toward negative infinity.
+ */
+div :: Int -> Int -> Int;
+div !x !y =   
+    if (x > 0 && y < 0 || x < 0 && y > 0) then
+        x / y - 1
+    else
+        x / y;
+
+/**
+ * The remainder that corresponds to {@link div@}.
+ * 
+ * e.g.
+ * {@unorderedList
+ * {@item {@code rem (-24) 5 = 1@}@}
+ * {@item {@code rem 24 (-5) = -1@}@}
+ * @}
+ * 
+ * This is a property of {@code rem@}: {@code ({@link div@} x y) * y + (rem x y) = x@}
+ * 
+ * @arg x the dividend.
+ * @arg y the divisor.
+ * @return the modulus.
+ */
+rem :: Int -> Int -> Int;
+rem !x !y =     
+    if (x > 0 && y < 0 || x < 0 && y > 0) then
+        (x % y) + y
+    else
+        (x % y); 
+
+divRem :: Int -> Int -> (Int, Int);
+divRem !x !y = (div x y, rem x y);
+
+isLeapYear :: Int -> Boolean;
+private isLeapYear !year =
+    if year > 1582 then
+        (year % 4) == 0 && (year % 100) != 0 || (year % 400) == 0
+    else
+        (year % 4) == 0;
+
+daysInMonth :: Int -> Int;
+private daysInMonth !n = subscript [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] (n - 1);
+
+daysInMonth2 :: Int -> Int -> Int;
+private daysInMonth2 year !month =
+    if month != 2 then
+        daysInMonth month
+    else if isLeapYear year then
+        29
+    else
+        28;
+                                  
+makeRelativeDateValue :: Int -> Int -> Int -> RelativeDate;
+public makeRelativeDateValue !year !month !day = 
+
+    if year < -4713 then
+        error "Years less than -4713 are not supported."
+
+    else if month < 1 || month > 12 then
+        error "Invalid month."
+
+    else if day < 1 || day > (daysInMonth2 year month) then
+        error "Invalid day."
+
+    else
+        let
+            //correct for negative year
+            work_year =
+                if year < 0 && month > 2 then
+                    year + 1
+                else if year >= 0 && month <= 2 then
+                    year - 1
+                else
+                    year;
+
+            work_month = if month <= 2 then month + 12 else month;
+
+            //deal with Gregorian calendar
+            b = if work_year * 10000 + work_month * 100 + day >= 15821015 then
+                    let
+                        a = work_year / 100;
+                    in 
+                        (2 - a) + a / 4
+                else
+                    0;
+
+            yearToDays = truncate (365.25 * toDouble work_year);
+            monthToDays = truncate (30.6001 * toDouble (work_month + 1));
+        in
+            relativeDate (yearToDays + monthToDays + day + 1720994 + b);
+
+
+dateToYearMonthDay :: RelativeDate -> (Int, Int, Int);
+public dateToYearMonthDay !date =
+    let
+        // dealing with Gregorian calendar reform
+        z = getInternalDate date + 1;
+        a = if z < 2299161 then
+                z
+            else
+                let
+                    alpha = truncate ((toDouble z - 1867216.25) / 36524.25);
+                in
+                    z + 1 + alpha - alpha / 4;
+
+        b = if a > 1721423 then a + 1524 else a + 1158;       
+        c = truncate ((toDouble b - 122.1) / 365.25);
+        d = truncate (365.25 * (toDouble c));
+        e = truncate ((toDouble (b - d)) / 30.6001);
+
+        day = b - d - truncate (30.6001 * (toDouble e));
+        month = if e < 14 then e - 1 else e - 13;
+        year = if month > 2 then c - 4716 else c - 4715;
+    in
+        (year, month, day);
+
+makeRelativeTimeValue :: Int -> Int -> Int -> RelativeTime;
+public makeRelativeTimeValue !hour !min !sec =
+    if hour < 0 || hour > 23 then
+        error "Invalid hour."
+    else if min < 0 || min > 60 then
+        error "Invalid minute."
+    else if sec < 0 || sec > 60 then
+        error "Invalid second."
+    else
+        relativeTime (hour * 3600 + min * 60 + sec);
+
+timeToHourMinuteSecond :: RelativeTime -> (Int, Int, Int);
+public timeToHourMinuteSecond !time = 
+    let
+        internalTime = getInternalTime time;
+        hour = internalTime / 3600;
+        min  = rem (internalTime / 60) 60;
+        sec  = rem internalTime 60;
+    in
+        (hour, min, sec);
+
+makeRelativeDateTimeValue :: Int -> Int -> Int -> Int -> Int -> Int -> RelativeDateTime;
+public makeRelativeDateTimeValue !year !month !day !hour !min !sec =
+    RelativeDateTime (makeRelativeDateValue year month day) (makeRelativeTimeValue hour min sec);
+
+makeRelativeDateTimeValue2 :: Int -> Int -> Int -> RelativeDateTime;
+public makeRelativeDateTimeValue2 !year !month !day =
+    toDateTime (makeRelativeDateValue year month day);
+
+year :: RelativeDate -> Int;
+public year !date =
+    case dateToYearMonthDay date of
+    (y, m, d) -> y;
+    ;
+
+/* @example */
+private yearMonthDayExamples =
+    let
+        d1 = makeRelativeDateValue 1999 8 6;
+        d2 = makeRelativeDateValue 500 2 28;
+    in
+        assert (year d1 == 1999 && month d1 == 8 && day d1 == 6) &&
+        assert (year d2 == 500 && month d2 == 2 && day d2 == 28)
+        ;
+
+month :: RelativeDate -> Int;
+public month !date = 
+    case dateToYearMonthDay date of
+    (y, m, d) -> m;
+    ;
+
+day :: RelativeDate -> Int;
+public day !date = 
+    case dateToYearMonthDay date of
+    (y, m, d) -> d;
+    ;
+
+hour :: RelativeTime -> Int;
+public hour !time =
+    case timeToHourMinuteSecond time of
+    (h, m, s) -> h;
+    ;
+
+minute :: RelativeTime -> Int;
+public minute !time = 
+    case timeToHourMinuteSecond time of
+    (h, m, s) -> m;
+    ;
+
+second :: RelativeTime -> Int;
+public second !time = 
+    case timeToHourMinuteSecond time of
+    (h, m, s) -> s;
+    ;
+
+getDatePart :: RelativeDateTime -> RelativeDate;
+public getDatePart !dateTime = dateTime.RelativeDateTime.date;
+
+getTimePart :: RelativeDateTime -> RelativeTime;
+public getTimePart !dateTime = dateTime.RelativeDateTime.time;
+
+toDateTime :: RelativeDate -> RelativeDateTime;
+public toDateTime !date = RelativeDateTime date (relativeTime 0);
+
+addDaysToDate :: Int -> RelativeDate -> RelativeDate;
+//todoBI better validation
+private addDaysToDate !days !date = relativeDate (days + getInternalDate date);
+
+/* @example */
+private addDaysToDateExamples =
+    assert ((addDaysToDate 5000 (makeRelativeDateValue 1986 10 16)) == (makeRelativeDateValue 2000 6 24)) &&
+    assert ((addDaysToDate (-5000) (makeRelativeDateValue 1986 10 16)) == (makeRelativeDateValue 1973 2 6))
+    ;
+
+addSecondsToTime :: Int -> RelativeTime -> RelativeTime;
+private addSecondsToTime !nSeconds !time =
+    normalizeTime (relativeTime (getInternalTime time + nSeconds));
+
+/**
+ * Normalizes a time so that its internal representation in seconds satisfies {@code 0 <= s < {@link maxNSecondsInDay@}@}.
+ * {@code RelativeTime (-1)@} is converted to {@code RelativeTime ({@link maxNSecondsInDay@} - 1)@}.
+ */
+normalizeTime :: RelativeTime -> RelativeTime;
+private normalizeTime !time = 
+    relativeTime (rem (getInternalTime time) maxNSecondsInDay);
+
+addSecondsToDateTime :: Int -> RelativeDateTime -> RelativeDateTime;
+private addSecondsToDateTime !nSeconds !dateTime =
+    case dateTime of
+    RelativeDateTime {date, time} ->
+        normalizeDateTime (RelativeDateTime date (relativeTime (getInternalTime time + nSeconds)));
+    ;
+
+/* @example */
+private addSecondsToDateTimeExamples =
+    assert ((addSecondsToDateTime 2 (makeRelativeDateTimeValue 1999 3 21 23 59 59)) == (makeRelativeDateTimeValue 1999 3 22 0 0 1)) &&
+    assert ((addSecondsToDateTime (-2) (makeRelativeDateTimeValue 1999 3 22 0 0 1)) == (makeRelativeDateTimeValue 1999 3 21 23 59 59))
+    ;
+
+/**
+ * Normalizes a {@link typeConstructor = RelativeDateTime@} value so that the internal representation of the time part in seconds satisfies
+ * {@code 0 <= s < {@link maxNSecondsInDay@}@}, with the date part correspondingly adjusted.
+ */
+normalizeDateTime :: RelativeDateTime -> RelativeDateTime;
+private normalizeDateTime !dateTime = 
+    case dateTime of
+    RelativeDateTime {date, time} ->
+        let
+            a = divRem (getInternalTime time) maxNSecondsInDay;
+            normalizedTime = relativeTime (snd a);     
+            normalizedDate = relativeDate (getInternalDate date + fst a);
+        in
+            RelativeDateTime normalizedDate normalizedTime;
+    ;    
+         
+addDaysToDateTime :: Double -> RelativeDateTime -> RelativeDateTime;
+private addDaysToDateTime !fractionalDays !dateTime =
+    case dateTime of
+    RelativeDateTime {date, time} ->
+        case fractionalDaysToNDaysNSeconds fractionalDays of
+        (nDays, nSeconds) ->
+            normalizeDateTime (RelativeDateTime (relativeDate (getInternalDate date + nDays)) (relativeTime (getInternalTime time + nSeconds)))
+            ;
+        ;
+    ;
+
+/* @example */
+private addDaysToDateTimeExamples =
+    assert ((addDaysToDateTime 1000.5 (makeRelativeDateTimeValue2 1986 10 16)) == (makeRelativeDateTimeValue 1989 7 12 12 0 0)) &&
+    assert((addDaysToDateTime (negate 1000.5) (makeRelativeDateTimeValue2 1986 10 16)) == (makeRelativeDateTimeValue 1984 1 19 12 0 0))
+    ;
+
+maxNSecondsInDay :: Int;
+private maxNSecondsInDay = 24 * 60 * 60;
+
+fractionalDaysToNDaysNSeconds :: Double -> (Int, Int);
+private fractionalDaysToNDaysNSeconds !fractionalDays =
+    (truncate fractionalDays, truncate ((Math.fractionalPart fractionalDays) * (toDouble maxNSecondsInDay)));
+
+data public DayOfWeek =
+    public Sunday |
+    public Monday |
+    public Tuesday |
+    public Wednesday |
+    public Thursday |
+    public Friday |
+    public Saturday
+    deriving Eq, Show, Arbitrary;
+
+fromEnumDayOfWeek :: DayOfWeek -> Int;
+private fromEnumDayOfWeek !dayOfWeek =
+    case dayOfWeek of
+    Sunday -> 1;
+    Monday -> 2;
+    Tuesday -> 3;
+    Wednesday -> 4;
+    Thursday -> 5;
+    Friday -> 6;
+    Saturday -> 7;
+    ;
+
+/**
+ * Used to specify the definition of what the first week of the year should be considered to be.
+ * @see datePart
+ */
+data public FirstWeekOfYear =
+    public WeekInWhichJan1Occurs |
+    public FirstWeekWithAtLeast4DaysInNewYear |
+    public FirstWeekFullyInNewYear
+    deriving Eq, Show, Arbitrary;
+
+/**
+ * Used to specify the units of a time interval to be added 
+ * @see dateAdd
+ */
+data public DateAddType =
+    public YearAdd | 
+    public QuarterAdd |
+    public MonthAdd |
+    public DayAdd |
+    public WeekAdd |
+    public HourAdd |
+    public MinuteAdd |
+    public SecondAdd
+    deriving Eq, Show, Arbitrary;
+
+/**
+ * {@link dateAdd@} is used to add intervals of time to a {@link typeConstructor = RelativeDateTime@} value. Its main feature
+ * is that the date-time returned will always be valid. For example, {@link dateAdd@} takes into account such factors as
+ * the number of days in a month and leap years. 
+ *  
+ * @arg intervalType
+ * @arg nIntervals the number of intervals to be added. It can be positive (to get date-times in the future) or negative
+ *     (to get date-times in the past).
+ * @arg dateTime the date-time value to which the intervals are to be added
+ * @return a date-time value to which a specified number of time intervals have been added. 
+ */
+dateAdd :: DateAddType -> Int -> RelativeDateTime -> RelativeDateTime;
+public dateAdd !intervalType !nIntervals !dateTime = 
+    let
+        date = getDatePart dateTime;
+        time = getTimePart dateTime;
+    in
+        case intervalType of
+
+        YearAdd -> 
+            case dateToYearMonthDay date of
+            (year, month, day) -> 
+                let
+                    resultYear = year + nIntervals;
+                    resultDay = if day == 29 && month == 2 && not (isLeapYear resultYear) then 28 else day;
+                in
+                    RelativeDateTime (makeRelativeDateValue resultYear month resultDay) time;
+            ;
+     
+        QuarterAdd -> dateAdd MonthAdd (3 * nIntervals) dateTime;
+
+        MonthAdd -> 
+            case dateToYearMonthDay date of
+            (year, month, day) -> 
+                let
+                    temp = (month - 1) + nIntervals;
+                    //we use rem and div instead of Prelude.mod and Prelude.divide to handle the case of negative temp correctly. 
+                    resultMonth = rem temp 12 + 1;                       
+                    resultYear = year + div temp 12; 
+                    nDaysInResultMonth = daysInMonth2 resultYear resultMonth;
+                    resultDay = if day <= 28 || day <= nDaysInResultMonth then day else nDaysInResultMonth;
+                in
+                    RelativeDateTime (makeRelativeDateValue resultYear resultMonth resultDay) time;
+            ;   
+
+        DayAdd -> RelativeDateTime (addDaysToDate nIntervals date) time;
+
+        WeekAdd -> dateAdd DayAdd (7 * nIntervals) dateTime;
+
+        HourAdd -> dateAdd SecondAdd (3600 * nIntervals) dateTime;
+
+        MinuteAdd -> dateAdd SecondAdd (60 * nIntervals) dateTime;
+
+        SecondAdd -> addSecondsToDateTime nIntervals dateTime;
+        ;
+
+/* @example */
+private dateAddExamples =
+    assert ((dateAdd DayAdd (-32) (makeRelativeDateTimeValue2 1999 9 28)) == (makeRelativeDateTimeValue2 1999 8 27)) &&
+    assert ((dateAdd MonthAdd 1 (makeRelativeDateTimeValue2 1996 1 31)) == (makeRelativeDateTimeValue2 1996 2 29)) &&  
+    assert ((dateAdd MonthAdd (-100) (makeRelativeDateTimeValue2 1996 3 31)) == (makeRelativeDateTimeValue2 1987 11 30)) &&  
+    assert ((dateAdd QuarterAdd 17 (makeRelativeDateTimeValue2 1999 9 28)) == (makeRelativeDateTimeValue2 2003 12 28)) &&
+    assert ((dateAdd HourAdd (-400) (makeRelativeDateTimeValue2 1999 9 28)) == (makeRelativeDateTimeValue 1999 9 11 8 0 0))
+    ;
+
+/**
+ * Type to specify the units for the result of performing a difference between 2 date-time values.
+ * 
+ * For example, it allows you to specify that you want the difference expressed in quarters, or weeks.
+ */
+data public DateDiffType =
+    public YearDiff |
+    public QuarterDiff |
+    public MonthDiff |
+    public DayDiff |
+    public WeekDiff |
+    public FirstDayOfWeekDiff |
+    public HourDiff |
+    public MinuteDiff |
+    public SecondDiff
+    deriving Eq, Show;
+
+/**
+ * @arg dateDiffType
+ * @arg dateTime1
+ * @arg dateTime2
+ * @arg maybeFirstDayOfWeek if Nothing, then {@link Sunday@} is assumed.
+ */
+dateDiff :: DateDiffType -> RelativeDateTime -> RelativeDateTime -> Maybe DayOfWeek -> Int;
+public dateDiff !dateDiffType !dateTime1 !dateTime2 maybeFirstDayOfWeek =
+    let
+        firstDayOfWeek = fromMaybe Sunday maybeFirstDayOfWeek;
+
+        date1 = getDatePart dateTime1;
+        date2 = getDatePart dateTime2;
+        time1 = getTimePart dateTime1;
+        time2 = getTimePart dateTime2;
+
+        yearDiff = year date2 - year date1;
+        dayDiff = getInternalDate date2 - getInternalDate date1;
+
+    in
+        case dateDiffType of
+        
+        YearDiff -> yearDiff;
+
+        QuarterDiff -> 4 * yearDiff + (month date2 - 1) /3 - (month date1 - 1) / 3;
+
+        MonthDiff -> 12 * yearDiff + (month date2 - month date1);
+
+        DayDiff -> dayDiff;
+
+        WeekDiff -> dayDiff / 7;
+
+        FirstDayOfWeekDiff ->
+            let
+                //returns the closest date less than or equal to d that falls on firstDayOfWeek.
+                roundDownToFirstDayOfWeek d = addDaysToDate (-(rem (dayOfWeek d - fromEnumDayOfWeek firstDayOfWeek) 7)) d;
+            in 
+                (getInternalDate (roundDownToFirstDayOfWeek date2) - getInternalDate (roundDownToFirstDayOfWeek date1)) / 7;
+
+        HourDiff -> 24 * dayDiff + hour time2 - hour time1;
+
+        MinuteDiff -> 24 * 60 * dayDiff + getInternalTime time2 / 60 - getInternalTime time1 / 60;
+
+        SecondDiff -> maxNSecondsInDay * dayDiff + getInternalTime time2 - getInternalTime time1;
+        ;
+
+/* @example */
+private dateDiffExamples =
+
+    assert (dateDiff YearDiff (makeRelativeDateTimeValue2 1999 10 7) (makeRelativeDateTimeValue2 2005 2 10) Nothing == 6) &&
+    assert (dateDiff YearDiff (makeRelativeDateTimeValue2 1999 12 31) (makeRelativeDateTimeValue2 2000 1 1) Nothing == 1) &&
+    assert (dateDiff YearDiff (makeRelativeDateTimeValue2 1999 1 1) (makeRelativeDateTimeValue2 1999 12 31) Nothing == 0) &&
+
+    assert (dateDiff QuarterDiff (makeRelativeDateTimeValue2 1999 10 6) (makeRelativeDateTimeValue2 2003 5 20) Nothing == 14) &&
+    assert (dateDiff QuarterDiff (makeRelativeDateTimeValue2 1999 3 31) (makeRelativeDateTimeValue2 1999 4 1) Nothing == 1) &&
+    assert (dateDiff QuarterDiff (makeRelativeDateTimeValue2 1999 1 1) (makeRelativeDateTimeValue2 1999 3 31) Nothing == 0) &&
+
+    assert (dateDiff MonthDiff (makeRelativeDateTimeValue2 1999 3 15) (makeRelativeDateTimeValue2 1999 7 13) Nothing == 4) &&
+
+    assert (dateDiff DayDiff (makeRelativeDateTimeValue2 1999 10 7) (makeRelativeDateTimeValue2 1999 10 10) Nothing == 3) &&   
+     
+    assert (dateDiff WeekDiff (makeRelativeDateTimeValue2 1999 10 19) (makeRelativeDateTimeValue2 1999 10 25) Nothing == 0) &&
+    assert (dateDiff WeekDiff (makeRelativeDateTimeValue2 1999 10 19) (makeRelativeDateTimeValue2 1999 10 26) Nothing == 1) &&
+
+    assert (dateDiff FirstDayOfWeekDiff (makeRelativeDateTimeValue2 1999 10 5) (makeRelativeDateTimeValue2 1999 10 29) (Just Wednesday) == 4) &&
+    assert (dateDiff FirstDayOfWeekDiff (makeRelativeDateTimeValue2 1999 10 6) (makeRelativeDateTimeValue2 1999 10 29) (Just Wednesday) == 3) &&
+    assert (dateDiff FirstDayOfWeekDiff (makeRelativeDateTimeValue2 1999 10 5) (makeRelativeDateTimeValue2 1999 10 27) (Just Wednesday) == 4)
+    
+    ;
+
+/**
+ * @return the day of week that a date occurs on with Sunday = 1, Monday = 2, ..., Saturday = 7.
+ */
+dayOfWeek :: RelativeDate -> Int;
+public dayOfWeek !date = rem (getInternalDate date + 2) 7 + 1;
+
+data public DatePartType =
+    public YearPart |
+    public QuarterPart |
+    public MonthPart |
+    public DayOfYearPart |
+    public DayPart |
+    public DayOfWeekPart |
+    public WeekOfYearPart |
+    public HourPart |
+    public MinutePart |
+    public SecondPart
+    deriving Eq, Show;
+
+/**
+ * Extracts a specified component of a date. For example, this function can be used to
+ * determine what week of the year a given date is.
+ * 
+ * @arg datePartType
+ * @arg dateTime
+ * @arg maybeFirstDayOfWeek if {@link Nothing@} then {@link Sunday@} is used as a default.
+ * @arg maybeFirstWeekOfYear if {@link Nothing@} then {@link WeekInWhichJan1Occurs@} is used as a default.
+ */
+datePart :: DatePartType -> RelativeDateTime -> Maybe DayOfWeek -> Maybe FirstWeekOfYear -> Int;
+public datePart !datePartType !dateTime maybeFirstDayOfWeek maybeFirstWeekOfYear =
+    let
+        firstDayOfWeek = fromMaybe Sunday maybeFirstDayOfWeek;
+        firstWeekOfYear = fromMaybe WeekInWhichJan1Occurs maybeFirstWeekOfYear;
+
+        date = getDatePart dateTime;
+        time = getTimePart dateTime;
+        
+        //dateOfFirstDayOfFirstWeek :: Int -> RelativeDate;
+        dateOfFirstDayOfFirstWeek year =
+            let
+                jan1 = makeRelativeDateValue year 1 1;
+                nDaysInNewYearInJan1Week = rem (6 + fromEnumDayOfWeek firstDayOfWeek - dayOfWeek jan1) 7 + 1;
+                d1 = addDaysToDate (nDaysInNewYearInJan1Week - 7) jan1;
+                d2 = addDaysToDate (rem nDaysInNewYearInJan1Week 7) jan1;
+            in
+                case firstWeekOfYear of
+                WeekInWhichJan1Occurs -> d1;
+                FirstWeekWithAtLeast4DaysInNewYear -> if nDaysInNewYearInJan1Week >= 4 then d1 else d2;
+                FirstWeekFullyInNewYear -> d2;
+                ;
+                          
+    in
+        case datePartType of
+
+        YearPart -> year date;
+
+        QuarterPart -> (month date - 1) / 3 + 1;
+
+        MonthPart -> month date;
+
+        DayOfYearPart -> (getInternalDate date - getInternalDate (makeRelativeDateValue (year date) 1 1)) + 1;
+
+        DayPart -> day date;
+
+        DayOfWeekPart -> rem (dayOfWeek date - fromEnumDayOfWeek firstDayOfWeek) 7 + 1;
+
+        WeekOfYearPart ->
+            let
+                currentYear = year date;
+                weekOfYear :: Int -> Int;
+                weekOfYear !yr = (7 + getInternalDate date - getInternalDate (dateOfFirstDayOfFirstWeek yr)) / 7;
+                weekOfCurrentYear = weekOfYear currentYear;
+                weekOfPreviousYear = weekOfYear (currentYear - 1); 
+            in
+                if weekOfCurrentYear > 0 then weekOfCurrentYear else weekOfPreviousYear;
+
+        HourPart -> hour time;
+
+        MinutePart -> minute time;
+
+        SecondPart -> second time;
+        ;  
+        
+/* @example */
+private datePartExamples =
+    let
+        dt1 = makeRelativeDateTimeValue 1999 8 15 10 35 0;
+        dt2 = makeRelativeDateTimeValue2 1999 9 29;
+        dt3 = makeRelativeDateTimeValue2 1997 9 14;
+    in
+        assert (datePart DayPart dt1 Nothing Nothing == 15) &&
+        assert (datePart MonthPart dt1 Nothing Nothing == 8) &&
+        assert (datePart MinutePart dt1 Nothing Nothing == 35) &&
+        assert (datePart QuarterPart dt2 Nothing Nothing == 3) &&
+        assert (datePart DayOfWeekPart dt2 Nothing Nothing == 4) &&
+        assert (datePart DayOfWeekPart dt2 (Just Friday) Nothing == 6) &&
+        assert (datePart WeekOfYearPart dt3 Nothing Nothing == 38) &&
+        assert (datePart WeekOfYearPart dt3 Nothing (Just FirstWeekFullyInNewYear) == 37)
+        ;
+
+//mappings of RelativeDate, RelativeTime, RelativeDateTime to Java's Date class.
+
+data foreign unsafe import jvm public "java.util.Date"
+    public JDate deriving Inputable, Outputable;
+
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.makeDate"
+    private makeJDate :: Int -> Int -> Int -> Int -> Int -> Int -> JDate;
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.getUTCYear"
+    private getYear :: JDate -> Int;
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.getUTCMonth"
+    private getMonth :: JDate -> Int;
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.getUTCDay"
+    private getDay :: JDate -> Int;
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.getUTCHour"
+    private getHour :: JDate -> Int;
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.getUTCMinute"
+    private getMinute :: JDate -> Int;
+foreign unsafe import jvm "static method org.openquark.util.time.TimeUtility.getUTCSecond"
+    private getSecond :: JDate -> Int;
+
+
+jDateToRelativeDate :: JDate -> RelativeDate;
+public jDateToRelativeDate !date = makeRelativeDateValue (getYear date) (getMonth date) (getDay date);
+
+relativeDateToJDate :: RelativeDate -> JDate;
+public relativeDateToJDate !date = 
+    case dateToYearMonthDay date of
+    (y, m, d) -> makeJDate y m d 0 0 0;
+    ;
+    
+jDateToRelativeDateTime :: JDate -> RelativeDateTime;
+public jDateToRelativeDateTime !jdate = 
+    let
+        date = makeRelativeDateValue (getYear jdate) (getMonth jdate) (getDay jdate);
+        time = makeRelativeTimeValue (getHour jdate) (getMinute jdate) (getSecond jdate);
+    in
+        RelativeDateTime date time;   
+        
+relativeDateTimeToJDate:: RelativeDateTime -> JDate;
+public relativeDateTimeToJDate !dateTime = 
+    case dateTime of
+    RelativeDateTime {date, time} ->
+        case dateToYearMonthDay date of
+        (y, m, d) ->
+            case timeToHourMinuteSecond time of
+            (h, mins, s) ->
+                makeJDate y m d h mins s
+                ;
+            ;
+        ;
+    ;
+
+//IO for RelativeDate
+
+//todoBI currently we output to a Tuple holding the year, month, day triple. It might be nicer to define our own Java class 
+//that represents the concept of relative date and/or in the case of input, make the input function more lenient i.e. behave
+//like the Crystal Reports dateSerial functions so that DateSerial (2003, 1, 32) = Feb 1, 2003.
+
+instance Inputable RelativeDate where
+    input = inputRelativeDate;
+    ;
+
+inputRelativeDate :: JObject -> RelativeDate;
+inputRelativeDate !date =
+    case (input date) of
+    (y, m, d) -> makeRelativeDateValue y m d;
+    ;
+
+
+instance Outputable RelativeDate where
+    output = outputRelativeDate;
+    ;
+
+outputRelativeDate :: RelativeDate -> JObject;
+outputRelativeDate !date = output (dateToYearMonthDay date);
+
+
+//IO for RelativeTime
+
+instance Inputable RelativeTime where
+    input = inputRelativeTime;
+    ;
+
+inputRelativeTime :: JObject -> RelativeTime;
+inputRelativeTime !time =
+    case (input time) of
+    (h, m, s) -> makeRelativeTimeValue h m s;
+    ;
+
+instance Outputable RelativeTime where
+    output = outputRelativeTime;
+    ;
+
+outputRelativeTime :: RelativeTime -> JObject;
+outputRelativeTime !time = output (timeToHourMinuteSecond time);
+
+
+
+//IO for RelativeDateTime
+
+/**
+ * {@code RelativeDateTime@} is currently output as a tuple of tuples e.g. ((2003, 11, 6), (15, 40, 0))
+ */
+instance Inputable RelativeDateTime where
+    input = inputRelativeDateTime;
+    ;
+
+inputRelativeDateTime :: JObject -> RelativeDateTime;
+private inputRelativeDateTime !dateTime =
+    case (input dateTime) of
+    (date, time) -> 
+        RelativeDateTime (input date) (input time);
+    ;
+
+instance Outputable RelativeDateTime where
+    output = outputRelativeDateTime;
+    ;
+
+outputRelativeDateTime :: RelativeDateTime -> JObject;
+private outputRelativeDateTime !dateTime =
+    case dateTime of
+    RelativeDateTime {date, time} ->
+        output (output date, output time);
+    ;
+
+/** Shows the {@link typeConstructor = RelativeTime@} value using the format hh:mm:ss. */
+instance Show RelativeTime where
+    show = showRelativeTime;
+    ;
+
+/* @example */
+showRelativeTimeExamples :: Boolean;
+private showRelativeTimeExamples =
+    assert (show (makeRelativeTimeValue 8 30 0) == "08:30:00")
+    && assert (show (makeRelativeTimeValue 12 0 30) == "12:00:30")
+    ;
+
+showPadded2 :: Int -> String;
+private showPadded2 !value =
+    let 
+        stringValue = intToString value;
+    in
+        if value >= 10 then
+            stringValue
+        else if value >= 0 then
+            "0" ++ stringValue
+        else
+            error ("invalid hour, minute, second, month or day " ++ stringValue);
+
+showPaddedYear :: Int -> String;
+showPaddedYear !value =
+    let 
+        stringValue = intToString value;
+    in
+        if value >= 1000 then
+            stringValue
+        else if value >= 100 then
+            "0" ++ stringValue
+        else if value >= 10 then
+            "00" ++ stringValue
+        else if value >= 0 then
+            "000" ++ stringValue
+        else
+            //negative years are supported, but don't do anything special here to format
+            stringValue;     
+        
+/** shows the time using the format HH:MM:SS */        
+showRelativeTime :: RelativeTime -> String;
+private showRelativeTime !time = 
+    case timeToHourMinuteSecond time of
+    (h, m, s) ->        
+        join ":" [showPadded2 h, showPadded2 m, showPadded2 s];
+    ;
+
+/** Shows the {@link typeConstructor = RelativeDate@} value using the format yyyy/MM/dd hh:mm:ss. */
+instance Show RelativeDate where
+    show = showRelativeDate;
+    ;
+
+/* @example */
+showRelativeDateExamples :: Boolean;
+private showRelativeDateExamples =
+    assert (show (makeRelativeDateValue 123 12 3) == "0123/12/03")
+    && assert (show (makeRelativeDateValue 2006 9 27) == "2006/09/27")
+    ;
+        
+
+/** shows the date using the format yyyy/MM/dd. */
+private showRelativeDate !date =
+    case dateToYearMonthDay date of
+    (y, m, d) ->
+        join "/" [showPaddedYear y, showPadded2 m, showPadded2 d];
+    ;
+
+/** Shows the {@link typeConstructor = RelativeDateTime@} value using the format yyyy/MM/dd. */
+instance Show RelativeDateTime where
+    show = showRelativeDateTime;
+    ;
+
+/* @example */
+showRelativeDateTimeExamples :: Boolean;
+private showRelativeDateTimeExamples =
+    assert (show (makeRelativeDateTimeValue 2003 8 6 8 30 0) == "2003/08/06 08:30:00")
+    && assert (show (makeRelativeDateTimeValue 999 1 1 12 0 30) == "0999/01/01 12:00:30")
+    ;
+
+/** Shows the {@link typeConstructor = RelativeDateTime@} value using the format yyyy/MM/dd. */
+showRelativeDateTime :: RelativeDateTime -> String;
+private showRelativeDateTime !dateTime =
+    show (getDatePart dateTime) ++ " " ++ show (getTimePart dateTime);
+
+
+    
+    
+
+/** Predicate function for verifying basic functionality of the RelativeTime module. */
+/* @test */
+public testModule = 
+    assert addDaysToDateExamples
+    && assert yearMonthDayExamples
+    && assert addDaysToDateTimeExamples
+    && assert datePartExamples
+    && assert dateDiffExamples
+    && assert dateAddExamples
+    && assert addSecondsToDateTimeExamples
+    && assert showRelativeDateExamples
+    && assert showRelativeDateTimeExamples
+    && assert showRelativeTimeExamples
+    ;
+
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link RelativeDate@} type. This creates RelativeDates
+ * in the range year 1 to approximately end of year 2099
+ */
+instance Arbitrary RelativeDate where
+    arbitrary = arbitraryRelativeDate;
+    coarbitrary = coarbitraryRelativeDate;
+    ;
+
+arbitraryRelativeDate :: Gen RelativeDate;
+arbitraryRelativeDate = 
+    makeGen (\genParams -> 
+        let 
+            day = getBoundedInt genParams 0 (365 * 2100);
+        in
+            getDatePart $ dateAdd DayAdd day $ makeRelativeDateTimeValue2 1 1 1
+            
+    );
+
+coarbitraryRelativeDate :: RelativeDate -> Gen a -> Gen a;
+coarbitraryRelativeDate date = coarbitrary (month date) # coarbitrary (year date) # coarbitrary (day date);
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = RelativeTime@} type. This creates RelativeTimes
+ * in the range 0:0:0 to 23:59:59 inclusive.
+ */
+instance Arbitrary RelativeTime where
+    arbitrary = arbitraryRelativeTime;
+    coarbitrary = coarbitraryRelativeTime;
+    ;
+
+arbitraryRelativeTime :: Gen RelativeTime;
+arbitraryRelativeTime = 
+    makeGen (\genParams -> 
+        let 
+            ahour = getBoundedInt genParams 0 24;
+            aminute = getNthBoundedInt 1 genParams 0 60;
+            asecond = getNthBoundedInt 2 genParams 0 60;
+        in
+            makeRelativeTimeValue ahour aminute asecond
+            
+    );
+
+coarbitraryRelativeTime :: RelativeTime -> Gen a -> Gen a;
+coarbitraryRelativeTime time = coarbitrary (hour time) # coarbitrary (minute time) # coarbitrary (second time);
+
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = RelativeDateTime@} type. This creates RelativeDateTimes
+ * in the range year 1 to approximately end of year 2099.
+ */
+instance Arbitrary RelativeDateTime where
+    arbitrary = arbitraryRelativeDateTime;
+    coarbitrary = coarbitraryRelativeDateTime;
+    ;
+
+arbitraryRelativeDateTime :: Gen RelativeDateTime;
+arbitraryRelativeDateTime = 
+    makeGen (\genParams -> 
+        let 
+            day = getBoundedInt genParams 0 (365 * 2100);
+            ahour = getNthBoundedInt 2 genParams 0 24;
+            aminute = getNthBoundedInt 3 genParams 0 60;
+            asecond = getNthBoundedInt 4 genParams 0 60;
+        in
+            dateAdd DayAdd day $ makeRelativeDateTimeValue 1 1 1 ahour aminute asecond            
+    );
+
+
+coarbitraryRelativeDateTime :: RelativeDateTime -> Gen a -> Gen a;
+coarbitraryRelativeDateTime datetime = 
+    let 
+        date = getDatePart datetime;
+        time = getTimePart datetime;
+    in
+        coarbitrary (dateToYearMonthDay date)  #
+        coarbitrary (timeToHourMinuteSecond time);
+
+
+
+

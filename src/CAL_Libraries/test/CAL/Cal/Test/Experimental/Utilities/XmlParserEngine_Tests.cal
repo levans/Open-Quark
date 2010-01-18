@@ -1,0 +1,1110 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * XmlParserEngine_Tests.cal
+ * Creation date: September 2007.
+ * By: Malcolm Sharpe
+ */
+
+module Cal.Test.Experimental.Utilities.XmlParserEngine_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Byte, Char, Either, Int, Maybe, String;
+    dataConstructor = False, Just, Nothing, True, Left, Right;
+    function =
+        assert, const, either, equals, error, fromInt, fromJust, id, isJust,
+        isLeft, isRight, seq, snd;
+    ;
+import Cal.Collections.List using
+    function = concatMap, foldLeft, length, map, sum;
+    ;
+import Cal.Core.String using
+    function = fromList, toList;
+    ;
+import Cal.Core.Char using
+    ;
+import Cal.IO.File using
+    typeConstructor = FileName;
+    function =
+        getFilteredDirectoryContents, makeFileName, readFile, readFileBinary,
+        writeFileBinary;
+    ;
+import Cal.Utilities.Parser using
+    function =
+        eof, errorPos, pBind, pReturn, pSeq, runParser, showParseError,
+        sourceColumn, sourceLine, makeTSString, runParserSeq;
+    typeConstructor = GenParser, ParseError, SourcePos;
+    ;
+import Cal.Experimental.Utilities.Encoding;
+import Cal.Experimental.Utilities.XmlParserState using
+    function = initialXmlParserState;
+    typeConstructor = XmlParserState;
+    dataConstructor = InContent, InEntityValue;
+    ;
+import Cal.Experimental.Utilities.XmlParserEngine using
+    function =
+        attValue, cdsect, charData, charRef, doctypedecl,
+        entityRef, externalId, handleLineEndings,
+        markupdecl, parseXmlDocumentFromBytes, pi, prolog, comment, attribute,
+        xmlChar, xmldecl, document, element, name;
+    ;
+import Cal.Experimental.Utilities.XmlPrinters using
+    function =
+        xmlAttributeToCanonicalString, xmlAttributeToFirstXmlCanonicalForm,
+        xmlDocumentToCanonicalString, xmlDocumentToFirstXmlCanonicalForm,
+        xmlDocumentToSecondXmlCanonicalForm,
+        xmlNodeToCanonicalString,
+        xmlNodeToFirstXmlCanonicalForm;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeConstructor = XmlDocument;
+    function = elementChildren;
+    ;
+import Cal.Core.Debug;
+
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+
+
+/**
+ * Test the {@link handleLineEndings@} helper function.
+ */
+test_handleLineEndings :: Boolean;
+private test_handleLineEndings =
+    // No change to line feeds. (UNIX convention.)
+    assert (handleLineEndings "foo\n\nbar\n" == "foo\n\nbar\n") &&
+    // Lone carriage returns converted to line feeds. (Mac convention.)
+    assert (handleLineEndings "foo\r\rbar\r" == "foo\n\nbar\n") &&
+    // CR-LF converted to line feeds. (Windows convention.)
+    assert (handleLineEndings "foo\r\n\r\nbar\r\n" == "foo\n\nbar\n") &&
+    // Mixed.
+    assert (handleLineEndings "foo\r\n\nbar\r" == "foo\n\nbar\n")
+    ;
+
+/**
+ * Runs the specified parser on the specified input.
+ * 
+ * @return the output of the parser, if it succeeds (throws an error otherwise).
+ */
+parseTestRaw :: GenParser Char XmlParserState a -> String -> a;
+private parseTestRaw p input = 
+    case runParserSeq p initialXmlParserState "" (makeTSString input) of
+    Right x  -> x;
+    Left err -> error (showParseError err);
+    ;
+
+/**
+ * Parses input which is not valid for the parser specified.
+ * The parser error information is returned in a Just.
+ * If the parsing is successful, then Nothing is returned.
+ * This makes it easier to diagnose the source of the failure.
+ */
+parseInvalid :: GenParser Char XmlParserState a -> String -> Maybe ParseError;
+parseInvalid p input = 
+    case runParserSeq p initialXmlParserState "" (makeTSString input) of
+    Right _  -> Nothing;
+    Left err -> Just err;
+    ;
+
+/**
+ * Test that characters are parsed correctly.
+ */
+test_xmlChar :: Boolean;
+private test_xmlChar =
+    let
+        wf s = parseTestRaw xmlChar s == s;
+        nwf col s =
+            let
+                pos = errorPos $ fromJust $ parseInvalid xmlChar s;
+            in
+                sourceLine pos == 1 && sourceColumn pos == col;
+    in
+        // In usual range.
+        assert (wf "a") &&
+        assert (wf "\uD7FF") &&
+        // Allowed character below usual range.
+        assert (wf "\n") &&
+        // Surrogate pair.
+        assert (wf "\uD800\uDC00") &&
+        // Disallowed control character.
+        assert (nwf 1 "\b") &&
+        // Orphaned leading surrogate.
+        assert (nwf 2 "\uDBFF") &&
+        // Orphaned trailing surrogate.
+        assert (nwf 1 "\uDFFF")
+    ;
+
+maybe :: b -> (a -> b) -> Maybe a -> b;
+private maybe def f m =
+    case m of
+    Just x -> f x;
+    Nothing -> def;
+    ;
+
+/**
+ * Test that names are parsed correctly.
+ */
+test_name :: Boolean;
+private test_name =
+    let
+        wf s = parseTestRaw name s == s;
+        nwf s =
+            case parseInvalid name s of
+            Nothing -> False;
+            Just parseError ->
+                let
+                    pos = errorPos parseError;
+                in
+                    sourceLine pos == 1 && sourceColumn pos == 1;
+            ;
+    in
+        assert (wf "foo") &&
+        // Digit.
+        assert (wf "ab92") &&
+        // Extender.
+        assert (wf "L\u00B7L") &&
+        // Colons.
+        assert (wf ":bar:") &&
+        // Leading underscore.
+        assert (wf "__name") &&
+        // Leading hyphen.
+        assert (nwf "-qux") &&
+        // Leading period.
+        assert (nwf ".hello") &&
+        // Leading extender.
+        assert (nwf "\u00B7asdf")
+    ;
+
+/**
+ * Test that numerically-escaped characters are parsed correctly.
+ */
+test_charRef :: Boolean;
+private test_charRef =
+    assert (parseTestRaw charRef "&#97;" == "a") &&
+    assert (parseTestRaw charRef "&#x61;" == "a") &&
+    // Character that must be encoded as a surrogate pair.
+    assert (parseTestRaw charRef "&#x10000;" == "\uD800\uDC00") &&
+    // Largest legal code point.
+    assert (parseTestRaw charRef "&#x10FFFF;" == "\uDBFF\uDFFF") &&
+    assert (parseTestRaw charRef "&#1114111;" == "\uDBFF\uDFFF") &&
+    // Character not matching Char production.
+    assert (isJust (parseInvalid charRef "&#x000B;")) &&
+    // No digits.
+    assert (isJust (parseInvalid charRef "&#;")) &&
+    // Overflowing number.
+    assert (isJust (parseInvalid charRef "&#x80000000;")) &&
+    // Slightly too big number.
+    assert (isJust (parseInvalid charRef "&#1114112;")) &&
+    // Number that isn't too big but has a lot of trailing zeroes.
+    assert (parseTestRaw charRef "&#x00000000000000000061;" == "a")
+    ;
+
+/**
+ * Test that entity references are parsed correctly.
+ */
+test_entityRef :: Boolean;
+private test_entityRef =
+    assert (parseTestRaw (entityRef InContent) "&quot;" == ("quot", "\"")) &&
+    assert (parseTestRaw (entityRef InContent) "&apos;" == ("apos", "'")) &&
+    assert (parseTestRaw (entityRef InContent) "&gt;" == ("gt", ">")) &&
+    // &amp; and &lt; must expand to character references.
+    assert (parseTestRaw (entityRef InContent) "&amp;" == ("amp", "&#38;")) &&
+    assert (parseTestRaw (entityRef InContent) "&lt;" == ("lt", "&#60;")) &&
+    // Undeclared entity.
+    assert (isJust (parseInvalid (entityRef InContent) "&foo;")) &&
+    // Non-expanding.
+    assert (parseTestRaw (entityRef InEntityValue) "&apos;" == ("apos", "&apos;"))
+    ;
+
+/**
+ * Test that quoted text is parsed correctly.
+ */
+test_attValue :: Boolean;
+private test_attValue =
+    let 
+        p = attValue "elt" "att";
+    in
+        assert (parseTestRaw p "''" == "") &&
+        assert (parseTestRaw p "\"\"" == "") &&
+        assert (parseTestRaw p "'string &amp;'" == "string &") &&
+        assert (parseTestRaw p "'st&gt;&#97;&#x61;'" == "st>aa") &&
+        assert (parseTestRaw p "'^'" == "^") &&
+        // Attribute value may not contain <.
+        assert (isJust (parseInvalid p "'foo<bar'")) &&
+        // Attribute value may contain a character reference to <, however.
+        assert (parseTestRaw p "'foo&#x3C;bar'" == "foo<bar") &&
+        // Since &lt; expands to a character reference, it is also allowed.
+        assert (parseTestRaw p "'foo&lt;bar'" == "foo<bar") &&
+        // The characters in the attribute value must match the Char production.
+        assert (isJust (parseInvalid p "'\u000B'")) &&
+        // Normalize the value as CDATA.
+        assert (parseTestRaw p "'foo\nbar\rbaz\tasd fgh'" == "foo bar baz asd fgh") &&
+        assert (parseTestRaw p "'&#x9;&#xA;&#xD;&#x20;'" == "\t\n\r ")
+    ;
+
+/**
+ * Test that CDATA sections are parsed correctly.
+ */
+test_cdata_text :: Boolean;
+private test_cdata_text =
+    let
+        // If it doesn't crash, it is okay.
+        wf s = parseTestRaw cdsect s `seq` True;
+    in
+        assert (wf "<![CDATA[  blah  ]]>") &&
+        assert (wf "<![CDATA[<&]>]]]>")
+    ;
+
+/**
+ * Test that CDATA sections are printed correctly.
+ */
+test_cdata_to_string :: Boolean;
+private test_cdata_to_string =
+    let
+        input = "<![CDATA[Hello World]]>";
+    in
+        xmlNodeToCanonicalString (parseTestRaw cdsect input) == "Hello World";
+
+/**
+ * Test that <'s and &'s in a CDATA section are correctly interpreted
+ * as raw text.
+ */
+test_cdata_markup :: Boolean;
+private test_cdata_markup =
+    let
+        input = "<![CDATA[&amp; <tag/>]]>";
+    in
+        xmlNodeToCanonicalString (parseTestRaw cdsect input) == "&amp;amp; &lt;tag/&gt;";
+
+/**
+ * Test that XML declarations are parsed correctly.
+ */
+test_xmldecl :: Boolean;
+private test_xmldecl =
+    let
+        // Okay if it does not fail.
+        wf s = parseTestRaw xmldecl s `seq` True;
+        
+        nwf col s =
+            let
+                pos = errorPos $ fromJust $ parseInvalid xmldecl s;
+            in
+                sourceLine pos == 1 && sourceColumn pos == col;
+    in
+        // Both quote types.
+        assert (wf "<?xml version='1.0'?>") &&
+        assert (wf "<?xml version=\"1.0\"?>") &&
+        // Standalone declaration.
+        assert (wf "<?xml version='1.0' standalone='yes'?>") &&
+        // Wrong order of attributes.
+        assert (nwf 7 "<?xml encoding='UTF-8' version='1.0'?>") &&
+        // Wrong version.
+        assert (nwf 16 "<?xml version='0.9'?>") &&
+        // Bad attribute name.
+        assert (nwf 21 "<?xml version='1.0' foo='bar'?>")
+    ;
+
+/**
+ * Test that document type declarations are parsed correctly.
+ */
+test_doctypedecl :: Boolean;
+private test_doctypedecl =
+    let
+        // Okay if it does not fail.
+        wf s = parseTestRaw doctypedecl s `seq` True;
+        
+        // Okay if it fails.
+        nwf s = isJust $ parseInvalid doctypedecl s;
+    in
+        // Simplest possible doctype declaration.
+        assert (wf "<!DOCTYPE doc>") &&
+        // Space after the name.
+        assert (wf "<!DOCTYPE doc  >") &&
+        // Missing name.
+        assert (nwf "<!DOCTYPE >") &&
+        // Empty internal subset.
+        assert (wf "<!DOCTYPE doc [ ]>") &&
+        // Element declaration.
+        assert (wf "<!DOCTYPE doc [ <!ELEMENT elt ANY> ]>") &&
+        // Internal parameter entity reference.
+        assert (wf "<!DOCTYPE doc [ <!ENTITY % mype '<!ELEMENT elt ANY>'> %mype; ]>") &&
+        assert (nwf "<!DOCTYPE doc [ <!ENTITY % mype 'this is bad <><><><><>'> %mype; ]>") &&
+        assert (wf "<!DOCTYPE doc [ <!ENTITY % mype '<!ELEMENT elt ANY> <!ATTLIST elt foo CDATA #IMPLIED>'> %mype; ]>") &&
+        // This is not OK since &lt; is not expanded at entity declaration time.
+        assert (nwf "<!DOCTYPE doc [ <!ENTITY % mype '&lt;!ELEMENT elt ANY>'> %mype; ]>") &&
+        // External subset.
+        assert (wf "<!DOCTYPE doc SYSTEM 'asdfoj<>&re;'>") &&
+        assert (wf "<!DOCTYPE doc PUBLIC '###@@@$$$$ $$' 'asdfoj<>&re;'>") &&
+        // Both external and internal subset.
+        assert (wf "<!DOCTYPE doc SYSTEM 'foo' [ <!ELEMENT elt ANY> ]>") &&
+        // With only an internal subset, an undeclared parameter entity reference is a WF error.
+        assert (nwf "<!DOCTYPE doc [ %mype; ]>") &&
+        // With an external subset, an undeclared entity parameter reference is a VC error, not a WF error.
+        assert (wf "<!DOCTYPE doc SYSTEM 'x.ent' [ %mype; ]>")
+    ;
+
+/**
+ * Test that external IDs are parsed correctly.
+ */
+test_externalId :: Boolean;
+private test_externalId =
+    let
+        // Okay if it does not fail.
+        wf s = parseTestRaw externalId s `seq` True;
+        
+        // Okay if it fails.
+        nwf s = isJust $ parseInvalid externalId s;
+    in
+        //// SYSTEM.
+        // Single & double quotes.
+        assert (wf "SYSTEM 'foo'") &&
+        assert (wf "SYSTEM \"foo\"") &&
+        // Space is required.
+        assert (nwf "SYSTEM'foo'") &&
+        
+        //// PUBLIC.
+        // Single & double quotes.
+        assert (wf "PUBLIC 'foo' 'bar'") &&
+        assert (wf "PUBLIC \"foo\" \"bar\"") &&
+        // Space is required.
+        assert (nwf "PUBLIC'foo' 'bar'") &&
+        assert (nwf "PUBLIC 'foo''bar'") &&
+        // Quote types may be different.
+        assert (wf "PUBLIC \"foo\" 'bar'") &&
+        
+        // Various sorts of characters.
+        assert (wf "PUBLIC 'foo124FOO$%' 'bar789BAR$%\"'") &&
+        // But can't put a double-quote in the pubid.
+        assert (nwf "PUBLIC 'foo\"' 'bar'")
+    ;
+
+/**
+ * Test that markup declarations are parsed correctly.
+ */
+test_markupdecl :: Boolean;
+private test_markupdecl =
+    let
+        // Okay if it does not fail.
+        wf s = parseTestRaw markupdecl s `seq` True;
+        
+        // Okay if it fails.
+        nwf s = isJust $ parseInvalid markupdecl s;
+    in
+        //// Comments.
+        assert (wf "<!-- foo -->") &&
+        
+        //// Processing instructions.
+        assert (wf "<?foo bar?>") &&
+        
+        //// Element Declarations.
+        // Simplest possible element declaration.
+        assert (wf "<!ELEMENT foo EMPTY>") &&
+        // Whitespace after content specification.
+        assert (wf "<!ELEMENT  bar  EMPTY  >") &&
+        // ANY content specification.
+        assert (wf "<!ELEMENT foo ANY>") &&
+        // Non-existent content specification.
+        assert (nwf "<!ELEMENT foo QUX>") &&
+        // Mixed content specification.
+        assert (wf "<!ELEMENT foo (#PCDATA| bar |baz)*>") &&
+        assert (wf "<!ELEMENT foo (#PCDATA)*>") &&
+        assert (wf "<!ELEMENT foo (#PCDATA)>") &&
+        assert (nwf "<!ELEMENT foo (#PCDATA|bar)>") &&
+        // Children content specification, choice.
+        assert (wf "<!ELEMENT foo ( bar | baz )>") &&
+        // Children content specification, seq.
+        assert (wf "<!ELEMENT foo ( bar , baz , qux )>") &&
+        // Children content specification, name not allowed at top level.
+        assert (nwf "<!ELEMENT foo bar>") &&
+        // Children content specification, single-length seq.
+        assert (wf "<!ELEMENT foo (bar)>") &&
+        // Children content specification, must be choice or seq, not both.
+        assert (nwf "<!ELEMENT foo (bar | baz , qux)>") &&
+        // Children content specification, repetition specifiers.
+        assert (wf "<!ELEMENT foo (bar, baz)+>") &&
+        assert (wf "<!ELEMENT foo (bar, baz)*>") &&
+        assert (wf "<!ELEMENT foo (bar, baz)?>") &&
+        // Children content specification, nested.
+        assert (wf "<!ELEMENT foo ( (bar, baz)+ | qux | (foo | bar)* )?>") &&
+        
+        //// Attribute-List Declarations.
+        // Simplest possible attlist declaration.
+        assert (wf "<!ATTLIST foo >") &&
+        // CDATA attribute type, #REQUIRED.
+        assert (wf "<!ATTLIST foo mydata CDATA #REQUIRED>") &&
+        // #IMPLIED, #FIXED, and unadorned default.
+        assert (wf "<!ATTLIST foo mydata CDATA #IMPLIED>") &&
+        assert (wf "<!ATTLIST foo mydata CDATA #FIXED 'stuff'>") &&
+        assert (wf "<!ATTLIST foo mydata CDATA 'stuff'>") &&
+        // Multiple attributes.
+        assert (wf "<!ATTLIST foo bar CDATA #IMPLIED baz CDATA #IMPLIED>") &&
+        // Tokenized type.
+        assert (wf "<!ATTLIST foo bar ID #REQUIRED>") &&
+        assert (wf "<!ATTLIST foo bar IDREF #REQUIRED>") &&
+        assert (wf "<!ATTLIST foo bar IDREFS #REQUIRED>") &&
+        assert (wf "<!ATTLIST foo bar ENTITY #REQUIRED>") &&
+        assert (wf "<!ATTLIST foo bar ENTITIES #REQUIRED>") &&
+        assert (wf "<!ATTLIST foo bar NMTOKEN #REQUIRED>") &&
+        assert (wf "<!ATTLIST foo bar NMTOKENS #REQUIRED>") &&
+        // Notation type.
+        assert (wf "<!ATTLIST foo bar NOTATION ( baz | qux ) #IMPLIED>") &&
+        assert (nwf "<!ATTLIST foo bar NOTATION ( ) #IMPLIED>") &&
+        // Enumeration.
+        assert (wf "<!ATTLIST foo bar ( baz | qux | asdf ) 'qux'>") &&
+        assert (nwf "<!ATTLIST foo bar ( ) 'qux'>") &&
+        
+        //// Parameter-Entity Declarations.
+        // Simplest possible PE declaration.
+        assert (wf "<!ENTITY % mype ''>") &&
+        // Some text in the quotes.
+        assert (wf "<!ENTITY  % mype \"foo&#65;\">") &&
+        // Spaces are required.
+        assert (nwf "<!ENTITY% mype ''>") &&
+        assert (nwf "<!ENTITY %mype ''>") &&
+        assert (nwf "<!ENTITY % mype''>") &&
+        // External parameter entity.
+        assert (wf "<!ENTITY % mype SYSTEM 'foo'>") &&
+        
+        //// General-Entity Declarations.
+        // Simplest possible GE declaration.
+        assert (wf "<!ENTITY ent ''>") &&
+        // Declare predefined lt entity; it must be double-escaped.
+        assert (wf "<!ENTITY lt '&#38;#60;'>") &&
+        assert (nwf "<!ENTITY lt '&#60;'>") &&
+        // gt entity may be either double-escaped or not, but cannot be defined
+        // to be something else.
+        assert (wf "<!ENTITY gt '&#62;'>") &&
+        assert (wf "<!ENTITY gt '&#38;#62;'>") &&
+        assert (nwf "<!ENTITY gt 'foo'>") &&
+        // Replacement text is allowed to not match the content production so long
+        // as the entity is never referenced.
+        assert (wf "<!ENTITY ent '<tag'>") &&
+        // It's okay to reference entities that are not yet declared.
+        assert (wf "<!ENTITY ent '&ent2;'>") &&
+        // External general entity.
+        assert (wf "<!ENTITY ent SYSTEM 'foo'>") &&
+        assert (wf "<!ENTITY ent SYSTEM 'foo' NDATA bar>") &&
+        assert (nwf "<!ENTITY ent SYSTEM 'foo'NDATA bar>") &&
+        
+        //// Notation Declarations.
+        // PublicID.
+        assert (wf "<!NOTATION foo PUBLIC 'asdf'>") &&
+        // ExternalID.
+        assert (wf "<!NOTATION foo SYSTEM 'foo'>") &&
+        assert (wf "<!NOTATION foo PUBLIC 'foo' 'bar'>")
+    ;
+
+/**
+ * Test that the prolog is parsed correctly.
+ */
+test_prolog :: Boolean;
+private test_prolog =
+    let
+        // Okay if it does not fail.
+        wf s = parseTestRaw prolog s `seq` True;
+        
+        nwf line col s =
+            let
+                pos = errorPos $ fromJust $ parseInvalid prolog s;
+            in
+                sourceLine pos == line && sourceColumn pos == col;
+    in
+        // Without XML declaration.
+        assert (wf "") &&
+        // With XML declaration.
+        assert (wf "<?xml version='1.0'?>") &&
+        // Leading PI.
+        assert (wf "<?target some text?>") &&
+        // Non-well-formed XML declaration.
+        assert (nwf 1 7 "<?xml encoding='UTF-8' version='1.0'?>")
+    ;
+
+/**
+ * Test that XML comments are parsed correctly.
+ */
+test_comment :: Boolean;
+private test_comment = 
+    let
+        wf s = xmlNodeToCanonicalString (parseTestRaw comment s) == s;
+        nwf col s =
+            let
+                pos = errorPos $ fromJust $ parseInvalid comment s;
+            in
+                sourceLine pos == 1 && sourceColumn pos == col;
+    in
+        assert (wf "<!-- this is an XML comment -->") &&
+        assert (wf "<!--foo-->") &&
+        assert (wf "<!-- single hyphens - are allowed -->") &&
+        assert (wf "<!---this is also okay -->") &&
+        assert (nwf 23 "<!-- double hyphens -- are disallowed -->") &&
+        assert (nwf 45 "<!-- three closing hyphens are disallowed --->")
+    ;
+
+/**
+ * Test that processing instructions are parsed correctly.
+ */
+test_pi :: Boolean;
+private test_pi =
+    let
+        wf s = xmlNodeToCanonicalString (parseTestRaw (pi `pBind` (\x -> eof `pSeq` pReturn x)) s) == s;
+        
+        nwf col s =
+            let
+                pos = errorPos $ fromJust $ parseInvalid pi s;
+            in
+                sourceLine pos == 1 && sourceColumn pos == col;
+    in
+        // With content.
+        assert (wf "<?foo bar baz?>") &&
+        // Without content.
+        assert (wf "<?FooBar?>") &&
+        // Can have XML as the prefix of its target.
+        assert (wf "<?xml__?>") &&
+        // Cannot have XML as its target.
+        assert (nwf 6 "<?xML asdf?>") &&
+        // Illegal character in target.
+        assert (nwf 3 "<?\u9FA6 illegal character in PITarget?>")
+    ;
+
+/**
+ * Ensure that attributes are parsed correctly.
+ */
+test_attribute :: Boolean;
+private test_attribute =
+    let
+        wf inS outS = xmlAttributeToCanonicalString (parseTestRaw (attribute "elt") inS) == outS;
+        
+        // If the parse fails, it is okay.
+        nwf s = isJust $ parseInvalid (attribute "elt") s;
+    in
+        // > is allowed with and without escaping.
+        assert (wf "foo='bar>baz'" "foo=\"bar>baz\"") &&
+        assert (wf "foo='bar&gt;baz'" "foo=\"bar>baz\"") &&
+        // < in attribute value.
+        assert (nwf "foo='bar<baz'") &&
+        // But &lt; is allowed, since it expands to a character reference.
+        assert (wf "foo='bar&lt;baz'" "foo=\"bar&lt;baz\"")
+    ;
+
+/**
+ * Test parsing and rebuilding a simple XML element.
+ */
+test_element :: Boolean;
+private test_element = 
+    let
+        wf inS outS = xmlNodeToCanonicalString (parseTestRaw element inS) == outS;
+        
+        // If the parse fails, it is okay.
+        nwf s = isJust $ parseInvalid element s;
+    in
+        // No content.
+        assert (wf "<t i='d'></t>" "<t i=\"d\"></t>") &&
+        // Empty.
+        assert (wf "<t i='d'/>" "<t i=\"d\"></t>") &&
+        // Text content.
+        assert (wf "<e> \nfoo bar\n</e>" "<e> \nfoo bar\n</e>") &&
+        // Unicode name. (Combining char.)
+        assert (wf "<L\u00B7L/>" "<L\u00B7L></L\u00B7L>") &&
+        // Spaces before / in close tag.
+        assert (nwf "<e>< /e>") &&
+        // Spaces before name in close tag.
+        assert (nwf "<e></ e>") &&
+        // Duplicated attribute.
+        assert (nwf "<e a='1' b='2' a='3'/>") &&
+        // CDATA section end.
+        assert (nwf "<e> ]]> </e>") &&
+        // Characters that don't match Char production.
+        assert (nwf "<e> \u000B </e>") &&
+        assert (nwf "<e>\uFFFE</e>") &&
+        // Not okay to have ]]> in content.
+        assert (nwf "<e> ]]> </e>") &&
+        // But okay to have part of it.
+        assert (wf "<e> ]] ]> </e>" "<e> ]] ]&gt; </e>") &&
+        // Adjacent text nodes should be joined.
+        assert (length (elementChildren (parseTestRaw element "<e>foo&gt;bar<b/>qux&lt;baz</e>")) == 3)
+    ;
+
+/**
+ * Test parsing and rebuilding a simple XML document.
+ */
+test_document :: Boolean;
+private test_document =
+    xmlDocumentToCanonicalString (parseTestRaw document "<?xml version='1.0'?>\n<component ID='ASEP-1_0' FAMILY='ASE Plugin' HIDDEN='NO' OVERWRITE='YES'>\n</component> ") ==  
+        "<component FAMILY=\"ASE Plugin\" HIDDEN=\"NO\" ID=\"ASEP-1_0\" OVERWRITE=\"YES\">\n</component>";
+
+/**
+ * Confirm that the beginning of the file is flagged with an error if the
+ * ?xml tag is specified in uppercase.
+ */
+test_document_case_sensitivity :: Boolean;
+private test_document_case_sensitivity =
+    let
+        err :: ParseError;
+        err = fromJust $ parseInvalid document "<?XML version='1.0'?>\n<root></root>";
+
+        pos :: SourcePos;
+        pos = errorPos err;
+    in
+        sourceLine pos == 1 && sourceColumn pos == 6;
+
+/**
+ * Test parsing and rebuilding a simple XML document containing no whitespace.
+ */
+test_document_no_spaces :: Boolean;
+test_document_no_spaces =
+    xmlDocumentToCanonicalString (parseTestRaw document "<?xml version='1.0'?><component ID='ASEP-1_0' FAMILY='ASE Plugin' HIDDEN='NO' OVERWRITE='YES'></component>") ==  
+        "<component FAMILY=\"ASE Plugin\" HIDDEN=\"NO\" ID=\"ASEP-1_0\" OVERWRITE=\"YES\"></component>";
+
+
+/**
+ * Test parsing a document containing comments.
+ */
+test_document_with_comments :: Boolean;
+private test_document_with_comments =
+    case parseTestRaw document "<?xml version='1.0'?>\n<!-- comment text -->\n<component>\n<!-- nested comment -->\n<nestedElem /></component>\n<!-- another comment -->" of
+    _ -> True;      // if it doesn't crash it is okay
+    ;
+
+/**
+ * Test parsing a document containing no root element.
+ * This should produce an error.
+ */
+test_document_no_root_elem :: Boolean;
+private test_document_no_root_elem =
+    let
+        err :: ParseError;
+        err = fromJust $ parseInvalid document "<?xml version='1.0'?>\n<!-- comment text -->\n";
+
+        pos :: SourcePos;
+        pos = errorPos err;
+    in
+        sourceLine pos == 3 && sourceColumn pos == 1;
+
+/**
+ * Test parsing a document containing more than one root elements.
+ * This should produce an error at the beginning of line 3, when
+ * <TwoElements /> is encountered.
+ */
+test_document_multiple_root_elems :: Boolean;
+private test_document_multiple_root_elems = 
+    let
+        err :: ParseError;
+        err = fromJust $ parseInvalid document "<?xml version='1.0'?>\n<OneElement />\n<TwoElements />\n<ThreeElements />";
+
+        pos :: SourcePos;
+        pos = errorPos err;
+    in
+        sourceLine pos == 3 && sourceColumn pos == 1;
+
+/**
+ * Test parsing a document that begins with a processing instruction.
+ */
+test_document_leading_pi :: Boolean;
+private test_document_leading_pi =
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<?xml version='1.0'?><?t x?><e/>")
+            == "<?t x?>\n<e></e>") &&
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<?target some text?><root/>")
+            == "<?target some text?>\n<root></root>");
+
+/**
+ * Test parsing a document that contains user-defined general entities.
+ */
+test_document_general_entities :: Boolean;
+private test_document_general_entities =
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE doc [ <!ENTITY ent 'foo bar'> ]><root>&ent;</root>")
+            == "<root>foo bar</root>") &&
+    // Recursive entities are not allowed.
+    assert (isJust $ parseInvalid document "<!DOCTYPE doc [ <!ENTITY e1 '&e2;'> <!ENTITY e2 '&e1;'> ]><e>&e1;</e>")
+    ;
+
+/**
+ * Test parsing a document that declares attribute defaults.
+ */
+test_document_attribute_defaults :: Boolean;
+private test_document_attribute_defaults =
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE e [ <!ATTLIST e a CDATA 'default'> ]><e/>")
+            == "<e a=\"default\"></e>") &&
+    // Explicit attribute values take precedence.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE e[<!ATTLIST e a CDATA 'default'>]><e a='explicit'/>")
+            == "<e a=\"explicit\"></e>")
+    ;
+
+/**
+ * Test parsing a document that declares non-CDATA attribute types.
+ */
+test_document_attribute_types :: Boolean;
+private test_document_attribute_types =
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE e [ <!ATTLIST e a NMTOKENS #IMPLIED> ]><e a='  foo\n\tbar\r'></e>")
+            == "<e a=\"foo bar\"></e>") &&
+    // Even a default should be normalized.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE e [ <!ATTLIST e a NMTOKENS '  foo\n\tbar\r'> ]><e></e>")
+            == "<e a=\"foo bar\"></e>")
+    ;
+
+/**
+ * Test rejecting a document that declares and references an unparsed entity. 
+ */
+test_document_unparsed_entity :: Boolean;
+private test_document_unparsed_entity =
+    assert (isJust $ parseInvalid document "<!DOCTYPE doc [ <!ENTITY x SYSTEM 'x.dat' NDATA foo> ]><doc>&x;</doc>")
+    ;
+
+/**
+ * Test parsing a document that contains a reference to an unread parameter entity.
+ * The XML parser must ignore declarations after the unread parameter entity is referenced.
+ */
+test_document_unread_parameter_entity :: Boolean;
+private test_document_unread_parameter_entity =
+    // Attribute default.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document
+                                          ("<!DOCTYPE doc ["++
+                                           "  <!ATTLIST doc a CDATA \"D4A\">"++
+                                           "  <!ENTITY % x SYSTEM \"x.ent\">"++
+                                           "  %x;"++
+                                           "  <!ATTLIST doc b CDATA \"D4B\">"++
+                                           "  ]>"++
+                                           "<doc>Hello.</doc>"))
+            == "<doc a=\"D4A\">Hello.</doc>") &&
+    // Attribute type, and its effect on normalization.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document
+                                          ("<!DOCTYPE doc ["++
+                                           "  <!ENTITY % x SYSTEM 'x.ent'>"++
+                                           "  %x;"++
+                                           "  <!ATTLIST doc a NMTOKENS #REQUIRED>"++
+                                           "  ]>"++
+                                           "<doc a='  foo  '/>"))
+            == "<doc a=\"  foo  \"></doc>") &&
+    // Internal general entity. Note that the test is testing an inequality.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE doc [<!ENTITY % x SYSTEM 'x.ent'>%x;<!ENTITY g 'bar'>]><doc>&g;</doc>")
+            != "<doc>bar</doc>") &&
+    // Document is standalone, so all internal declarations must be processed.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document
+                                          ("<?xml version='1.0' encoding='UTF-8' standalone='yes'?>"++
+                                           "<!DOCTYPE doc ["++
+                                           "  <!ENTITY % x SYSTEM \"x.ent\">"++
+                                           "  %x;"++
+                                           "  <!ATTLIST doc b CDATA \"D4B\">"++
+                                           "  ]>"++
+                                           "<doc>Hello.</doc>"))
+            == "<doc b=\"D4B\">Hello.</doc>") &&
+    // Document is standalone, so an external parameter entity reference is not
+    // an excuse for an undeclared general entity.
+    assert (isJust $ parseInvalid document
+                     ("<?xml version='1.0' encoding='UTF-8' standalone='yes'?>"++
+                     "  <!ENTITY % x SYSTEM \"x.ent\">"++
+                     "  %x;"++
+                     "  ]>"++
+                     "<doc>&e;</doc>"))
+    ;
+
+/**
+ * Test parsing a document that references undeclared general entities.
+ */
+test_document_undeclared_entity :: Boolean;
+private test_document_undeclared_entity =
+    // With only an internal subset, an undeclared general entity reference is a WF error.
+    assert (isJust $ parseInvalid document "<root>&myge;</doc>") &&
+    // With an external subset, an undeclared entity general reference is a VC error, not a WF error.
+    // However, its non-inclusion must be reported.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE doc SYSTEM 'x.ent'><root>&myge;</root>")
+            != "<root></root>")
+    ;
+
+/**
+ * Test parsing a document referencing external general entities.
+ */
+test_document_external_entity :: Boolean;
+private test_document_external_entity =
+    // External general entities may be referenced in content.
+    // Their non-inclusion must be reported.
+    assert (xmlDocumentToCanonicalString (parseTestRaw document "<!DOCTYPE doc [ <!ENTITY x SYSTEM 'x.ent'> ]><doc>&x;</doc>")
+            != "<doc></doc>") &&
+    // External general entities may not be referenced in attribute values.
+    assert (isJust $ parseInvalid document "<!DOCTYPE doc [ <!ENTITY x SYSTEM 'x.ent'> ]><doc a='&x;'/>")
+    ;
+
+/**
+ * Test the quality of document-parsing error message positions.
+ */
+test_document_errors :: Boolean;
+private test_document_errors =
+    let
+        nwf line col s =
+            let
+                pos = errorPos $ fromJust $ parseInvalid document s;
+            in
+                sourceLine pos == line && sourceColumn pos == col;
+    in
+        // XML declaration requires a version attribute.
+        assert (nwf 1 6 "<?xml?>") &&
+        
+        // XML declaration enforces attribute order.
+        assert (nwf 1 7 "<?xml encoding='UTF-8' version='1.0'?>") &&
+        
+        // Double-hyphen error should occur immediately after the double-hyphen,
+        // where the > is expected.
+        assert (nwf 1 8 "<!-- --->") &&
+        
+        // A processing instruction's target cannot case-insensitively match
+        // "xml". It's not clear what location is best to report for this error,
+        // but one reasonable place is as soon as the target name ends.
+        assert (nwf 1 6 "<?XML text?>") &&
+        assert (nwf 1 6 "<?XML?>") &&
+        
+        // If an empty element erroneously puts whitespace after the /, report
+        // the whitespace, not the /.
+        assert (nwf 1 4 "<e/ ></e>")
+    ;
+
+mapEither :: (b -> c) -> Either a b -> Either a c;
+mapEither f = either Left (Right # f);
+
+/**
+ * Test reading XML documents from encoded byte arrays.
+ */
+test_encoding :: Boolean;
+private test_encoding =
+    let
+        wf charset inS outS =
+            either (const False)
+              (equals outS # xmlDocumentToCanonicalString)
+              (parseXmlDocumentFromBytes (Encoding.encode charset inS));
+        
+        // If it fails, it is okay.
+        nwf charset inS =
+            isLeft (parseXmlDocumentFromBytes (Encoding.encode charset inS));
+    in
+        // Implicit UTF-8 without BOM
+        assert (wf "UTF-8" "<e/>" "<e></e>") &&
+        // Explicit UTF-8 without BOM
+        assert (wf "UTF-8" "<?xml version='1.0' encoding='UTF-8'?><e/>" "<e></e>") &&
+        // Implicit UTF-8 with BOM
+        assert (wf "UTF-8" "\uFEFF<e/>" "<e></e>") &&
+        // Explicit UTF-8 with BOM
+        assert (wf "UTF-8" "\uFEFF<?xml version='1.0' encoding='UTF-8'?><e/>" "<e></e>") &&
+        // UTF-16, big-endian with BOM
+        assert (wf "UTF-16" "<?xml version='1.0' encoding='UTF-16'?><e/>" "<e></e>") &&
+        // UTF-16, little-endian with BOM
+        assert (wf "UTF-16LE" "\uFEFF<?xml version='1.0' encoding='UTF-16'?><e/>" "<e></e>") &&
+        // UTF-16, big-endian without BOM -- a fatal error
+        assert (nwf "UTF-16BE" "<?xml version='1.0' encoding='UTF-16'?><e/>") &&
+        // Implicitly UTF-8, but explicitly UTF-16
+        assert (nwf "UTF-8" "<?xml version='1.0' encoding='UTF-16'?><e/>") &&
+        // Illegal character
+        assert (nwf "UTF-16LE" "\uFEFF<?xml version='1.0' encoding='UTF-16'?><e>\uFFFE</e>") &&
+        // Two BOMs before XML declaration.
+        assert (nwf "UTF-8" "\uFEFF\uFEFF<?xml version='1.0' encoding='UTF-8'?><e/>")
+    ;
+
+/**
+ * Test converting XML attributes to the First XML Canonical Form, as defined
+ * by the XML W3C Conformance Test Suite.
+ */
+test_xmlAttributeToFirstXmlCanonicalForm :: Boolean;
+private test_xmlAttributeToFirstXmlCanonicalForm =
+    // Must be preceded by one space, have no space around the equals,
+    // and be quoted with double-quotes. The value is escaped in the
+    // same way as text. Note that a < cannot occur in an attribute value.
+    assert (xmlAttributeToFirstXmlCanonicalForm (parseTestRaw (attribute "elt") "name  = 'foo &amp;>\"&apos;&#x9;&#xA;&#xD;'")
+            == " name=\"foo &amp;&gt;&quot;'&#9;&#10;&#13;\"")
+    ;
+
+/**
+ * Test converting XML nodes to the First XML Canonical Form, as defined
+ * by the XML W3C Conformance Test Suite.
+ */
+test_xmlNodeToFirstXmlCanonicalForm :: Boolean;
+private test_xmlNodeToFirstXmlCanonicalForm =
+    // Comments are discarded.
+    assert (xmlNodeToFirstXmlCanonicalForm (parseTestRaw comment "<!-- foo -->")
+            == "") &&
+    // Processing instructions are printed with exactly one separating space.
+    assert (xmlNodeToFirstXmlCanonicalForm (parseTestRaw pi "<?target?>")
+            == "<?target ?>") &&
+    assert (xmlNodeToFirstXmlCanonicalForm (parseTestRaw pi "<?target   content?>")
+            == "<?target content?>") &&
+    // Ampersands, less-thans, greater-thans, quotes, tabs, line feeds, and carriage
+    // returns are escaped in text, but not apostrophes.
+    assert (xmlNodeToFirstXmlCanonicalForm (parseTestRaw element "<e>foo &amp;&lt;&gt;&quot;&apos;&#x9;&#xA;&#xD;</e>")
+            == "<e>foo &amp;&lt;&gt;&quot;'&#9;&#10;&#13;</e>") &&
+    // CDATA sections are converted to text. (Note that carriage returns cannot occur
+    // in a CDATA section due to end-of-line handling.)
+    assert (xmlNodeToFirstXmlCanonicalForm (parseTestRaw cdsect "<![CDATA[foo &<>\"'\t\n]]>")
+            == "foo &amp;&lt;&gt;&quot;'&#9;&#10;") &&
+    // Elements are converted with no unnecessary spaces in the tags. Attributes are
+    // sorted lexicographically.
+    assert (xmlNodeToFirstXmlCanonicalForm (parseTestRaw element "<e  foo='1' bar=\"2\"> baz </e >")
+            == "<e bar=\"2\" foo=\"1\"> baz </e>")
+    ;
+
+/**
+ * Test converting XML documents to the First XML Canonical Form, as defined
+ * by the XML W3C Conformance Test Suite.
+ */
+test_xmlDocumentToFirstXmlCanonicalForm :: Boolean;
+private test_xmlDocumentToFirstXmlCanonicalForm =
+    assert (xmlDocumentToFirstXmlCanonicalForm (parseTestRaw document "<!-- foo --><?bar  baz?><root> <child/>text</root><?qux?>")
+            == "<?bar baz?><root> <child></child>text</root><?qux ?>") &&
+    // Report PIs in the doctype declaration.
+    assert (xmlDocumentToFirstXmlCanonicalForm (parseTestRaw document "<!DOCTYPE doc [ <?foo bar?> ]><doc/>")
+            == "<?foo bar?><doc></doc>")
+    ;
+
+/**
+ * Test converting XML documents to the Second XML Canonical Form, as defined
+ * by the XML W3C Conformance Test Suite.
+ */
+test_xmlDocumentToSecondXmlCanonicalForm :: Boolean;
+private test_xmlDocumentToSecondXmlCanonicalForm =
+    // Three different kinds of notation.
+    assert (xmlDocumentToSecondXmlCanonicalForm (parseTestRaw document "<!DOCTYPE doc [ <!NOTATION foo SYSTEM 'foo'> <!ENTITY x SYSTEM 'x.ent' NDATA foo> ]><doc/>")
+            == "<!DOCTYPE doc [\n<!NOTATION foo SYSTEM 'foo'>\n]>\n<doc></doc>") &&
+    assert (xmlDocumentToSecondXmlCanonicalForm (parseTestRaw document "<!DOCTYPE doc [ <!NOTATION foo PUBLIC 'foo'> <!ENTITY x SYSTEM 'x.ent' NDATA foo> ]><doc/>")
+            == "<!DOCTYPE doc [\n<!NOTATION foo PUBLIC 'foo'>\n]>\n<doc></doc>") &&
+    assert (xmlDocumentToSecondXmlCanonicalForm (parseTestRaw document "<!DOCTYPE doc [ <!NOTATION foo PUBLIC 'foo' 'bar'> <!ENTITY x SYSTEM 'x.ent' NDATA foo> ]><doc/>")
+            == "<!DOCTYPE doc [\n<!NOTATION foo PUBLIC 'foo' 'bar'>\n]>\n<doc></doc>") &&
+    // We only want notations to be printed when there are some.
+    assert (xmlDocumentToSecondXmlCanonicalForm (parseTestRaw document "<!DOCTYPE doc []><doc/>")
+            == "<doc></doc>") &&
+    // Notations should be sorted in lexicographical order.
+    assert (xmlDocumentToSecondXmlCanonicalForm (parseTestRaw document "<!DOCTYPE doc [ <!NOTATION foo SYSTEM 'foo'> <!ENTITY x SYSTEM 'x.ent' NDATA foo> <!NOTATION bar SYSTEM 'bar'> <!ENTITY y SYSTEM 'y.ent' NDATA bar> ]><doc/>")
+            == "<!DOCTYPE doc [\n<!NOTATION bar SYSTEM 'bar'>\n<!NOTATION foo SYSTEM 'foo'>\n]>\n<doc></doc>")
+    ;
+
+/**
+ * Run all of the unit tests for the Engine module.
+ */
+unitTests :: Boolean;
+public unitTests =
+    assert test_handleLineEndings &&
+    
+    assert test_xmlChar &&
+    assert test_name &&
+    assert test_charRef &&
+    assert test_entityRef &&
+    assert test_attValue &&
+    assert test_cdata_text &&
+    assert test_cdata_to_string &&
+    assert test_cdata_markup &&
+    assert test_xmldecl &&
+    assert test_doctypedecl &&
+    assert test_externalId &&
+    assert test_markupdecl &&
+    assert test_prolog &&
+    assert test_comment &&
+    assert test_pi &&
+    assert test_attribute &&
+    assert test_element &&
+    assert test_document &&
+    assert test_document_case_sensitivity &&
+    assert test_document_no_spaces &&
+    assert test_document_with_comments &&
+    assert test_document_no_root_elem &&
+    assert test_document_multiple_root_elems &&
+    assert test_document_leading_pi &&
+    assert test_document_general_entities &&
+    assert test_document_attribute_defaults &&
+    assert test_document_attribute_types &&
+    assert test_document_unparsed_entity &&
+    assert test_document_unread_parameter_entity &&
+    assert test_document_undeclared_entity &&
+    assert test_document_external_entity &&
+    assert test_document_errors &&
+    assert test_encoding &&
+    
+    // Printers.
+    assert test_xmlAttributeToFirstXmlCanonicalForm &&
+    assert test_xmlNodeToFirstXmlCanonicalForm &&
+    assert test_xmlDocumentToFirstXmlCanonicalForm &&
+    assert test_xmlDocumentToSecondXmlCanonicalForm
+    ;
+
+
+// BENCHMARKING HELPER FUNCTIONS ///////////////////////////////////////////////
+
+testFilesNew :: String -> String -> Int;
+private testFilesNew dirName pattern = testFiles dirName pattern (parseTestRaw document);
+//private testFilesOld pattern = testFiles pattern XmlParser.parseXmlDocument;
+
+testFiles :: String -> String -> (String -> XmlDocument) -> Int;
+private testFiles dirName pattern parser =
+    let
+        files = getFilteredDirectoryContents (makeFileName dirName) pattern True;
+        parseFile :: FileName -> Int;
+        parseFile fileName =
+                String.length (xmlDocumentToCanonicalString (parser (case (readFile fileName) of Right s -> s;)));
+        
+        result :: [Int];        
+        result = map parseFile (Debug.trace (Prelude.intToString (length files)) files);
+    in
+        sum result;
+
+// Functions for use by a test driver running the XML W3C Conformance Test Suite.
+// http://www.w3.org/XML/Test/
+
+parseXmlDocumentFromFile :: String -> Either ParseError XmlDocument;
+private parseXmlDocumentFromFile path =
+    case readFileBinary $ makeFileName path of
+    Left _ -> error $ "Failed to read file: "++path;
+    Right bytes -> parseXmlDocumentFromBytes bytes;
+    ;
+
+/**
+ * Test an XML document file for well-formedness.
+ * 
+ * @arg path the path of the XML document to read.
+ * @return true if the document is well-formed; false otherwise. 
+ */
+isWellFormed :: String -> Boolean;
+public isWellFormed path = isRight (parseXmlDocumentFromFile path);
+
+parseAndWriteCanonicalized :: (XmlDocument -> String) -> String -> String -> ();
+private parseAndWriteCanonicalized canonicalize inPath outPath =
+    case parseXmlDocumentFromFile inPath of
+    Left _ -> ();
+    Right doc ->
+        let
+            s = canonicalize doc;
+        in
+            writeFileBinary (makeFileName outPath) (Encoding.encode "UTF-8" s) `seq` ();
+    ;
+
+/**
+ * Parse an XML document from {@code inPath@}, canonicalize it according to
+ * the Second XML Canonical Form, and write it to {@code outPath@}.
+ * 
+ * This function is used when the OUTPUT attribute is set.
+ */
+parseAndWriteSecondXmlCanonicalForm :: String -> String -> ();
+public parseAndWriteSecondXmlCanonicalForm =
+    parseAndWriteCanonicalized xmlDocumentToSecondXmlCanonicalForm;

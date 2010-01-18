@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section version="5.0" xml:id="UsingJavaForeignInputFactoryInGemCutter" xmlns="http://docbook.org/ns/docbook" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns:svg="http://www.w3.org/2000/svg" xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:html="http://www.w3.org/1999/xhtml" xmlns:db="http://docbook.org/ns/docbook">
+<!--
+Copyright (c) 2006 BUSINESS OBJECTS SOFTWARE LIMITED
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+ 
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ 
+    * Neither the name of Business Objects nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    UsingJFitInGemCutter.xml
+    Creation date: Nov 22, 2006.
+    By: Neil Corkum
+-->
+
+  <title>Using the Java Foreign Input Factory (JFit) in the Gem Cutter</title>
+
+  <para>This section describes how to use the Java Foreign Import Module
+  Factory UI to invoke JFit.</para>
+
+  <bridgehead>Invoke the Java Foreign Import Module Factory</bridgehead>
+
+  <para>From the Gem Cutter menu bar, select <menuchoice>
+      <guiicon>Generate</guiicon>
+
+      <guimenuitem>Java Foreign Import Module</guimenuitem>
+    </menuchoice>.</para>
+
+  <para>The factory dialog will be displayed, shown in <xref linkend="FigureGenerateJavaForeignImportModuleDialog"></xref>:</para>
+
+  <figure xml:id="FigureGenerateJavaForeignImportModuleDialog">
+    <title>Generate Java Foreign Import Module dialog box</title>
+
+    <screenshot>
+      <mediaobject>
+        <imageobject>
+          <imagedata fileref="images/UsingJFitInGemCutter/generateJavaForeignImportModule.png"></imagedata>
+        </imageobject>
+      </mediaobject>
+    </screenshot>
+  </figure>
+
+  <bridgehead>Enter the Module Name</bridgehead>
+
+  <para>This will be the name of the generated module. For example, if “Test”
+  is entered here, the generated module will be module
+  <package>Test</package>, and the file will be
+  <filename>Test.cal</filename>.</para>
+
+  <bridgehead>Select Import Sources</bridgehead>
+
+  <para>In order for JFit to know the classes for which foreign imports should
+  be generated, one or more import sources should be specified. There are two
+  types of sources:</para>
+
+  <variablelist>
+    <varlistentry>
+      <term>Jar File</term>
+
+      <listitem>
+        <para>The class(es) to import exist in the selected .jar file.</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term>Folder</term>
+
+      <listitem>
+        <para>The class(es) to import are in .class file form, and this folder
+        represents the parent of the root package component. For instance, if
+        the files to import are subpackages of “com.businessobjects”, the
+        folder here would be the parent of the “com” folder.</para>
+      </listitem>
+    </varlistentry>
+  </variablelist>
+
+  <note>
+    <para>The classes which comprise the standard Java distribution are
+    available in .jar form with the Java SDK. These can typically be found in
+    the folder: <filename>&lt;java.home&gt;\lib</filename>. For instance, the
+    <classname>java.lang.StringBuffer</classname> class from a recent Java
+    distribution might be found at a path similar to:
+    <filename>C:\j2sdk1.4.2_07\jre\lib\rt.jar</filename>.</para>
+  </note>
+
+  <bridgehead>Add Import Patterns</bridgehead>
+
+  <para>Import patterns can optionally be provided to widen or narrow the
+  scope of the classes of interest within the scope of the selected import
+  sources. There are two types of import patterns:</para>
+
+  <variablelist>
+    <varlistentry>
+      <term>Exclude patterns</term>
+
+      <listitem>
+        <para>Classes whose fully-qualified names match the given pattern will
+        be excluded from the classes for which types and functions will be
+        generated.</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term>Include patterns</term>
+
+      <listitem>
+        <para>Classes whose fully-qualified names match the given pattern will
+        be included in the classes for which types and functions will be
+        generated, provided that their names do not match any exclude
+        patterns.</para>
+      </listitem>
+    </varlistentry>
+  </variablelist>
+
+  <para>In both types of patterns, wildcards may be used to match groups of
+  classes. For instance:</para>
+
+  <informaltable>
+    <tgroup cols="2">
+      <tbody>
+        <row>
+          <entry><classname>java.lang.StringBuffer</classname></entry>
+
+          <entry align="left">matches the class
+          <classname>java.lang.StringBuffer</classname></entry>
+        </row>
+
+        <row>
+          <entry><classname>java.math.*</classname></entry>
+
+          <entry align="left">matches all classes in all packages starting
+          with <classname>java.math.</classname></entry>
+        </row>
+
+        <row>
+          <entry><classname>java.lang.Illegal*Exception</classname></entry>
+
+          <entry align="left">matches classes in the
+          <package>java.lang</package> package starting with
+          <classname>Illegal</classname> and ending with
+          <classname>Exception</classname></entry>
+        </row>
+
+        <row>
+          <entry><literallayout><classname>com.businessobjects.test.
+classes.MyClass$?</classname></literallayout></entry>
+
+          <entry align="left">Matches inner classes of
+          <classname>com.businessobjects.test. classes.MyClass</classname>
+          whose unqualified names are one character long</entry>
+        </row>
+      </tbody>
+    </tgroup>
+  </informaltable>
+
+  <bridgehead>Select Generated Scopes</bridgehead>
+
+  <para>This section allows the visibility of the generated types and
+  functions to be specified. There are three options:</para>
+
+  <variablelist>
+    <varlistentry>
+      <term>All private</term>
+
+      <listitem>
+        <para>The visibility of all generated entities is private</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term>Public functions and types, private type implementations</term>
+
+      <listitem>
+        <para>The visibility of generated functions and types is public. The
+        implementation scopes for the generated types will be private. This
+        indicates that other modules can not “know” that the implementation of
+        the type is as a foreign type, and thus cannot also define foreign
+        functions which operate on the type.</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term>Public functions, type, and type implementations</term>
+
+      <listitem>
+        <para>The visibility of all generated entities is public.</para>
+      </listitem>
+    </varlistentry>
+  </variablelist>
+
+  <bridgehead>Select Optional Methods to Generate from
+  <classname>java.lang.Object</classname></bridgehead>
+
+  <para>By default, functions are not generated for a number of methods
+  inherited by all java classes from the class
+  <classname>java.lang.Object</classname>. These methods are:
+  <function>equals()</function>, <function>hashCode()</function>,
+  <function>wait()</function>, <function>notify()</function>,
+  <function>notifyAll()</function>, and
+  <function>getClass()</function>.</para>
+
+  <para>This section can be used to override the default settings, and
+  optionally generate functions for a number of these methods for all
+  generated types.</para>
+
+  <bridgehead>Generate the Module</bridgehead>
+
+  <para>Click “OK” to accept the user-defined inputs and generate the foreign
+  import module.</para>
+</section>

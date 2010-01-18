@@ -1,0 +1,285 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * RegexDna benchmark implementation for the internet bechmark shootouts see: {@url
+ * http://shootout.alioth.debian.org/@}
+ *
+ * This code is based on and inspired by the other entries in the The Great
+ * Computer Language Shootout {@url http://shootout.alioth.debian.org/@}.
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.RegexDna;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Char, Int, String;
+    function = concat, eager, seq;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Core.String using
+    function = length, replaceAllString, splitString;
+    ;
+import Cal.Collections.List using
+    function = foldLeftStrict;
+    ;
+import Cal.IO.Console using
+    function = print, printLine;
+    ;
+
+data foreign unsafe import jvm "java.lang.StringBuilder"
+    private JStringBuilder deriving Show;
+
+foreign unsafe import jvm "constructor"
+    private createStringBuilder :: JStringBuilder;
+
+foreign unsafe import jvm "method append"
+    private appendString :: JStringBuilder -> String -> JStringBuilder;
+
+foreign unsafe import jvm "method append"
+    private appendChar :: JStringBuilder -> Char -> JStringBuilder;
+
+data foreign unsafe import jvm "java.io.BufferedReader"
+    private JBufferedReader;
+
+data foreign unsafe import jvm "java.io.InputStream" private JInputStream;
+
+data foreign unsafe import jvm "java.io.InputStreamReader"
+    private JInputStreamReader;
+
+data foreign unsafe import jvm "java.io.Reader" private JReader;
+
+data foreign unsafe import jvm "java.io.FileReader" private JFileReader;
+
+data foreign unsafe import jvm "java.io.PrintStream" private JPrintStream;
+
+data foreign unsafe import jvm "java.util.regex.Matcher" private JMatcher;
+
+data foreign unsafe import jvm "java.util.regex.Pattern" private JPattern;
+
+data foreign unsafe import jvm "java.lang.CharSequence" private JCharSequence;
+
+foreign unsafe import jvm "static method java.util.regex.Pattern.compile"
+    private compilePattern :: String -> JPattern;
+
+foreign unsafe import jvm "method matcher"
+    private getMatcher :: JPattern -> JCharSequence -> JMatcher;
+
+foreign unsafe import jvm "method find" private find :: JMatcher -> Boolean;
+
+foreign unsafe import jvm "constructor"
+    private createBufferedReader :: JReader -> JBufferedReader;
+
+foreign unsafe import jvm "constructor"
+    private createInputStreamReaderStream ::
+        JInputStream -> JInputStreamReader;
+
+foreign unsafe import jvm "method append"
+    private append ::
+        JStringBuilder -> JCharArray -> Int -> Int -> JStringBuilder;
+
+foreign unsafe import jvm "method read"
+    private read :: JBufferedReader -> JCharArray -> Int -> Int -> Int;
+
+foreign unsafe import jvm "static field java.lang.System.out"
+    private stdout :: JPrintStream;
+
+foreign unsafe import jvm "static field java.lang.System.in"
+    private stdin :: JInputStream;
+
+data foreign unsafe import jvm "char[]" JCharArray;
+
+foreign unsafe import jvm "newArray" char_newArray :: Int -> JCharArray;
+
+foreign unsafe import jvm "cast"
+    jInputStreamReaderToJReader :: JInputStreamReader -> JReader;
+
+foreign unsafe import jvm "cast"
+    stringToJCharSequence :: String -> JCharSequence;
+
+/** read a dna file from stdin into a buffer */
+readFile :: JBufferedReader -> String;
+readFile !bufferedReader =
+    let
+        charBuffer :: JCharArray;
+        charBuffer = eager $ char_newArray 10240;
+
+        stringBuilder :: JStringBuilder;
+        stringBuilder = eager $ createStringBuilder;
+
+        readAll :: JCharArray -> JStringBuilder -> String;
+        readAll !charBuffer !stringBuilder =
+            let
+                charsRead :: Int;
+                charsRead = eager $ read bufferedReader charBuffer 0 10240;
+            in
+                if charsRead != -1 then
+                    append stringBuilder charBuffer 0 charsRead
+                    `seq`
+                    readAll charBuffer stringBuilder
+                else
+                    show stringBuilder
+            ;
+    in
+        readAll charBuffer stringBuilder
+    ;
+
+/** Counts the number of matches remaining in a matcher */
+countMatches :: JMatcher -> Int -> Int;
+countMatches !matcher !count =
+    if find matcher then
+        countMatches matcher (count + 1)
+    else
+        count
+    ;
+
+/** List of variants to search for */
+variants :: [String];
+variants =
+    [
+        "agggtaaa|tttaccct",
+        "[cgt]gggtaaa|tttaccc[acg]",
+        "a[act]ggtaaa|tttacc[agt]t",
+        "ag[act]gtaaa|tttac[agt]ct",
+        "agg[act]taaa|ttta[agt]cct",
+        "aggg[acg]aaa|ttt[cgt]ccct",
+        "agggt[cgt]aa|tt[acg]accct",
+        "agggta[cgt]a|t[acg]taccct",
+        "agggtaa[cgt]|[acg]ttaccct"
+    ]
+    ;
+
+/** list of replacements to make (from, to) */
+replacements =
+    [
+        ("B", "(c|g|t)"),
+        ("D", "(a|g|t)"),
+        ("H", "(a|c|t)"),
+        ("K", "(g|t)"),
+        ("M", "(a|c)"),
+        ("N", "(a|c|g|t)"),
+        ("R", "(a|g)"),
+        ("S", "(c|g)"),
+        ("V", "(a|c|g)"),
+        ("W", "(a|t)"),
+        ("Y", "(c|t)")
+    ]
+    ;
+
+doReplace !str !pos !strBuilder =
+    if (pos == String.length str) then
+        strBuilder
+    else
+        let
+            c = eager $ String.subscript str pos;
+        in
+            (case c of
+            'B' -> appendString strBuilder "(c|g|t)";
+            'D' -> appendString strBuilder "(a|g|t)";
+            'H' -> appendString strBuilder "(a|c|t)";
+            'K' -> appendString strBuilder "(g|t)";
+            'M' -> appendString strBuilder "(a|c)";
+            'N' -> appendString strBuilder "(a|c|g|t)";
+            'R' -> appendString strBuilder "(a|g)";
+            'S' -> appendString strBuilder "(c|g)";
+            'V' -> appendString strBuilder "(a|c|g)";
+            'W' -> appendString strBuilder "(a|t)";
+            'Y' -> appendString strBuilder "(c|t)";
+            _ -> appendChar strBuilder c;)
+            `seq`
+            doReplace str (pos+1) strBuilder
+    ;
+
+main :: [String] -> ();
+public main args =
+    let
+        bufferReader :: JBufferedReader;
+        bufferReader =
+            eager
+            $ createBufferedReader
+                (jInputStreamReaderToJReader
+                    (createInputStreamReaderStream stdin)
+                )
+            ;
+
+        input :: String;
+        input = eager $ readFile bufferReader;
+
+        sequence :: String;
+        sequence = replaceAllString input ">.*\n|\n" "";
+    in
+
+        print
+            (foldLeftStrict
+                (
+                    \!accumulator !variant ->
+                        accumulator
+                        ++ variant
+                        ++ " "
+                        ++ show
+                            (
+                                List.sum
+                                $ List.map
+                                    (
+                                        \!v ->
+                                            countMatches
+                                                (getMatcher
+                                                    (compilePattern v)
+                                                    (stringToJCharSequence
+                                                        sequence
+                                                    )
+                                                )
+                                                0
+                                    )
+                                    (String.splitString "|" variant)
+                            )
+                        ++ "\n"
+                )
+                ""
+                variants
+            )
+        `seq`
+        printLine ""
+        `seq`
+        printLine (show $ length input)
+        `seq`
+        printLine (show $ length sequence)
+        `seq`
+        printLine
+            (
+                show
+                $ length (show $ doReplace sequence 0 createStringBuilder)
+            )
+    ;
+
+

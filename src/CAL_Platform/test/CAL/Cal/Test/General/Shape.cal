@@ -1,0 +1,625 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Shape.cal
+ * Creation date: July 8, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+This module contains an approach in CAL to solving the challenge of Jim Weirich to write a small
+example of a program in OO style in non-OO languages. The code is in Shape.cal, Circle.cal, Rectangle.cal and Shape_Test.cal.
+
+{@url http://onestepback.org/articles/poly/@}
+
+{@url http://www.angelfire.com/tx4/cus/shapes/index.html@}
+
+The Problem ...
+Here is a small example of a OO program that uses the following classes: 
+{@code
+
+              |<<inteface>>|
+              |   Shape    |
+                    A
+                    |
+           +--------+-------+
+           |                |
+      |Rectangle|       |Circle|
+@}
+
+Shape provides an abstract interface that supports Draw(), MoveTo(x,y), and RMoveTo(dx,dy) methods.
+Rectangle and Circle support that interface as well as defining their own specific methods (e.g. SetRadius(newRadius) for Circle). 
+
+Note: My intention was to have the Shape class be a pure interface, with all implementation in the derived classes. 
+A few of the examples move the MoveTo and RMoveTo methods implementations into the Shape class. 
+This certainly reduces redundency and is an acceptable optimization for this example.
+
+Output:
+{@code
+Drawing a Rectangle at (10,20), width 5, height 6
+Drawing a Rectangle at (110,120), width 5, height 6
+Drawing a Circle at (15,25), radius 8
+Drawing a Circle at (115,125), radius 8
+Drawing a Rectangle at (0,0), width 30, height 15
+@}
+
+For reference, Haskell (with existential types) and C++ versions are included in comments at the end.
+
+///////////////////////////////////////////
+
+{@strong Discussion of approach #1:@}
+
+This is a simple and straightforward approach in CAL, with a Shape type class and Circle and Rectangle types that are instances.
+
+The main problem is that it doesn't support heterogeneous collections involving both Circle and Rectangle values.
+
+Another problem (or factor in this case) is that the implementations of moveTo and relativeMoveTo for Circle and Rectangle
+are essentially duplicated i.e. it would be interesting to see how to model implementation inheritence here. 
+
+The definition of Rectangle and Circle do not have to be in the same module and the design is extensible 
+to adding new Shapes. This is true of all the approaches. If this is not required, then the simplest (and most standard approach)
+is to have a single data declaration for Shape, where the individual shapes are data constructors within that declaration.
+
+For this approach, the Shape type class does not need to have Typeable as a superclass.
+
+///////////////////////////////////////////
+
+{@strong Discussion of approach #2:@}
+
+This approach provides a true object oriented style where we can have a list of GenericShape values where the operations of the Shape
+type class can be applied successfully, and new instances of the Shape type class can be introduced without modifying Shape.cal.
+
+The approach is somewhat ugly in that CalValue and unsafeCoerce are needed to make it work (although only in the Shape module and
+not in Rectangle, Circle, or application modules).
+
+There are also efficiency impacts in the use of records to encode type information.
+
+We can do a type-safe cast from GenericShape to an appropriate concrete shape (such as Rectangle or Circle) if appropriate.
+
+This approach is roughly analogous to the use of "existentially quantified types" in Haskell (with extensions).
+
+The definition of GenericShape and the Shape GenericShape instance, and all the instance methods could in principle be boilerplated
+by the compiler. A more efficient implementation of GenericShape would use a tuple, or even just an algebraic data type.
+
+///////////////////////////////////////////
+
+{@strong Discussion of approach #3:@}
+
+This is the best approach so far for object oriented style in CAL.
+
+This is like approach #2 but more efficient, and it doesn't use records.
+
+It looks like it should be possible to further optimize this approach in a compiler implemented
+version in the case of types where the instance declaration is not a constrained instance declaration.
+This is because in that case, the information on the instance functions is essentially the same
+as what is found in the dictionary for the instace- we should be able to reuse that.
+
+@author Bo Ilic
+*/
+module Cal.Test.General.Shape;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    typeConstructor = CalValue, TypeRep;
+    typeClass = Typeable;
+    function = unsafeCoerce, typeOf, asTypeOf;
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    ;      
+import Cal.Core.String using  
+    function = toList;
+    ;        
+
+/////////////////////////////////////////////////////////
+//approach #1    
+    
+public class Typeable a => Shape a where    
+    public draw :: a -> String;
+    public moveTo :: a -> Int -> Int -> a;
+    public relativeMoveTo :: a -> Int -> Int -> a;       
+    ;
+    
+/////////////////////////////////////////////////////////
+//approach #2    
+      
+data public GenericShape = 
+    private MakeGenericShape 
+        value   :: CalValue;
+
+makeGenericShape :: (Shape a) => a -> GenericShape;
+public makeGenericShape shape = MakeGenericShape (unsafeCoerce (wrapShape shape));
+
+//modelled on the implementation of Prelude.fromDynamic.
+//this function lets a person "downcast" from a GenericShape to a Rectangle, Circle etc
+//provided that they guess right.
+//It is probably one of the hairiest short functions in CAL!
+fromGenericShape :: (Shape a) => GenericShape -> Maybe a;
+public fromGenericShape genericShape =
+    let
+        r = (unwrapShape genericShape);
+        actualGenericShapeType = r.typeRep;
+        fromUnderlyingValue value =
+            if (actualGenericShapeType == typeOf value) then
+                Just value
+            else
+                Nothing;        
+    in
+        fromUnderlyingValue (unsafeCoerce r.value);
+
+instance Shape GenericShape where   
+    draw = drawGenericShape;
+    moveTo = moveToGenericShape;
+    relativeMoveTo = relativeMoveToGenericShape;   
+    ;
+    
+wrapShape :: Shape a => a ->
+    {value :: a,
+     typeRep :: TypeRep,    
+     draw :: a -> String,
+     moveTo :: a -> Int -> Int -> a,
+     relativeMoveTo :: a -> Int -> Int -> a};
+wrapShape s = {value = s, typeRep = typeOf s, draw = draw, moveTo = moveTo, relativeMoveTo = relativeMoveTo};    
+    
+unwrapShape :: GenericShape ->
+    {value :: CalValue,
+     typeRep :: TypeRep,    
+     draw :: CalValue -> String,
+     moveTo :: CalValue -> Int -> Int -> CalValue,
+     relativeMoveTo :: CalValue -> Int -> Int -> CalValue};
+unwrapShape !genericShape =
+    case genericShape of
+    MakeGenericShape r -> unsafeCoerce r;
+    ;           
+    
+drawGenericShape :: GenericShape -> String;
+private drawGenericShape genericShape =
+    let
+        r = unwrapShape genericShape;
+    in
+        r.draw r.value;    
+    
+moveToGenericShape :: GenericShape -> Int -> Int -> GenericShape;
+private moveToGenericShape genericShape newX newY =
+    let
+        r = unwrapShape genericShape;
+    in
+        case r of
+        {s | value} -> MakeGenericShape (unsafeCoerce {s | value = r.moveTo r.value newX newY});
+        ;   
+    
+relativeMoveToGenericShape :: GenericShape -> Int -> Int -> GenericShape;
+private relativeMoveToGenericShape genericShape dX dY =
+    let
+        r = unwrapShape genericShape;        
+    in
+        case r of
+        {s | value} -> MakeGenericShape (unsafeCoerce {s | value = r.relativeMoveTo r.value dX dY});
+        ;
+        
+/////////////////////////////////////////////////////////
+//approach #3        
+
+//GenericShape3 captures the value (stripped of type information), a run-time representation of the type, and the instance methods
+//used for the particular value.        
+data public GenericShape3 =
+    private MakeGenericShape3    
+        value           :: CalValue
+        typeRep         :: TypeRep
+        draw            :: (CalValue -> String)
+        moveTo          :: (CalValue -> Int -> Int -> CalValue)
+        relativeMoveTo  :: (CalValue -> Int -> Int -> CalValue)
+        ;
+
+makeGenericShape3 :: (Shape a) => a -> GenericShape3;
+public makeGenericShape3 shape =
+    let
+        //the 3 let functions below are never actually run (and so their definition is just Prelude.undefined.
+        //they are used to give the correct type arguments when calling MakeGenericShape3
+        drawType :: Shape a => a -> (a -> String);
+        drawType = Prelude.undefined;
+        
+        moveToType :: Shape a => a -> (a -> Int -> Int -> a);
+        moveToType = Prelude.undefined;
+        
+        relativeMoveToType :: Shape a => a -> (a -> Int -> Int -> a);
+        relativeMoveToType = Prelude.undefined;
+        
+    in
+        MakeGenericShape3
+            (unsafeCoerce shape)
+            (typeOf shape)
+            //todoBI we should optimize out asTypeOf. In that case asTypeOf x y is replaced by x, and then the local variables
+            //drawType etc will be optimized out as well. Also, unsafeCoerce is optimized out. So this function becomes (at the
+            //machine level)
+            //makeGenericShape2 shape = MakeGenericShape2 shape (typeOfShape) draw moveTo relativeMoveTo;
+            //with the class methods instantiated to the instance methods appropriate for the shape arg.
+            (unsafeCoerce (asTypeOf draw (drawType shape)))
+            (unsafeCoerce (asTypeOf moveTo (moveToType shape)))
+            (unsafeCoerce (asTypeOf relativeMoveTo (relativeMoveToType shape))); 
+    
+//modelled on the implementation of Prelude.fromDynamic.
+//this function lets a person "downcast" from a GenericShape3 to a Rectangle, Circle etc
+//provided that they guess right.
+fromGenericShape3 :: (Shape a) => GenericShape3 -> Maybe a;
+public fromGenericShape3 !genericShape =
+    case genericShape of
+    MakeGenericShape3 value typeRep draw moveTo relativeMoveTo ->
+        let
+            fromUnderlyingValue value =
+                if (typeRep == typeOf value) then
+                    Just value
+                else
+                    Nothing;
+        in
+            fromUnderlyingValue (unsafeCoerce value); 
+    ;
+    
+    
+instance Shape GenericShape3 where   
+    draw = drawGenericShape3;
+    moveTo = moveToGenericShape3;
+    relativeMoveTo = relativeMoveToGenericShape3;   
+    ;
+        
+drawGenericShape3 :: GenericShape3 -> String;
+private drawGenericShape3 !genericShape =
+    case genericShape of
+    MakeGenericShape3 value typeRep draw moveTo relativeMoveTo ->
+        draw value;
+    ;              
+    
+moveToGenericShape3 :: GenericShape3 -> Int -> Int -> GenericShape3;
+private moveToGenericShape3 !genericShape newX newY =
+    case genericShape of
+    MakeGenericShape3 value typeRep draw moveTo relativeMoveTo ->
+        MakeGenericShape3 (moveTo value newX newY) typeRep draw moveTo relativeMoveTo;
+    ;    
+    
+relativeMoveToGenericShape3 :: GenericShape3 -> Int -> Int -> GenericShape3;
+private relativeMoveToGenericShape3 !genericShape dX dY =
+    case genericShape of
+    MakeGenericShape3 value typeRep draw moveTo relativeMoveTo ->
+        MakeGenericShape3 (relativeMoveTo value dX dY) typeRep draw moveTo relativeMoveTo;
+    ;    
+    
+    
+
+/*
+Haskell with existential types:
+ 
+module: Polymorph.hs
+module Polymorph(main)
+
+   where
+   import Shape
+   import Circle
+   import Rectangle
+
+   main =
+      do
+         -- handle the shapes polymorphically
+         drawloop scribble
+
+         -- handle rectangle specific instance
+         draw (setWidth arectangle 30)
+
+      where
+         -- create some shape instances (using existential wrapper)
+         scribble = [
+            MakeExistentialShape (MakeRectangle 10 20 5 6),
+            MakeExistentialShape (MakeCircle 15 25 8)]
+
+         -- create a rectangle instance
+         arectangle = (MakeRectangle 0 0 15 15)
+
+   -- iterate through the list of shapes and draw
+   drawloop [] = return True
+   drawloop (x:xs) =
+      do
+         draw x
+         draw (rMoveTo x 100 100)
+         drawloop xs
+
+
+ 
+
+module: Shape.hs
+module Shape(Shape, ExistentialShape, MakeExistentialShape, getX, getY, setX, setY, moveTo, rMoveTo, draw)
+
+   where
+
+   -- declare method interfaces for the shape superclass
+   class Shape a where
+      getX :: a -> Int
+      getY :: a -> Int
+      setX :: a -> Int -> a
+      setY :: a -> Int -> a
+      moveTo :: a -> Int -> Int -> a
+      rMoveTo :: a -> Int -> Int -> a
+      draw :: a -> IO()
+
+   -- declare the constructor for the existential type
+   data ExistentialShape =
+      forall a. Shape a => MakeExistentialShape a
+
+   -- map the methods for the existential type
+   instance Shape ExistentialShape where
+     getX (MakeExistentialShape a) = getX a
+     getY (MakeExistentialShape a) = getY a
+     setX (MakeExistentialShape a) newx = MakeExistentialShape(setX a newx)
+     setY (MakeExistentialShape a) newy = MakeExistentialShape(setY a newy)
+     moveTo (MakeExistentialShape a) newx newy = MakeExistentialShape(moveTo a newx newy)
+     rMoveTo (MakeExistentialShape a) deltax deltay = MakeExistentialShape(rMoveTo a deltax deltay)
+     draw (MakeExistentialShape a) = draw a
+
+ 
+
+module: Circle.hs
+module Circle(Circle, MakeCircle, getRadius, setRadius)
+
+   where
+   import Shape
+
+   -- declare method interfaces for circle subclass
+   class Shape a => Circle a where
+      getRadius :: a -> Int
+      setRadius :: a -> Int -> a
+
+   -- define the methods for shape superclass
+   instance Shape CircleInstance where
+      getX = x
+      getY = y
+      setX a newx = a {x = newx}
+      setY a newy = a {y = newy}
+      moveTo a newx newy = a {x = newx, y = newy}
+      rMoveTo a deltax deltay = a {x = ((getX a) + deltax), y = ((getY a) + deltay)}
+      draw a =
+         putStrLn ("Drawing a Circle at:(" ++ (show (getX a)) ++ "," ++ (show (getY a)) ++
+            "), radius " ++ (show (getRadius a)))
+
+   -- define the methods for circle subclass
+   instance Circle CircleInstance where
+      getRadius = radius
+      setRadius a newradius = a {radius = newradius}
+
+   -- declare the constructor for circle class
+   data CircleInstance = MakeCircle {x, y, radius :: Int}
+      deriving(Eq, Show)
+
+ 
+
+module: Rectangle.hs
+module Rectangle(Rectangle, MakeRectangle, getWidth, getHeight, setWidth, setHeight)
+
+   where
+   import Shape
+
+   -- declare method interfaces for rectangle subclass
+   class Shape a => Rectangle a where
+      getWidth :: a -> Int
+      getHeight :: a -> Int
+      setWidth :: a -> Int -> a
+      setHeight :: a -> Int -> a
+
+   -- define the methods for shape superclass
+   instance Shape RectangleInstance where
+      getX = x
+      getY = y
+      setX a newx = a {x = newx}
+      setY a newy = a {y = newy}
+      moveTo a newx newy = a {x = newx, y = newy}
+      rMoveTo a deltax deltay = a {x = ((getX a) + deltax), y = ((getY a) + deltay)}
+      draw a =
+         putStrLn ("Drawing a Rectangle at:(" ++ (show (getX a)) ++ "," ++ (show (getY a)) ++
+            "), width " ++ (show (getWidth a)) ++ ", height " ++ (show (getHeight a)))
+
+   -- define the methods for rectangle subclass
+   instance Rectangle RectangleInstance where
+      getWidth = width
+      getHeight = height
+      setWidth a newwidth = a {width = newwidth}
+      setHeight a newheight = a {height = newheight}
+
+   -- declare the constructor for rectangle class
+   data RectangleInstance = MakeRectangle {x, y, width, height :: Int}
+      deriving(Eq, Show)
+
+ 
+
+project: Polymorph.prj
+Shape.hs
+Circle.hs
+Rectangle.hs
+Polymorph.hs
+
+ 
+
+Polymorphism Test
+:project Polymorph.prj
+main
+*/
+
+
+
+/*
+C++ implementation:
+
+File: shapes.cc
+
+#include <iostream.h>
+
+
+class Shape
+{
+public:
+    virtual void Draw () = 0;
+    virtual void MoveTo (int newx, int newy) = 0;
+    virtual void RMoveTo (int dx, int dy) = 0;
+};
+             
+
+class Rectangle : public Shape
+{
+public:
+    Rectangle (int x, int y, int w, int h);
+    virtual void Draw ();
+    virtual void MoveTo (int newx, int newy);
+    virtual void RMoveTo (int dx, int dy);
+    virtual void SetWidth (int newWidth);
+    virtual void SetHeight (int newHeight);
+
+private:
+    int x, y;
+    int width;
+    int height;
+};
+    
+void Rectangle::Draw ()
+{
+    cout << "Drawing a Rectangle at (" << x << "," << y
+     << "), width " << width << ", height " << height << "\n";
+};
+
+void Rectangle::MoveTo (int newx, int newy)
+{
+    x = newx;
+    y = newy;
+}
+
+void Rectangle::RMoveTo (int dx, int dy)
+{
+    x += dx;
+    y += dy;
+}
+
+void Rectangle::SetWidth (int newWidth)
+{
+    width = newWidth;
+}
+
+void Rectangle::SetHeight (int newHeight)
+{
+    height = newHeight;
+}
+
+Rectangle::Rectangle (int initx, int inity, int initw, int inith)
+{
+    x = initx;
+    y = inity;
+    width = initw;
+    height = inith;
+}
+
+class Circle : public Shape
+{
+public:
+    Circle (int initx, int inity, int initr);
+    virtual void Draw ();
+    virtual void MoveTo (int newx, int newy);
+    virtual void RMoveTo (int dx, int dy);
+    virtual void SetRadius (int newRadius);
+
+private:
+    int x, y;
+    int radius;
+};
+
+void Circle::Draw ()
+{
+    cout << "Drawing a Circle at (" << x << "," << y
+     << "), radius " << radius << "\n";
+}
+
+void Circle::MoveTo (int newx, int newy)
+{
+    x = newx;
+    y = newy;
+}
+
+void Circle::RMoveTo (int dx, int dy)
+{
+    x += dx;
+    y += dy;
+}
+
+void Circle::SetRadius (int newRadius)
+{
+    radius = newRadius;
+}
+
+Circle::Circle (int initx, int inity, int initr)
+{
+    x = initx;
+    y = inity;
+    radius = initr;
+}
+
+
+void DoSomethingWithShape (Shape * s)
+{
+    s->Draw ();
+    s->RMoveTo (100, 100);
+    s->Draw ();
+}
+
+int main ()
+{
+    
+    // using shapes polymorphically
+       
+    Shape * shapes[2];
+    shapes[0] = new Rectangle (10, 20, 5, 6);
+    shapes[1] = new Circle (15, 25, 8);
+
+    for (int i=0; i<2; ++i) {
+    DoSomethingWithShape (shapes[i]);
+    }
+
+    // access a rectangle specific function
+
+    Rectangle * rect = new Rectangle (0, 0, 15, 15);
+    rect->SetWidth (30);
+    rect->Draw ();
+
+    return 0;
+}
+
+*/

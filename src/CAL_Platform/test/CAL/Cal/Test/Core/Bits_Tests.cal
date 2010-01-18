@@ -1,0 +1,195 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Bits_Tests.cal
+ * Creation date: Oct 20, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for the {@link module = Bits@} module.
+ *
+ * Note that {@em examples functions@} can and should still go into the {@link module = Bits@} module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Bits_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Int;
+    function = assert;
+    ;
+
+import Cal.Core.Bits using
+    function = bitwiseAnd, bitwiseOr, bitwiseXor, complement, highestBitMask, shiftL, shiftR, shiftRUnsigned;
+    ;
+
+import Cal.Utilities.QuickCheck using
+    typeConstructor = Gen, Property;
+    function = arbitrary, chooseOneOfWithFreq, forAll, implies, makeConstGen, quickCheck;
+    ; 
+
+
+testBitwiseAnd =
+    assert ((10 :: Int) `bitwiseAnd` 7 == 2)
+    ;
+
+testBitwiseOr =
+    assert ((10 :: Int) `bitwiseOr` 7 == 15)
+    ;
+
+testBitwiseXor =
+    assert ((10 :: Int) `bitwiseXor` 7 == 13)
+    ;
+
+testComplement =
+    assert (complement (12 :: Int) == -13)
+    ;
+
+testHighestBitMask =
+    assert (highestBitMask (45 :: Int) == 32)
+    && assert (highestBitMask (-1 :: Int) == -2147483648)
+    && assert (highestBitMask (0 :: Int) == 0)
+    ;
+
+testShiftL = 
+    assert ((10 :: Int) `shiftL` 1 == 20)
+    && assert ((7 :: Int) `shiftL` 3 == 56)
+    ;
+
+testShiftR =
+    assert ((10 :: Int) `shiftR` 1 == 5)
+    && assert ((27 :: Int) `shiftR` 3 == 3)
+    && assert ((-49 :: Int) `shiftR` 2 == -13)
+    ;
+
+testShiftRUnsigned =
+    assert ((10 :: Int) `shiftRUnsigned` 1 == 5)
+    && assert ((27 :: Int) `shiftRUnsigned` 3 == 3)
+    && assert ((-1 :: Int) `shiftRUnsigned` 4 == 268435455)
+    && assert ((-16 :: Int) `shiftRUnsigned` 2 == 1073741820)
+    ;
+
+/**
+ * Here we define a generator that includes the boundary integers
+ * to ensure the boundary cases are checked. Also note that this
+ * generator includes negative numbers. 
+ */
+bigIntsGen :: Gen Int;
+bigIntsGen = chooseOneOfWithFreq [ (5, arbitrary::Gen Int), 
+                                   (1, makeConstGen (Prelude.maxBound)), 
+                                   (1, makeConstGen (Prelude.minBound))];
+
+prop_and :: Property;
+prop_and =  
+    forAll 
+    bigIntsGen
+    (\x -> ((x::Int) `bitwiseAnd` x == x) && 
+              (x `bitwiseAnd` (complement x) == 0) &&
+              (x `bitwiseAnd` (complement 0) == x));
+
+prop_or :: Property;
+prop_or = 
+    forAll
+    bigIntsGen
+    (\x -> ((x `bitwiseOr` x == x) && 
+            (x `bitwiseOr` (complement x) == (complement 0) ) &&
+            (x `bitwiseOr` (complement 0) == (complement 0))));
+
+prop_xor :: Property;
+prop_xor = 
+    forAll
+    bigIntsGen
+    (\x -> ((x `bitwiseXor` x `bitwiseXor` x == x) && 
+            (x `bitwiseXor` x == 0 ) &&
+            (x `bitwiseXor` (complement x) == (complement 0))));
+
+prop_shiftL :: Int -> Property;
+prop_shiftL x = 
+    ( x < (Prelude.maxBound / 2) && x > (Prelude.minBound / 2)) 
+    `implies` 
+    ( (shiftL x 1) == (x * 2) );
+
+prop_shiftL2 :: Int -> Property;
+prop_shiftL2 x = 
+    ( x < (Prelude.maxBound / 4) && x > (Prelude.minBound / 4)) 
+    `implies` 
+    ( shiftL (shiftL x 1) 1 == shiftL x 2 );
+
+prop_shiftLR :: Int -> Property;
+prop_shiftLR x = 
+    ( x < (Prelude.maxBound / 2) && x > (Prelude.minBound / 2)) 
+    `implies` 
+    ( shiftR (shiftL x 1) 1 == x );
+
+prop_shiftRUnsigned :: Int -> Property;
+prop_shiftRUnsigned x = (x < 0) `implies`  ((shiftRUnsigned x 1) > 0);
+
+prop_shiftRUnsigned2 :: Int -> Int -> Property;
+prop_shiftRUnsigned2 x y = 
+    (x > 0 && y > 0) 
+    `implies`  
+    ((shiftRUnsigned x y) == (shiftR x y)) ;
+
+prop_highestbit :: Int -> Int -> Property;
+prop_highestbit x n = 
+    (x > 0 && n > 0) 
+    `implies`  
+    ( (shiftR (highestBitMask x) n) == (highestBitMask (shiftR x n)));
+
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    testBitwiseAnd
+    && testBitwiseOr
+    && testBitwiseXor
+    && testComplement
+    && testHighestBitMask
+    && testShiftL
+    && testShiftR
+    && testShiftRUnsigned
+    && (quickCheck prop_and)
+    && (quickCheck prop_or)
+    && (quickCheck prop_xor)
+    && (quickCheck prop_shiftL)
+    && (quickCheck prop_shiftL2)
+    && (quickCheck prop_shiftLR)
+    && (quickCheck prop_shiftRUnsigned)
+    && (quickCheck prop_shiftRUnsigned2)
+    && (quickCheck prop_highestbit)
+    ;
+
+//please leave testModule last! It makes it easy to see what tests are hooked up.
+

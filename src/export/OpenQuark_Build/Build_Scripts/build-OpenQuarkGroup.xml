@@ -1,0 +1,807 @@
+<?xml version="1.0"?>
+<!--
+    Copyright (c) 2006 BUSINESS OBJECTS SOFTWARE LIMITED
+    All rights reserved.
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+    
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+     
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+     
+        * Neither the name of Business Objects nor the names of its contributors
+          may be used to endorse or promote products derived from this software
+          without specific prior written permission.
+     
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    build-OpenQuarkGroup.xml
+    Creation date: Oct 30, 2006.
+    By: Edward Lam
+-->
+
+<!-- ================================================================================================= -->
+<!-- build-OpenQuarkGroup.xml                                                                          -->
+<!--                                                                                                   -->
+<!-- The ant build file for the OpenQuark distribution.                                                -->
+<!--                                                                                                   -->
+<!-- ================================================================================================= -->
+
+<project name="OpenQuarkGroup" default="main">
+
+    <!-- The folder in which this build file lives. -->
+    <dirname property="OpenQuarkGroup.basedir" file="${ant.file.OpenQuarkGroup}"/>
+
+    <!-- What are we building? -->
+    <property name="buildGroup.name" value="OpenQuarkGroup"/>
+
+    <!-- Set the property which specifies that the projects in Main/Research are being built. -->
+    <property name="build.MainResearch" value="true"/>
+
+    <!-- Group properties -->
+    <property file="${OpenQuarkGroup.basedir}/build-${buildGroup.name}.properties"/>
+    
+    <!-- 
+      Load imports (during parse).
+      -->
+    <import file="${OpenQuarkGroup.basedir}/build-group-common.xml" />
+
+    <!-- =================================== -->
+    <!-- Principal targets                   -->
+    <!-- =================================== -->
+    <target name="main" depends="buildToZip" description="The default build process." />
+    <target name="clean" depends="init" description="Clean out the output directories." >
+        <delete dir="${group.obj.dir}" />
+        <delete dir="${junit.dir}" />
+        <delete dir="${group.outbin.dir}" />
+        <delete dir="${group.javadocs.dir}" />
+        <delete dir="${caldoc.out.dir}" />
+    </target>
+    <target name="build" depends="build-all" description="Do an (incremental) build." />
+    <target name="docs" description="Create the documentation.">
+        <parallel failonany="true">
+            <antcall target="javadoc-open"/>
+            <antcall target="caldoc"/>
+        </parallel>
+    </target>
+    <target name="deploy" depends="createExecutables,createOpenQuarkDeployment" description="Ship the zip, jars, wars, whatever to the execution system." />
+    <target name="test" depends="junit-sanity" description="Run the junit sanity tests." />
+
+    <target name="buildToZip" depends="clean" description="Build and create the OpenQuark deployment." >
+        <antcall target="build-all"/>
+        <antcall target="createExecutables"/>
+        <antcall target="docs"/>
+        <antcall target="createOpenQuarkDeployment"/>
+        <antcall target="test"/>
+    </target>
+
+    <!--
+        Initialization target 
+          - setup directory names etc.
+     -->
+
+    <target name="init" depends="group-common.init">
+
+        <!-- Fail if there is a build error. -->
+        <property name="failOnBuildError" value="true"/>
+
+        <path id="dependeeGroup.path"/>
+        
+        <property name="cal.platform.src.dir" value="${src.dir}/Quark_Platform/CAL_Platform"/>
+
+        <patternset id="import.javadoc.libs">
+            <include name="${antlr.jar}"/>
+            <include name="${asm-all.jar}"/>
+            <include name="${commons-collections.jar}"/>
+            <include name="${icu4j.jar}"/>
+            <include name="${junit.jar}"/>
+            <include name="${log4j.jar}"/>
+            <include name="${xercesImpl.jar}"/>
+            <include name="${xmlParserAPIs.jar}"/>
+        </patternset>
+
+        <patternset id="depot2.javadoc.libs">
+            <include name="External/Sun/JavaHelp/2.0_02/jh.jar"/>
+            <include name="Research/Quark_Gems/Help/GemCutterHelpFiles.jar"/>
+        </patternset>
+        
+        <patternset id="eclipse.javadoc.libs">
+            <include name="org.eclipse.core.commands_3.3.0.I20070605-0010.jar" />
+            <include name="org.eclipse.core.filebuffers_3.3.0.v20070606-0010.jar"/>
+            <include name="org.eclipse.core.jobs_3.3.0.v20070423.jar" />
+            <include name="org.eclipse.core.resources_3.3.0.v20070604.jar"/>
+            <include name="org.eclipse.core.runtime_3.3.100.v20070530.jar"/>
+            <include name="org.eclipse.debug.core_3.3.0.v20070607-1800.jar"/>
+            <include name="org.eclipse.debug.ui_3.3.0.v20070607-1800.jar"/>
+            <include name="org.eclipse.equinox.common_3.3.0.v20070426.jar" />
+            <include name="org.eclipse.equinox.preferences_3.2.100.v20070522.jar" />
+            <include name="org.eclipse.equinox.registry_3.3.0.v20070522.jar" />
+            <include name="org.eclipse.jdt.core_3.3.0.v_771.jar"/>
+            <include name="org.eclipse.jdt.debug.ui_3.2.100.v20070531-1800.jar"/>
+            <include name="org.eclipse.jdt.launching_3.3.0.v20070510.jar"/>
+            <include name="org.eclipse.jdt.ui_3.3.0.v20070607-0010.jar"/>
+            <include name="org.eclipse.jface_3.3.0.I20070606-0010.jar"/>
+            <include name="org.eclipse.jface.text_3.3.0.v20070606-0010.jar"/>
+            <include name="org.eclipse.osgi_3.3.0.v20070530.jar"/>
+            <include name="org.eclipse.search_3.3.0.v20070606-0010.jar"/>
+            <include name="org.eclipse.swt_3.3.0.v3346.jar"/>
+            <include name="org.eclipse.swt.win32.win32.x86_3.3.0.v3346.jar"/>
+            <include name="org.eclipse.text_3.3.0.v20070606-0010.jar"/>
+            <include name="org.eclipse.ui_3.3.0.I20070614-0800.jar"/>
+            <include name="org.eclipse.ui.console_3.2.0.v20070530.jar"/>
+            <include name="org.eclipse.ui.editors_3.3.0.v20070606-0010.jar"/>
+            <include name="org.eclipse.ui.forms_3.3.0.v20070511.jar"/>
+            <include name="org.eclipse.ui.ide_3.3.0.I20070620.jar"/>
+            <include name="org.eclipse.ui.views_3.2.100.I20070319-0010.jar"/>
+            <include name="org.eclipse.ui.workbench_3.3.0.I20070608-1100.jar"/>
+            <include name="org.eclipse.ui.workbench.texteditor_3.3.0.v20070606-0010.jar"/>
+        </patternset>
+
+        <!-- The dirs for which any Cars existing in the Car subfolder will not be generated. -->
+        <property name="cal.in.dirs" value=""/>
+        <!-- The dirs for which any Car-jars existing in the Car subfolder will not be generated. -->
+        <property name="cal.in.carjar.dirs" value=""/>
+
+        <!--
+        ============================================================================
+        Deployment properties
+        ============================================================================
+        -->
+        <property name="openquark.local.dir" value="${group.obj.dir}/OpenQuark"/>
+        <property name="openquark.quark.folder" value="Quark" />
+        <property name="openquark.java.debug.folder" value="${openquark.quark.folder}/bin/java/debug" />
+        <property name="openquark.java.release.folder" value="${openquark.quark.folder}/bin/java/release" />
+        <property name="openquark.cal.debug.folder" value="${openquark.quark.folder}/bin/cal/debug" />
+        <property name="openquark.cal.release.folder" value="${openquark.quark.folder}/bin/cal/release" />
+        <property name="openquark.lib.resource.folder" value="${openquark.quark.folder}/lib/Resources" />
+        <property name="openquark.samples.folder" value="${openquark.quark.folder}/samples" />
+        <property name="openquark.bam.sample.folder" value="${openquark.samples.folder}/bam" />
+        <property name="openquark.simple.samples.folder" value="${openquark.samples.folder}/simple" />
+        <property name="openquark.dest.dir" value="${group.outbin.dir}" />
+
+        <!-- 
+            Eclipse project files (in dependency order). 
+        -->
+        <filelist 
+            id="calEclipsePluginProjectBuildFiles" 
+            dir="${basedir}"
+            files="${cal.eclipse.plugin.build.files}"/>
+
+        <!-- 
+            OpenQuark Documentation to ship from the OpenQuark/docs folder.
+          -->
+        <patternset id="openquark.docs.pdf">
+            <include name="Business Activity Monitor Overview.pdf"/>
+            <include name="Business Objects Gem Cutter Manual.pdf"/>
+            <include name="CAL and the Computer Language Shootout Benchmarks.pdf"/>
+            <include name="CAL for Haskell Programmers.pdf"/>
+            <include name="CAL Global Optimizer.pdf"/>
+            <include name="CAL Runtime Internals.pdf"/>
+            <include name="CAL User's Guide.pdf"/>
+            <include name="CALDoc Crib Sheet.pdf"/>
+            <include name="Effective CAL.pdf"/>
+            <include name="Getting Started with Open Quark.pdf"/>
+            <include name="The Development History of Quark.pdf"/>
+            <include name="Interactive CAL Environment (ICE) Manual.pdf"/>
+            <include name="Input Output Source Generation Tool.pdf"/>
+            <include name="Java meets Quark.pdf"/>
+            <include name="The Java Foreign Import Tool (JFit).pdf"/>
+            <include name="Using CAL Archives (Car files).pdf"/>
+            <include name="Using CAL with Eclipse.pdf"/>
+            <include name="Developing Eclipse Plug-ins that make use of CAL Workspaces.pdf"/>
+            <include name="Using Quark with Standalone JARs.pdf"/>
+            <include name="Using the Command Line Interface for the Documentation Generator.pdf"/>
+            <include name="implementation/CAL Benchmarking.pdf"/>
+            <include name="implementation/CAL Global Optimizer.pdf"/>
+            <include name="implementation/CAL Runtime Internals.pdf"/>
+            <include name="implementation/Generating DocBook Documentation.pdf"/>
+            <include name="implementation/How to Build Open Quark.pdf"/>
+        </patternset>
+
+        <patternset id="openquark.docs.doc.srcdir">
+            <include name="CAL_Platform/Docs/CALDoc Crib Sheet.doc"/>
+            <include name="CAL_Platform/Docs/CAL for Haskell Programmers.doc"/>
+            <include name="CAL_Platform/Docs/CAL User's Guide.doc"/>
+            <include name="CAL_Platform/Docs/Effective CAL.doc"/>
+            <include name="CAL_Platform/Docs/Getting Started with Open Quark.doc"/>
+            <include name="CAL_Platform/Docs/The Development History of Quark.doc"/>
+            <include name="CAL_Platform/Docs/Interactive CAL Environment (ICE) Manual.doc"/>
+            <include name="CAL_Platform/Docs/Java meets Quark.doc"/>
+            <include name="CAL_Platform/Docs/Using CAL Archives (Car files).doc"/>
+            <include name="CAL_Platform/Docs/Using the Command Line Interface for the Documentation Generator.doc"/>
+            <include name="CAL_Platform/Docs/Internal/CAL Global Optimizer.doc"/>
+            <include name="CAL_Platform/Docs/Internal/CAL Runtime Internals.doc"/>
+            <include name="CAL_Platform/Docs/Internal/Benchmarks/CAL Benchmarking.doc"/>
+            <include name="export/OpenQuark_Build/Docs/How to Build Open Quark.doc"/>
+        </patternset>
+        <patternset id="openquark.docs.doc.researchdir">
+            <include name="BAM_Sample/Docs/Business Activity Monitor Overview.doc"/>
+            <include name="CAL_Benchmarks/Docs/CAL and the Computer Language Shootout Benchmarks.doc"/>
+            <include name="CAL_Eclipse_Bridge/Docs/Developing Eclipse Plug-ins that make use of CAL Workspaces.doc"/>
+            <include name="IO_Source_Generator/Docs/Input Output Source Generation Tool.doc"/>
+            
+            <!-- For now this is the Gem Cutter tech paper. -->
+            <include name="Quark_Gems/Docs/latex/**"/>
+            <exclude name="Quark_Gems/Docs/latex/Gem_Cutter_Technical_Paper/sigplanconf**"/>
+        </patternset>
+
+    </target>
+
+
+    <!--
+        Build targets 
+          - Compile a given project.
+     -->
+
+    <!-- Build everything -->
+    <target name="build-all" depends="init,build-projects"/>
+
+    
+    <!-- Generate the parser from the antlr grammar. -->
+    <target name="gen-parser" depends="init" unless="nogenparser">
+        <mkdir dir="${java.build.dir}" />
+
+        <!-- Copy the common import vocabulary to the build directory -->
+        <!-- Antlr can only look for import vocabularies in the current directory, and antlr is invoked from the build directory.  -->
+        <copy file="${cal.platform.src.dir}/antlr grammar/CALCommonTokenTypes.txt" todir="${java.build.dir}" />
+
+        <!-- Generate the parser from the grammar files. -->
+        <process-grammar grammarName="CALDoc" />
+        <process-grammar grammarName="CAL" />
+        <process-grammar grammarName="CALTreeParser" />
+
+        <!-- Delete the import vocabulary file we copied into the build directory. -->
+        <!-- delete file="${java.build.dir}/CALCommonTokenTypes.txt" /-->
+    </target>
+
+    <!-- Macro to process a grammar file -->
+    <!-- java -cp (classpath) antlr.Tool (grammarfile).g    -->
+    <macrodef name="process-grammar">
+        <attribute name="grammarName"/>
+        <sequential>
+            <java classname="antlr.Tool" dir="${java.build.dir}" fork="yes" >
+                <classpath path="${outbin.dir}/${antlr.jar}" />
+                <arg value="-o" />
+                <arg path="${cal.platform.src.dir}/src/org/openquark/cal/compiler" />
+                <arg path="${cal.platform.src.dir}/antlr grammar/@{grammarName}.g" />
+            </java>
+        </sequential>
+    </macrodef>
+
+
+    <!--
+        Deployment targets.
+        Creates .zips and .jars.
+     -->
+
+    <target name="createExecutables" depends="init,copyProjectResources,copyDebugJarsToRelease,calVersion,buildCarsAndCarjars" description="Deploy the weekly build."/>
+
+    <!--
+        Create Javadocs.
+     -->
+    <target name="javadoc-open" depends="init,copyProjectResources,calVersion" unless="nojavadoc">
+        <javadoc destdir="${group.javadocs.dir}"
+                 source="${source.level}"
+                 author="true"
+                 use="true"
+                 version="true"
+                 access="protected" 
+                 additionalparam="-breakiterator"
+                 windowtitle="Quark Platform Documentation"
+                 doctitle="Quark Platform"
+                 header="&lt;img src='http://www.businessobjects.com/global/images/logos/internal/corporate_logo_nav.gif' alt='Business Objects'&gt;&lt;br&gt;Quark Platform Documentation&lt;br&gt;Version ${cal.version}&lt;br&gt;Business Objects"
+                 bottom="Copyright &amp;copy; 2007 Business Objects. All rights reserved."
+                 maxmemory="340m"
+                 useexternalfile="yes">
+            <packageset dir="${src.dir}/Quark_Platform/Utilities">
+                <include name="org/openquark/util/attributes"/>
+                <include name="org/openquark/util/database"/>
+                <include name="org/openquark/util/time"/>
+            </packageset>
+            <packageset dir="${src.dir}/Quark_Platform/CAL_Runtime/src">
+                <include name="org/openquark/cal/**"/>
+                <exclude name="org/openquark/cal/**/internal/**"/>
+            </packageset>
+            <packageset dir="${src.dir}/Quark_Platform/CAL_Platform/src">
+                <include name="org/openquark/cal/**"/>
+                <exclude name="org/openquark/cal/**/internal/**"/>
+                <exclude name="org/openquark/cal/compiler"/>
+                <exclude name="org/openquark/cal/machine"/>
+                <exclude name="org/openquark/cal/services"/>
+            </packageset>
+
+            <fileset dir="${src.dir}/Quark_Platform/CAL_Platform/src/org/openquark/cal/compiler">
+                <include name="*.java"/>
+                <!-- exclude: CompilerMessage.AbortCompilation -->
+                <exclude name="ClassInstanceImpl.java"/>
+                <exclude name="ClassMethodImpl.java"/>
+                <exclude name="CoreFunction.java"/>
+                <exclude name="DataConstructorImpl.java"/>
+                <exclude name="DerivedInstanceFunctionGenerator.java"/>
+                <exclude name="DeserializationHelper.java"/>
+                <exclude name="EntryPointGenerator.java"/>
+                <exclude name="Expression.java"/>
+                <exclude name="ExpressionAnalyzer.java"/>
+                <exclude name="ExpressionCopier.java"/>
+                <exclude name="ExpressionVisitor.java"/>
+                <exclude name="FunctionalAgentImpl.java"/>
+                <exclude name="FunctionImpl.java"/>
+                <exclude name="JavaPrimitives.java"/>
+                <exclude name="OptimizerHelper.java"/>
+                <exclude name="Packager.java"/>
+                <exclude name="ParseTreeNode.java"/>
+                <exclude name="TypeCheckerImpl.java"/>
+                <exclude name="TypeClassImpl.java"/>
+                <exclude name="TypeConstructorImpl.java"/>
+
+                <exclude name="CALMultiplexedLexer.java"/>
+                <exclude name="CALDocTokenTypes.java"/>
+                <exclude name="CALTokenTypes.java"/>
+                <exclude name="CALTreeParserTokenTypes.java"/>
+            </fileset>
+            <fileset dir="${src.dir}/Quark_Platform/CAL_Platform/src/org/openquark/cal/machine">
+                <include name="*.java"/>
+                <exclude name="CodeGenerator.java"/>
+                <exclude name="GeneratedCodeInfo.java"/>
+                <exclude name="MachineFunction.java"/>
+                <exclude name="Module.java"/>
+                <exclude name="Program.java"/>
+                <exclude name="ProgramResourceLocator.java"/>
+                <exclude name="ProgramResourceRepository.java"/>
+            </fileset>
+            <fileset dir="${src.dir}/Quark_Platform/CAL_Platform/src/org/openquark/cal/services">
+                <include name="*.java"/>
+                <exclude name="CALWorkspaceEnvironmentProvider.java"/>
+                <exclude name="RevisionHistory.java"/>
+                <exclude name="Assert.java"/>
+                <exclude name="BasicCALWorkspace.java"/>
+                <exclude name="BasicProgramResourcePathRepository.java"/>
+                <!-- CALWorkspace.SyncInfo -->
+                <exclude name="ModuleRevision.java"/>
+                <exclude name="ResourceFileStore.java"/>
+                <exclude name="ResourceJarStore.java"/>
+                <exclude name="ResourceNullaryStore.java"/>
+                <exclude name="ResourceRevision.java"/>
+                <!-- WorkspaceResource.SyncTime -->
+            </fileset>
+            <packageset dir="${src.dir}/Quark_Platform/CAL_Libraries/src">
+                <include name="org/openquark/cal/**"/>
+                <exclude name="org/openquark/cal/**/internal/**"/>
+            </packageset>
+
+            <packageset dir="${research.src.dir}/IO_Source_Generator/src"/>
+            <packageset dir="${research.src.dir}/Quark_Gems/src">
+                <include name="org/openquark/gems/client/**"/>
+                <exclude name="org/openquark/gems/client/**/internal/**"/>
+                <exclude name="org/openquark/gems/client/caleditor/editorapp*"/>
+            </packageset>
+            <classpath>
+                <fileset dir="${java.debug.out.dir}">
+                    <include name="*.jar"/>
+                    <exclude name="*.car.jar"/>
+                </fileset>
+                <fileset dir="${outbin.dir}">
+                    <patternset refid="import.javadoc.libs"/>
+                </fileset>
+                <fileset dir="${depot2.src.dir}">
+                    <patternset refid="depot2.javadoc.libs"/>
+                </fileset>
+                <fileset dir="${eclipse.plugins.dir}">
+                    <patternset refid="eclipse.javadoc.libs"/>
+                </fileset>
+            </classpath>
+            <link 
+                offline="false"
+                href="http://java.sun.com/j2se/1.5.0/docs/api/"
+            />
+        </javadoc>
+    </target>
+
+    <!--
+        Generate CALDoc
+     -->
+    <target name="caldoc" depends="init,calVersion" unless="nocaldoc">
+        <property file="generate-CALDoc.properties"/>
+
+        <delete dir="${caldoc.out.dir}"/>
+        <caldoc-common workspace="openquark.caldoc.cws" destDir="${caldoc.out.dir}" scopeOption="-private">
+            <caldoc-elements>
+                <classpath>
+                    <fileset dir="${java.debug.out.dir}">
+                        <include name="**/*.jar"/>
+                    </fileset>
+                    <fileset dir="${outbin.dir}">
+                        <patternset refid="import.javadoc.libs"/>
+                    </fileset>
+                    <fileset dir="${depot2.src.dir}">
+                        <patternset refid="depot2.javadoc.libs"/>
+                    </fileset>
+                    <fileset dir="${eclipse.plugins.dir}">
+                        <patternset refid="eclipse.javadoc.libs"/>
+                    </fileset>
+                </classpath>
+            </caldoc-elements>
+        </caldoc-common>
+    </target>
+
+    <!--
+        Produce the OpenQuark distribution
+    -->
+    <target name="createOpenQuarkDeployment">
+        <parallel>
+            <antcall target="createOpenQuarkBinaryDeployment"/>
+            <antcall target="createOpenQuarkSourceDeployment"/>
+            <antcall target="createOpenQuarkCALEclipseArchivedUpdateSite"/>
+            <antcall target="createOpenQuarkEclipseSourceDeployment"/>
+        </parallel>
+    </target>
+
+    <!-- Create archived update site. -->
+    <target name="createOpenQuarkCALEclipseArchivedUpdateSite" depends="init,calVersion">
+        <!-- Update the site.xml with the current feature version. -->
+        <copy file="${research.src.dir}/CAL_Eclipse_Archived_Update_Site/site.xml" tofile="${group.obj.dir}/CAL_Eclipse_Archived_Update_Site/site.xml">
+            <filterset>
+                <filter token="BUNDLE_VERSION" value="${bundle.version}"/>
+            </filterset>
+        </copy>
+
+        <zip destfile="${openquark.dest.dir}/CAL_Eclipse_Plug-in_Archived_Update_Site-${cal.version}.zip">
+            <zipfileset dir="${research.src.dir}/CAL_Eclipse_Archived_Update_Site" includes="**" excludes="**/site.xml" />
+
+            <!-- updated site.xml -->
+            <zipfileset file="${group.obj.dir}/CAL_Eclipse_Archived_Update_Site/site.xml"/>
+
+            <!-- feature and plugins folder -->
+            <zipfileset dir="${java.release.out.dir}/eclipse"/>
+
+            <!-- Release notes and license files. -->
+            <zipfileset file="${research.src.dir}/OpenQuark/CAL_Eclipse_Plug-in_Release_Notes.html"/>
+            <zipfileset dir="${research.src.dir}/OpenQuark/license/eclipse-distributions" includes="**" />
+
+            <zipfileset dir="${research.src.dir}/OpenQuark/ThirdPartyComponents" prefix="about_files">
+                <include name="**"/>
+                <exclude name="ghc**"/>
+                <exclude name="hugs**"/>
+                <exclude name="ddata**"/>
+                <exclude name="parsec**"/>
+            </zipfileset>
+        </zip>
+    </target>
+
+    <!-- Create Eclipse source distribution. -->
+    <target name="createOpenQuarkEclipseSourceDeployment" depends="init,calVersion">
+        <zip destfile="${openquark.dest.dir}/CAL_Eclipse_Plug-in-${cal.version}-src.zip">
+            <zipfileset dir="${src.dir}/Research" prefix="Quark/src">
+                <include name="CAL_Eclipse_Archived_Update_Site/**"/>
+                <include name="CAL_Eclipse_Branding/**"/>
+                <include name="CAL_Eclipse_Bridge/**"/>
+                <include name="CAL_Eclipse_Bridge_Example/**"/>
+                <include name="CAL_Eclipse_Help/**"/>
+                <include name="CAL_Eclipse_Core/**"/>
+                <include name="CAL_Eclipse_Feature/**"/>
+                <include name="CAL_Eclipse_UI/**"/>
+
+                <!--   
+                <include name="CAL_Eclipse_Launching/**"/>
+               -->
+
+                <!-- Don't include MS Word docs. -->
+                <exclude name="**/*.doc"/>
+
+                <!-- The folder entry gets added even if there are no files. -->
+                <exclude name="CAL_Eclipse_Bridge/Docs/**"/>
+            </zipfileset>
+
+            <!-- Include the license and readme files at the root level. -->
+            <zipfileset file="${research.src.dir}/OpenQuark/CAL_Eclipse_Plug-in_Release_Notes.html" prefix="${openquark.quark.folder}" />
+            <zipfileset dir="${research.src.dir}/OpenQuark/license/eclipse-distributions" includes="**" prefix="${openquark.quark.folder}" />
+            <zipfileset file="${research.src.dir}/OpenQuark/docs/implementation/How to Build Open Quark.pdf" prefix="${openquark.quark.folder}"  />
+
+            <zipfileset dir="${research.src.dir}/OpenQuark/ThirdPartyComponents" prefix="${openquark.quark.folder}/ThirdPartyComponents"/>
+        </zip>
+
+    </target>
+    <!-- Create source distribution. -->
+    <target name="createOpenQuarkSourceDeployment" depends="init,calVersion">
+        <zip destfile="${openquark.dest.dir}/QuarkPlatform-${cal.version}-src.zip">
+            <zipfileset dir="${src.dir}/Quark_Platform" prefix="Quark/src">
+                <include name="CAL_Runtime/**"/>
+                <include name="CAL_Platform/**"/>
+                <include name="CAL_Libraries/**"/>
+                <include name="Utilities/**"/>
+
+                <include name="export/OpenQuark_Build/"/>
+                <include name="export/tools/CALVersionStringBuilder/"/>
+
+                <exclude name="**/Docs/**"/>
+            </zipfileset>
+            <zipfileset dir="${research.src.dir}" prefix="Quark/src">
+                <include name="BAM_Sample/**"/>
+                <include name="CAL_Benchmarks/**"/>
+                <include name="CAL_Samples/**"/>
+                <include name="IO_Source_Generator/**"/>
+                <include name="OpenQuark/**"/>
+                <include name="OpenQuark_Doc_Source/**"/>
+                <include name="Quark_Gems/**"/>
+
+                <include name="OpenQuark_Website/resources/*.html"/>
+                <include name="OpenQuark_Website/teamsite/body.html"/>
+                
+                <!--include name="MICE/**"/-->
+
+                <exclude name="*/Docs/**"/>
+                <exclude name="CAL_Benchmarks/scripts/*.sh"/>
+            </zipfileset>
+
+            <!--
+            We separate out the *.sh files and add them to the zip with UNIX permissions 755, which
+            means the files are readable and executable by all, and writable by the owner.
+            -->
+            <zipfileset dir="${research.src.dir}" prefix="Quark/src" filemode="755">
+                <include name="CAL_Benchmarks/scripts/*.sh"/>
+            </zipfileset>
+
+            <zipfileset dir="${src.dir}/Quark_Platform" prefix="Quark/src">
+                <patternset refid="openquark.docs.doc.srcdir"/>
+            </zipfileset>
+            <zipfileset dir="${research.src.dir}" prefix="Quark/src">
+                <patternset refid="openquark.docs.doc.researchdir"/>
+            </zipfileset>
+
+            <!-- For now the import folder needs to be patched together like Frankenstein. -->
+            <zipfileset dir="${src.dir}/Quark_Platform/export" prefix="Quark/src">
+                <include name="import/META-INF/**"/>
+                <include name="import/.classpath"/>
+                <include name="import/.project"/>
+                <include name="import/*.properties"/>
+                <include name="import/about.html"/>
+            </zipfileset>
+            <zipfileset dir="${outbin.dir}" prefix="Quark/src/import/Titan_Research/win32_x86/release/bin">
+                <patternset refid="import.javadoc.libs"/>
+            </zipfileset>
+            <zipfileset dir="${src.dir}" prefix="Quark/src/import/Main/PI">
+                <include name="External/Sun/JavaHelp/2.0_02/jh.jar"/>
+            </zipfileset>
+
+            <!-- Include the license and readme files at the root level. -->
+            <zipfileset dir="${research.src.dir}/OpenQuark" prefix="${openquark.quark.folder}" includes="*.txt" excludes="CAL_Eclipse_*.txt"/>
+            <zipfileset file="${research.src.dir}/OpenQuark/license/license-QuarkPlatformDistributions.txt" fullpath="${openquark.quark.folder}/license.txt" />
+            <zipfileset file="${research.src.dir}/OpenQuark/docs/implementation/How to Build Open Quark.pdf" prefix="${openquark.quark.folder}"  />
+
+            <zipfileset dir="${research.src.dir}/OpenQuark/ThirdPartyComponents" prefix="${openquark.quark.folder}/ThirdPartyComponents"/>
+        </zip>
+
+    </target>
+
+    <!-- Create binary distribution -->
+    <target name="createOpenQuarkBinaryDeployment" depends="init,calVersion">
+        <!--
+        ============================================================================
+        Project JARs
+        ============================================================================
+        -->
+        <patternset id="openquark.project.jars">
+            <include name="calLibraries.jar" />
+            <include name="calLibraries_test.jar" />
+            <include name="calPlatform.jar" />
+            <include name="calPlatform_test.jar" />
+            <include name="calRuntime.jar" />
+            <include name="calUtilities.jar" />
+            <include name="ioSourceGenerator.jar" />
+            <include name="quarkGems.jar" />
+            <include name="quarkGems_test.jar" />
+            <include name="calBenchmarks.jar" />
+            <include name="calBenchmarks_test.jar" />
+            <!-- include name="calSamples.jar" /-->
+            <include name="calSamples_test.jar" />
+        </patternset>
+        <patternset id="openquark.project.carjars">
+            <include name="cal.platform.car.jar" />
+            <include name="cal.platform.test.car.jar" />
+            <include name="cal.libraries.car.jar" />
+            <include name="cal.libraries.test.car.jar" />
+            <include name="gemcutter.default.car.jar" />
+            <include name="gemcutter.test.car.jar" />
+            <include name="cal.benchmark.car.jar" />
+            <include name="cal.benchmark.test.car.jar" />
+            <include name="cal.benchmarks.internal.car.jar" />
+            <include name="cal.optimizer.car.jar" />
+            <!-- include name="cal.samples.base.car.jar" /-->
+            <!-- include name="cal.samples.car.jar" /-->
+            <include name="cal.samples.test.car.jar" />
+        </patternset>
+        <patternset id="openquark.workspace.declarations">
+            <include name="Workspace Declarations/cal.optimizer.cws"/>
+            <include name="Workspace Declarations/cal.platform.cws"/>
+            <include name="Workspace Declarations/ice.default.cws"/>
+            <include name="Workspace Declarations/cal.platform.test.cws"/>
+            <include name="Workspace Declarations/cal.libraries.cws"/>
+            <include name="Workspace Declarations/cal.libraries.test.cws"/>
+            <include name="Workspace Declarations/gemcutter.default.cws"/>
+            <include name="Workspace Declarations/gemcutter.test.cws"/>
+            <include name="Workspace Declarations/cal.benchmark.cws"/>
+            <include name="Workspace Declarations/cal.benchmark.test.cws"/>
+            <include name="Workspace Declarations/cal.benchmarks.internal.cws"/>
+            <!--include name="Workspace Declarations/cal.samples.base.cws"/-->
+            <!--include name="Workspace Declarations/cal.samples.cws"/-->
+            <include name="Workspace Declarations/cal.samples.test.cws"/>
+        </patternset>
+
+        <!--
+        ============================================================================
+        Run scripts
+        ============================================================================
+        -->
+        <patternset id="openquark.run.scripts">
+            <include name="CALSamples*"/>
+            <include name="quark*"/>
+            <include name="javacp.*"/>
+            <include name="javacp-workspace.*"/>
+            <include name="set-javacp-base.*"/>
+            <include name="set-javacp-carjar.*"/>
+        </patternset>
+
+        <!--
+        ============================================================================
+        Unpack and manipulate various resources into the form needed for OpenQuark
+        ============================================================================
+        -->
+
+        <!-- Unzip contents of the car jars to the output folder -->
+        <unzip dest="${group.obj.dir}/out/${openquark.cal.debug.folder}">
+            <fileset dir="${java.debug.out.dir}">
+                <patternset refid="openquark.project.carjars"/>
+            </fileset>
+            <patternset>
+                <include name="**"/>
+                <exclude name="Car.*"/>
+                <exclude name="META-INF/**"/>
+                <exclude name="**/Workspace Declarations/*.cws"/>
+            </patternset>
+        </unzip>
+
+        <!-- Also unzip compiled .cmi files from CAL samples. -->
+        <unzip dest="${group.obj.dir}/out/${openquark.cal.debug.folder}">
+            <fileset file="${java.debug.out.dir}/cal.samples.base.car.jar"/>
+            <patternset>
+                <include name="lecc_runtime/**"/>
+            </patternset>
+        </unzip>
+
+        <!-- Copy the workspace files that will be used 
+             - overwriting the existing files in the output folder. -->
+        <copy todir="${group.obj.dir}/out/${openquark.cal.debug.folder}">
+            <fileset dir="${cal.debug.out.dir}">
+                <patternset refid="openquark.workspace.declarations" />
+            </fileset>
+        </copy>
+
+        <!-- Copy the run scripts from the source folder. -->
+        <copy todir="${group.obj.dir}/out/${openquark.quark.folder}">
+            <fileset dir="${src.dir}/Quark_Platform/export/OpenQuark_Build/Run_Scripts">
+                <patternset refid="openquark.run.scripts"/>
+            </fileset>
+        </copy>
+
+        <!-- Rename the CALSamples{foo} run scripts to {foo}. -->
+        <move todir="${group.obj.dir}/out/${openquark.quark.folder}">
+            <fileset dir="${group.obj.dir}/out/${openquark.quark.folder}">
+                <include name="CALSamples*"/>
+            </fileset>
+            <mapper type="glob" from="CALSamples*" to="*"/>
+        </move>
+
+        <!-- Copy the {foo}.sh run scripts to {foo}.command. -->
+        <copy todir="${group.obj.dir}/out/${openquark.quark.folder}">
+            <fileset dir="${group.obj.dir}/out/${openquark.quark.folder}">
+                <include name="*.sh"/>
+                <exclude name="javacp**"/>
+                <exclude name="set-javacp**"/>
+            </fileset>
+            <mapper type="glob" from="*.sh" to="*.command"/>
+        </copy>
+
+        <!--
+        ============================================================================
+        Produce the distribution zip file and the separate CALDoc zip file
+        ============================================================================
+        -->
+        <parallel>
+            <zip destfile="${openquark.dest.dir}/QuarkPlatform-${cal.version}.zip">
+                <!-- Executable .jars -->
+                <zipfileset dir="${java.release.out.dir}" prefix="${openquark.java.release.folder}">
+                    <patternset refid="openquark.project.jars"/>
+                </zipfileset>
+
+                <!-- libs -->
+                <zipfileset dir="${outbin.dir}" prefix="${openquark.lib.resource.folder}">
+                    <patternset refid="import.javadoc.libs"/>
+                </zipfileset>
+
+                <zipfileset dir="${group.obj.dir}/java/lib/Resources" prefix="${openquark.lib.resource.folder}">
+                    <patternset>
+                        <include name="GemCutterHelpFiles.jar"/>
+                        <include name="External/Sun/JavaHelp/2.0_02/jh.jar"/>
+                    </patternset>
+                </zipfileset>
+
+                <!-- Cal resources and run scripts. -->
+                <zipfileset dir="${group.obj.dir}/out/Quark" prefix="Quark" includes="**" excludes="*.sh *.command"/>
+
+                <!--
+                We separate out the *.sh files and add them to the zip with UNIX permissions 755, which
+                means the files are readable and executable by all, and writable by the owner.
+                -->
+                <zipfileset dir="${group.obj.dir}/out/Quark" prefix="Quark" includes="*.sh *.command" filemode="755"/>
+
+                <!-- Built documentation -->
+                <zipfileset dir="${group.javadocs.dir}" prefix="${openquark.quark.folder}/javadoc"/>
+                <zipfileset dir="${caldoc.out.dir}" prefix="${openquark.quark.folder}/caldoc"/>
+
+                <!-- the third party licenses -->
+                <zipfileset dir="${research.src.dir}/OpenQuark/ThirdPartyComponents" prefix="${openquark.quark.folder}/ThirdPartyComponents"/>
+
+                <!-- the documentation (pdf files) -->
+                <zipfileset dir="${research.src.dir}/OpenQuark/docs" prefix="${openquark.quark.folder}/docs">
+                    <patternset refid="openquark.docs.pdf"/>
+                </zipfileset>
+                <zipfileset dir="${research.src.dir}/Quark_Gems/Docs/latex/Gem_Cutter_Technical_Paper" prefix="${openquark.quark.folder}/docs">
+                    <include name="gemcutter-techpaper.pdf"/>
+                </zipfileset>
+
+                <!-- simple samples -->
+                <zipfileset dir="${research.src.dir}/CAL_Samples/src" prefix="${openquark.simple.samples.folder}"/>
+                <zipfileset dir="${research.src.dir}/CAL_Samples/test" prefix="${openquark.simple.samples.folder}" includes="**/*.cws"/>
+                <zipfileset dir="${research.src.dir}/CAL_Samples/Standalone Library JARs" prefix="${openquark.simple.samples.folder}/Standalone Library JARs"/>
+                <zipfileset src="${java.debug.out.dir}/calSamples.jar" prefix="${openquark.simple.samples.folder}"
+                    includes="**" excludes="META-INF/**"/>
+
+                <!-- BAM Sample. 
+                     Need to add filemode to the second fileset, otherwise it seems to strip all permissions from the .class files. -->
+                <zipfileset dir="${research.src.dir}/BAM_Sample" prefix="${openquark.bam.sample.folder}" includes="**" excludes="Docs/**" />
+                <zipfileset src="${java.debug.out.dir}/bamSample.jar" prefix="${openquark.bam.sample.folder}" includes="**/*.class" filemode="644"/>
+                <zipfileset dir="${src.dir}/Quark_Platform/export/OpenQuark_Build/Run_Scripts" prefix="${openquark.bam.sample.folder}" includes="BAMSample.*" filemode="755"/>
+                <zipfileset dir="${src.dir}/Quark_Platform/export/OpenQuark_Build/Run_Scripts" includes="BAMSample.sh" fullpath="${openquark.bam.sample.folder}/BAMSample.command" filemode="755"/>
+
+                <!-- Eclipse support files -->
+                <zipfileset dir="${research.src.dir}/OpenQuark/eclipse-support" prefix="${openquark.quark.folder}/eclipse-support"/>
+
+                <!-- the license and readme files -->
+                <zipfileset dir="${research.src.dir}/OpenQuark" prefix="${openquark.quark.folder}" includes="Quark_Platform_Release_Notes.html"/>
+                <zipfileset file="${research.src.dir}/OpenQuark/license/license-QuarkPlatformDistributions.txt" fullpath="${openquark.quark.folder}/license.txt" />
+                
+                <zipfileset file="${research.src.dir}/OpenQuark_Website/teamsite/body.html" fullpath="${openquark.quark.folder}/docs/Open Quark Overview.html" />
+                <zipfileset dir="${research.src.dir}/OpenQuark_Website/resources" prefix="${openquark.quark.folder}/docs" includes="sql.html,tutorial_calintro.html" />
+            </zip>
+
+            <sequential>
+                <!-- the Javadoc -->
+                <zip destfile="${openquark.dest.dir}/QuarkPlatform-${cal.version}-javadoc.zip">
+                    <zipfileset dir="${group.javadocs.dir}" prefix="${openquark.quark.folder}/javadoc"/>
+                    <zipfileset file="${research.src.dir}/OpenQuark/license/license-QuarkPlatformDistributions.txt" fullpath="${openquark.quark.folder}/license.txt" />
+                </zip>
+                <!-- the CALDoc -->
+                <zip destfile="${openquark.dest.dir}/QuarkPlatform-${cal.version}-caldoc.zip">
+                    <zipfileset dir="${caldoc.out.dir}" prefix="${openquark.quark.folder}/caldoc"/>
+                    <zipfileset file="${research.src.dir}/OpenQuark/license/license-QuarkPlatformDistributions.txt" fullpath="${openquark.quark.folder}/license.txt" />
+                </zip>
+            </sequential>
+        </parallel>
+    </target>
+
+</project>

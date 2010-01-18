@@ -1,0 +1,424 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * DataProcessing.cal
+ * Creation date: Nov 21, 2006.
+ * By: Magnus Byne
+ */
+
+/**
+ * This is a tutorial module intended to show how CAL can be used to connect to a
+ * database and retrieve and process records. It is written to connect to the free
+ * Apache Derby database. It has been tested with Apache Derby 10.2.1.6. However,
+ * the basic approach here is immediately applicable to other database systems.
+ * 
+ * In order to use this tutorial you must first download and install the Apache Derby
+ * Database. It is available at {@url http://db.apache.org/derby/derby_downloads.html@}
+ * You must choose a distribution which includes the sample toursdb database, 
+ * e.g. the bin distribution. The lib only distributions do not include the sample database 
+ * used in this tutorial.
+ * 
+ * You must also set the Java class path so that it includes the derby.jar.
+ *
+ * Eclipse:
+ * If you are using Eclipse to run the samples (this is described in
+ * the CAL Eclipse Plug-in documentation) you can add the derby.jar to you run configuration 
+ * by clicking Menu -> Run -> Run..., then select the run configuration you created as described 
+ * in the CAL_Eclipse_Dev_tools_Release_Notes,
+ * select the classpath tab, select "User Entries" and click "Add External JARs" and then
+ * select the derby.jar from the lib directory of your Apache Derby installation.
+ * 
+ * Windows Command Prompt:
+ * If you are using the Quark scripts on Windows, e.g. ICE.bat, GemCutter.bat
+ * you must create a new file set-javacp-extended.bat in the Quark installation directory 
+ * which contains the following:
+
+   set JAVACP_PATH=%JAVACP_PATH%;%DERBY_HOME%/lib/derby.jar
+
+ * This assumes that you have set your DERBY_HOME environment variable. If you have not done
+ * this you can simply replace %DERBY_HOME% with the full path to your derby installation
+ * e.g. D:/db-derby-10.2.1.6-bin
+ * 
+ * Unix/Mac Shell:
+ * If you are using the Quark scripts on Unix or Mac, e.g. ICE.sh, GemCutter.sh
+ * you must create a new file set-javacp-extended.sh in the Quark installation directory 
+ * which contains the following:
+  
+   JAVACP_PATH=$JAVACP_PATH:$DERBY_HOME/lib/derby.jar
+ 
+ * This assumes that you have set your DERBY_HOME environment variable. If you have not done
+ * this you can simple replace $DERBY_HOME with the full path to your derby installation
+ * e.g. ~/db-derby-10.2.1.6-bin
+ * 
+ */
+module Cal.Tutorials.DataProcessing;
+
+import Cal.Core.Prelude using
+    typeConstructor = Double, Int, String;
+    function = combineComparators, induceComparator, reverseComparator, toDouble, seq;
+    ;
+import Cal.Data.DataGems;
+import Cal.Data.Sql;
+import Cal.Data.SqlBuilder;
+import Cal.Utilities.Summary;
+import Cal.Collections.List using
+    function = filter, group, head, length, map, sort, sortBy;
+    ;
+
+import Cal.Core.String;
+import Cal.Core.Debug;
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+/**
+ * The database file path - you must update this to reflect the directory 
+ * in which you installed derby.
+ */
+toursDbFilePath = "d:/db-derby-10.2.1.6-bin/demo/databases/toursdb";
+
+/**
+ * This creates a connection to the Apache Derby tours database
+ * You will have to modify the database URL to match the 
+ * location where Apache Derby is installed on your system.
+ */
+toursdbConnection :: DataGems.JDBCConnection;
+public toursdbConnection = 
+    DataGems.jdbcConnectionWithDriverCheck 
+      "org.apache.derby.jdbc.EmbeddedDriver" 
+      ("jdbc:derby:" ++ toursDbFilePath) 
+      "APP"  //username
+      "APP"; //password
+
+/**
+ * This demonstrates a simple text based select statement. It returns a {@link DataGems.ResultSet@}.
+ */
+flightsResultSet :: DataGems.ResultSet;
+flightsResultSet =
+        DataGems.jdbcQueryToResultSet toursdbConnection "select FLIGHT_ID, ORIG_AIRPORT, DEST_AIRPORT, MILES from FLIGHTS" ;
+
+/**
+ * It is possible to display the contents of a {@link DataGems.ResultSet@} using 
+ * {@link DataGems.resultSetText@}. For example:
+Tutorial_DataProcessing>DataGems.resultSetText 5 flightsResultSet 
+Output:
+FLIGHT_ID  ORIG_AIRPORT  DEST_AIRPORT  MILES  
+---------  ------------  ------------  -----  
+AA1111     ABQ           LAX           664    
+AA1112     LAX           ABQ           664    
+AA1113     ABQ           PHX           329    
+AA1114     PHX           ABQ           329    
+AA1115     ABQ           OKC           517    
+...        ...           ...           ...    
+ */
+showFlightsResultSet :: String;
+showFlightsResultSet =
+   DataGems.resultSetText 10 flightsResultSet; 
+
+
+/*
+ * Next we show how to build queries pragmatically using the CAL Sql module.
+ * We construct a JOIN between flights and cities.
+ */
+
+/*these are the tables that will be used in the join*/
+flights = Sql.makeQueryTable "FLIGHTS";
+cities_origin = Sql.makeQueryTableWithAlias "CITIES" "ORIGIN_CITIES";
+cities_dest = Sql.makeQueryTableWithAlias "CITIES" "DESTINATION_CITIES";
+        
+/**
+ *this joins the flights table with the cities table twice - once for the flight origin
+ *and once for the destination. It also uses project to choose a subset of the 
+ *columns from the joined tables.
+ */
+allFlightsQuery :: Sql.Query;
+allFlightsQuery = 
+    Sql.projectWithAliases
+    (Sql.join2 Sql.newQuery 
+         [Sql.makeJoinInfo2 flights cities_origin    //join for the origin cities
+              (Sql.eqExpr (Sql.stringField flights "ORIG_AIRPORT") 
+              (Sql.stringField cities_origin "AIRPORT")) Sql.InnerJoin,
+          Sql.makeJoinInfo2 flights cities_dest      //join for the destination cities
+              (Sql.eqExpr (Sql.stringField flights "DEST_AIRPORT") 
+              (Sql.stringField cities_dest "AIRPORT")) Sql.InnerJoin])
+    [(Sql.untypedField flights "FLIGHT_ID", "FLIGHT_ID"),  //fields to project
+     (Sql.untypedField cities_origin "CITY_NAME", "ORIGIN_CITY"),
+     (Sql.untypedField cities_dest "CITY_NAME", "DEST_CITY"),
+     (Sql.untypedField flights "DEPART_TIME", "DEPART_TIME"),
+     (Sql.untypedField flights "MILES", "MILES")];
+
+/**
+ * This restricts the {@link allFlightsQuery@} to rows with the same destination and origin countries, 
+ * thereby including only domestic flights.
+ */
+domesticFlightsQuery :: Sql.Query;
+domesticFlightsQuery =
+    Sql.restrict 
+        allFlightsQuery
+        (Sql.eqExpr  (Sql.stringField cities_origin "COUNTRY") (Sql.stringField cities_dest "COUNTRY"));
+
+/**
+ * This restricts the {@link allFlightsQuery@} to rows with different destination and origin countries
+ * i.e. international flights
+ */
+internationalFlightsQuery :: Sql.Query;
+internationalFlightsQuery = 
+    Sql.restrict 
+        allFlightsQuery
+        (Sql.notEqExpr  (Sql.stringField cities_origin "COUNTRY") (Sql.stringField cities_dest "COUNTRY"));
+
+
+/**
+ * This function takes a query, converts it to a text Sql query using an
+ * SqlBuilder, in this case the {@link SqlBuilder.derbySqlBuilder@}, and runs it against the 
+ * tours database connection. There are different SqlBuilders for various different 
+ * database systems - they each format the Sql query according to the specifics
+ * of the corresponding SQL implementation.
+ */
+runQuery :: Sql.Query -> DataGems.ResultSet;
+runQuery query =
+    let
+        queryText = 
+            Sql.queryText 
+                SqlBuilder.derbySqlBuilder //this specifies which Sql dialect is used
+                Prelude.False  //false here indicates that the query is not for presentation to the user
+                query;
+    in
+        DataGems.jdbcQueryToResultSet toursdbConnection queryText;
+
+
+/**
+ * The ResultSets that we have seen so far are not strongly typed and are not convenient
+ * for processing in CAL. This function extracts the information from a ResultSet
+ * containing flights and builds a corresponding list of CAL records.
+ * 
+ * The GEM Cutter provides a GUI wizard 
+ * for automatically generating code to do this it. It allows you to select a database
+ * table, choose the columns that should be included, and generates
+ * code for the corresponding query and conversion from a ResultSet to records. For eaxmple,
+ * using the toursdbConnection connection defined above:
+ * 
+ * From the GemCutter menu choose Generate -> JDBC Data Source to start the wizard.
+ * 
+ * Provide a name, e.g. toursdbCountries, for the new gem which will be generated. 
+ * Check the 'Include Record Extractor Gem' check-box.
+ * Click Next.
+ * 
+ * In the 'Connection Gem' list box and select the toursdbConnection, defined in this module.
+ * In the 'SQL Builder Gem' list box select the derbySqlBuilder.
+ * Click Next.
+ * 
+ * Choose a table from the toursdb database, e.g. COUNTRIES.
+ * Click Next.
+ * 
+ * Select fields from the COUNTRIES table.
+ * Click Next.
+ * 
+ * You can specify sorting for the records.
+ * Click Next.
+ * 
+ * You will be shown the Sql query that will be used.
+ * Click Next.
+ * 
+ * You will see a preview of the query results.
+ * Click Finish.
+ * 
+ * Two new gems will be created in the current module:
+ * toursDbCountries (a resultSet) and toursDbCountriesRecords (a list of records).
+ * 
+ */
+flightsResultSetToRecords :: DataGems.ResultSet -> [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ];
+flightsResultSetToRecords resutSet =  
+    let
+        rowExtractionFunction !row =
+            let
+                flightId = DataGems.extractStringByName "FLIGHT_ID"  row; 
+                originCity = DataGems.extractStringByName "ORIGIN_CITY" row; 
+                destCity = DataGems.extractStringByName "DEST_CITY" row;
+                miles = DataGems.extractIntByName "MILES" row;
+                departureTime = DataGems.extractTimeByName "DEPART_TIME" row;
+            in
+                flightId `seq`    //the seqs are necessary to ensure the extractions are all run in the correct sequence
+                originCity `seq` 
+                destCity `seq` 
+                miles `seq` 
+                departureTime `seq` 
+                    { 
+                    flightId = flightId, 
+                    originCity = originCity, 
+                    destCity = destCity,
+                    miles = miles,
+                    departureTime = departureTime
+                    };
+    in
+        DataGems.dataFromResultSet resutSet rowExtractionFunction;
+
+
+/**
+ * This function uses the {@link allFlightsQuery@} and {@link flightsResultSetToRecords@} to create a list
+ * of records for all flights in the database.
+ */
+allFlights :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ];
+public allFlights = flightsResultSetToRecords (runQuery allFlightsQuery);
+
+/**
+ * This function uses the {@link domesticFlightsQuery@} and {@link flightsResultSetToRecords@} to create a list
+ * of records for all domestic flights in the database.
+ */
+domesticFlights :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ];
+public domesticFlights = flightsResultSetToRecords (runQuery domesticFlightsQuery);
+
+/**
+ * This function uses the {@link internationalFlightsQuery@} and {@link flightsResultSetToRecords@} to create a list
+ * of records for all international flights in the database.
+ */
+internationalFlights :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ];
+public internationalFlights = flightsResultSetToRecords (runQuery internationalFlightsQuery);
+
+
+/**
+ * This formats a list of flight records to a string. It can be used to display 
+ * the flight records defined above, e.g.
+Tutorial_DataProcessing> showFlights (take 5 allFlights)
+Output:
+Flights:
+AA1111  | Albuquerque          | Los Angeles          | 664    | 2006/11/22 09:00:00 
+AA1112  | Los Angeles          | Albuquerque          | 664    | 2006/11/22 09:00:00 
+AA1113  | Albuquerque          | Phoenix              | 329    | 2006/11/22 09:00:00 
+AA1114  | Phoenix              | Albuquerque          | 329    | 2006/11/22 09:00:00 
+AA1115  | Albuquerque          | Oklahoma City        | 517    | 2006/11/22 09:00:00 
+ */
+showFlights :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ] -> String;
+public showFlights flights =
+    let
+        showFlight :: { flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } -> String;
+        showFlight flight = 
+            let
+                //this helper function is used to pad a string with spaces to fixed length
+                pad length str =
+                    if ( (String.length str) > length) then 
+                        String.substring str 0 length 
+                    else
+                        str ++ String.space (length - String.length str);
+                //this defines the column separator
+                separator = " | ";
+            in
+                (pad  7 flight.flightId) ++ separator ++
+                (pad 20 flight.originCity) ++ separator ++
+                (pad 20 flight.destCity) ++ separator ++
+                (pad  6 (Debug.show flight.miles)) ++ separator ++
+                (pad 20 (Debug.show flight.departureTime));
+    in
+        List.foldLeftStrict  
+            (\accumulator flight -> accumulator ++ "\n" ++ (showFlight flight)) 
+            "Flights:" 
+            flights;
+  
+
+/**
+ * This function shows how we can apply an ordering to the list of records,
+ * in this case by the length (miles) of the flight. To view the result use
+ * showFlights, e.g. showFlights (sortFlightsByLength domesticFlights)
+ */
+sortFlightsByLength :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ] -> [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ];
+public sortFlightsByLength flights =
+    List.sortBy (induceComparator (\flight -> flight.miles) ) flights;
+
+/**
+ * This function shows how we can apply a slightly more complex ordering to the 
+ * list of records: by departure city and then by departure time.
+ */
+sortFlightsByDepCityTime :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ] -> [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ];
+public sortFlightsByDepCityTime flights =
+    let
+        compareFlights flight1 flight2 =
+            combineComparators 
+              (induceComparator (\flight -> flight.originCity) )
+              (induceComparator (\flight -> flight.departureTime) )
+              flight1 flight2;
+    in
+        List.sortBy compareFlights flights;
+  
+/**
+ * This functions shows how to filter the list of flights, it 
+ * returns only flights that are over 1000 miles in length
+ */
+longFlights :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ] -> [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time } ];
+longFlights flights =
+    filter (\flight -> flight.miles > 1000) flights;
+
+/**
+ * This applies a summary function over the list of records to calculate the average flight length (miles)
+ */
+averageFlightLength :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time }] -> Double;
+averageFlightLength flights =
+    Summary.average (map (\flight -> flight.miles) flights) ;
+
+
+/**
+ * This uses the average defined above, {@link averageFlightLength@}, and filtering to 
+ * return only flights that are above average length
+ */
+longerThanAverageFlights :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time }] -> [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time }];
+longerThanAverageFlights flights =
+    let
+        ave = averageFlightLength flights;
+    in
+        filter (\flight -> (toDouble flight.miles) > ave) flights;
+
+/**
+ * This processes a list of flight records to create a list of records 
+ * containing a city name and the number of flights departing that city. 
+ */
+numberOfDepartures :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time }] -> [{city :: String, numberOfDepartures :: Int}];
+numberOfDepartures flights = 
+    let
+        //extract the departure cities from the flight records
+        cities = map (\flight -> flight.originCity) flights;
+
+        //group the departure cities
+        groupedCities = group (sort cities);
+    in
+        //build the result records
+        map (\groupedList -> { city = head groupedList, numberOfDepartures = length groupedList }) groupedCities;
+    
+/** 
+ * This sorts the {@link numberOfDepartures@} list by the number of departures (descending)
+ * for example to show the city with the most international departures: 
+ * Tutorial_DataProcessing> head (citiesOrderedByNumberOfDepartures internationalFlights)
+ * [Los Angeles, 15]
+ */
+citiesOrderedByNumberOfDepartures :: [{ flightId :: String, originCity :: String, destCity :: String, miles :: Int, departureTime :: Time }] -> [{city :: String, numberOfDepartures :: Int}];
+citiesOrderedByNumberOfDepartures flights =
+    sortBy (reverseComparator ( induceComparator (\x -> x.numberOfDepartures) )) (numberOfDepartures flights);
+    

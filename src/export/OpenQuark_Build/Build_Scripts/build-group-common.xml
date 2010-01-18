@@ -1,0 +1,527 @@
+<?xml version="1.0"?>
+<!--
+    Copyright (c) 2006 BUSINESS OBJECTS SOFTWARE LIMITED
+    All rights reserved.
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+    
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+     
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+     
+        * Neither the name of Business Objects nor the names of its contributors
+          may be used to endorse or promote products derived from this software
+          without specific prior written permission.
+     
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    build-group-common.xml
+    Creation date: Mar 14, 2006.
+    By: Edward Lam
+-->
+
+<!-- ================================================================================================= -->
+<!-- build-group-common.xml                                                                            -->
+<!--                                                                                                   -->
+<!-- This is a library of common tasks used by ant scripts which build multiple projects.              -->
+<!--                                                                                                   -->
+<!-- ================================================================================================= -->
+
+<project name="group-common" default="main">
+    <!--
+        The default target.
+    -->
+    <target name="main" description="The default build process.">
+        <echo level="error">This file has no default target.</echo>
+    </target>
+
+    <import file="./ant.rules.research.xml" />
+    <import file="./build-common.xml" />
+
+    <!-- Ensure that the PLATFORM environment var is set. -->
+    <condition property="platform" value="${env.PLATFORM}" else="win32_x86">
+        <isset property="env.PLATFORM" />
+    </condition>
+    <property name="env.PLATFORM" value="${platform}" />
+    
+
+    <!--
+        Initialization target 
+          - setup directory names etc.
+     -->
+
+    <target name="init">
+        <tstamp />
+
+        <condition property="failOnBuildError" value="true">
+            <not>
+                <isset property="failOnBuildError" />
+            </not>
+        </condition>
+
+        <!--
+          Property "build.MainResearch": specify that projects in Main/Research are to be built.
+            This property must be true if building any projects in Main/Research.
+            This property must *not* be true if performing an area build.
+          -->
+        <!--property name="research.src.dir" location="${src.dir}/Research" /-->
+        <condition property="research.src.dir" value="${src.dir}/Research" else=".">
+            <istrue value="${build.MainResearch}" />
+        </condition>
+        <condition property="depot2.src.dir" value="${src.dir}" else=".">
+            <istrue value="${build.MainResearch}" />
+        </condition>
+        <condition property="eclipse.plugins.dir" value="${depot2.src.dir}/External/eclipse/eclipse/3.3.0/plugins" else=".">
+            <istrue value="${build.MainResearch}" />
+        </condition>
+    
+        <property name="group.outbin.dir"   location="${outbin.dir}/${buildGroup.name}"/>
+        <property name="group.obj.dir"   location="${obj.dir}/${buildGroup.name}"/>
+        <property name="group.javadocs.dir"   location="${javadocs.out.dir}/${buildGroup.name}"/>
+        <property name="junit.dir" location="${outlog.dir}/${buildGroup.name}/junit" />
+        <property name="java.build.dir" location="${group.obj.dir}/java"/>
+        <property name="java.lib.dir" location="${java.build.dir}/lib"/>
+
+        <property name="java.out.dir"   location="${group.outbin.dir}/java"/>
+        <!-- ${import.areaname.dir} -->
+        <property name="java.debug.out.dir" location="${java.out.dir}/debug" />
+        <property name="java.release.out.dir" location="${java.out.dir}/release" />
+
+        <property name="cal.out.dir"   location="${group.outbin.dir}/cal"/>
+        <property name="cal.debug.out.dir"   location="${cal.out.dir}/debug"/>
+        <property name="cal.release.out.dir"   location="${cal.out.dir}/release"/>
+
+        <!-- TEMP: these should be set in ant.rules.common.xml -->
+        <property name="import.quarkplatform.dir" location="/${outbin.dir}/Quark_Platform/java"/>
+        <property name="import.extendedsl.dir" location="/${outbin.dir}/Extended_SL/java"/>
+
+        <!-- 
+            Project files (in dependency order). 
+        -->
+        <filelist 
+            id="projectBuildFiles" 
+            dir="${basedir}"
+            files="${build.files}"/>
+
+    </target>
+
+
+    <!--
+        Build targets 
+          - Compile a given project.
+     -->
+
+    <!-- Build project files. -->
+    <target name="build-projects" depends="init">
+        <!-- inherit refs so that the dependeeGroup.path path reference can be found. -->
+        <subant 
+            target="Build" 
+            inheritall="true"
+            inheritRefs="true"
+            failonerror="${failOnBuildError}">
+            <filelist refid="projectBuildFiles"/>
+        </subant>
+    </target>
+
+
+    <!-- 
+        Compile a given project.
+        Parameter: targetfile - the name of the ant file responsible for the given project (without the trailing ".xml").
+     -->
+    <macrodef name="build-parametrized">
+        <attribute name="targetfile"/>
+        <sequential>
+            <subant 
+                antfile="@{project}.xml" 
+                target="Build" 
+                inheritall="true"
+                failonerror="${failOnBuildError}"/>
+        </sequential>
+    </macrodef>
+
+    <!-- Copy the debug jars to release. -->
+    <!-- Release .jars are the same as the debug .jars. -->
+    <target name="copyDebugJarsToRelease" depends="init,mkReleaseDir" unless="norelease">
+        <copy todir="${java.release.out.dir}">
+            <fileset dir="${java.debug.out.dir}">
+                <include name="**/*.jar"/>
+            </fileset>
+        </copy>
+    </target>
+
+    <!--
+        Unit tests
+     -->
+    <target name="junit-sanity" depends="init,copyProjectResources">
+        <!-- inherit refs so that the dependeeGroup.path path reference can be found. -->
+        <subant 
+            target="junit" 
+            inheritall="true"
+            inheritRefs="true"
+            failonerror="false">
+            <filelist refid="projectBuildFiles"/>
+        </subant>
+
+    </target>
+
+    <!-- 
+        Run the JUnit deep test suite. 
+        Assumes the Everything test classes are already built.
+      -->
+    <target name="junit-deep" depends="init,initJarsToTest">
+        <junit-test-macro testClass="${junit.deepsuite}"/>
+    </target>
+
+    <!--
+        Run a JUnit test.
+        path id "dependeeGroup.path" should be set.
+      -->
+    <target name="testWithTestSuite" depends="init,initJarsToTest" >
+        <junit-test-macro testClass="${testClass.name}"/>
+        <fail if="junit-Failed"/>
+    </target>
+
+    <!--
+        Deployment targets.
+        Creates .zips and .jars.
+     -->
+
+    <!-- Copy non-Java resources. -->
+    <target name="copyProjectResources" depends="init">
+
+        <!-- Copy resources for each of the built projects. -->
+        <subant 
+            target="copyResources" 
+            inheritall="true"
+            failonerror="${failOnBuildError}">
+            <filelist refid="projectBuildFiles"/>
+        </subant>
+
+    </target>
+
+    <target name="defineBuildCarsTargets">
+        <!-- If running an area build, suppress the suffix to facilitate deployment.
+             If running the weekly build, we need the suffix, since the original workspace files 
+             (without suffix) will also be present.
+             
+             However, we always suppress the suffix for Car-jars, since the workspace files go *inside* the Car-jars. -->
+        <condition property="carSuffixArg" value="-nosuffix" else="">
+            <isset property="areaBuild" />
+        </condition>
+
+        <property name="carJarSuffixArg" value="-nosuffix"/>
+
+        <!-- If running the weekly build, turn off verbose mode.
+             If running an area build, allow verbose mode, since the rest of the build is verbose.
+          -->
+        <condition property="notVerboseArg" value="" else="-notVerbose">
+            <isset property="areaBuild" />
+        </condition>
+
+        <!-- Note that the staticRuntime property is passed as a jvmarg.  
+             On linux this is interpreted as an arg even if it's the empty string so instead define a dummy property for the else. -->
+        <condition property="staticRuntime" value="-Dorg.openquark.cal.machine.lecc.static_runtime" else="-Dorg.openquark.cal.dummyProperty">
+            <isset property="areaBuild" />
+        </condition>
+
+        <presetdef name="cleanupBuildDebugCarsDef">
+            <delete dir="${cal.debug.out.dir}/CarBuildingRuntime" quiet="true" includeemptydirs="true"/>
+        </presetdef>
+
+        <presetdef name="buildDebugCarsDef">
+            <java classname="org.openquark.cal.services.CarTool"
+                  fork="true"
+                  failonerror="true"
+                  maxmemory="256m">
+                <jvmarg value="${staticRuntime}"/>
+                <jvmarg value="-Dorg.openquark.cal.machine.lecc.output_directory=${cal.debug.out.dir}/CarBuildingRuntime"/>
+                <classpath>
+                    <fileset dir="${java.debug.out.dir}" includes="*.jar" excludes="*.car.jar"/>
+                    <fileset dir="${java.lib.dir}" includes="**/*.jar" />
+                    <pathelement location="${cal.debug.out.dir}"/>
+                </classpath>
+                <arg value="-multi"/>
+                <arg line="${build.cws.files}"/>
+                <arg value="--"/>
+                <arg value="${notVerboseArg}"/>
+                <arg value="-keepsource"/>
+                <arg value="${carSuffixArg}"/>
+                <arg value="-excludeCarsInDirs"/>
+                <arg value="${cal.in.dirs}"/>
+                <arg value="--"/>
+                <arg value="-d"/>
+                <arg value="${cal.debug.out.dir}"/>
+            </java>
+        </presetdef>
+
+        <presetdef name="buildDebugCarJarsDef">
+            <java classname="org.openquark.cal.services.CarTool"
+                  fork="true"
+                  failonerror="true"
+                  maxmemory="256m">
+                <jvmarg value="${staticRuntime}"/>
+                <jvmarg value="-Dorg.openquark.cal.machine.lecc.output_directory=${cal.debug.out.dir}/CarBuildingRuntime"/>
+                <classpath>
+                    <fileset dir="${java.debug.out.dir}" includes="*.jar" excludes="*.car.jar"/>
+                    <fileset dir="${java.lib.dir}" includes="**/*.jar" />
+                    <pathelement location="${cal.debug.out.dir}"/>
+                </classpath>
+                <arg value="-multi"/>
+                <arg line="${build.cws.files}"/>
+                <arg value="--"/>
+                <arg value="${notVerboseArg}"/>
+                <arg value="-keepsource"/>
+                <arg value="${carJarSuffixArg}"/>
+                <arg value="-excludeCarJarsInDirs"/>
+                <arg value="${cal.in.carjar.dirs}"/>
+                <arg value="--"/>
+                <arg value="-jar"/>
+                <arg value="-d"/>
+                <arg value="${java.debug.out.dir}"/>
+            </java>
+        </presetdef>
+
+
+        <!-- Please include an element "cp" which is the classpath for the quark platform and its import libs. -->
+        <!-- Note: target "setIncarsLine" must be called first.
+             Note: internally this task works by setting a property, so it can only be used to generate 
+             release cars once per ant invocation. -->
+        <macrodef name="buildReleaseCarsDef">
+            <element name="cp"/>
+            <sequential>
+                <java classname="org.openquark.cal.services.CarTool"
+                      fork="true"
+                      failonerror="true"
+                      maxmemory="256m">
+                    <classpath>
+                        <cp/>
+                    </classpath>
+                    <arg value="-unsource"/>
+                    <arg value="-incars"/>
+                    <arg line="${incarsLine}"/>
+                    <arg value="--"/>
+                    <arg value="-d"/>
+                    <arg value="${cal.release.out.dir}/Car"/>
+                </java>
+                <copy todir="${cal.release.out.dir}">
+                    <fileset dir="${cal.debug.out.dir}" includes="*/*.cws"/>
+                </copy>
+            </sequential>
+        </macrodef>
+
+        <!-- Please include an element "cp" which is the classpath for the quark platform and its import libs. -->
+        <!-- Note: target "setIncarsLine" must be called first.
+             Note: internally this task works by setting a property, so it can only be used to generate 
+             release carjars once per ant invocation. -->
+        <macrodef name="buildReleaseCarJarsDef">
+            <element name="cp"/>
+            <sequential>
+                <java classname="org.openquark.cal.services.CarTool"
+                      fork="true"
+                      failonerror="true"
+                      maxmemory="256m">
+                    <classpath>
+                        <cp/>
+                    </classpath>
+                    <arg value="-unsource"/>
+                    <arg value="-incars"/>
+                    <arg line="${incarjarsLine}"/>
+                    <arg value="--"/>
+                    <arg value="-d"/>
+                    <arg value="${java.release.out.dir}"/>
+                </java>
+            </sequential>
+        </macrodef>
+
+    </target>
+
+    <!-- Set the property "incarsLine" to be the paths to the cars in cal.debug.out.dir
+         It would be nice to inline this in the sequential part of the macrodef, but ant <1.7 has a bug
+         where it can't deal with filesets nested inside macrodefs. 
+         
+         Only call this once cal.debug.out.dir is populated with the cars to be released.
+      -->
+    <target name="setIncarsLine">
+        <fileset dir="${cal.debug.out.dir}/Car" id="infileset" includes="*.*"/>
+        <pathconvert property="incarsLine" refid="infileset" pathsep=" ">
+            <mapper type="glob" from="*" to="&quot;*&quot;"/>
+        </pathconvert>
+    </target>
+
+    <!-- Set the property "incarjarsLine" to be the paths to the carjars in java.debug.out.dir
+         Only call this once java.debug.out.dir is populated with the carjars to be released.
+     -->
+    <target name="setIncarjarsLine">
+        <fileset dir="${java.debug.out.dir}" id="infileset" includes="*.car.jar"/>
+        <pathconvert property="incarjarsLine" refid="infileset" pathsep=" ">
+            <mapper type="glob" from="*" to="&quot;*&quot;"/>
+        </pathconvert>
+    </target>
+
+    <!-- Build CAR files. -->
+    <target name="buildCarsAndCarjars" depends="defineBuildCarsTargets,cleanupBuildCars,buildCars,buildCarJars">
+        <!-- Can't add to depends again since it's already there, so would only be called the first time.-->
+        <antcall target="cleanupBuildCars"/>
+    </target>
+    <target name="cleanupBuildCars">
+        <cleanupBuildDebugCarsDef/>
+    </target>
+
+    <!-- TODO-JW remove once Car-jar work is done. -->
+    <target name="buildCars">
+        <antcall target="buildDebugCars"/>
+        <antcall target="buildReleaseCars"/>
+    </target>
+    <target name="buildDebugCars" if="build.cws.files">
+        <buildDebugCarsDef/>
+    </target>
+    <target name="buildReleaseCars" depends="setIncarsLine" if="build.cws.files" unless="norelease">
+        <buildReleaseCarsDef>
+            <cp>
+                <fileset dir="${java.release.out.dir}" includes="*.jar" excludes="*.car.jar"/>
+                <fileset dir="${java.lib.dir}" includes="**/*.jar" />
+            </cp>
+        </buildReleaseCarsDef>
+    </target>
+
+    <target name="buildCarJars">
+        <antcall target="buildDebugCarJars"/>
+        <antcall target="buildReleaseCarJars"/>
+    </target>
+    <target name="buildDebugCarJars" if="build.cws.files">
+        <buildDebugCarJarsDef/>
+    </target>
+    <target name="buildReleaseCarJars" depends="setIncarjarsLine" if="build.cws.files" unless="norelease">
+        <buildReleaseCarJarsDef>
+            <cp>
+                <fileset dir="${java.release.out.dir}" includes="*.jar" excludes="*.car.jar"/>
+                <fileset dir="${java.lib.dir}" includes="**/*.jar" />
+            </cp>
+        </buildReleaseCarJarsDef>
+    </target>
+
+    <!-- Get the CAL version string. -->
+    <macrodef name="cal-version-common">
+        <attribute name="outputproperty"/>
+        <sequential>
+            <java classname="org.openquark.tools.build.CALVersionStringBuilder"
+                  fork="true"
+                  failonerror="true"
+                  outputproperty="@{outputproperty}">
+
+                <classpath>
+                    <fileset dir="${java.debug.out.dir}">
+                        <include name="*.jar"/>
+                    </fileset>
+                </classpath>
+            </java>
+        </sequential>
+    </macrodef>
+
+    <!--
+        Default target to set the property "cal.version" to the CAL version string
+     -->
+    <target name="calVersion" depends="init">
+        <cal-version-common outputproperty="cal.version"/>
+    </target>
+
+    <!-- Run the javadoc tool with common settings. -->
+    <presetdef name="javadoc-common">
+        <javadoc packagenames="org.openquark.*,com.businessobjects.*"
+                 destdir="${group.javadocs.dir}"
+                 source="${source.level}"
+                 author="true"
+                 use="true"
+                 version="true"
+                 access="private" 
+                 additionalparam="-breakiterator"
+                 windowtitle="Quark Platform/Client Documentation"
+                 doctitle="Quark Platform/Clients"
+                 header="Copyright (C) Business Objects&lt;p&gt;Company Confidential"
+                 maxmemory="450m"
+                 useexternalfile="yes">
+        </javadoc>
+    </presetdef>
+
+    <!-- Run the CALDoc tool with common settings. -->
+    <macrodef name="caldoc-common">
+        <element name="caldoc-elements"/>
+        <attribute name="workspace"/>
+        <attribute name="destDir"/>
+        <attribute name="scopeOption"/>
+        <sequential>
+            <!--
+            <echo>caldoc.windowTitle = ${caldoc.windowTitle}</echo>
+            <echo>caldoc.docTitle = ${caldoc.docTitle}</echo>
+            <echo>caldoc.header = ${caldoc.header}</echo>
+            <echo>caldoc.bottom = ${caldoc.bottom}</echo>
+            -->
+            <java classname="org.openquark.cal.caldoc.CALDocTool"
+                  fork="true"
+                  failonerror="true"
+                  maxmemory="256m">
+                <jvmarg value="-Dorg.openquark.cal.machine.lecc.output_directory=${cal.debug.out.dir}/CALDocBuildingRuntime"/>
+
+                <classpath>
+                    <pathelement path="${cal.debug.out.dir}" />
+                    <pathelement path="${java.lib.dir}" />
+
+                    <!--
+                        jaxrpc.jar and xmlparserv2.jar contain old versions of various xml APIs (eg. the javax.xml.namespace.QName class).
+                        The order in which .jars from a fileset are added to a path-like structure is undefined.
+                        Ensure these come after other .jars (which include the newer versions of the api) by separating out filesets.
+                      -->
+                    <fileset dir="${java.lib.dir}" includes="**/*.jar" excludes="**/xmlparserv2.jar,**/jaxrpc.jar"/>
+                    <fileset dir="${java.lib.dir}" includes="**/xmlparserv2.jar,**/jaxrpc.jar"/>
+                    <fileset dir="${java.debug.out.dir}" includes="**/*_test.jar"/>
+
+                    <!--
+                      It would be better to include the particular jars which are relevant.
+                      However, the classpath property is only relevant for building a project, not running a target within it.
+                    <fileset dir="${src.dir}">
+                        <patternset refid="import.buildpath"/>
+                    </fileset>
+                    <fileset dir="${depot2.src.dir}">
+                        <patternset refid="depot2.buildpath"/>
+                    </fileset>
+                    -->
+
+                </classpath>
+                <classpath refid="dependeeGroup.path"/>
+
+                <caldoc-elements/>
+
+                <arg value="@{workspace}"/>
+                <arg value="-d"/>
+                <arg value="@{destDir}"/>
+                <arg value="@{scopeOption}"/>
+                <arg value="-author"/>
+                <arg value="-use"/>
+                <arg value="-windowTitle"/>
+                <arg value="${caldoc.windowTitle}"/>
+                <arg value="-docTitle"/>
+                <arg value="${caldoc.docTitle}"/>
+                <arg value="-header"/>
+                <arg value="${caldoc.header}"/>
+                <arg value="-bottom"/>
+                <arg value="${caldoc.bottom}"/>
+            </java>
+            <delete dir="${cal.debug.out.dir}/CALDocBuildingRuntime" quiet="true" includeemptydirs="true"/>
+        </sequential>
+    </macrodef>
+</project>

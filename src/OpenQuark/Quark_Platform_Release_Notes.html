@@ -1,0 +1,1024 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html>
+	<head>
+		<title>Quark Platform Release Notes</title></head>
+	<body>
+		<div id="DIV1" style="WIDTH: 700px">
+			<h1><a href="http://labs.businessobjects.com/cal/">Quark Platform</a> Release Notes</h1>
+			<h2>1. What's new in the Quark Platform and the CAL Language</h2>
+			<H3>version 1.7.1-0 (November 15, 2007)</H3>
+			<UL>
+				<LI>
+					new document: <EM>The Development History of Quark.</EM>
+				<LI>
+				implementation of the new computer language shootout benchmark ThreadRing.
+				<LI>
+				enhancements to the ICE manual with examples of using :find and single and 
+				multi-threaded debugging.
+				<LI>
+					memory-use improvement in the CAL runtime
+					<UL>
+						<LI>
+							experimental code generation optimization to reduce memory usage in certain 
+							cases by nulling out the last reference to a method argument or local variable. 
+							Can be enabled&nbsp;by setting the&nbsp;system property 
+							org.openquark.cal.machine.lecc.source_code_space_optimization. There is a 
+							similar experimental transformation at the bytecode level in Open Quark 1.7.0. 
+							The advantage of the code-generation level optimization is that it is more 
+							explicit, and it works both in the lecc source generation mode as well as in 
+							the lecc bytecode generation mode.</LI></UL>
+				<LI>
+					bug fixes
+					<UL>
+						<LI>
+						fixed problems with the Open Quark build scripts in 1.7.0 and made them work 
+						with Eclipse 3.3.0.
+						<LI>
+							bug fix for foreign types located in a Java package with a 1 segment name. (<A href="http://groups.google.com/group/cal_language/msg/d8fd814ba6d811bd">more 
+								details</A>)
+						<LI>
+						compilation error instead of a runtime error for foreign types in an unnamed 
+						(i.e. default) package
+						<LI>
+							fixed problems with the deployment metadata for gems. They needed resaving to 
+							the new format.</LI></UL>
+				</LI>
+			</UL>
+			<H3>version 1.7.0-0 (October 26, 2007)</H3>
+			<UL>
+				<LI>
+				new Record Creation special Gem in the Gem Cutter.
+				<LI>
+					ability to create record instance functions without adding new compiler 
+					primitives. This is useful for making records an instance of a type-class such 
+					as Eq {r}, Ord {r} or Show {r}. (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/a9325b7455bf2894">more 
+						details</A>)
+				<LI>
+					Standalone CAL libraries- Standalone JARs have minimal start-up times, and can 
+					be used when accessing the CAL compiler in the running application is not 
+					needed. The standalone JAR builder that previously created standalone CAL 
+					applications can now also create standalone CAL libraries. (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/a1b004241b181baa/17effc769a85e6c9#17effc769a85e6c9">more 
+						details</A>)
+					<UL>
+						<LI>
+							sample standalone library exposing the DirectedGraph module</LI></UL>
+				<LI>
+				smaller-footprint deployment options. The&nbsp;JAR previously containing the 
+				CAL compiler and&nbsp;its runtime support has been split into 2 separate JARs. 
+				The new CAL runtime JAR is 584KB in size while the&nbsp;previous combined JAR 
+				was 4338KB.&nbsp;
+				<LI>
+					improved refactoring and symbol identification support in the CAL Eclipse 
+					Plug-in, as well as the CAL services layer:
+					<UL>
+						<LI>
+						renaming local variables, type variables&nbsp;and&nbsp;data constructor field 
+						names
+						<LI>
+						F3/go to declaration (the keyboard/context menu equivalent to hyperlinks) now 
+						works with these new types of symbols
+						<LI>
+							CALDoc tooltips for all identifiers (including local variables, field names, 
+							type variables)</LI></UL>
+				<LI>
+					new or enhanced CAL modules:
+					<UL>
+						<LI>
+						Enhanced XML parser to be fully XML 1.0 conformant. Also added an Encoding 
+						library.
+						<LI>
+						Enhanced the Parallel module to allow an Executor to be specified to control 
+						thread usage.
+						<LI>
+						Allow CAL values to be registered as cleanable using a CAL function 
+						(System.registerCleanableFunction).
+						<LI>
+						New function File.readFileLines&nbsp;to read-in the lines of a file lazily.
+						<LI>
+							New modules RegEx for regular expressions, FormatRecord for formatting record 
+							values, and BoundedParallel for parallel computations using a bounded number of 
+							threads.</LI></UL>
+				<LI>
+				tracing, statistics gathering, and interactive debugging are thread-safe and 
+				work in concurrent mode, as well as in standalone libraries.
+				<LI>
+					memory-use improvements in the CAL runtime:
+					<UL>
+						<LI>
+							elimination of need of the execution context to hold onto the rootnode. i.e. no 
+							caching of RTValues in the rootnode any-more. See <EM>CAL Runtime Internals</EM>
+						for details.
+						<LI>
+							experimental bytecode optimization to reduce memory usage in certain cases by 
+							nulling out the last reference to a method argument or local variable. Can be 
+							enabled&nbsp;by setting the&nbsp;system property 
+							org.openquark.cal.machine.lecc.bytecode_space_optimization.</LI></UL>
+				<LI>
+				SourceModelVisualizer- a utility&nbsp;for&nbsp;inspecting the structure of 
+				source models and identified symbols and their relationship with the actual 
+				source text.
+				<LI>
+					new document: <EM>Interactive CAL Environment (ICE) Manual</EM>
+					<UL>
+						<LI>
+							describes the text-based interactive environment for evaluating CAL 
+							expressions, obtaining information about CAL entities, refactoring, debugging, 
+							etc.
+						</LI>
+					</UL>
+				<LI>
+					new document <EM>Developing Eclipse Plug-ins that make use of CAL Workspaces</EM>
+				<LI>
+					updates to&nbsp;<EM>How to Build Open Quark</EM>&nbsp;to explain building 
+				of various collaterals (such as generating PDFs, DocBook, ANTLR grammars etc)
+				<LI>
+					various collaterals now included in the distribution instead of as separate 
+					downloads
+					<UL>
+						<LI>
+							The paper: <EM>The Gem Cutter - A Graphical Tool for Creating Functions in the 
+								Strongly-typed Lazy Functional Language CAL</EM>
+						(gemcutter-techpaper.pdf)
+						<LI>
+							HTML pages: Open Quark Overview and the code samples for the CalIntro and Sql 
+							modules</LI></UL>
+				<LI>
+				the tutorial videos (Gem Intro Parts 1 &amp; 2, ICE and CAL Intro, Tool 
+				Walkthrough, Eclipse Plug-in) are now released under a BSD licenses (but are 
+				separate downloads due to size).
+				<LI>
+					bug fixes and smaller enhancements
+					<UL>
+						<LI>
+							Added section of <EM>Java meets Quark</EM> explaining deployment options. (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/03261e7b0d874e9c/19ab3e85fa315f9e#19ab3e85fa315f9e">more 
+								details</A>)
+						<LI>
+							Added a target to the build.xml Ant script for building CAL's ANTLR grammar. (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/41c61feed837f014">more 
+								details</A>)
+						<LI>
+							Context class loaders can now load CAL resources. (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/bb82bf3337536793/de3ba23cc6a75ead#de3ba23cc6a75ead">more 
+								details</A>)
+						</LI>
+					</UL>
+				</LI>
+			</UL>
+			<H3>version 1.6.1-0 (September 21, 2007)</H3>
+			<UL>
+				<LI>
+					new document <EM>Getting Started with</EM> <EM>Open Quark</EM>
+				provides an introduction to Open Quark for new users and an overview 
+				of&nbsp;the other documents and resources available for learning more.
+				<LI>
+					new CAL modules for concurrency:
+					<UL>
+						<LI>
+							<EM>Parallel</EM>
+						for various parallel evaluation functions such as par, parallelTuple2 and 
+						parallelMap.
+						<LI>
+							<EM>BlockingQueue</EM>
+						for a CAL implementation of a blocking queue.
+						<LI>
+							Chameneos, Message and Message_2 provide implementations of the multi-threaded 
+							benchmarks in the <A href="http://shootout.alioth.debian.org/gp4/benchmark.php?test=all&amp;lang=all">
+								Computer Language Benchmarks Game</A>. Updated the&nbsp;<EM>CAL and&nbsp;the 
+								Computer Language Benchmarks Game</EM> doc to discuss this new approach to 
+							direct concurrency support in CAL.</LI></UL>
+				<LI>
+					Open Quark build process now included
+					<UL>
+						<LI>
+						build scripts for building the various Open Quark distributions (Quark Platform 
+						binaries and&nbsp;sources, CAL Eclipse Plug-in binaries and sources) from 
+						unzipped source distributions are now included.
+						<LI>
+							new document <EM>How_To_Build_OpenQuark.txt</EM>.</LI></UL>
+				<LI>
+					new CAL Eclipse Plug-in features:
+					<UL>
+						<LI>
+							new Quick Outline view
+							<UL>
+								<LI>
+								new quick view displays the outline of the current module in-place in the 
+								editor area
+								<LI>
+									invoke using Ctrl-O or select Navigate&nbsp;-&gt; Quick Outline
+								</LI>
+							</UL>
+						<LI>
+							CAL Console enhancements to make the Console more similar to ICE:
+							<UL>
+								<LI>
+								unqualified symbols in entered code expressions are now automatically qualified 
+								if unambiguous
+								<LI>
+									added new commands
+									<UL>
+										<LI>
+											<CODE>:t</CODE>
+										– display the type of a CAL expression
+										<LI>
+											<CODE>:rs</CODE>
+										– reset cached CAFs
+										<LI>
+											<CODE>:spc</CODE> and <CODE>:pc</CODE> – display and execute from command 
+											history
+										</LI>
+									</UL>
+								</LI>
+							</UL>
+						<LI>
+						Rename refactoring can now rename entire modules
+						<LI>
+							Goto next and previous elements (Ctrl-Shift-Up/Down arrow)
+							<UL>
+								<LI>
+									new commands to move the cursor to the next/previous top level element 
+									definition
+								</LI>
+							</UL>
+						</LI>
+					</UL>
+				<LI>
+				Parser module generalized to accept String as a sequence of character tokens. 
+				Updated XmlParser to use&nbsp;this which resulted in&nbsp;large memory 
+				savings&nbsp;and&nbsp;some speed improvement. CDATA handling improved too.
+				<LI>
+					Set which module is the startup module for ICE.
+					<UL>
+						<LI>
+							ICE will default to the first module in the loaded workspace definition.
+						</LI>
+					</UL>
+				<LI>
+					updated the document <EM>Java meets Quark</EM> with a new section discussing 
+					deployment approaches&nbsp;such as the&nbsp;required JARs for deploying Quark (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/3261e7b0d874e9c">more 
+						details</A>).
+				<LI>
+					Bug fixes and&nbsp;various smaller&nbsp;enhancements:
+					<UL>
+						<LI>
+							derived instance declarations which are invalid due to type reasons now give 
+							line/column position information in the error messages. (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/d59e4ff33329eb16/bde9b60c13630acc#bde9b60c13630acc">more 
+								details</A>).</LI></UL>
+				</LI>
+			</UL>
+			<H3>version 1.6.0-0 (August 29, 2007)</H3>
+			<UL>
+				<LI>
+					new CAL modules (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/6c5cd6bc2e941153">more 
+						details</A>)
+					<UL>
+						<LI>
+							<EM>SqlType</EM>
+						for describing the types of values in a SQL database
+						<LI>
+							<EM>BusinessCalendar</EM>, <EM>GregorianBusinessCalendar</EM> and <EM>FiscalBusinessCalendar</EM>
+						for working with database date/time fields with respect to periods such as 
+						Year, Quarter, Month, etc.
+						<LI>
+							<EM>DataDictionary&nbsp;</EM>and&nbsp;<EM>SqlDataDictionary</EM>
+						to expose a simplified view of a database that can be queried more simply than 
+						by constructing SQL (either directly, or using the CAL Sql module types).
+						<LI>
+							<EM>DictionaryQuery </EM>
+						supports queries on data dictionaries. Complex concepts like database tables 
+						and joins are not needed in these queries.
+						<LI>
+							<EM>DirectedGraph</EM>&nbsp;provides a directed graph data type, and 
+						various functions on it.
+						<LI>
+							<EM>Drawing</EM>
+						exposes Java2D functionality in CAL.
+						<LI>
+							<EM>XmlParser </EM>
+						is an XML parser implemented using the functionality of&nbsp;the CAL Parser 
+						module.
+						<LI>
+							<EM>CollectionUtilities</EM> contains various utility functions for working 
+							with collections.</LI></UL>
+				<LI>
+					IO source generator (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/344bb4a3908730dd">more 
+						details</A>)
+					<UL>
+						<LI>
+						a utility that assists in marshaling CAL values to/from Java by creating Java 
+						types corresponding to CAL types, and defining reasonable Inputable/Outputable 
+						instances for the corresponding CAL types.
+						<LI>
+							there is a document (<EM>Input/Output Source Generation Tool</EM>) on how to 
+							use this feature.</LI></UL>
+				<LI>
+				Connections in the Gem Cutter can now be&nbsp;automatically split&nbsp;to form 
+				a collector/emitter pair.
+				<LI>
+					New documentation on the implementation of CAL
+					<UL>
+						<LI>
+							<EM>CAL Runtime Internals</EM>
+						explains how the CAL runtime is implemented, and some of the optimizations 
+						used.
+						<LI>
+							<EM>CAL Global Optimizer</EM>
+						has information about an optimization pass of the CAL compiler for doing global 
+						optimizations such as inlining and fusion.
+						<LI>
+							<EM>CAL Benchmarking</EM>
+						is an account of various optimizations, and their effects on performance, 
+						covering a period of approximately four years.
+						<LI>
+							<EM>Generating DocBook Documentation</EM> explains our process for generating 
+							documentation in multiple formats (JavaHelp, PDF, HTML, Eclipse Help) from a 
+							single&nbsp;DocBook source.</LI></UL>
+				<LI>
+					CAL now requires Java 5. The implementation and Java API have been updated to 
+					use Java 5 features such as generics (<A href="http://groups.google.com/group/cal_language/browse_thread/thread/a2c412184bf7a000">more 
+						details</A>).
+				<LI>
+					New features in the CAL Eclipse Plug-in:
+					<UL>
+						<LI>
+						New console page in the Console view can be used to evaluate CAL expressions 
+						with respect to the CAL modules in the Eclipse workspace.
+						<LI>
+						New item in the Project menu to clear all build state specific to CAL.
+						<LI>
+						Supports&nbsp;JARs for packaged sets of CAL modules as Eclipse referenced 
+						libraries.
+						<LI>
+							If the hyperlink modifier is held down and the source element under the mouse 
+							can be opened then the element displays as a hyperlink.</LI></UL>
+				<LI>
+				The CAL source pretty printer now handles comments (both CALDoc and regular 
+				comments).
+				<LI>
+					CAL foreign function syntax supports creating Java class literals.
+					<UL>
+						<LI>
+							e.g. <tt>foreign unsafe import jvm "class java.lang.String" stringClass :: JClass;</tt></LI></UL>
+				<LI>
+					The CAL_Benchmarks project now includes more CAL benchmarks (those we have been 
+					using over the last number of years internally). These are discussed in the <EM>CAL 
+						Benchmarking</EM>
+				document.
+				<LI>
+				New Prelude functions toCalValue and unsafeFromCalValue for working with the 
+				CalValue type.
+				<LI>
+					bug fixes and various smaller enhancements
+					<UL>
+						<LI>
+							CAL Language Discussion Group reported bug fixes and 
+							suggested&nbsp;enhancements&nbsp;in Open Quark 1.6:
+							<UL>
+								<LI>
+									<A href="http://groups.google.com/group/cal_language/browse_frm/thread/33f4d2304582c6fe?hl=en">
+										CAL Eclipse Plug-in&nbsp;fix for handling of files with no file extension</A>
+								<LI>
+									<A href="http://groups.google.com/group/cal_language/browse_thread/thread/11e408ffb4272a8e/#">
+										Gem Cutter saving gem designs in wrong folder</A>
+								<LI>
+									<A href="http://groups.google.com/group/cal_language/browse_thread/thread/c11c20d55e1855a5/#">
+										Database field metadata enhancement</A></LI></UL>
+						</LI>
+					</UL>
+				</LI>
+			</UL>
+			<H3>version 1.5.1-0 (July 19, 2007)</H3>
+			<ul>
+				<li>
+					lazy loading of foreign entities from compiled CAL modules
+					<ul>
+						<li>
+							allows for more flexible deployment of CAL generated JARs (<a href="http://groups.google.com/group/cal_language/browse_thread/thread/a5a52e4c5ea49ca0">more 
+								details</a>)
+						</li>
+					</ul>
+				<li>
+					concurrent evaluation of CAL functions on a single execution context
+					<ul>
+						<li>
+						this allows concurrent programs to be written entirely in CAL, instead of 
+						having the concurrency instrumented via Java
+						<li>
+						must be enabled by using the VM argument 
+						org.openquark.cal.machine.lecc.concurrent_runtime
+						<li>
+						currently an experimental feature, mainly for those wanting to experiment with 
+						writing concurrency libraries in CAL
+						<li>
+							for example, see the thread on <a href="http://groups.google.com/group/cal_language/browse_thread/thread/7d83d9aa7eb7441b">
+								Parallel CAL</a>
+						</li>
+					</ul>
+				<li>
+				startup time improvements for standalone JARs
+				<li>
+				scope icons (public/protected/private) used in the Gem Cutter and CAL Eclipse 
+				plug-in
+				<li>
+				Gem Cutter now warns the user when the next action would result in losing an 
+				unsaved design e.g. new table top, changing the current module, switching 
+				workspaces, etc.
+				<li>
+				enhancement to search in the CAL Eclipse Plug-in, the Gem Cutter and ICE to 
+				find all occurrences where a data constructor is used to construct a value 
+				(i.e. excludes locations where unpacking a value)
+				<li>
+				CAL source pretty printer now preserves parentheses and is now hooked-up in the 
+				CAL Eclipse plug-in
+				<li>
+				CAL Eclipse Plug-in has a new quick fix to insert the fully qualified name of 
+				an unimported symbol (as an alternative to the quick fix for importing the 
+				symbol) and a new quick fix for cases where you import a module and do not 
+				qualify it properly
+				<li>
+					improvements to the CAL implementations of the <a href="http://shootout.alioth.debian.org/gp4/benchmark.php?test=all&amp;lang=all">
+						Computer Language Benchmark Games</a>
+				benchmarks, and documentation updates with new timings for the Open Quark 1.5.1 
+				release
+				<li>
+					bug fixes and various smaller enhancements
+					<ul>
+						<li>
+							CAL Language Discussion Group reported bugs fixed in Open Quark 1.5.1:
+							<ul>
+								<li>
+									<a href="http://groups.google.com/group/cal_language/browse_thread/thread/79475b67ed62e179">
+										Gem Cutter problem saving gems when using Gnome and Linux in Java 5 or later</a>
+								<li>
+									<a href="http://groups.google.com/group/cal_language/browse_thread/thread/a450e149a6823640">
+										bug in Prelude.typeRepToString introduced in Open Quark 1.5.0</a>
+								<li>
+									<a href="http://groups.google.com/group/cal_language/browse_thread/thread/7643febfe5ee1e35/05b372fbf62a8d20#05b372fbf62a8d20">
+										problem using the CAL Eclipse Plug-in on Mac OSX</a>
+								<li>
+									<a href="http://groups.google.com/group/cal_language/browse_thread/thread/5fd3e4ed5bd47282">
+										bug in DataGems.tableDescription with fetching information about foreign keys</a>
+								</li>
+							</ul>
+						</li>
+					</ul>
+				</li>
+			</ul>
+			<h3>version 1.5.0-0 (June 15, 2007)</h3>
+			<ul>
+				<li>
+					standalone Utility JARs
+					<ul>
+						<li>
+						given a CAL function of type [String] -&gt; (), Open Quark can generate a JAR 
+						with a static main method entry point that can be used to run the function with 
+						supplied command-line arguments.
+						<li>
+						the start-up time to run the function from a cold-start will be much smaller 
+						than running the function via ICE or the Gem Cutter since a CAL workspace is 
+						not loaded.
+						<li>
+						the standalone utility JAR only includes the CAL functions needed to run it, 
+						and thus is small in size.
+						<li>
+							meta-programming using CAL's Java APIs requires loading a CAL workspace, and so 
+							is not supported in a stand-alone utility JAR.
+						</li>
+					</ul>
+				<li>
+					improved formatting of CAL source code by tools
+					<ul>
+						<li>
+						handles large expressions nicely
+						<li>
+						CAL code generated by the Gem Cutter will be formatted nicely
+						<li>
+							pretty print a CAL module using ICE and the new :pp command
+						</li>
+					</ul>
+				<li>
+				organization and appearance of the ICE help has been improved
+				<li>
+					new features in the CAL Eclipse Plug-in
+					<ul>
+						<li>
+							inclusion of help in the CAL Eclipse Plug-in
+							<ul>
+								<li>
+									the CAL User's Guide, Using CAL with Eclipse, CAL for Haskell Programmers and 
+									Effective CAL are all now available in Eclipse help
+								</li>
+							</ul>
+						<li>
+						New Module dialog that can be used for creating new CAL modules
+						<li>
+						New Quark Binaries wizard. Creates .classpath and .project files automatically. 
+						Verifies the Java compiler settings as well.
+						<li>
+						shift-hover now shows the source code for the symbol in the CAL editor.
+						<li>
+						templates for commonly used CAL syntactic structures.
+						<li>
+							insert type declarations action for functions. Works over functions in selected 
+							range or whole file if no range is selected.
+						</li>
+					</ul>
+				<LI>
+					improvements to existing CAL Eclipse Plug-in features
+					<ul>
+						<li>
+						tooltips on local function names. Tooltips on module names in import and module 
+						statements.
+						<li>
+						auto-complete
+						<li>
+						having auto-complete turn on when '.' is pressed.
+						<li>
+						property page for auto-complete behavior.
+						<li>
+						auto-import symbols for auto-completion.
+						<li>
+							open declaration
+							<UL>
+								<li>
+								open declaration now works for foreign functions.
+								<li>
+									implement control-click for open declaration action</li></UL>
+						<li>
+							workspace and outline view
+							<UL>
+								<li>
+								add rename to the workspace and outline views.
+								<li>
+									overlays show the scope of the CAL entities on the icon.</li></UL>
+						<li>
+							CAL compiler error messages
+							<UL>
+								<li>
+								nicer error message for when the VM is an older version and the CAL compiler 
+								cannot handle projects set to a later version.
+								<li>
+									highlights all the text that caused the compilation error instead of just the 
+									first character.</li></UL>
+						</li>
+					</ul>
+				<li>
+				some new library functions, bug fixes, documentation improvements
+				<li>
+				new document "Using CAL Archives (Car files)"
+				<li>
+					new collaterals since the last Open Quark release (not part of the Open Quark 
+					but available as separate downloads):
+					<ul>
+						<li>
+							Technical Reports:
+							<ul>
+								<li>
+									<a href="http://resources.businessobjects.com/labs/cal/gemcutter-techpaper.pdf">The 
+										Gem Cutter- A Graphical Tool for Creating Functions in the Strongly-typed Lazy 
+										Functional Language CAL</a>
+								</li>
+							</ul>
+						<li>
+							Presentations (PDFs of slides):
+							<ul>
+								<li>
+									<a href="http://resources.businessobjects.com/labs/cal/cal_overview.pdf">CAL 
+										Overview talk</a>
+								<li>
+									<a href="http://resources.businessobjects.com/labs/cal/another_intro_mini.pdf">Quark 
+										Framework Introduction talk</a>
+								<li>
+									<a href="http://resources.businessobjects.com/labs/cal/hierarchical_module_names_local_pattern_match.pdf">
+										Hierarchical Module Names and Local Pattern Matching</a>
+								</li>
+							</ul>
+						</li>
+					</ul>
+				</li>
+			</ul>
+			<h3>version 1.4.0-0 (April 11, 2007)</h3>
+			<ul>
+				<li>
+				the CAL Eclipse Plug-in is now open-sourced under the Eclipse Public License.
+				<li>
+				the CAL Eclipse Plug-in is a separate download, with its own release notes.
+				<li>
+				some components of the plug-in are licensed under the BSD license of Open Quark 
+				(see the plug-in zip for details).
+				<li>
+					new features in the CAL Eclipse Plug-in:
+					<ul>
+						<li>
+						CAL Workspace view provides a categorized tree of all CAL entities in the 
+						workspace
+						<li>
+						CAL Outline view shows the CAL entities in a particular module
+						<li>
+						CAL metadata editing support
+						<li>
+						auto-complete in the CAL editor
+						<li>
+						rename refactoring
+						<li>
+						organize imports refactoring
+						<li>
+						CAL Perspective
+						<li>
+							CAL branding plug-in
+						</li>
+					</ul>
+				<li>
+					CAL Eclipse Plug-in documentation:
+					<ul>
+						<li>
+						new "Using CAL with Eclipse" document
+						<li>
+							new video "CAL Eclipse Plug-in Features"
+						</li>
+					</ul>
+				<li>
+				lazy pattern matching: new CAL syntax to lazily unpack data constructors and 
+				records within a let expression.
+				<li>
+				improved readability of generated Java sources for understanding the Java code 
+				actually generated from CAL sources:
+				<li>
+				Java expression pretty printer, shorter un-desugared CAL identifier names, 
+				improved generated Java source file organization.
+				<li>
+					CAL and the Computer Language Shootout Benchmarks
+					<ul>
+						<li>
+							benchmarks and a document summarizing results on CAL performance for the <a href="http://shootout.alioth.debian.org/gp4/benchmark.php?test=all&amp;lang=all">
+								Computer Language Benchmarks Game benchmarks</a>
+						</li>
+					</ul>
+				<li>
+					various bug fixes, library enhancements and documentation updates
+				</li>
+			</ul>
+			<h3>version 1.3.0-0 (January 24, 2007)</h3>
+			<ul>
+				<li>
+				Quark Platform is now open-sourced under the BSD license!
+				<li>
+				hierarchical module names e.g. the Prelude module is now called 
+				Cal.Core.Prelude (but can still be referred to as Prelude in most contexts). 
+				This feature allows for modules to be organized according to ownership, as well 
+				as functionality, in a similar way to Java packages. See the CAL User's Guide 
+				for details.
+				<li>
+				new Record Field Selection Gem in the Gem Cutter to easily select fields from a 
+				record (without using Code Gems).
+				<li>
+				improved syntax for CAL foreign functions corresponding to Java non-static 
+				methods, non-static fields and constructors avoids redundant re-specification 
+				of Java type names.
+				<li>
+				foreign functions can be created corresponding to Java null values, Java null 
+				checks, and Java primitive array operations (creation, subscript, update and 
+				length).
+				<li>
+				foreign types corresponding to Java array types no longer need to use JVM 
+				syntax for array names but can use Java source syntax.
+				<li>
+				new Cal.Core.Record module
+				<li>
+				added the ability to output(input) a CAL record (or tuple) to(from) a Java map 
+				from field-names to values.
+				<li>
+				strictRecord function for sequencing the fields of a record
+				<li>
+				Java sources repackaged to the org.openquark namespace (from 
+				com.businessobjects)
+				<li>
+				various improvements to CAL's Java apis. For example, InputPolicy, 
+				OutputPolicy, BasicCALServices and EntryPoints are easier to use.
+				<li>
+				various smaller changes to CAL modules (documented in the CALDoc)
+				<li>
+					various bug fixes
+				</li>
+			</ul>
+			<h3>version 1.2.0-140 (Nov 30, 2006)</h3>
+			<ul dir="ltr">
+				<li>
+					<div style="MARGIN-RIGHT: 0px">the Business Activity Monitor sample, which is an 
+						extended example of an application program written partially in Java and 
+						partially in CAL, is now fully included. It is executable, includes sources, 
+						and a document describing how to use the application ("Business Activity 
+						Monitor Overview") as well as details about its implementation.
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">Cal.Tutorials.DataProcessing is a new tutorial CAL 
+						module showing how to connect to a relational database (in this case the Apache 
+						Derby database), perform SQL operations, express the results as CAL records, 
+						and perform various reporting and summarizing operations with those records.
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">significantly expanded "Java meets Quark" document 
+						provides more details on ways in which Quark/CAL and Java can interact.
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">can declare foreign functions whose implementations 
+						are Java cast operators or Java instanceof operators. See the CAL User's Guide 
+						documentation on foreign functions for details.
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">enhancements to the Prelude.Num type class to better 
+						support conversions between CAL's various standard numeric types
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">CAL Lists can be converted to and from Java 
+						Iterators in a lazy fashion. See List.toIterator, List.toIteratorWith, 
+						List.fromIterator and List.fromIteratorWith. It simplifies writing Java client 
+						code that lazily explores a CAL list. Added examples of this pattern to the 
+						EventLoop.java sample.
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">support for CAL foreign functions making callbacks 
+						into CAL to trigger further CAL evaluations. See the Prelude.CalFunction type 
+						and the functions Prelude.makeCalFunction and Prelude.evaluatedCalFunction. 
+						There are examples of how to use this in Prelude_Tests. For example, one can 
+						implement sortByExternal (sorting a CAL list using java.util.Collections.sort 
+						which makes call backs to the CAL comparison function a -&gt; a -&gt; Ordering) 
+						using this mechanism without modifying the compiler.
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">various enhancements to CAL's Java apis
+					</div>
+				<li>
+					<div style="MARGIN-RIGHT: 0px">various bug fixes.
+					</div>
+				</li>
+			</ul>
+			<h3>version 1.2.0-135 (Oct 27, 2006)</h3>
+			<ul>
+				<li>
+				includes Quark's Java apis so that Java applications can be written 
+				incorporating CAL.
+				<li>
+				includes generated Javadoc for Quark's public Java apis
+				<li>
+				document on using Quark's Java apis ("Java meets Quark")
+				<li>
+				samples (i.e. including Java sources) on using Quark's Java apis.
+				<li>
+				the Business Objects GemCutter manual has been extensively expanded to document 
+				more features, as well as incorporate revision suggestions
+				<li>
+					new sample CAL module <a href="http://resources.businessobjects.com/labs/cal/tutorial_calintro.html">
+						Cal.Tutorials.CalIntro</a>
+				(a quick tutorial for CAL, showing lots of code and not assuming knowledege of 
+				functional programming)
+				<li>
+				new sample CAL module Cal.Tutorials.QuickCheck and other improvements to the 
+				QuickCheck testing modules in CAL
+				<li>
+				the CAL Eclipse Plug-in is now available simultaneously with the release of 
+				Quark 1.2.0_135. It has its own release notes and install zip (or update site).
+				<li>
+				the CellularAutomata and Sudoku sample CAL modules posted on the forums are now 
+				included in the distribution
+				<li>
+					various bug fixes
+				</li>
+			</ul>
+			<h3>version 1.2.0-133 (Oct 12, 2006)</h3>
+			<ul dir="ltr">
+				<li>
+					<div style="MARGIN-RIGHT: 0px">the initial release of the Quark Platform
+					</div>
+				</li>
+			</ul>
+			<h2>2. Contact information + license:</h2>
+			<p>The Quark Platform download is available at:<a href="http://labs.businessobjects.com/cal">http://labs.businessobjects.com/cal</a>
+				Check here for updates and announcements as well.</p>
+			<p>The Quark Platform is available under the BSD license. See the license.txt file 
+				in the root Quark folder of the zip for the precise license.</p>
+			<p>The CAL Eclipse Plug-in is available under the Eclipse Public License. It is a 
+				separate download from Quark Platform.</p>
+			<p>There is a <a href="http://groups.google.com/group/cal_language">Google Group on the 
+					CAL Language and Quark Platform</a>. This is the primary place for 
+				discussions, announcements, and questions about CAL and Quark.</p>
+			<p>In addition, please feel free to send comments or questions to Luke Evans (<A href="mailto:luke.evans@businessobjects.com">luke.evans@businessobjects.com</A>) 
+				or Bo Ilic (<A href="mailto:bo.ilic@businessobjects.com">bo.ilic@businessobjects.com</A>
+				).</p>
+			<h2>3. System requirements:</h2>
+			<p>You need to have Java 5 or greater installed to run Quark. Quark has been tested 
+				by us mainly on Windows XP, Linux and Mac OS X, but as a pure Java application 
+				may work on other platforms supporting Java&nbsp;5 or greater.</p>
+			<p>The generated HTML based CALDoc has been tested and works with the following 
+				browsers (current versions unless specified): IE6, IE7, Firefox, Safari, 
+				Konqueror.</p>
+			<p>These release notes are an HTML file, the other documents are PDFs which can be 
+				read using Adobe Reader (http://www.adobe.com/).</p>
+			<h2>4. Basic installation:</h2>
+			<p>Unzip the open_quark_platform.zip to the directory of your choice. Note that 
+				installing on top of a previous&nbsp;version of Open Quark is not 
+				supported-&nbsp;the installation directory must be empty.</p>
+			<p>In the Quark subfolder there are 4 batch files, which can be used by Windows 
+				users to quickly start-up ICE or the Gem Cutter (just double click on the files 
+				to launch the application). There are also 4 similarly named .sh files that can 
+				be used by Linux or Mac OS users to the same end. There are also 4 .command 
+				files for Mac OS users. These are similar to the .sh files but can start the 
+				corresponding application on a Mac simply by double clicking.</p>
+			<ul>
+				<li>
+				ICE.bat - launches ICE with production CAL modules
+				<li>
+				ICE_Test.bat - launches ICE with production as well as test CAL modules
+				<li>
+				GemCutter.bat - launches the Gem Cutter with production CAL modules
+				<li>
+					GemCutter_Test.bat - launches the Gem Cutter with production as well as test 
+					CAL modules.</li>
+			</ul>
+			<p>Note that Java must be accessible from this folder. Alternatively, you can 
+				hand-edit the file javacp.bat to specify the precise location of your Java.</p>
+			<p>It is possible to deploy Quark in a variety of ways, including entirely using 
+				JAR files, but we have shipped this deployment using .cal files that you can 
+				modify and experiment with. A JAR based deployment can be generated using the 
+				tools we have supplied with this distribution.</p>
+			<h2>5. What is included in this distribution:</h2>
+			<p>This distribution of the Quark Platform includes the following:</p>
+			<ul>
+				<li>
+				ICE- the Interactive CAL Environment. This is an interactive console shell for 
+				evaluating CAL expressions, and performing a variety of other operations (such 
+				as changing modules, refactoring, search, viewing CALDoc etc). The :h command 
+				displays the list of available commands.
+				<li>
+				GemCutter - a graphical environment for creating, running and testing CAL 
+				functions, along with a variety of other UI based tools for accessing various 
+				services in the CAL platform, such as refactoring, search, CALDoc generation 
+				etc.
+				<li>
+				Both production as well as test CAL modules are included. These are stored in 
+				files with the .cal extension.
+				<li>
+				The Java API of Quark is included in this distribution as well as the generated 
+				Javadoc HTML for this api.
+				<li>
+				The CAL Eclipse Plug-in- a plug-in for CAL in Eclipse that provides an editor 
+				for CAL files supporting syntax highlighting, indenting, and other features. It 
+				is not included in the basic Quark_Platform zip but is available as a separate 
+				download from the Labs site and has its own release note.
+				<li>
+				quarkc- the Standalone JAR Tool. This tool produces an independent Java JAR 
+				with a main method (corresponding to a designated CAL function), and can be 
+				thought of as a compiler for CAL for producing Java JARs that are deployable 
+				independently of the Quark framework.
+				<li>
+					quarklaunch- a launcher for JARs created using quarkc. Effectively this runs 
+					the main entry point in a JAR created by quarkc, after first setting the 
+					classpath appropriately.</li>
+			</ul>
+			<p>The following documents are included:</p>
+			<UL>
+				<li>
+				Quark Platform Release Notes - this file!
+				<LI>
+				Getting Started with Open Quark&nbsp;-&nbsp;provides an introduction to Open 
+				Quark for new users and an overview of&nbsp;the other documents and resources 
+				available for learning more.
+				<li>
+				CAL User's Guide- this is a combination tutorial and reference manual on the 
+				CAL language.
+				<li>
+				CAL for Haskell Programmers- this is a short introduction to CAL for people 
+				familiar with Haskell.
+				<li>
+				Effective CAL- a document describing tips for someone past the beginner stage 
+				with CAL.
+				<LI>
+				Interactive CAL Environment (ICE) Manual- describes the text-based interactive 
+				environment for evaluating CAL expressions, obtaining information about CAL 
+				entities, refactoring, debugging, etc.
+				<li>
+				Business Objects GemCutter manual- an introduction to some of the functionality 
+				available in the Gem Cutter
+				<LI>
+				The Gem Cutter - A Graphical Tool for Creating Functions in the Strongly-typed 
+				Lazy Functional Language CAL (gemcutter-techpaper.pdf)- a more technical paper 
+				on the Gem Cutter for&nbsp;people familiar with functional programming.
+				<li>
+				Java meets Quark- how to use CAL's Java apis to write Java programs that make 
+				use of CAL's functionality.
+				<li>
+				Business Activity Monitor Overview- an intro and technical overview of a larger 
+				real-world sample involving both Java code and CAL code.
+				<li>
+				The Java Foreign Import Tool (JFit)- describes a tool for automatically 
+				generating CAL foreign function and type declarations for Java classes. This 
+				functionality is also exposed as a dialog in the Gem Cutter.
+				<li>
+				Using CAL Archives (Car files)- describes how to create and deploy precompiled 
+				CAL workspaces as JAR files which fully support Quark based metaprogramming 
+				using CAL's Java APIs.
+				<li>
+				Using CAL with Eclipse- describes how to install the CAL Eclipse Plug-in, and 
+				how to use it to develop, run, and test new CAL modules.
+				<LI>
+				Developing Eclipse Plug-ins that make use of CAL Workspaces
+				<LI>
+					The Development History of Quark</LI></UL>
+			<P>The following documents on the implementation of CAL/Quark are included:</P>
+			<UL>
+				<LI>
+					CAL Runtime Internals<EM>-</EM>
+				explains how the CAL runtime is implemented, and some of the optimizations 
+				used.
+				<LI>
+					CAL Global Optimizer<EM>-</EM>
+				information about an optimization pass of the CAL compiler for doing global 
+				optimizations such as inlining and fusion.
+				<LI>
+					CAL Benchmarking<EM>-</EM>
+				an account of various optimizations, and their effects on performance, covering 
+				a period of approximately four years.
+				<LI>
+					Generating DocBook Documentation<EM>-</EM> explains our process for generating 
+					documentation in multiple formats (JavaHelp, PDF, HTML, Eclipse Help) from a 
+					single&nbsp;DocBook source.</LI></UL>
+			<p>In addition, CALDoc HTML generated help is included for the production CAL 
+				modules. You can also generate this help yourself from the distribution (and 
+				vary the options for generation, such as to include test modules as well), but 
+				it is included pre-generated as a convenience.</p>
+			<p>There are also 5 videos available on the Labs site. These are a good place to 
+				get an end-to-end introduction to what is included in Quark. The videos are:</p>
+			<ul>
+				<li>
+				Introduction to Gems and the Gem Cutter (Part 1)
+				<li>
+				Introduction to Gems and the Gem Cutter (Part 2)
+				<li>
+				CAL and the Interactive CAL Environment (ICE) Shell
+				<li>
+				Walkthrough of some Developer Tool Features
+				<li>
+					CAL Eclipse Plug-in Features</li>
+			</ul>
+			<p>CAL modules are defined in files with the .cal extension (such as Prelude.cal). 
+				They are text files. Both the production and release modules are located in the 
+				Quark\bin\cal\debug\CAL subfolder of the install directory. Reading through the 
+				code in some of these modules is a good way to familiarize yourself with CAL 
+				after learning some of the basics through the documents or videos mentioned 
+				above. Note that the production modules should demonstrate reasonable CAL 
+				coding practices, but the test modules contain some examples of extreme and 
+				unreasonable code, that are intended as unit tests, and not examples of well 
+				written CAL code! The distributed CALDoc help only includes the production 
+				modules, so you can see which these are, and determine which are of interest to 
+				look at.</p>
+			<p>In addition, there are some sample modules that contain tutorials:</p>
+			<ul>
+				<li>
+					<a href="http://resources.businessobjects.com/labs/cal/tutorial_calintro.html">Cal.Tutorials.CalIntro</a>
+				- a basic tutorial on CAL, not assuming knowledge of functional programming
+				<li>
+				Cal.Tutorials.CALDoc - writing CAL code with CALDoc
+				<li>
+				Cal.Tutorials.Fibonnaci - various approaches to writing efficient CAL code
+				<li>
+				Cal.Tutorials.LocalizedStrings - localizing CAL modules
+				<li>
+				Cal.Tutorials.QuickCheck - a tutorial on using the QuickCheck module for unit 
+				testing CAL code
+				<li>
+					Cal.Tutorials.DataProcessing - a tutorial on using CAL to access the Apache 
+					Derby database, perform SQL operations, express the results as CAL records, and 
+					perform various reporting and summarizing operations with those records.</li>
+			</ul>
+			<p>Also of note is the CAL modules GemModelDemo and GemModelDemo_Designs. The 
+				former shows the CAL text of 4 functions written and the later is automatically 
+				generated from designs created in the Gem Cutter. These designs are included in 
+				the distribution and can be opened and viewed in the GemCutter by switching to 
+				the GemModelDemo_Designs module, locating the desired Gem in the Gem Browser 
+				(there are 4 in that module from which to chose), right clicking and selecting 
+				"Open Gem Design".</p>
+			<p>CAL workspace files are defined in modules with a .cws extension. A CAL 
+				workspace is a text file that essentially specifies the collection of modules 
+				that should be loaded upon start-up. The production workspaces are in the 
+				subfolder "Quark\bin\cal\release\Workspace Declarations" of the install 
+				directory, and the test workspaces are in the subfolder 
+				"Quark\bin\cal\debug\Workspace Declarations".</p>
+			<p>There are also samples of using CAL's Java apis in the samples subfolder of the 
+				distribution. The samples are:</p>
+			<ul>
+				<li>
+				GemModelDemo.java -shows the use of our compositional api for creating Gems, as 
+				in the GemCutter
+				<li>
+				SourceModelDemo.java -shows a more language-based apu for creating CAL 
+				functions and other entities programmatically
+				<li>
+					EventLoop.java -shows how CAL lazy computations can be suspended and resumed 
+					under a Java client's control</li>
+			</ul>
+			<h2>6. Accessing relational data in the Gem Cutter:</h2>
+			<p>See the Cal.Tutorials.DataProcessing CAL module as well as the Gem Cutter manual 
+				for this information (and more).</p>
+			<ul class="noindent">
+			</ul>
+		</div>
+	</body>
+</html>

@@ -1,0 +1,791 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * Meteor benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org@}
+ * 
+ * This code is based on and inspired by the entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}.
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.Meteor;
+
+import Cal.Core.Prelude using
+    typeClass = Enum, Inputable, IntEnum, Outputable;
+    typeConstructor = Boolean, Int, Long, String;
+    dataConstructor = False, True;
+    function = eager, fromInt, iff, seq, stringToInt;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Core.Bits using
+    function = bitwiseAnd, bitwiseOr, shiftL, shiftRUnsigned;
+    ;
+import Cal.Collections.List using
+    function = foldLeftStrict, head, map;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.IO.Console using
+    function = printLine;
+    ;
+
+
+data foreign unsafe import jvm "long[]"
+    JLongArray deriving Inputable, Outputable, Show;
+
+foreign unsafe import jvm "newArray" longArray_new :: Int -> JLongArray;
+
+foreign unsafe import jvm "lengthArray" longArray_length :: JLongArray -> Int;
+
+foreign unsafe import jvm "subscriptArray"
+    longArray_subscript :: JLongArray -> Int -> Long;
+
+foreign unsafe import jvm "updateArray"
+    longArray_update :: JLongArray -> Int -> Long -> Long;
+
+/** build an array from a list*/
+jLongArrayfromList :: [Long] -> JLongArray;
+jLongArrayfromList !input =
+    let
+        array :: JLongArray;
+        array = eager $ longArray_new (List.length input);
+    in
+        array
+        `seq`
+        foldLeftStrict
+            (
+                \!index !value ->
+                    longArray_update array index value
+                    `seq`
+                    (index + 1)
+            )
+            0
+            input
+        `seq`
+        array
+    ;
+
+data Direction =
+    E | SE | SW | W | NW | NE
+    deriving Enum, IntEnum
+    ;
+
+/** the puzzle pieces*/
+pieces :: [[Direction]];
+pieces =
+    [
+        [E, E, E, SE],
+        [SE, SW, W, SW],
+        [W, W, SW, SE],
+        [E, E, SW, SE],
+        [NW, W, NW, SE, SW],
+        [E, E, NE, W],
+        [NW, NE, NE, W],
+        [NE, SE, E, NE],
+        [SE, SE, E, SE],
+        [E, NW, NW, NW]
+    ]
+    ;
+
+width :: Int;
+width = 5;
+
+height :: Int;
+height = 10;
+
+/** rotate a puzzle piece clockwise */
+rotatePiece :: [Direction] -> [Direction];
+rotatePiece !piece =
+    let
+        rotate :: Direction -> Direction;
+        rotate !direction =
+            case direction of
+            E -> SE;
+            SE -> SW;
+            SW -> W;
+            W -> NW;
+            NW -> NE;
+            NE -> E;
+            ;
+    in
+        map rotate piece
+    ;
+
+/** flip a piece about it's vertical axis*/
+flipPiece :: [Direction] -> [Direction];
+flipPiece !piece =
+    let
+        flip :: Direction -> Direction;
+        flip !direction =
+            case direction of
+            E -> W;
+            SE -> SW;
+            SW -> SE;
+            W -> E;
+            NW -> NE;
+            NE -> NW;
+            ;
+    in
+        map flip piece
+    ;
+
+/** 
+ * the puzzle board is represented as a 64 long. The positions on the board,
+ * from the top left, row by row, to the bottom right are represented
+ * by bits highbit to lowbit inclusive. A set bit means the position is occupied.
+ * An unset bit means the bit is not occupied.
+ */
+highBit :: Long;
+highBit = 4611686018427387904;
+
+lowBit :: Long;
+lowBit = 8192;
+
+fullBoard :: Long;
+fullBoard = 9223372036854767616;
+
+/** 
+ * an array with one mask for each position on the board. The set bits in the mask
+ * correspond to positions on the board that are adjacent.
+ */
+adjacentSquares :: JLongArray;
+adjacentSquares =
+    let
+        adjacent :: [Direction];
+        //route of steps to surround the square
+        adjacent = [E, SW, W, NW, NE, E];
+    in
+        jLongArrayfromList
+            (List.mapIndexed
+                (
+                    \!a !i ->
+                        toBits
+                        $ validCoords
+                        $ List.tail
+                        $ toCoords adjacent (i % width) (i / width)
+                )
+                (List.replicate (width * height) (0 :: Int))
+            )
+    ;
+
+/** 
+ * returns the board position 0 .. 49 of the first occuipied square
+ */
+getFirstSetBit :: Long -> Int;
+getFirstSetBit !word =
+    let
+        helper :: Long -> Long -> Int -> Int;
+        helper !word !bit !i =
+            if bitwiseAnd word bit != 0 then
+                i
+            else
+                helper word (shiftRUnsigned bit 1) (i + 1)
+            ;
+    in
+        helper word highBit 0
+    ;
+
+/** 
+ * return the number of bits that are set in a mask
+ */
+countBits :: Long -> Int;
+countBits !word =
+    let
+        helper :: Long -> Int -> Int;
+        helper !word !count =
+            if word == 0 then
+                count
+            else
+                helper (bitwiseAnd word (word - 1)) (count + 1)
+            ;
+    in
+        eager $ helper word 0
+    ;
+
+/** 
+ * returns true if the board mask has an island of fewer than five positions -
+ * used to prune positions tha have 'holes' that no piece could fit into
+ * (as all pieces are of size 5)
+ */
+hasSmallIslands :: Long -> Boolean;
+hasSmallIslands !board =
+    let
+        fill :: Long -> Long -> Long -> Long;
+        fill !board !filled !seeds =
+            if seeds == 0 then
+                filled
+            else
+                let
+                    highestSeed :: Int;
+                    highestSeed = eager $ getFirstSetBit seeds;
+
+                    newSeeds :: Long;
+                    newSeeds =
+                        eager
+                        $ bitwiseAnd
+                            (longArray_subscript adjacentSquares highestSeed)
+                            (Bits.complement $ bitwiseOr filled board)
+                        ;
+                in
+                    fill
+                        board
+                        (bitwiseOr filled (bitwiseOr seeds newSeeds))
+                        (bitwiseAnd
+                            (bitwiseOr seeds newSeeds)
+                            (
+                                Bits.complement
+                                $ Bits.shiftR highBit (fromInt highestSeed)
+                            )
+                        )
+            ;
+    in
+
+        if bitwiseAnd board fullBoard == fullBoard then
+            False
+        else
+            let
+                island :: Long;
+                island =
+                    eager
+                    $ fill
+                        board
+                        0
+                        (
+                            Bits.highestBitMask
+                            $ bitwiseAnd fullBoard (Bits.complement board)
+                        )
+                    ;
+            in
+                if countBits island < 5 then
+                    True
+                else
+                    hasSmallIslands (bitwiseOr board island)
+    ;
+
+/** 
+ * take a solution and make the reverse - a second solution that is a rotation of the first.
+ */
+makeReverseSolution :: JLongArray -> JLongArray -> JLongArray;
+makeReverseSolution !solution !reversed =
+    let
+        reverseMask :: Long -> Long;
+        reverseMask !board =
+            let
+                reverse :: Long -> Long -> Long -> Long -> Long;
+                reverse !board !res !fromBit !toBit =
+                    if fromBit < lowBit then
+                        res
+                    else if bitwiseAnd fromBit board != 0 then
+                        reverse
+                            board
+                            (bitwiseOr res toBit)
+                            (shiftRUnsigned fromBit 1)
+                            (shiftL toBit 1)
+                    else
+                        reverse
+                            board
+                            res
+                            (shiftRUnsigned fromBit 1)
+                            (shiftL toBit 1)
+                    ;
+            in
+                reverse board (bitwiseAnd board 15) highBit lowBit
+            ;
+
+        len :: Int;
+        len = eager $ longArray_length solution;
+
+        loop :: Int -> JLongArray;
+        loop !i =
+            if i < len then
+                longArray_update
+                    reversed
+                    i
+                    (reverseMask $ longArray_subscript solution i)
+                `seq`
+                loop (i + 1)
+            else
+                reversed
+            ;
+    in
+        loop 1
+    ;
+
+/** true if the coord is on the board*/
+validCoord :: (Int, Int) -> Boolean;
+validCoord !coord =
+    case coord of
+    (x, y) -> x >= 0 && x < width && y >= 0 && y < height;
+    ;
+
+/** filter a list of corrds and return only those that fit on the board*/
+validCoords :: [(Int, Int)] -> [(Int, Int)];
+validCoords !coords = List.filter validCoord coords;
+
+/** convert a piece to a list of coords*/
+toCoords :: [Direction] -> Int -> Int -> [(Int, Int)];
+toCoords !piece !x !y =
+    case piece of
+    head : tail ->
+        case head of
+        E -> (x, y) : toCoords tail (x + 1) y;
+        SE -> (x, y) : toCoords tail (x + bitwiseAnd y 1) (y + 1);
+        SW ->
+            (x, y) : toCoords tail (x - (1 - bitwiseAnd y 1)) (y + 1);
+        W -> (x, y) : toCoords tail (x - 1) y;
+        NW ->
+            (x, y) : toCoords tail (x - (1 - bitwiseAnd y 1)) (y - 1);
+        NE -> (x, y) : toCoords tail (x + bitwiseAnd y 1) (y - 1);
+        ;
+    [] -> [(x, y)];
+    ;
+
+getValueAtbit :: JLongArray -> Long -> Int -> Long;
+getValueAtbit !solution !bit !i =
+    if bitwiseAnd bit (longArray_subscript solution i) != 0 then
+        bitwiseAnd (longArray_subscript solution i) 15
+    else
+        getValueAtbit solution bit (i + 1)
+    ;
+
+copy :: JLongArray -> JLongArray -> Int -> ();
+copy !solution1 !solution2 !i =
+    if i < 11 then
+        longArray_update solution1 i (longArray_subscript solution2 i)
+        `seq`
+        copy solution1 solution2 (i + 1)
+    else
+        ()
+    ;
+
+/** 
+ * set solution 2 to the max of solution 2 and solution 1.
+ */
+updateMaxSolution :: JLongArray -> JLongArray -> ();
+updateMaxSolution !solution1 !solution2 =
+    let
+        greaterThan :: JLongArray -> JLongArray -> Long -> Boolean;
+        greaterThan !solution1 !solution2 !bit =
+            let
+                v1 :: Long;
+                v1 = eager $ getValueAtbit solution1 bit 1;
+
+                v2 :: Long;
+                v2 = eager $ getValueAtbit solution2 bit 1;
+            in
+                if v1 == v2 then
+                    greaterThan solution1 solution2 (shiftRUnsigned bit 1)
+                else
+                    v1 < v2
+            ;
+    in
+
+        if greaterThan solution1 solution2 highBit then
+            copy solution1 solution2 0
+        else
+            ()
+    ;
+
+/** 
+ * set solution 2 to the minimum of solution 2 and solution 1.
+ */
+updateMinSolution :: JLongArray -> JLongArray -> ();
+updateMinSolution !solution1 !solution2 =
+    let
+        lessThan :: JLongArray -> JLongArray -> Long -> Boolean;
+        lessThan !solution1 !solution2 !bit =
+            let
+                v1 :: Long;
+                v1 = eager $ getValueAtbit solution1 bit 1;
+
+                v2 :: Long;
+                v2 = eager $ getValueAtbit solution2 bit 1;
+            in
+                if v1 == v2 then
+                    lessThan solution1 solution2 (shiftRUnsigned bit 1)
+                else
+                    v1 > v2
+            ;
+    in
+
+        if lessThan solution1 solution2 highBit then
+            copy solution1 solution2 0
+        else
+            ()
+    ;
+
+/** true if the list of coords all fit on the board*/
+fits :: [(Int, Int)] -> Boolean;
+fits !coords = List.all validCoord coords;
+
+/** convert a coord to a bit mask*/
+toBit :: (Int, Int) -> Long;
+toBit !coord = shiftRUnsigned highBit (fromInt (coord.#1 + coord.#2 * 5));
+
+/** convert a list of coords to be bit mask*/
+toBits :: [(Int, Int)] -> Long;
+toBits !coords = foldLeftStrict bitwiseOr 0 (map toBit coords);
+
+/** convert a list of coords to be bit mask, with a piece id in the lower bits*/
+coordsToBits :: [(Int, Int)] -> Int -> Long;
+coordsToBits !coords !pieceNo =
+    let
+        bits :: [Long];
+        bits = map toBit coords;
+    in
+        foldLeftStrict bitwiseOr (fromInt pieceNo) bits
+    ;
+
+/** find the next empty square starting at square*/
+findNextEmptySquare :: Long -> Int -> Int;
+findNextEmptySquare !board !square =
+    if bitwiseAnd board (shiftRUnsigned highBit (fromInt square)) == 0 then
+        square
+    else
+        findNextEmptySquare board (square + 1)
+    ;
+
+/** convert a solution to s string in the benchmark format*/
+showSolution :: JLongArray -> String;
+showSolution !solution =
+    let
+        findId :: Int -> Long -> String;
+        findId !i !bit =
+            if i == 11 then
+                "-"
+            else if bitwiseAnd (longArray_subscript solution i) bit > 0 then
+                show (i - 1)
+            else
+                findId (i + 1) bit
+            ;
+
+        drawBoard :: Int -> Long -> String -> String;
+        drawBoard !i !bit !result =
+            let
+                term1 :: String;
+                term1 =
+                    if i > 0 && i % 5 == 0 then
+                        "\n"
+                    else
+                        ""
+                    ;
+
+                term2 :: String;
+                term2 =
+                    if i % 10 == 5 then
+                        " "
+                    else
+                        ""
+                    ;
+            in
+                if i < 50 then
+                    drawBoard
+                        (i + 1)
+                        (shiftRUnsigned bit 1)
+                        (result ++ term1 ++ term2 ++ findId 0 bit ++ " ")
+                else
+                    result
+            ;
+    in
+
+        drawBoard 0 highBit ""
+    ;
+
+/** 
+ * Creates an array in which for each square on the board
+ * there is an array of bit masks for the pieces that occupy that square as their first square
+ */
+allSortedMasks :: [[Direction]] -> Array JLongArray;
+allSortedMasks !pieces =
+    let
+        masks :: [Long];
+        masks =
+            List.reverse
+            $ List.sortExternal
+            $ Prelude.concat
+            $ List.zipWith getAllMasks pieces [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            ;
+
+        loop :: Long -> [Long] -> [[Long]] -> [[Long]];
+        loop !bit !masks !res =
+            if bit < lowBit then
+                res
+            else
+                loop
+                    (shiftRUnsigned bit 1)
+                    (List.dropWhile (\!a -> a > bit) masks)
+                    (res ++ [List.takeWhile (\!a -> a > bit) masks])
+            ;
+    in
+
+        Array.fromList (map jLongArrayfromList (loop highBit masks []))
+    ;
+
+meteor :: Int -> ();
+meteor !n =
+    let
+        masks :: Array JLongArray;
+        masks = allSortedMasks pieces;
+
+        minSol :: JLongArray;
+        minSol = longArray_new 11;
+
+        maxSol :: JLongArray;
+        maxSol = longArray_new 11;
+
+        workingSolution :: JLongArray;
+        workingSolution = longArray_new 11;
+    in
+        longArray_update maxSol 1 highBit
+        `seq`
+        longArray_update minSol 1 (bitwiseOr highBit 11)
+        `seq`
+        solve
+            0
+            emptyBoard
+            workingSolution
+            (longArray_new 11)
+            masks
+            (Array.subscript masks 0)
+            0
+            0
+            maxSol
+            minSol
+        `seq`
+        printLine
+            (
+                show (longArray_subscript workingSolution 0)
+                ++ " solutions found"
+            )
+        `seq`
+        printLine ""
+        `seq`
+        printLine (showSolution minSol)
+        `seq`
+        printLine ""
+        `seq`
+        printLine (showSolution maxSol)
+        `seq`
+        printLine ""
+    ;
+
+solve ::
+    Int -> Long -> JLongArray -> JLongArray -> Array JLongArray -> JLongArray
+    -> Int -> Int -> JLongArray -> JLongArray -> ();
+solve !i !board !solution !reverseSolution !allMasks !masks !numPieces 
+      !boardSquare !maxSolution !minSolution =
+
+    if i >= longArray_length masks then
+        ()
+    else
+        let
+            pieceMask :: Long;
+            pieceMask = eager $ longArray_subscript masks i;
+
+            pieceId :: Int;
+            pieceId = eager $ Prelude.fromLong (bitwiseAnd pieceMask 15);
+        in
+
+            //if the piece is not already in use and it fits
+            if
+                longArray_subscript solution pieceId == 0
+                && bitwiseAnd board pieceMask < 16
+            then
+                let
+                    newBoard :: Long;
+                    newBoard = eager $ bitwiseOr board pieceMask;
+
+                    nextSquare :: Int;
+                    nextSquare =
+                        eager $ findNextEmptySquare newBoard boardSquare;
+                in
+                    longArray_update solution pieceId pieceMask
+                    `seq`
+                    (
+                        if numPieces == 9 then
+                            longArray_update
+                                solution
+                                0
+                                (longArray_subscript solution 0 + 2)
+                            `seq`
+                            makeReverseSolution solution reverseSolution
+                            `seq`
+                            updateMaxSolution maxSolution solution
+                            `seq`
+                            updateMaxSolution maxSolution reverseSolution
+                            `seq`
+                            updateMinSolution minSolution solution
+                            `seq`
+                            updateMinSolution minSolution reverseSolution
+                            `seq`
+                            longArray_update solution pieceId 0
+                            `seq`
+                            ()
+                        else if
+                            nextSquare > 25
+                            && longArray_subscript solution 1 == 0
+                        then
+                            longArray_update solution pieceId 0
+                            `seq`
+                            solve
+                                (i + 1)
+                                board
+                                solution
+                                reverseSolution
+                                allMasks
+                                masks
+                                numPieces
+                                boardSquare
+                                maxSolution
+                                minSolution
+                        else
+                            solve
+                                0
+                                newBoard
+                                solution
+                                reverseSolution
+                                allMasks
+                                (Array.subscript allMasks nextSquare)
+                                (numPieces + 1)
+                                nextSquare
+                                maxSolution
+                                minSolution
+                            `seq`
+                            longArray_update solution pieceId 0
+                            `seq`
+                            solve
+                                (i + 1)
+                                board
+                                solution
+                                reverseSolution
+                                allMasks
+                                masks
+                                numPieces
+                                boardSquare
+                                maxSolution
+                                minSolution
+                    )
+            else
+                solve
+                    (i + 1)
+                    board
+                    solution
+                    reverseSolution
+                    allMasks
+                    masks
+                    numPieces
+                    boardSquare
+                    maxSolution
+                    minSolution
+    ;
+
+/** 
+ * computes a list of all the masks for a particular piece.
+ * The list includes all positions, rotations and flips of the piece.
+ */
+getAllMasks :: [Direction] -> Int -> [Long];
+getAllMasks !piece !pieceNo =
+    let
+
+        //this is used so we omit masks were piece 1 is in the bottom half of the board
+        //these positions will be covered by symmetry
+        heightp :: Int;
+        heightp =
+            eager
+            $
+            (
+                if pieceNo == 1 then
+                    height / 2 - 1
+                else
+                    height
+            )
+            ;
+
+        getRotationMasks :: [Direction] -> Int -> [Long] -> [Long];
+        getRotationMasks !piece !n !masks =
+            getTranslationMasks piece
+            ++ iff
+                (n > 0)
+                (getRotationMasks (rotatePiece piece) (n - 1) masks)
+                []
+            ;
+
+        getTranslationMasks :: [Direction] -> [Long];
+        getTranslationMasks !piece =
+            let
+                loop :: Int -> Int -> [Long] -> [Long];
+                loop !x !y !masks =
+                    if x < width then
+                        let
+                            coords :: [(Int, Int)];
+                            coords = eager $ toCoords piece x y;
+
+                            mask :: Long;
+                            mask = eager $ coordsToBits coords pieceNo;
+                        in
+                            if
+                                fits coords
+                                && (Prelude.not $ hasSmallIslands mask)
+                            then
+                                loop (x + 1) y (mask : masks)
+                            else
+                                //reject the piece
+                                loop (x + 1) y masks
+                    else if y < heightp then
+                        loop 0 (y + 1) masks
+                    else
+                        masks
+                    ;
+            in
+                loop 0 0 []
+            ;
+    in
+        getRotationMasks piece 5 []
+        ++ getRotationMasks (flipPiece piece) 5 []
+    ;
+
+emptyBoard :: Long;
+emptyBoard = 0;
+
+main :: [String] -> ();
+public main !args =
+    let
+        n :: Int;
+        n = eager $ stringToInt (head args);
+    in
+        meteor n
+    ;
+

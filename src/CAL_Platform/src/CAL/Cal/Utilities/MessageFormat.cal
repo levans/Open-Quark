@@ -1,0 +1,460 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * MessageFormat.cal
+ * Creation date: May 31, 2006.
+ * By: Joseph Wong
+ */
+
+/**
+ * This module defines a set of functions for formatting strings with message patterns. It provides a means
+ * for producing concatenated messages in a localizable way.
+ * 
+ * For the exact syntax of the message patterns, please refer to the Java documentation for the
+ * {@code java.text.MessageFormat@} class:
+ * {@url http://java.sun.com/j2se/1.4.2/docs/api/java/text/MessageFormat.html@}
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Utilities.MessageFormat;
+
+import Cal.Core.Prelude using
+    function = input, output;
+    typeConstructor = String, JObject, JList;
+    typeClass = Num, Inputable, Outputable;
+    ;
+
+import Cal.Utilities.Locale using
+    typeConstructor = Locale;
+    ;
+
+import Cal.Utilities.StringProperties using
+    function = bundleRequestedLocale, bundleStrings, lookupWithDefault;
+    typeConstructor = StringResourceBundle;
+    ;
+
+import Cal.Core.String using
+    function = replaceAllString;
+    ;
+
+/**
+ * Returns the placeholder string for a key that cannot be found.
+ * 
+ * @arg key the key that cannot be found.
+ * @return a placeholder string for the key.
+ */
+missingFormat :: String -> String;
+private missingFormat !key = "!" ++ key ++ "!";
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format0 :: StringResourceBundle -> String -> String;
+public format0 !bundle !key =
+    lookupWithDefault key (bundleStrings bundle) (missingFormat key);
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg arg1 the first message argument.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format1 :: Outputable a =>
+    StringResourceBundle -> String -> a -> String;
+public format1 !bundle !key !arg1 =
+    formatWithPattern1 (format0 bundle key) (bundleRequestedLocale bundle) arg1;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format2 :: (Outputable a, Outputable b) =>
+    StringResourceBundle -> String -> a -> b -> String;
+public format2 !bundle !key !arg1 !arg2 =
+    formatWithPattern2 (format0 bundle key) (bundleRequestedLocale bundle) arg1 arg2;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format3 :: (Outputable a, Outputable b, Outputable c) =>
+    StringResourceBundle -> String -> a -> b -> c -> String;
+public format3 !bundle !key !arg1 !arg2 !arg3 =
+    formatWithPattern3 (format0 bundle key) (bundleRequestedLocale bundle) arg1 arg2 arg3;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format4 :: (Outputable a, Outputable b, Outputable c, Outputable d) =>
+    StringResourceBundle -> String -> a -> b -> c -> d -> String;
+public format4 !bundle !key !arg1 !arg2 !arg3 !arg4 =
+    formatWithPattern4 (format0 bundle key) (bundleRequestedLocale bundle) arg1 arg2 arg3 arg4;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @arg arg5 the fifth message argument.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format5 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e) =>
+    StringResourceBundle -> String -> a -> b -> c -> d -> e -> String;
+public format5 !bundle !key !arg1 !arg2 !arg3 !arg4 !arg5 =
+    formatWithPattern5 (format0 bundle key) (bundleRequestedLocale bundle) arg1 arg2 arg3 arg4 arg5;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @arg arg5 the fifth message argument.
+ * @arg arg6 the sixth message argument.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format6 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f) =>
+    StringResourceBundle -> String -> a -> b -> c -> d -> e -> f -> String;
+public format6 !bundle !key !arg1 !arg2 !arg3 !arg4 !arg5 !arg6 =
+    formatWithPattern6 (format0 bundle key) (bundleRequestedLocale bundle) arg1 arg2 arg3 arg4 arg5 arg6;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @arg arg5 the fifth message argument.
+ * @arg arg6 the sixth message argument.
+ * @arg arg7 the seventh message argument.
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format7 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f, Outputable g) =>
+    StringResourceBundle -> String -> a -> b -> c -> d -> e -> f -> g -> String;
+public format7 !bundle !key !arg1 !arg2 !arg3 !arg4 !arg5 !arg6 !arg7 =
+    formatWithPattern7 (format0 bundle key) (bundleRequestedLocale bundle) arg1 arg2 arg3 arg4 arg5 arg6 arg7;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * The arguments are provided in a record (which can be a tuple), and is treated as ordered by the record's field names
+ * (i.e. ordinal fields first, in ascending order, then the textual fields in lexicographical order).
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg args the message arguments, ordered by the record's field names. 
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+format :: (Outputable r) => StringResourceBundle -> String -> {r} -> String;
+public format !bundle !key !args =
+    formatWithPattern (format0 bundle key) (bundleRequestedLocale bundle) args;
+
+/**
+ * Returns a string formatted according to the message pattern found in the given bundle using the specified key.
+ * 
+ * @arg bundle the string resource bundle.
+ * @arg key the key to be looked up in the bundle.
+ * @arg args the message arguments. 
+ * @return a string formatted according to the message pattern found in the given bundle using the specified key,
+ *         or a placeholder string if the key cannot be found.
+ */
+formatForArgList :: StringResourceBundle -> String -> [JObject] -> String;
+public formatForArgList !bundle !key !args =
+    formatWithPatternForArgList (format0 bundle key) (bundleRequestedLocale bundle) args;
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg arg1 the first message argument.
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern1 :: Outputable a =>
+    String -> Locale -> a -> String;
+public formatWithPattern1 !pattern !locale !arg1 =
+    formatWithPatternForArgList pattern locale [output arg1];
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern2 :: (Outputable a, Outputable b) =>
+    String -> Locale -> a -> b -> String;
+public formatWithPattern2 !pattern !locale !arg1 !arg2 =
+    formatWithPatternForArgList pattern locale [output arg1, output arg2];
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern3 :: (Outputable a, Outputable b, Outputable c) =>
+    String -> Locale -> a -> b -> c -> String;
+public formatWithPattern3 !pattern !locale !arg1 !arg2 !arg3 =
+    formatWithPatternForArgList pattern locale [output arg1, output arg2, output arg3];
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern4 :: (Outputable a, Outputable b, Outputable c, Outputable d) =>
+    String -> Locale -> a -> b -> c -> d -> String;
+public formatWithPattern4 !pattern !locale !arg1 !arg2 !arg3 !arg4 =
+    formatWithPatternForArgList pattern locale [output arg1, output arg2, output arg3, output arg4];
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @arg arg5 the fifth message argument.
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern5 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e) =>
+    String -> Locale -> a -> b -> c -> d -> e -> String;
+public formatWithPattern5 !pattern !locale !arg1 !arg2 !arg3 !arg4 !arg5 =
+    formatWithPatternForArgList pattern locale [output arg1, output arg2, output arg3, output arg4, output arg5];
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @arg arg5 the fifth message argument.
+ * @arg arg6 the sixth message argument.
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern6 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f) =>
+    String -> Locale -> a -> b -> c -> d -> e -> f -> String;
+public formatWithPattern6 !pattern !locale !arg1 !arg2 !arg3 !arg4 !arg5 !arg6 =
+    formatWithPatternForArgList pattern locale [output arg1, output arg2, output arg3, output arg4, output arg5, output arg6];
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg arg1 the first message argument.
+ * @arg arg2 the second message argument.
+ * @arg arg3 the third message argument.
+ * @arg arg4 the fourth message argument.
+ * @arg arg5 the fifth message argument.
+ * @arg arg6 the sixth message argument.
+ * @arg arg7 the seventh message argument.
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern7 :: (Outputable a, Outputable b, Outputable c, Outputable d, Outputable e, Outputable f, Outputable g) =>
+    String -> Locale -> a -> b -> c -> d -> e -> f -> g -> String;
+public formatWithPattern7 !pattern !locale !arg1 !arg2 !arg3 !arg4 !arg5 !arg6 !arg7 =
+    formatWithPatternForArgList pattern locale [output arg1, output arg2, output arg3, output arg4, output arg5, output arg6, output arg7];
+
+/**
+ * A foreign type for Java's {@code Object[]@} array tupe.
+ */
+data foreign unsafe import jvm private "java.lang.Object[]"
+    private JObjectArray deriving Outputable;
+
+/**
+ * Converts a {@link JList@} to a {@link JObjectArray@}.
+ * 
+ * @arg list the list.
+ * @return the corresponding object array.
+ */
+foreign unsafe import jvm "method toArray"
+    private jListToArray :: JList -> JObjectArray;
+
+/**
+ * A foreign type for Java's {@code java.text.MessageFormat@} type.
+ */
+data foreign unsafe import jvm private "java.text.MessageFormat"
+    private JMessageFormat;
+
+/**
+ * Constructs an instance of {@link JMessageFormat@}.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @return a new instance of {@link JMessageFormat@}.
+ */
+foreign unsafe import jvm "constructor"
+    private jMakeMessageFormat :: String -> Locale -> JMessageFormat;
+
+/**
+ * Formats the specified object according to the specified message format to produce a string.
+ * 
+ * @arg messageFormat the message format.
+ * @arg object the object.
+ * @return a string formatted according to the message format.
+ */
+foreign unsafe import jvm "method format"
+    private jFormat :: JMessageFormat -> JObject -> String;
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * The arguments are provided in a record (which can be a tuple), and is treated as ordered by the record's field names
+ * (i.e. ordinal fields first, in ascending order, then the textual fields in lexicographical order).
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg args the message arguments, ordered by the record's field names. 
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPattern :: (Outputable r) => String -> Locale -> {r} -> String;
+public formatWithPattern !pattern !locale !args =
+    formatWithPatternForArgList pattern locale $ input $ output args;
+
+/**
+ * Returns a string formatted according to the specified message pattern.
+ * 
+ * @arg pattern the message pattern.
+ * @arg locale the locale to use for formatting.
+ * @arg args the message arguments. 
+ * @return a string formatted according to the message pattern.
+ */
+formatWithPatternForArgList :: String -> Locale -> [JObject] -> String;
+public formatWithPatternForArgList !pattern !locale !args =
+    jFormat (jMakeMessageFormat pattern locale) (output $ jListToArray $ input $ output args);
+
+/**
+ * Returns a formatted string for the given number.
+ * 
+ * @arg locale the locale to use for formatting.
+ * @arg number the number to format.
+ * @return a formatted string for the given number.
+ */
+formatNumber :: (Num a, Outputable a) => Locale -> a -> String;
+public formatNumber !locale !number =
+    formatWithPattern1 "{0,number}" locale number;
+
+/**
+ * Returns the given number formatted as a currency value.
+ * 
+ * @arg locale the locale to use for formatting.
+ * @arg number the number to format.
+ * @return the given number formatted as a currency value.
+ */
+formatCurrency :: (Num a, Outputable a) => Locale -> a -> String;
+public formatCurrency !locale !number =
+    formatWithPattern1 "{0,number,currency}" locale number;
+
+/**
+ * Returns the given number formatted as a percent value.
+ * 
+ * @arg locale the locale to use for formatting.
+ * @arg number the number to format.
+ * @return the given number formatted as a percent value.
+ */
+formatPercent :: (Num a, Outputable a) => Locale -> a -> String;
+public formatPercent !locale !number =
+    formatWithPattern1 "{0,number,percent}" locale number;
+
+/**
+ * Returns the given number formatted by the specified pattern.
+ * 
+ * @arg decimalPattern the decimal pattern to use for formatting the number.
+ * @arg locale the locale to use for formatting.
+ * @arg number the number to format.
+ * @return the given number formatted by the specified pattern.
+ */
+formatNumberWithPattern :: (Num a, Outputable a) => String -> Locale -> a -> String;
+public formatNumberWithPattern !decimalPattern !locale !number =
+    formatWithPattern1 ("{0,number," ++ decimalPattern ++ "}") locale number;

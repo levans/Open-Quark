@@ -1,0 +1,198 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * Mandelbrot benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org@}
+ * 
+ * This code is based on and inspired by the entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}.
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.Mandelbrot;
+
+import Cal.Core.Prelude using
+    typeConstructor = Double, Int, String;
+    function = eager, fromInt, seq, stringToInt;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+import Cal.Core.Bits using
+    function = bitwiseAnd, bitwiseOr, shiftL;
+    ;
+
+import Cal.Collections.List using
+    function = head;
+    ;
+
+import Cal.IO.Console using
+    function = print;
+    ;
+
+
+data foreign unsafe import jvm "java.io.PrintStream" private JPrintStream;
+
+data foreign unsafe import jvm "java.io.FilterOutputStream"
+    private JFilterOutputStream;
+
+foreign unsafe import jvm "static field java.lang.System.out"
+    private stdout :: JPrintStream;
+
+data foreign unsafe import jvm "java.io.OutputStream" private JOutputStream;
+
+data foreign unsafe import jvm "java.io.BufferedOutputStream"
+    private JBufferedOutputStream;
+
+foreign unsafe import jvm "constructor"
+    private createBufferedOutputStream :: JOutputStream -> JBufferedOutputStream;
+
+foreign unsafe import jvm "method write"
+    private write :: JBufferedOutputStream -> Int -> ();
+
+foreign unsafe import jvm "method flush"
+    private flush :: JBufferedOutputStream -> ();
+
+foreign unsafe import jvm "cast"
+    jPrintStreamToJOutputStream :: JPrintStream -> JOutputStream;
+
+/** 
+ * compute a binary mandelbrot image and write to stdout as a pbm file
+ */
+main :: [String] -> ();
+public main !args =
+    let
+        size = eager $ stringToInt (head args);
+
+        offset :: Int;
+        offset = eager $ bitwiseAnd size 7;
+
+        shift :: Int;
+        shift =
+            eager
+            $
+            (
+                if offset == 0 then
+                    0
+                else
+                    8 - offset
+            )
+            ;
+
+        bufferedOutput = 
+            eager
+            $ createBufferedOutputStream (jPrintStreamToJOutputStream stdout)
+            ;
+
+        maxIterations :: Int;
+        maxIterations = 50;
+
+        /** write out the byte buffer every 8th pixel*/
+        outputBitBuffer :: Int -> Int -> Int;
+        outputBitBuffer !x !buffer =
+            if bitwiseAnd x 7 == 7 then
+                //write the buffer
+                write bufferedOutput buffer
+                `seq`
+                0
+            else
+                //no, output buffer is not yet full
+                buffer
+            ;
+
+        /**write out the paritial byte buffer at end of line if necessary*/
+        writeLastByte :: Int -> ();
+        writeLastByte !bitBuffer =
+            if (shift != 0) then
+                write bufferedOutput (shiftL bitBuffer shift)
+            else
+                ()
+            ;
+
+        /** compute and output every pixel in the image*/
+        process :: Int -> Int -> Int -> Double -> Double -> ();
+        process !x !y !bitBuffer !ix !iy =
+            if x < size then
+                let
+                    calculateBit ::
+                        Int -> Double -> Double -> Double -> Double -> Int;
+                    calculateBit !i !zr !zi !cr !ci =
+                        if i == maxIterations then
+                            1
+                        else if zr * zr + zi * zi > 4 then
+                            0
+                        else
+                            calculateBit
+                                (i + 1)
+                                (zr * zr - zi * zi + cr)
+                                (2.0 * zr * zi + ci)
+                                cr
+                                ci
+                        ;
+                in
+                    process
+                        (x + 1)
+                        y
+                        (outputBitBuffer
+                            x
+                            (
+                                eager
+                                $ bitwiseOr
+                                    (eager $ shiftL bitBuffer 1)
+                                    (eager $ calculateBit 0 ix iy ix iy)
+                            )
+                        )
+                        (fromInt (2 * (x + 1)) / fromInt size - 1.5)
+                        iy
+            else
+                writeLastByte bitBuffer
+                `seq`
+                (
+                    if y < size - 1 then
+                        process
+                            0
+                            (y + 1)
+                            0
+                            (-1.5)
+                            (fromInt (2 * (y + 1)) / fromInt size - 1.0)
+                    else
+                        flush bufferedOutput
+                )
+            ;
+    in
+        //write out the image header
+        print ("P4\n" ++ show size ++ " " ++ show size ++ "\n")
+        `seq`
+        //compute and write out the binary image body
+        process 0 0 0 (-1.5) (-1.0)
+    ;
+

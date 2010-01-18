@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>Quark_Gems</name>
+	<comment></comment>
+	<projects>
+		<project>CAL_Libraries</project>
+		<project>CAL_Platform</project>
+		<project>CAL_Runtime</project>
+		<project>Utilities</project>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.jdt.core.javabuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+		<buildCommand>
+			<name>org.openquark.cal.eclipse.core.calBuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>org.eclipse.jdt.core.javanature</nature>
+		<nature>org.openquark.cal.eclipse.core.calNature</nature>
+	</natures>
+</projectDescription>

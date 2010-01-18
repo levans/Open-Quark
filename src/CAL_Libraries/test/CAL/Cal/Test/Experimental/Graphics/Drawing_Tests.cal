@@ -1,0 +1,105 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Drawing_Tests.cal
+ * Creation date: July 4, 2005.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains tests for the Drawing module.  The output is graphical
+ * and requires human interpretation.
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Test.Experimental.Graphics.Drawing_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int;
+    dataConstructor = False, True;
+    ;
+import Cal.Utilities.Math;    
+import Cal.Experimental.Graphics.Drawing using
+    typeConstructor = Graphics;
+    ;
+import Cal.Graphics.Color;
+
+
+line1 = Drawing.makeLine 0 0 100 50;
+line2 = Drawing.makeLine 100 0 0 50;
+
+rect1 = Drawing.makeRectangle 20 10 60 30;
+rect2 = Drawing.makeRectangle 30 15 40 20;
+
+redPaint   = Drawing.solidColourPaint Color.red;
+greenPaint = Drawing.solidColourPaint Color.green;
+bluePaint  = Drawing.solidColourPaint Color.blue;
+
+thinLine = Drawing.defaultStroke;
+wideLine = Drawing.solidStroke (5 :: Int);
+
+font1 = Drawing.font "Courier" 12 False False;
+font2 = Drawing.font "Arial" 16 False True;
+
+
+public drawTest1 = 
+    Drawing.drawShape greenPaint thinLine rect1 
+        # Drawing.drawShape greenPaint thinLine line1 
+        # Drawing.drawShape redPaint thinLine line2
+        # Drawing.drawShape redPaint thinLine rect2
+        # Drawing.drawText bluePaint font2 "test" 50.0 25.0;
+
+public drawTest2 = 
+    Drawing.drawShape greenPaint thinLine rect1 
+        # Drawing.drawShape greenPaint wideLine line1 
+        # Drawing.drawShape redPaint wideLine line2
+        # Drawing.drawShape redPaint thinLine rect2;
+
+public drawScaledTest = 
+    Drawing.drawScaled 3 3 drawTest1;
+
+public drawTranslatedTest = 
+    Drawing.drawTranslated 100 50 drawTest1;
+
+public drawAll = 
+    Drawing.drawTranslated 10 10 drawTest1
+        # Drawing.drawTranslated 10 100 drawScaledTest
+        # Drawing.drawTranslated 10 300 (Drawing.drawRotated (Math.pi / 4) 50 25 drawTest1)
+        # Drawing.drawTranslated 10 400 drawTest2;
+
+/**
+ * Display the results of a drawing function in a dialog.
+ */
+testDrawing :: (Graphics -> Graphics) -> ();
+public testDrawing drawFn = 
+    Drawing.displayCustomDrawDialog "Test Drawing" drawFn;
+

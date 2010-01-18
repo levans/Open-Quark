@@ -1,0 +1,1921 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * DataGems.cal
+ * Creation date: Feb 28, 2003.
+ * By: Edward Lam
+ */
+
+/**
+ * DataGems provide a way to access database metadata, as well as query and modify database tables.
+ * 
+ * The JDBCConnection type allows access to a database through JDBC.
+ * 
+ * The ResultSet type is a foreign type which corresponds to a generic Java QueryResult interface.
+ * There is an implementation of this interface for JDBC resultsets, but other implementations are also possible.
+ * The Resultset functions in this module will work with any QueryResult implementation.
+ * 
+ * Due to stateful nature of a resultset (JDBC or otherwise), access to the resultset values must be done
+ * through high-level functions (such as dataFromResultSet) which take care of managing the resultset position and extracting values in 
+ * the correct order.
+ * 
+ * In the future, when we have generics/records in the typesystem, we'll be able to be much smarter about 
+ * the relationship between the extractors, result column types and combiners.  Arbitrary recombined Tuple-ns
+ * will be possible by applying a set of extractors to a record.  For now, there is a disconnect between the 
+ * record and the extractors.  You have to know 'implicitly' what the column types will be in a result set
+ * and what their column positions are, then use the right extractors with column names/numbers to get at 
+ * the data values in a result set.  JDBC allows a little leeway in that it will actually perform value
+ * transformations between in the actual column type and the requested type (the extractor).  This works in
+ * most expected situations (which is nice), but it doesn't really absolve you from knowing what the data is!
+ */
+
+module Cal.Data.DataGems;
+
+import Cal.Core.Prelude using
+    typeClass = Inputable, Ord, Outputable, Typeable;
+    typeConstructor = Boolean, Byte, Decimal, Double, Int, Long, JObject, Maybe, String, TypeRep;
+    dataConstructor = False, True, Nothing, Just;
+    function = 
+        compare, eager, error, field1, field2, field3, field4, fromJust, fst, input, 
+        isEmpty, maybeApply, not, output, seq, snd, strictTuple2, strictTuple3, 
+        strictTuple4, strictTuple5, strictTuple6, strictTuple7, upFromTo,
+        typeArguments, typeOf, undefined;
+    ;
+import Cal.Core.Dynamic using
+    typeConstructor = Dynamic;
+    function = toDynamic, fromDynamic;
+    ;
+import Cal.Collections.List using
+    function = drop, head, length, map, replicate, strictList, take, zipWith;
+    ;      
+import Cal.Core.String using
+    function = fromList;
+    ; 
+import Cal.Utilities.Format;    
+import Cal.Utilities.RelativeTime;
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+import Cal.Utilities.ValueType using
+    typeConstructor = ValueType, JValueType;
+    ;
+import Cal.Collections.Map using
+    typeConstructor = Map;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Data.DatabaseMetadata using
+    typeConstructor = FieldDescription, TableDescription, TableReference;
+    ;
+import Cal.Data.SqlType using
+    typeConstructor = JSqlType, SqlType;
+    ;
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+
+/**
+ * A JDBC database connection.
+ * This can be used to access the database metadata and to query or update the database tables.
+ */
+data foreign unsafe import jvm "org.openquark.cal.foreignsupport.module.DataGems.JDBC$Connection" 
+    public JDBCConnection deriving Inputable, Outputable;
+
+/**
+ * A statement that can be used to execute select or update queries with parameters.
+ */
+data foreign unsafe import jvm "org.openquark.cal.foreignsupport.module.DataGems.JDBCPreparedStatement" 
+    public JDBCPreparedStatement deriving Inputable, Outputable;
+
+/**
+ * The results of executing a database select query.
+ * This can be used to access the resultset metadata and to retrieve the data values from the resultset.
+ */
+data foreign unsafe import jvm public "org.openquark.cal.foreignsupport.module.DataGems.QueryResult" 
+    public ResultSet deriving Inputable, Outputable;
+
+/**
+ * A type for representing a row in the resultset.
+ */
+data foreign unsafe import jvm private "org.openquark.cal.foreignsupport.module.DataGems.QueryResult" 
+    public ResultRow;
+
+/**
+ * Get a ResultRow representing the current row of the resultset.
+ */
+foreign unsafe import jvm "cast" private currentResultSetRow :: ResultSet -> ResultRow;
+
+/**
+ * Get the ResultSet to which a row belongs.
+ */
+foreign unsafe import jvm "cast" private resultSetForRow :: ResultRow -> ResultSet;
+
+
+/**
+ * A JDBC resultset.
+ * This can be exposed at a {@link ResultSet@} by calling {@link resultSetFromJDBC@}.
+ */
+data foreign unsafe import jvm public "java.sql.ResultSet" public JDBCResultSet;
+
+/**
+ * Exposes a JDBC resultset as a {@link ResultSet@}.
+ * @arg jdbcResultSet  a JDBC resultset
+ * @return             a {@link ResultSet@} based on the JDBC resultset
+ */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.DataGems.JDBC.makeJDBCResultSet" 
+    public resultSetFromJDBC :: JDBCResultSet -> ResultSet;
+
+
+data foreign unsafe import jvm "byte[]" JByteArray deriving Inputable, Outputable;
+
+// Converts between JByteArray and (Array Byte).
+jByteArrayToByteArray :: JByteArray -> Array Byte;
+jByteArrayToByteArray = Array.inputPrimitive # output;
+
+byteArrayToJByteArray :: Array Byte -> JByteArray;
+byteArrayToJByteArray = input # Array.outputPrimitive;
+
+
+data foreign unsafe import jvm "int[]" JIntArray deriving Inputable, Outputable;
+
+// Convert between JIntArray and (Array Int).
+jIntArrayToIntArray :: JIntArray -> Array Int;
+jIntArrayToIntArray = Array.inputPrimitive # output;
+
+intArrayToJIntArray :: Array Int -> JIntArray;
+intArrayToJIntArray = input # Array.outputPrimitive;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// JDBC Driver management
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Load a JDBC driver.
+ * @arg driverClass  the full class name of the JDBC driver
+ * @return           {@link True@} if the driver loaded successfully, {@link False@} otherwise
+ */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.DataGems.JDBC.loadDriver"
+    public jdbcDriverLoad :: String -> Boolean;
+    
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Connection management
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Connect to a JDBC database.
+ * Use this if you don't know the driver is already loaded.
+ * @arg url       the JDBC connection URL
+ * @arg userName  the user ID for the database 
+ * @arg password  the password for the database 
+ * @return        a connection to the database
+ */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.DataGems.JDBC.connect"
+    public jdbcConnection :: String -> String -> String -> JDBCConnection;
+
+/**
+ * Use this if you don't know the driver is already loaded.
+ * @arg driverClass  the full class name of the JDBC driver
+ * @arg url          the JDBC connection URL
+ * @arg userName     the user ID for the database 
+ * @arg password     the password for the database 
+ * @return           a connection to the database
+ */
+jdbcConnectionWithDriverCheck :: String -> String -> String -> String -> JDBCConnection;
+public jdbcConnectionWithDriverCheck !driverClass url userName password = 
+    if jdbcDriverLoad driverClass then jdbcConnection url userName password 
+    else error ("JDBC: Driver " ++ driverClass ++ " failed to load.");
+
+/**
+ * Set auto-commit flag for a JDBC connection.
+ * This should be used with caution as it will modify the JDBC connection provided.
+ * @arg connection      a JDBC connection
+ * @arg autoCommitFlag  the new setting for the auto-commit flag for the connection
+ * @return              the original JDBC connection with the new setting
+ */
+foreign unsafe import jvm "method setAutoCommit"
+    public jdbcSetAutoCommit :: JDBCConnection -> Boolean -> JDBCConnection;
+
+/**
+ * Gets the auto-commit flag for a JDBC connection.
+ * @arg connection      a JDBC connection
+ * @return              the auto-commit flag for the connection
+ */
+foreign unsafe import jvm "method getAutoCommit"
+    public jdbcGetAutoCommit :: JDBCConnection -> Boolean;
+
+/**
+ * Closes a JDBC connection.
+ * This should be used with caution as it will modify the JDBC connection provided.
+ * @arg connection  the connection to be closed
+ */
+foreign unsafe import jvm "method close"
+    public jdbcCloseConnection :: JDBCConnection -> ();
+
+
+/**
+ * Retrieves the name of the database product to which this connection is connected. 
+ * @arg connection  a database connection
+ * @return          the name of the database product for the connection
+ */
+foreign unsafe import jvm "method getDatabaseProductName"
+    public connectionDatabaseProductName :: JDBCConnection -> String;
+
+/**
+ * Retrieves a {@link ResultSet@} of table information from a connection.
+ * @arg connection  a database connection
+ * @return          a {@link ResultSet@} of table information from the database connection
+ */
+foreign unsafe import jvm "method getTablesInfo"
+    public jdbcGetTablesInfo :: JDBCConnection -> ResultSet;
+
+/**
+ * Retrieves a {@link ResultSet@} of table information from a connection.
+ * @arg connection     a database connection
+ * @arg catalogName    the catalog name for the tables of interest, or an empty string to not restrict the table catalog
+ * @arg schemaPattern  the schema name pattern for the tables of interest, or an empty string to not restrict the table schema
+ * @arg tablePattern   the table name pattern for the tables of interest, or an empty string to not restrict by table name
+ * @return             a {@link ResultSet@} of table information from the database connection
+ */
+foreign unsafe import jvm "method getTablesInfo"
+    public jdbcGetTablesInfoWithFilters :: JDBCConnection -> String -> String -> String -> ResultSet;
+
+/**
+ * Retrieves a {@link ResultSet@} of table column information from a connection.
+ * @arg connection  a database connection
+ * @arg tableName   the name of the table for which column info will be retrieved
+ * @return          a {@link ResultSet@} of column information for the specified database table
+ */
+foreign unsafe import jvm "method getColumnsInfo"
+    public jdbcGetColumnsInfo :: JDBCConnection -> String -> ResultSet;
+
+/**
+ * Retrieves a {@link ResultSet@} of primary key columns for a table.
+ * @arg connection  a database connection
+ * @arg tableName   the name of the table for which primary key info will be retrieved
+ * @return          a {@link ResultSet@} of primary key information for the specified database table
+ */
+foreign unsafe import jvm "method getTablePrimaryKeyInfo"
+    public jdbcGetTablePrimaryKeyInfo :: JDBCConnection -> String -> ResultSet;
+
+/**
+ * Retrieves a {@link ResultSet@} of index info for a table.
+ * @arg connection  a database connection
+ * @arg tableName   the name of the table for which index info will be retrieved
+ * @arg uniqueOnly  if True, then only info about unique indexes will be returned;
+ *                  if False, then all index info for the table will be returned
+ * @return          a {@link ResultSet@} of index information for the specified database table
+ */
+foreign unsafe import jvm "method getTableIndexInfo"
+    public jdbcGetTableIndexInfo :: JDBCConnection -> String -> Boolean -> ResultSet;
+
+/**
+ * Retrieves a {@link ResultSet@} of foreign key info for a table.
+ * @arg connection  a database connection
+ * @arg tableName   the name of the table for which foreign key info will be retrieved
+ * @return          a {@link ResultSet@} of foreign key information for the specified database table
+ */
+foreign unsafe import jvm "method getTableForiegnKeyConstraintInfo"
+    public jdbcGetTableForeignKeyInfo :: JDBCConnection -> String -> ResultSet;
+
+
+/**
+ * Retrieves a list of table names from the connection.
+ * System tables will be excluded from the results.
+ * @arg connection  a database connection
+ * @return          a list of table names for the connection
+ */
+jdbcGetConnectionTableNames :: JDBCConnection -> [String];
+public jdbcGetConnectionTableNames connection =
+    let
+        tablesRS :: ResultSet;
+        tablesRS = jdbcGetTablesInfo connection;
+        
+        tablesAndTypes :: [(String, String)];
+        tablesAndTypes = 
+            dataFromResultSet2 True tablesRS $ extractTuple2 (extractStringWithDefault "" 3) (extractStringWithDefault "" 4);
+    in
+        // TODO: return qualified names...
+        List.map field1 $ List.filter (\!pr -> field2 pr != "SYSTEM TABLE") tablesAndTypes;
+
+/**
+ * Retrieves a list of table names from the connection.
+ * System tables will be excluded from the results.
+ * @arg connection     a database connection
+ * @arg catalogName    the catalog name for the tables of interest, or an empty string to not restrict the table catalog
+ * @arg schemaPattern  the schema name pattern for the tables of interest, or an empty string to not restrict the table schema
+ * @arg tablePattern   the table name pattern for the tables of interest, or an empty string to not restrict by table name
+ * @return             a list of table names for the connection
+ */
+jdbcGetConnectionTableNamesWithFilters :: JDBCConnection -> String -> String -> String -> [String];
+public jdbcGetConnectionTableNamesWithFilters connection catalogName schemaPattern tablePattern =
+    let
+        tablesRS :: ResultSet;
+        tablesRS = jdbcGetTablesInfoWithFilters connection catalogName schemaPattern tablePattern;
+        
+        tablesAndTypes :: [(String, String)];
+        tablesAndTypes = 
+            dataFromResultSet2 True tablesRS $ extractTuple2 (extractStringWithDefault "" 3) (extractStringWithDefault "" 4);
+    in
+        // TODO: return qualified names...
+        List.map field1 $ List.filter (\!pr -> field2 pr != "SYSTEM TABLE") tablesAndTypes;
+
+/**
+ * Retrieves a list of field names for the specified table in the connection.
+ * @arg connection  a database connection
+ * @arg tableName   the name of a table in the database
+ * @return          the list of field names for the database table
+ */
+jdbcGetTableFieldNames :: JDBCConnection -> String -> [String];
+public jdbcGetTableFieldNames !connection !tableName =
+    let
+        tablesRS :: ResultSet;
+        tablesRS = jdbcGetColumnsInfo connection tableName;
+    in
+        dataFromResultSet2 True tablesRS $ extractStringWithDefault "" 4;
+
+/**
+ * Retrieves information about the fields in a database table, including:  the field names, 
+ * their value types, and whether the type is a 'long' one.
+ * @arg connection  a database connection
+ * @arg tableName   the name of a table in the database
+ * @return          a list of records with field information for the specified table
+ */
+jdbcGetTableFieldInfo :: JDBCConnection -> String -> [{ columnName :: String, valueType :: ValueType, columnSize :: Int, isLongType :: Boolean }];
+public jdbcGetTableFieldInfo !connection !tableName =
+    let
+        columnInfoRS :: ResultSet;
+        columnInfoRS = jdbcGetColumnsInfo connection tableName;
+
+        // Extract information about the columns.
+        jdbcInfoExtractFn :: ResultRow -> {columnName :: String, columnSize :: Int, isLongType :: Boolean, valueType :: ValueType};
+        jdbcInfoExtractFn !rs = 
+            let
+                columnName    = extractStringWithDefault "" 4 rs;   // COLUMN_NAME
+                jdbcTypeCode  = extractIntWithDefault 0 5 rs;       // DATA_TYPE
+                columnSize    = extractIntWithDefault 0 7 rs;       // COLUMN_SIZE
+                decimalDigits = extractIntWithDefault 0 9 rs;       // DECIMAL_DIGITS
+
+                sqlType :: SqlType;
+                sqlType = SqlType.fromJdbcMetadata jdbcTypeCode columnSize decimalDigits;
+
+                // Extract more info from the JDBC type code.
+                valueType :: ValueType;
+                valueType = SqlType.toValueType sqlType;
+
+                isLongType :: Boolean;
+                isLongType = SqlType.isLongType sqlType;
+            in
+                seq columnName (seq jdbcTypeCode (seq columnSize { columnName = columnName, 
+                                                                   valueType = valueType, 
+                                                                   columnSize = columnSize, 
+                                                                   isLongType = isLongType }));
+    in
+        // TODO: perhaps more info should be added here (such as catalog, schema, etc...)...
+        dataFromResultSet columnInfoRS jdbcInfoExtractFn;
+
+/**
+ * Returns the description for the specified table.
+ * @arg includeConstraintInfo  if {@link True@}, then the table constraint info (primary/foreign keys and uniqueness) will be fetched;
+ *                             if {@link False@}, then the constraint info will not be fetched
+ * @arg connection             a database connection
+ * @arg tableRef               a reference to a database table
+ * @return                     a description of the database table (field info, primary/foreign key info, index info)
+ */
+tableDescription :: Boolean -> JDBCConnection -> TableReference -> TableDescription;
+public tableDescription !includeConstraintInfo !connection !tableRef = 
+    let
+        tableName :: String;
+        tableName = DatabaseMetadata.getTableNameFromReference tableRef;
+
+        // Get a resultset containing the column info for the table.
+        // TODO: perhaps the catalog and schema names should be passed along as well...
+        columnInfoRS :: ResultSet;
+        columnInfoRS = jdbcGetColumnsInfo connection tableName;
+
+        // Build a field description from a single records in the column info resultset.
+        extractFieldDescription :: ResultRow -> FieldDescription;
+        extractFieldDescription !rs = 
+            let
+                fieldName     = extractStringWithDefault "" 4 rs;   // COLUMN_NAME
+                jdbcTypeCode  = extractIntWithDefault 0 5 rs;       // DATA_TYPE
+                columnSize    = extractIntWithDefault 0 7 rs;       // COLUMN_SIZE
+                decimalDigits = extractIntWithDefault 0 9 rs;       // DECIMAL_DIGITS
+                nullableInt   = extractIntWithDefault 0 11 rs;      // NULLABLE
+                comment       = extractStringWithDefault "" 12 rs;  // REMARKS
+
+                // Extract more info from the JDBC type code.
+                sqlType :: SqlType;
+                sqlType = SqlType.fromJdbcMetadata jdbcTypeCode columnSize decimalDigits;
+
+                // If the nullability isn't known (nullableInt=2) then assume it is nullable.
+                nullable :: Boolean;
+                nullable = nullableInt != 0;
+
+                fieldDescription :: FieldDescription;
+                fieldDescription = DatabaseMetadata.makeFieldDescriptionWithComment fieldName sqlType nullable comment;
+            in
+                // Force all the data for the column to be extracted from the row before moving to the next row.
+                Prelude.deepSeq fieldDescription fieldDescription;
+
+        fields :: [FieldDescription];
+        fields = dataFromResultSet2 True columnInfoRS extractFieldDescription;
+
+        // Get the primary key constraint (if any) for this table.
+        primaryKeyConstraints :: [DatabaseMetadata.TableConstraint];
+        primaryKeyConstraints = 
+            let
+                // Get a resultset containing the primary key info for the table.
+                // TODO: perhaps the catalog and schema names should be passed along as well...
+                primaryKeyInfoRS :: ResultSet;
+                primaryKeyInfoRS = jdbcGetTablePrimaryKeyInfo connection tableName;
+
+                columnNamesAndSeqs :: [(String, Int)];
+                columnNamesAndSeqs = dataFromResultSet2 True primaryKeyInfoRS (extractTuple2 (extractStringWithDefault "" 4) (extractIntWithDefault 0 5));
+
+                // Order the columns by the sequence in the primary key.
+                orderedColumns :: [String];
+                orderedColumns = map field1 $ List.sortBy (\!v1 !v2 -> compare (field2 v1) (field2 v2)) columnNamesAndSeqs;
+            in
+                if (isEmpty orderedColumns) then []
+                else [DatabaseMetadata.PrimaryKeyConstraint orderedColumns];
+
+        // Get constraints for any unique indexes for this table.
+        uniqueIndexConstraints :: [DatabaseMetadata.TableConstraint];
+        uniqueIndexConstraints = 
+            let
+                // Get a resultset containing the index info for the table.
+                // TODO: perhaps the catalog and schema names should be passed along as well...
+                uniqueIndexInfoRS :: ResultSet;
+                uniqueIndexInfoRS = jdbcGetTableIndexInfo connection tableName True;
+
+                columnNamesAndSeqs :: [(String, Int)];
+                columnNamesAndSeqs = dataFromResultSet2 True uniqueIndexInfoRS (extractTuple2 (extractStringWithDefault "" 9) (extractIntWithDefault 0 8));
+
+                // Break up the list of column names wherever the sequence number resets.
+                indexColumnNameLists :: [(String, Int)] -> [[String]];
+                indexColumnNameLists !lst = 
+                    case lst of
+                    [] -> [];
+                    listHead : listTail -> 
+                        let
+                            headSeq :: Int;
+                            headSeq = field2 listHead;
+
+                            pr :: ([(String, Int)], [(String, Int)]);
+                            pr = List.span (\!v -> field2 v > headSeq) listTail;
+                        in
+                            (field1 listHead : map field1 (fst pr)) : indexColumnNameLists (snd pr);
+                    ;
+            in
+                map DatabaseMetadata.UniqueConstraint (indexColumnNameLists columnNamesAndSeqs);
+
+        // Get any foreign key constraints for this table.
+        foreignKeyConstraints :: [DatabaseMetadata.TableConstraint];
+        foreignKeyConstraints = 
+            let
+                // Get a resultset with info about the foreign keys imported by the table.
+                // TODO: perhaps the catalog and schema names should be passed along as well...
+                foreignKeyInfoRS :: ResultSet;
+                foreignKeyInfoRS = jdbcGetTableForeignKeyInfo connection tableName;
+
+                // Extract the table, primary and foreign key column names, and the sequence number.
+                // A sequence number of 1 indicates the start of a new foreign key.
+                foreignKeyInfo :: [(String, String, String, Int)];
+                foreignKeyInfo = 
+                    dataFromResultSet2 True foreignKeyInfoRS (extractTuple4 
+                                                       (extractStringWithDefault "" 3)  // PKTABLE_NAME
+                                                       (extractStringWithDefault "" 4)  // PKCOLUMN_NAME
+                                                       (extractStringWithDefault "" 8)  // FKCOLUMN_NAME
+                                                       (extractIntWithDefault 1 9));    // KEY_SEQ
+                    
+                // Break up the results into a list for each foreign key.
+                // A new foreign key starts when the sequence number is '1'.
+                groupedFkInfo :: [[(String, String, String, Int)]];
+                groupedFkInfo = List.breakAll (\!r -> field4 r == 1) foreignKeyInfo;
+
+                makeForeignKeyConstraint :: [(String, String, String, Int)] -> DatabaseMetadata.TableConstraint;
+                makeForeignKeyConstraint fkInfo = 
+                    let
+                        foreignTableName :: String;
+                        foreignTableName = field1 $ head fkInfo;
+                        
+                        foreignTableRef :: TableReference;
+                        foreignTableRef = DatabaseMetadata.makeTableReference foreignTableName;
+
+                        // Construct pairs consisting of the foreign key table column names and the primary key table column names.
+                        referencedFields :: [(String, String)];
+                        referencedFields = map (\!v -> (field3 v, field2 v)) fkInfo;
+                    in
+                        DatabaseMetadata.ForeignKeyConstraint foreignTableRef referencedFields;
+            in
+                map makeForeignKeyConstraint groupedFkInfo;
+
+        constraints :: [DatabaseMetadata.TableConstraint];
+        constraints = if (includeConstraintInfo) then primaryKeyConstraints ++ uniqueIndexConstraints ++ foreignKeyConstraints
+                      else [];
+    in
+        DatabaseMetadata.makeTableDescription tableRef fields constraints;
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Database Update Functions
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Executes a SQL statement which performs an update operation.
+ * @arg connection  a database connection
+ * @arg updateSQL   a SQL statement for the update operation
+ * @return          the number of rows affected by the update operation
+ */
+foreign unsafe import jvm "method executeUpdate" 
+    public executeUpdate :: JDBCConnection -> String -> Int;
+
+/**
+ * Adds a batch of operations to the database connection.
+ * @arg connection  a database connection
+ * @arg sql         the SQL for the batch operations
+ * @return          {@link True@} if the batch was added successfully
+ */
+foreign unsafe import jvm "method addBatch" 
+    public addBatch :: JDBCConnection -> String -> Boolean;
+
+/**
+ * Executes a batch of operations on the database connection.
+ * @arg connection  a database connection
+ * @return          an array containing the numbers of rows updated by each command in the batch
+ */
+executeBatch :: JDBCConnection -> Array Int;
+public executeBatch !connection = 
+    jIntArrayToIntArray $ jExecuteBatch connection;
+
+foreign unsafe import jvm "method executeBatch" 
+    private jExecuteBatch :: JDBCConnection -> JIntArray;
+                       
+/**
+ * Commit the changes made through the database connection. 
+ * @arg connection  a database connection
+ * @return          {@link True@} if the changes were committed successfully
+ */
+foreign unsafe import jvm "method commit" 
+    public commit :: JDBCConnection -> Boolean;
+
+/**
+ * Rollback the changes made through the database connection. 
+ * @arg connection  a database connection
+ * @return          {@link True@} if the changes were rolled back successfully
+ */
+foreign unsafe import jvm "method rollback" 
+    public rollback :: JDBCConnection -> Boolean;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Prepared Statements
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Creates a prepared statement from a SQL string.
+ * @arg connection  a database connection
+ * @arg sql         the SQL for the prepared statement
+ * @return          the prepared statement for the specified SQL
+ */
+foreign unsafe import jvm "method createPreparedStatement"
+    public createPreparedStatement :: JDBCConnection -> String -> JDBCPreparedStatement;
+
+/**
+ * Closes a prepared statement.
+ * @arg preparedStmt  a prepared statement
+ */
+foreign unsafe import jvm "method close"
+    public closePreparedStatement :: JDBCPreparedStatement -> ();
+
+/**
+ * Adds a batch with a set of parameters to the prepared statement.
+ * @arg preparedStmt  a prepared statement
+ * @return            {@link True@} if the batch was added successfully
+ */
+foreign unsafe import jvm "method addBatch"
+    public preparedStatementAddBatch :: JDBCPreparedStatement -> Boolean;
+
+/**
+ * Executes a prepared statement which performs an update operation.
+ * @arg preparedStmt  a prepared statement
+ * @return            the number of rows affected by the update operation
+ */
+foreign unsafe import jvm "method executeUpdate"
+    public preparedStatementExecuteUpdate :: JDBCPreparedStatement -> Int;
+
+/**
+ * Retrieves the SQL from a prepared statement.
+ * @arg preparedStmt  a prepared statement
+ * @return            the SQL for the prepared statement
+ */
+foreign unsafe import jvm "method getSQLStatement"
+    public preparedStatementGetSqlStatement :: JDBCPreparedStatement -> String;
+
+/**
+ * Retrieves the time taken to execute a prepared statement.
+ * @arg preparedStmt  a prepared statement
+ * @return            the time taken to execute the prepared statement
+ */
+foreign unsafe import jvm "method getTotalExecutionTime"
+    public preparedStatementGetTotalExecTime :: JDBCPreparedStatement -> Long;
+
+foreign unsafe import jvm "method executeBatch" private preparedStatement_executeBatch :: JDBCPreparedStatement -> JObject /* Array Int */;
+foreign unsafe import jvm "method setBoolean" private preparedStatement_setBoolean :: JDBCPreparedStatement -> Int -> Boolean -> JDBCPreparedStatement;
+foreign unsafe import jvm "method setInt" private preparedStatement_setInt :: JDBCPreparedStatement -> Int -> Int -> JDBCPreparedStatement;
+foreign unsafe import jvm "method setDouble" private preparedStatement_setDouble :: JDBCPreparedStatement -> Int -> Double -> JDBCPreparedStatement;
+foreign unsafe import jvm "method setString" private preparedStatement_setString :: JDBCPreparedStatement -> Int -> String -> JDBCPreparedStatement;
+foreign unsafe import jvm "method setTime" private preparedStatement_setTime :: JDBCPreparedStatement -> Int -> Time -> JDBCPreparedStatement;
+foreign unsafe import jvm "method setNull" private preparedStatement_setNull :: JDBCPreparedStatement -> Int -> JValueType -> JDBCPreparedStatement;
+
+/**
+ * Executes the given batched prepared statement.
+ * @arg stmt
+ *      Invokes executeBatch on this statement.
+// TODO * @return Array Int
+ */
+preparedStatementExecuteBatch :: JDBCPreparedStatement -> Array Int;
+public preparedStatementExecuteBatch !stmt =
+    Array.inputPrimitive $ preparedStatement_executeBatch stmt;
+
+/**
+ * Binds a {@link Boolean@} value to the given prepared statement
+ * @arg stmt
+ *      Binds the value to this statement.
+ * @arg parameterIndex
+ *      Binds the value at this index.
+ * @arg value
+ *      Binds this value and {@link dataConstructor = Nothing@} means null.
+ * @return The modified statement.
+ */
+bindBooleanToPreparedStatement :: JDBCPreparedStatement -> Int -> Maybe Boolean -> JDBCPreparedStatement;
+public bindBooleanToPreparedStatement !stmt !parameterIndex !value =
+    case value of
+    Just boolValue -> preparedStatement_setBoolean stmt parameterIndex boolValue;
+    Nothing        -> preparedStatement_setNull stmt parameterIndex $ input $ output ValueType.BooleanType;
+    ;
+
+/**
+ * Binds an {@link Int@} value to the given prepared statement
+ * @arg stmt
+ *      Binds the value to this statement.
+ * @arg parameterIndex
+ *      Binds the value at this index.
+ * @arg value
+ *      Binds this value and {@link dataConstructor = Nothing@} means null.
+ * @return The modified statement.
+ */
+bindIntToPreparedStatement :: JDBCPreparedStatement -> Int -> Maybe Int -> JDBCPreparedStatement;
+public bindIntToPreparedStatement !stmt !parameterIndex !value =
+    case value of
+    Just intValue -> preparedStatement_setInt stmt parameterIndex intValue;
+    Nothing       -> preparedStatement_setNull stmt parameterIndex $ input $ output ValueType.IntType;
+    ;
+
+/**
+ * Binds a {@link Double@} value to the given prepared statement
+ * @arg stmt
+ *      Binds the value to this statement.
+ * @arg parameterIndex
+ *      Binds the value at this index.
+ * @arg value
+ *      Binds this value and {@link dataConstructor = Nothing@} means null.
+ * @return The modified statement.
+ */
+bindDoubleToPreparedStatement :: JDBCPreparedStatement -> Int -> Maybe Double -> JDBCPreparedStatement;
+public bindDoubleToPreparedStatement !stmt !parameterIndex !value =
+    case value of
+    Just doubleValue -> preparedStatement_setDouble stmt parameterIndex doubleValue;
+    Nothing          -> preparedStatement_setNull stmt parameterIndex $ input $ output ValueType.DoubleType;
+    ;
+
+/**
+ * Binds a {@link typeConstructor = String@} value to the given prepared statement
+ * @arg stmt
+ *      Binds the value to this statement.
+ * @arg parameterIndex
+ *      Binds the value at this index.
+ * @arg value
+ *      Binds this value and {@link dataConstructor = Nothing@} means null.
+ * @return The modified statement.
+ */
+bindStringToPreparedStatement :: JDBCPreparedStatement -> Int -> Maybe String -> JDBCPreparedStatement;
+public bindStringToPreparedStatement !stmt !parameterIndex !value =
+    case value of
+    Just stringValue -> preparedStatement_setString stmt parameterIndex stringValue;
+    Nothing          -> preparedStatement_setNull stmt parameterIndex $ input $ output ValueType.StringType;
+    ;
+
+/**
+ * Binds a {@link typeConstructor = Time@} value to the given prepared statement
+ * @arg stmt
+ *      Binds the value to this statement.
+ * @arg parameterIndex
+ *      Binds the value at this index.
+ * @arg value
+ *      Binds this value and {@link dataConstructor = Nothing@} means null.
+ * @return The modified statement.
+ */
+bindTimeToPreparedStatement :: JDBCPreparedStatement -> Int -> Maybe Time -> JDBCPreparedStatement;
+public bindTimeToPreparedStatement !stmt !parameterIndex !value =
+    case value of
+    Just timeValue -> preparedStatement_setTime stmt parameterIndex timeValue;
+    Nothing        -> preparedStatement_setNull stmt parameterIndex $ input $ output ValueType.TimeType;
+    ;
+
+/**
+ * Binds a null value to the given prepared statement
+ * @arg stmt
+ *      Binds the value to this statement.
+ * @arg parameterIndex
+ *      Binds the value at this index.
+ * @arg valueType
+ *      Binds a null value of this type to the statement.
+ * @return The modified statement.
+ */
+bindNullToPreparedStatement :: JDBCPreparedStatement -> Int -> ValueType -> JDBCPreparedStatement;
+public bindNullToPreparedStatement !stmt !parameterIndex !valueType =
+    preparedStatement_setNull stmt parameterIndex $ input $ output valueType;
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Database Query Functions
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+* Execute a SQL SELECT statement against the specified connection to produce a {@link ResultSet@}.
+* @arg connection  a connection to the database against which the query will be performed
+* @arg sql         the SQL SELECT statement to be executed
+* @return          the results of the database query
+*/
+foreign unsafe import jvm "method queryFromSQLString"
+    public jdbcQueryToResultSet :: JDBCConnection -> String -> ResultSet;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ResultSet Metadata Functions
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Returns the number of columns in a {@link ResultSet@}.
+ * @arg resultSet  a {@link ResultSet@}
+ * @return         the number of columns in the {@link ResultSet@}
+ */
+foreign unsafe import jvm "method getColumnCount"
+    public columnCount :: ResultSet -> Int;
+
+/**
+ * Returns the label for the {@link ResultSet@} column at the specified ordinal.
+ * @arg resultSet      a {@link ResultSet@}
+ * @arg columnOrdinal  the 1-based column ordinal
+ * @return             the label for the specified {@link ResultSet@} column
+ */
+foreign unsafe import jvm "method getColumnLabel"
+    public columnLabel :: ResultSet -> Int -> String;
+
+/**
+ * Returns the name for the {@link ResultSet@} column at the specified ordinal.
+ * @arg resultSet      a {@link ResultSet@}
+ * @arg columnOrdinal  the 1-based column ordinal
+ * @return             the name for the specified {@link ResultSet@} column
+ */
+foreign unsafe import jvm "method getColumnName"
+    public columnName :: ResultSet -> Int -> String;
+
+
+foreign unsafe import jvm "method getColumnType"
+    private jGetColumnType :: ResultSet -> Int -> JSqlType;
+
+
+/**
+ * Returns the closest value type for the specified column in the {@link ResultSet@}.
+ * @arg resultSet      a {@link ResultSet@}
+ * @arg columnOrdinal  the 1-based column ordinal
+ * @return             the {@link typeConstructor = ValueType@} for the specified {@link ResultSet@} column
+ */
+columnType :: ResultSet -> Int -> ValueType;
+public columnType !resultSet !columnOrdinal = 
+    SqlType.toValueType $ columnSqlType resultSet columnOrdinal;
+
+/**
+ * Returns the SQL data type for the specified column in the {@link ResultSet@}.
+ * @arg resultSet      a {@link ResultSet@}
+ * @arg columnOrdinal  the 1-based column ordinal
+ * @return             the {@link typeConstructor = SqlType@} for the specified {@link ResultSet@} column
+ */
+columnSqlType :: ResultSet -> Int -> SqlType;
+public columnSqlType !resultSet !columnOrdinal = 
+    SqlType.inputSqlType $ jGetColumnType resultSet columnOrdinal;
+
+/**
+ * Returns the names of the {@link ResultSet@} columns.
+ * @arg resultSet  a {@link ResultSet@}
+ * @return         the names of the {@link ResultSet@} columns
+ */
+columnNames :: ResultSet -> [String];
+public columnNames !resultSet = 
+    map (columnName resultSet) (upFromTo 1 (columnCount resultSet));
+
+/**
+ * Returns the names and value types of the columns in a {@link ResultSet@}.
+ * @arg resultSet  a {@link ResultSet@}
+ * @return         the names and {@link typeConstructor = ValueType@}s of the {@link ResultSet@} columns
+ */
+resultSetInfo:: ResultSet -> [(String, ValueType)];
+public resultSetInfo !resultSet =
+    map (\!i -> (columnName resultSet i, columnType resultSet i)) (upFromTo 1 (columnCount resultSet));
+
+foreign unsafe import jvm "method getColumnIndex"
+    private jGetColumnIndex :: ResultSet -> String -> Int;
+
+/**
+ * Returns the (1-based) ordinal of the specified column.
+ * An error is thrown if the column cannot be found in the {@link ResultSet@}.
+ * @arg resultSet   a {@link ResultSet@}
+ * @arg columnName  the name of a column
+ * @return          the index of the {@link ResultSet@} column with the specified name
+ */
+getColumnIndex :: ResultSet -> String -> Int;
+public getColumnIndex !resultSet !columnName = 
+    let
+        colIndex :: Int;
+        colIndex = jGetColumnIndex resultSet columnName;
+    in
+        if (colIndex < 0) then error ("The column '" ++ columnName ++ "' could not be found in the resultset.")
+        else colIndex;
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ResultSet Data Functions
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+foreign unsafe import jvm "method moveFirst"
+    private jMoveFirst :: ResultSet -> Boolean;
+foreign unsafe import jvm "method moveNext"
+    private jMoveNext :: ResultSet -> Boolean;
+
+
+/** 
+ * Close a {@link ResultSet@}.
+ * @arg resultSet  a {@link ResultSet@}
+ */
+foreign unsafe import jvm "method close"
+    public jdbcCloseResultSet :: ResultSet -> ();
+
+
+/**
+ * Fetches the data from a {@link ResultSet@} using the specified extractor function for each row.
+ * @arg resultSet  a {@link ResultSet@}
+ * @arg extractFn  a function to extract a value from each {@link ResultRow@}
+ * @return         the list of values extracted from the {@link ResultSet@} rows
+ */
+dataFromResultSet :: ResultSet -> (ResultRow -> a) -> [a];
+public dataFromResultSet !resultSet extractFn =
+	dataFromResultSet2 False resultSet extractFn;
+
+/**
+ * Fetches the data from a {@link ResultSet@} using the specified extractor function for each row.
+ * If the closeAfterReading option is {@link True@}, then the {@link ResultSet@} will be closed after reading the data.
+ * @arg closeAfterReading  if {@link True@}, then the {@link ResultSet@} will be closed after reading the data
+ * @arg resultSet          a {@link ResultSet@}
+ * @arg extractFn          a function to extract a value from each {@link ResultRow@}
+ * @return                 the list of values extracted from the {@link ResultSet@} rows
+ */
+dataFromResultSet2 :: Boolean -> ResultSet -> (ResultRow -> a) -> [a];
+public dataFromResultSet2 !closeAfterReading !resultSet extractFn =
+    let
+        // Pass in the resultset to prevent this function from being a CAF (which would be bad here).
+        fetchResultsHelper startAtBeginning = 
+            let
+                // Move to the first/next row.
+                // TODO: this should really reset the position to BOF before processing the rows, but be careful not to cause the resultset to
+                //       re-execute unnecessarily...
+//                moveResult = if (startAtBeginning) then (jMoveFirst resultSet) else (jMoveNext resultSet);
+                moveResult :: Boolean;
+                moveResult = jMoveNext resultSet;
+
+                thisRow = extractFn $ currentResultSetRow resultSet;
+                nextRows = fetchResultsHelper False;
+            in
+                // Force the current row to be processed before the next one is fetched.
+                if (moveResult) then seq thisRow (thisRow : nextRows) 
+                else if (closeAfterReading) then seq (jdbcCloseResultSet resultSet) []
+                else [];
+    in
+        fetchResultsHelper True;
+
+/**
+ * Folds a function over the rows of the {@link ResultSet@}.
+ * @arg foldFn     a folding function to be applied for each {@link ResultRow@}
+ * @arg initValue  the starting value for the folding
+ * @arg resultSet  a {@link ResultSet@}
+ * @return         the result of applying the folding function over the {@link ResultSet@} rows
+ */
+foldStrictOverResultSet :: (ResultRow -> a -> a) -> a -> ResultSet -> a;
+public foldStrictOverResultSet foldFn !initValue !resultSet = 
+    let
+        // TODO: this should really reset the position to BOF before processing the rows, but be careful not to cause the resultset to
+        //       re-execute unnecessarily...
+        foldHelper startAtBeginning !curValue = 
+            let
+                moveResult :: Boolean;
+                moveResult = jMoveNext resultSet;
+                newValue = foldFn (currentResultSetRow resultSet) curValue;
+            in
+                if (moveResult) then seq newValue (foldHelper False newValue)
+                else curValue;
+    in
+        foldHelper True initValue;
+
+/**
+ * Returns the number of rows in the {@link ResultSet@}.
+ * @arg resultSet  a {@link ResultSet@}
+ * @return         the number of rows in the {@link ResultSet@}
+ */
+rowCount :: ResultSet -> Int;
+public rowCount !resultSet = 
+    foldStrictOverResultSet (\!rs !cnt -> 1 + cnt) 0 resultSet;
+
+
+/**
+ * Fetches the data from a {@link ResultSet@} as a {@link Map.Map@}.
+ * A map entry will be added for each row. The specified extractor functions will be used for the keys and values.
+ * @arg resultSet       a {@link ResultSet@}
+ * @arg keyExtractorFn  a function to extract a key value from each {@link ResultRow@}
+ * @arg valueExtractFn  a function to extract a map value from each {@link ResultRow@}
+ * @return              a {@link Map.Map@} containing keys and values obtained by applying the functions to each row in the {@link ResultSet@} 
+ */
+dataMapFromResultSet :: Ord k => ResultSet -> (ResultRow -> k) -> (ResultRow -> a) -> Map k a;
+public dataMapFromResultSet !resultSet keyExtractorFn valueExtractFn =
+    let
+        // Pass in the resultset to prevent this function from being a CAF (which would be bad here).
+        fetchResultsHelper startAtBeginning = 
+            let
+                // Move to the first/next row.
+                moveResult :: Boolean;
+                moveResult = if (startAtBeginning) then (jMoveFirst resultSet) else (jMoveNext resultSet);
+
+                keyForRow = keyExtractorFn $ currentResultSetRow resultSet;
+                valueForRow = valueExtractFn $ currentResultSetRow resultSet;
+
+                tailMap = fetchResultsHelper False;
+            in
+                // Force the current row to be processed before the next one is fetched.
+                if (moveResult) then seq keyForRow (seq valueForRow (Map.insert keyForRow valueForRow tailMap)) else Map.empty;
+    in
+        fetchResultsHelper True;
+
+
+/**
+ * Returns a textual table containing the {@link ResultSet@} values.
+ * Only up to {@code maxDisplayRows@} will be displayed (unless zero is specified, in which case all rows will be included).
+ * @arg maxDisplayRows  the maximum number of rows to be displayed, or zero to include all rows
+ * @arg resultSet       a {@link ResultSet@}
+ * @return              a textual table containing the {@link ResultSet@} data
+ */
+resultSetText :: Int -> ResultSet -> String;
+public resultSetText !maxDisplayRows !resultSet = 
+    let
+        columnHeadings :: [String];
+        columnHeadings = columnNames resultSet;
+
+        makeUnderline :: String -> String;
+        makeUnderline heading = fromList (replicate (String.length heading) '-');
+        
+        underlines :: [String];
+        underlines = map makeUnderline columnHeadings;
+
+        allResultRows :: [[String]];
+        allResultRows = dataFromResultSet resultSet (extractList $ extractStringWithDefault "");
+
+        rowsTruncated :: Boolean;
+        rowsTruncated = (maxDisplayRows > 0) && not (isEmpty (drop maxDisplayRows allResultRows));
+        
+        continuationRow :: [String];
+        continuationRow = replicate (length columnHeadings) "...";
+
+        resultRows :: [[String]];
+        resultRows = if (maxDisplayRows <= 0) then allResultRows
+                     else if (rowsTruncated) then (take maxDisplayRows allResultRows) ++ [continuationRow]
+                     else take maxDisplayRows allResultRows;
+    in
+        Format.formatTable 2 (columnHeadings : underlines : resultRows);
+
+
+// Extractor functions which work on the current row of a resultset.
+foreign unsafe import jvm "method wasLastFetchNull"
+    private wasLastFetchNull :: ResultRow -> Boolean;
+
+// By column index...
+foreign unsafe import jvm "method getCurrentRowString"
+    private jGetCurrentRowString :: ResultRow -> Int -> String;
+foreign unsafe import jvm "method getCurrentRowInt"
+    private jGetCurrentRowInt :: ResultRow -> Int -> Int;
+foreign unsafe import jvm "method getCurrentRowLong"
+    private jGetCurrentRowLong :: ResultRow -> Int -> Long;
+foreign unsafe import jvm "method getCurrentRowDouble"
+    private jGetCurrentRowDouble :: ResultRow -> Int -> Double;
+foreign unsafe import jvm "method getCurrentRowDecimal"
+    private jGetCurrentRowDecimal :: ResultRow -> Int -> Decimal;
+foreign unsafe import jvm "method getCurrentRowDate"
+    private jGetCurrentRowDate :: ResultRow -> Int -> RelativeTime.JDate;
+foreign unsafe import jvm "method getCurrentRowTime"
+    private jGetCurrentRowTime :: ResultRow -> Int -> Time;
+foreign unsafe import jvm "method getCurrentRowBoolean"
+    private jGetCurrentRowBoolean :: ResultRow -> Int -> Boolean;
+foreign unsafe import jvm "method getCurrentRowBytes"
+    private jGetCurrentRowBytes :: ResultRow -> Int -> JByteArray;
+foreign unsafe import jvm "method getCurrentRowObject"
+    private jGetCurrentRowObject :: ResultRow -> Int -> JObject;
+
+// By column name...
+foreign unsafe import jvm "method getCurrentRowString"
+    private jGetCurrentRowStringByName :: ResultRow -> String -> String;
+foreign unsafe import jvm "method getCurrentRowInt"
+    private jGetCurrentRowIntByName :: ResultRow -> String -> Int;
+foreign unsafe import jvm "method getCurrentRowLong"
+    private jGetCurrentRowLongByName :: ResultRow -> String -> Long;
+foreign unsafe import jvm "method getCurrentRowDouble"
+    private jGetCurrentRowDoubleByName :: ResultRow -> String -> Double;
+foreign unsafe import jvm "method getCurrentRowDecimal"
+    private jGetCurrentRowDecimalByName :: ResultRow -> String -> Decimal;
+foreign unsafe import jvm "method getCurrentRowDate"
+    private jGetCurrentRowDateByName :: ResultRow -> String -> RelativeTime.JDate;
+foreign unsafe import jvm "method getCurrentRowTime"
+    private jGetCurrentRowTimeByName :: ResultRow -> String -> Time;
+foreign unsafe import jvm "method getCurrentRowBoolean"
+    private jGetCurrentRowBooleanByName :: ResultRow -> String -> Boolean;
+foreign unsafe import jvm "method getCurrentRowBytes"
+    private jGetCurrentRowBytesByName :: ResultRow -> String -> JByteArray;
+foreign unsafe import jvm "method getCurrentRowObject"
+    private jGetCurrentRowObjectByName :: ResultRow -> String -> JObject;
+
+/**
+ * Extracts a {@link typeConstructor = String@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link typeConstructor = String@} value from the specified column in the current {@link ResultRow@}
+ */
+extractString :: Int -> ResultRow -> String;
+public extractString !columnN !resultRow = jGetCurrentRowString resultRow columnN;
+
+/**
+ * Extracts a {@link typeConstructor = String@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link typeConstructor = String@} value from the specified column in the current {@link ResultRow@}
+ */
+extractStringByName :: String -> ResultRow -> String;
+public extractStringByName !columnName !resultRow = jGetCurrentRowStringByName resultRow columnName;
+
+/**
+ * Extracts an {@link typeConstructor = Int@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link typeConstructor = Int@} value from the specified column in the current {@link ResultRow@}
+ */
+extractInt :: Int -> ResultRow -> Int;
+public extractInt !columnN !resultRow = jGetCurrentRowInt resultRow columnN;
+
+/**
+ * Extracts an {@link typeConstructor = Int@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link typeConstructor = Int@} value from the specified column in the current {@link ResultRow@}
+ */
+extractIntByName :: String -> ResultRow -> Int;
+public extractIntByName !columnName !resultRow = jGetCurrentRowIntByName resultRow columnName;
+
+/**
+ * Extracts an {@link typeConstructor = Long@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link typeConstructor = Long@} value from the specified column in the current {@link ResultRow@}
+ */
+extractLong :: Int -> ResultRow -> Long;
+public extractLong !columnN !resultRow = jGetCurrentRowLong resultRow columnN;
+
+/**
+ * Extracts an {@link typeConstructor = Long@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link typeConstructor = Long@} value from the specified column in the current {@link ResultRow@}
+ */
+extractLongByName :: String -> ResultRow -> Long;
+public extractLongByName !columnName !resultRow = jGetCurrentRowLongByName resultRow columnName;
+
+/**
+ * Extracts a {@link typeConstructor = Double@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link typeConstructor = Double@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDouble :: Int -> ResultRow -> Double;
+public extractDouble !columnN !resultRow = jGetCurrentRowDouble resultRow columnN;
+
+/**
+ * Extracts a {@link typeConstructor = Double@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link typeConstructor = Double@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDoubleByName :: String -> ResultRow -> Double;
+public extractDoubleByName !columnName !resultRow = jGetCurrentRowDoubleByName resultRow columnName;
+
+/**
+ * Extracts a {@link typeConstructor = Decimal@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link typeConstructor = Decimal@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDecimal :: Int -> ResultRow -> Decimal;
+public extractDecimal !columnN !resultRow = jGetCurrentRowDecimal resultRow columnN;
+
+/**
+ * Extracts a {@link typeConstructor = Decimal@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link typeConstructor = Decimal@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDecimalByName :: String -> ResultRow -> Decimal;
+public extractDecimalByName !columnName !resultRow = jGetCurrentRowDecimalByName resultRow columnName;
+
+/**
+ * Extracts a {@link RelativeTime.JDate@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link RelativeTime.JDate@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDate :: Int -> ResultRow -> RelativeTime.JDate;
+public extractDate !columnN !resultRow = jGetCurrentRowDate resultRow columnN;
+
+/**
+ * Extracts a {@link RelativeTime.JDate@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link RelativeTime.JDate@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDateByName :: String -> ResultRow -> RelativeTime.JDate;
+public extractDateByName !columnName !resultRow = jGetCurrentRowDateByName resultRow columnName;
+
+/**
+ * Extracts a {@link RelativeTime.RelativeDate@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link RelativeTime.RelativeDate@} value from the specified column in the current {@link ResultRow@}
+ */
+extractRelativeDate :: Int -> ResultRow -> RelativeTime.RelativeDate;
+public extractRelativeDate !columnN !resultRow = RelativeTime.jDateToRelativeDate (extractDate columnN resultRow);
+
+/**
+ * Extracts a {@link RelativeTime.RelativeDate@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link RelativeTime.RelativeDate@} value from the specified column in the current {@link ResultRow@}
+ */
+extractRelativeDateByName :: String -> ResultRow -> RelativeTime.RelativeDate;
+public extractRelativeDateByName !columnName !resultRow = RelativeTime.jDateToRelativeDate (extractDateByName columnName resultRow);
+
+/**
+ * Extracts a {@link typeConstructor = Time@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link typeConstructor = Time@} value from the specified column in the current {@link ResultRow@}
+ */
+extractTime :: Int -> ResultRow -> Time;
+public extractTime !columnN !resultRow = jGetCurrentRowTime resultRow columnN;
+
+/**
+ * Extracts a {@link typeConstructor = Time@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link typeConstructor = Time@} value from the specified column in the current {@link ResultRow@}
+ */
+extractTimeByName :: String -> ResultRow -> Time;
+public extractTimeByName !columnName !resultRow = jGetCurrentRowTimeByName resultRow columnName;
+
+/**
+ * Extracts a {@link Boolean@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Boolean@} value from the specified column in the current {@link ResultRow@}
+ */
+extractBoolean :: Int -> ResultRow -> Boolean;
+public extractBoolean !columnN !resultRow = jGetCurrentRowBoolean resultRow columnN;
+
+/**
+ * Extracts a {@link Boolean@} value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the {@link Boolean@} value from the specified column in the current {@link ResultRow@}
+ */
+extractBooleanByName :: String -> ResultRow -> Boolean;
+public extractBooleanByName !columnName !resultRow = jGetCurrentRowBooleanByName resultRow columnName;
+
+/**
+ * Extracts a byte array value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the byte array value from the specified column in the current {@link ResultRow@}
+ */
+extractBytes :: Int -> ResultRow -> Array Byte;
+public extractBytes !columnN !resultRow = jByteArrayToByteArray $ jGetCurrentRowBytes resultRow columnN;
+
+/**
+ * Extracts a byte array value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the byte array value from the specified column in the current {@link ResultRow@}
+ */
+extractBytesByName :: String -> ResultRow -> Array Byte;
+public extractBytesByName !columnName !resultRow = jByteArrayToByteArray $ jGetCurrentRowBytesByName resultRow columnName;
+
+/**
+ * Extracts an Object value from the specified column in the {@link ResultRow@}.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the Object value from the specified column in the current {@link ResultRow@}
+ */
+extractObject :: Int -> ResultRow -> JObject;
+public extractObject !columnN !resultRow = jGetCurrentRowObject resultRow columnN;
+
+/**
+ * Extracts an Object value from the specified column in the {@link ResultRow@}.
+ * @arg columnName  the name of the column for which the value will be fetched
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          the Object value from the specified column in the current {@link ResultRow@}
+ */
+extractObjectByName :: String -> ResultRow -> JObject;
+public extractObjectByName !columnName !resultRow = jGetCurrentRowObjectByName resultRow columnName;
+
+
+/**
+ * Extracts a {@link typeConstructor = String@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link typeConstructor = String@} value from the specified column in the current {@link ResultRow@}
+ */
+extractStringWithDefault :: String -> Int -> ResultRow -> String;
+public extractStringWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: String;
+        value = eager (jGetCurrentRowString resultRow columnN);  
+    in   
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts an {@link typeConstructor = Int@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link typeConstructor = Int@} value from the specified column in the current {@link ResultRow@}
+ */
+extractIntWithDefault :: Int -> Int -> ResultRow -> Int;
+public extractIntWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: Int;
+        value = eager (jGetCurrentRowInt resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts an {@link typeConstructor = Long@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link typeConstructor = Long@} value from the specified column in the current {@link ResultRow@}
+ */
+extractLongWithDefault :: Long -> Int -> ResultRow -> Long;
+public extractLongWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: Long;
+        value = eager (jGetCurrentRowLong resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts a {@link typeConstructor = Double@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link typeConstructor = Double@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDoubleWithDefault :: Double -> Int -> ResultRow -> Double;
+public extractDoubleWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: Double;
+        value = eager (jGetCurrentRowDouble resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts a {@link typeConstructor = Decimal@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link typeConstructor = Decimal@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDecimalWithDefault :: Decimal -> Int -> ResultRow -> Decimal;
+public extractDecimalWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: Decimal;
+        value = eager (jGetCurrentRowDecimal resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts a {@link RelativeTime.JDate@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link RelativeTime.JDate@} value from the specified column in the current {@link ResultRow@}
+ */
+extractDateWithDefault :: RelativeTime.JDate -> Int -> ResultRow -> RelativeTime.JDate;
+public extractDateWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: RelativeTime.JDate;
+        value = eager (jGetCurrentRowDate resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts a {@link typeConstructor = Time@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link typeConstructor = Time@} value from the specified column in the current {@link ResultRow@}
+ */
+extractTimeWithDefault :: Time -> Int -> ResultRow -> Time;
+public extractTimeWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: Time;
+        value = eager (jGetCurrentRowTime resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts a {@link Boolean@} value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the {@link Boolean@} value from the specified column in the current {@link ResultRow@}
+ */
+extractBooleanWithDefault :: Boolean -> Int -> ResultRow -> Boolean;
+public extractBooleanWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: Boolean;
+        value = eager (jGetCurrentRowBoolean resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts a byte array value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the byte array value from the specified column in the current {@link ResultRow@}
+ */
+extractBytesWithDefault :: Array Byte -> Int -> ResultRow -> Array Byte;
+public extractBytesWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: Array Byte;
+        value = eager (jByteArrayToByteArray $ jGetCurrentRowBytes resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+/**
+ * Extracts an Object value from the specified column in the {@link ResultRow@}.
+ * The defaultValue will be returned if the fetched value is null.
+ * @arg defaultValue  the value to be returned if the fetched value is null
+ * @arg columnN       the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow     a {@link ResultRow@}
+ * @return            the Object value from the specified column in the current {@link ResultRow@}
+ */
+extractObjectWithDefault :: JObject -> Int -> ResultRow -> JObject;
+public extractObjectWithDefault defaultValue !columnN !resultRow = 
+    let
+        value :: JObject;
+        value = eager (jGetCurrentRowObject resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then defaultValue else value);
+
+
+/**
+ * Extracts a {@link Maybe@} {@link typeConstructor = String@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link typeConstructor = String@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeString :: Int -> ResultRow -> Maybe String;
+public extractMaybeString !columnN !resultRow = 
+    let
+        value :: String;
+        value = eager (jGetCurrentRowString resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts an {@link Maybe@} {@link typeConstructor = Int@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link typeConstructor = Int@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeInt :: Int -> ResultRow -> Maybe Int;
+public extractMaybeInt !columnN !resultRow = 
+    let
+        value :: Int;
+        value = eager (jGetCurrentRowInt resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts an {@link Maybe@} {@link typeConstructor = Long@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link typeConstructor = Long@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeLong :: Int -> ResultRow -> Maybe Long;
+public extractMaybeLong !columnN !resultRow = 
+    let
+        value :: Long;
+        value = eager (jGetCurrentRowLong resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts a {@link Maybe@} {@link typeConstructor = Double@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link typeConstructor = Double@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeDouble :: Int -> ResultRow -> Maybe Double;
+public extractMaybeDouble !columnN !resultRow = 
+    let
+        value :: Double;
+        value = eager (jGetCurrentRowDouble resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts a {@link Maybe@} {@link typeConstructor = Decimal@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link typeConstructor = Decimal@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeDecimal :: Int -> ResultRow -> Maybe Decimal;
+public extractMaybeDecimal !columnN !resultRow = 
+    let
+        value :: Decimal;
+        value = eager (jGetCurrentRowDecimal resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts a {@link Maybe@} {@link RelativeTime.JDate@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link RelativeTime.JDate@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeDate :: Int -> ResultRow -> Maybe RelativeTime.JDate;
+public extractMaybeDate !columnN !resultRow = 
+    let
+        value :: RelativeTime.JDate;
+        value = eager (jGetCurrentRowDate resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts a {@link Maybe@} {@link RelativeTime.RelativeDate@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link RelativeTime.RelativeDate@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeRelativeDate :: Int -> ResultRow -> Maybe RelativeTime.RelativeDate;
+public extractMaybeRelativeDate !columnN !resultRow = 
+    maybeApply RelativeTime.jDateToRelativeDate $ extractMaybeDate columnN resultRow;
+
+/**
+ * Extracts a {@link Maybe@} {@link typeConstructor = Time@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link typeConstructor = Time@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeTime :: Int -> ResultRow -> Maybe Time;
+public extractMaybeTime !columnN !resultRow = 
+    let
+        value :: Time;
+        value = eager (jGetCurrentRowTime resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts a {@link Maybe@} {@link Boolean@} value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the {@link Maybe@} {@link Boolean@} value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeBoolean :: Int -> ResultRow -> Maybe Boolean;
+public extractMaybeBoolean !columnN !resultRow = 
+    let
+        value :: Boolean;
+        value = eager (jGetCurrentRowBoolean resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts a byte array value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the byte array value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeBytes :: Int -> ResultRow -> Maybe (Array Byte);
+public extractMaybeBytes !columnN !resultRow = 
+    let
+        value :: Array Byte;
+        value = eager (jByteArrayToByteArray $ jGetCurrentRowBytes resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+/**
+ * Extracts an Object value from the specified column in the {@link ResultRow@}.
+ * Nothing will be returned if the fetched value is null.
+ * @arg columnN    the (1-based) ordinal of the column for which the value will be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the Object value from the specified column in the current {@link ResultRow@}
+ */
+extractMaybeObject :: Int -> ResultRow -> Maybe JObject;
+public extractMaybeObject !columnN !resultRow = 
+    let
+        value :: JObject;
+        value = eager (jGetCurrentRowObject resultRow columnN);
+    in
+        value
+        `seq`
+        (if (wasLastFetchNull resultRow) then Nothing else Just value);
+
+
+/**
+ * Extracts a column value as a {@link typeConstructor = Dynamic@} value.
+ * For a null value, the value {@code ()@} will be returned wrapped as a {@link typeConstructor = Dynamic@}.
+ * @arg valueType  the type that will be used to fetch the column value
+ * @arg columnN    the (1-based) ordinal of the column for which the value should be fetched
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         a {@link typeConstructor = Dynamic@} value with the column value from the current row in the {@link ResultRow@}
+ */
+extractDynamic :: ValueType -> Int -> ResultRow -> Dynamic;
+public extractDynamic !valueType !columnN !resultRow = 
+    let
+        nullDynamic :: Dynamic;
+        nullDynamic = toDynamic ();
+    in
+        case valueType of
+        ValueType.NullType -> nullDynamic;
+
+        ValueType.StringType ->
+            let
+                value :: String;
+                value = eager (jGetCurrentRowString resultRow columnN);
+            in
+                value
+                `seq`
+                (if (wasLastFetchNull resultRow) then nullDynamic else toDynamic value);
+
+        ValueType.IntType ->
+            let
+                value :: Int;
+                value = eager (jGetCurrentRowInt resultRow columnN);
+            in
+                value
+                `seq`
+                (if (wasLastFetchNull resultRow) then nullDynamic else toDynamic value);
+
+        ValueType.DoubleType ->
+            let
+                value :: Double;
+                value = eager (jGetCurrentRowDouble resultRow columnN);
+            in
+                value
+                `seq`
+                (if (wasLastFetchNull resultRow) then nullDynamic else toDynamic value);
+
+        ValueType.BooleanType ->
+            let
+                value :: Boolean;
+                value = eager (jGetCurrentRowBoolean resultRow columnN);
+            in
+                value
+                `seq`
+                (if (wasLastFetchNull resultRow) then nullDynamic else toDynamic value);
+
+        ValueType.TimeType ->
+            let
+                value :: Time;
+                value = eager (jGetCurrentRowTime resultRow columnN);
+            in
+                value
+                `seq`
+                (if (wasLastFetchNull resultRow) then nullDynamic else toDynamic value);
+
+        ValueType.BinaryType ->
+            let
+                value :: JByteArray;
+                value = eager (jGetCurrentRowBytes resultRow columnN);
+            in
+                value
+                `seq`
+                (if (wasLastFetchNull resultRow) then nullDynamic else toDynamic value);
+
+        _ -> error "Unexpected data type.";
+        ;
+
+/**
+ * Retrieves 2 values from each row in the {@link ResultRow@}.
+ * @arg extractFn1  a function to extract the 1st tuple value from the {@link ResultRow@}
+ * @arg extractFn2  a function to extract the 2nd tuple value from the {@link ResultRow@}
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          a tuple of values from the current {@link ResultRow@}
+ */
+extractTuple2 :: (ResultRow -> a) -> (ResultRow -> b) -> ResultRow -> (a, b);
+public extractTuple2 extractFn1 extractFn2 !resultRow = 
+    strictTuple2 (extractFn1 resultRow) (extractFn2 resultRow);    
+
+/**
+ * Retrieves 3 values from each row in the {@link ResultRow@}.
+ * @arg extractFn1  a function to extract the 1st tuple value from the {@link ResultRow@}
+ * @arg extractFn2  a function to extract the 2nd tuple value from the {@link ResultRow@}
+ * @arg extractFn3  a function to extract the 3rd tuple value from the {@link ResultRow@}
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          a tuple of values from the current {@link ResultRow@}
+ */
+extractTuple3 :: (ResultRow -> a) -> (ResultRow -> b) -> (ResultRow -> c) -> ResultRow -> (a, b, c);
+public extractTuple3 extractFn1 extractFn2 extractFn3 !resultRow = 
+    strictTuple3 (extractFn1 resultRow) (extractFn2 resultRow) (extractFn3 resultRow);
+  
+/**
+ * Retrieves 4 values from each row in the {@link ResultRow@}.
+ * @arg extractFn1  a function to extract the 1st tuple value from the {@link ResultRow@}
+ * @arg extractFn2  a function to extract the 2nd tuple value from the {@link ResultRow@}
+ * @arg extractFn3  a function to extract the 3rd tuple value from the {@link ResultRow@}
+ * @arg extractFn4  a function to extract the 4th tuple value from the {@link ResultRow@}
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          a tuple of values from the current {@link ResultRow@}
+ */
+extractTuple4 :: (ResultRow -> a) -> (ResultRow -> b) -> (ResultRow -> c) -> (ResultRow -> d) -> ResultRow -> (a, b, c, d);
+public extractTuple4 extractFn1 extractFn2 extractFn3 extractFn4 !resultRow = 
+    strictTuple4 (extractFn1 resultRow) (extractFn2 resultRow) (extractFn3 resultRow) (extractFn4 resultRow);    
+
+/**
+ * Retrieves 5 values from each row in the {@link ResultRow@}.
+ * @arg extractFn1  a function to extract the 1st tuple value from the {@link ResultRow@}
+ * @arg extractFn2  a function to extract the 2nd tuple value from the {@link ResultRow@}
+ * @arg extractFn3  a function to extract the 3rd tuple value from the {@link ResultRow@}
+ * @arg extractFn4  a function to extract the 4th tuple value from the {@link ResultRow@}
+ * @arg extractFn5  a function to extract the 5th tuple value from the {@link ResultRow@}
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          a tuple of values from the current {@link ResultRow@}
+ */
+extractTuple5 :: (ResultRow -> a) -> (ResultRow -> b) -> (ResultRow -> c) -> (ResultRow -> d) -> (ResultRow -> e) -> ResultRow -> (a, b, c, d, e);
+public extractTuple5 extractFn1 extractFn2 extractFn3 extractFn4 extractFn5 !resultRow = 
+    strictTuple5 (extractFn1 resultRow) (extractFn2 resultRow) (extractFn3 resultRow) (extractFn4 resultRow) (extractFn5 resultRow);   
+
+/**
+ * Retrieves 6 values from each row in the {@link ResultRow@}.
+ * @arg extractFn1  a function to extract the 1st tuple value from the {@link ResultRow@}
+ * @arg extractFn2  a function to extract the 2nd tuple value from the {@link ResultRow@}
+ * @arg extractFn3  a function to extract the 3rd tuple value from the {@link ResultRow@}
+ * @arg extractFn4  a function to extract the 4th tuple value from the {@link ResultRow@}
+ * @arg extractFn5  a function to extract the 5th tuple value from the {@link ResultRow@}
+ * @arg extractFn6  a function to extract the 6th tuple value from the {@link ResultRow@}
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          a tuple of values from the current {@link ResultRow@}
+ */
+extractTuple6 :: (ResultRow -> a) -> (ResultRow -> b) -> (ResultRow -> c) -> (ResultRow -> d) -> (ResultRow -> e) -> (ResultRow -> f) -> ResultRow -> (a, b, c, d, e, f);
+public extractTuple6 extractFn1 extractFn2 extractFn3 extractFn4 extractFn5 extractFn6 !resultRow = 
+    strictTuple6 (extractFn1 resultRow) (extractFn2 resultRow) (extractFn3 resultRow) (extractFn4 resultRow) (extractFn5 resultRow) (extractFn6 resultRow);    
+
+/**
+ * Retrieves 7 values from each row in the {@link ResultRow@}.
+ * @arg extractFn1  a function to extract the 1st tuple value from the {@link ResultRow@}
+ * @arg extractFn2  a function to extract the 2nd tuple value from the {@link ResultRow@}
+ * @arg extractFn3  a function to extract the 3rd tuple value from the {@link ResultRow@}
+ * @arg extractFn4  a function to extract the 4th tuple value from the {@link ResultRow@}
+ * @arg extractFn5  a function to extract the 5th tuple value from the {@link ResultRow@}
+ * @arg extractFn6  a function to extract the 6th tuple value from the {@link ResultRow@}
+ * @arg extractFn7  a function to extract the 7th tuple value from the {@link ResultRow@}
+ * @arg resultRow   a {@link ResultRow@}
+ * @return          a tuple of values from the current {@link ResultRow@}
+ */
+extractTuple7 :: (ResultRow -> a) -> (ResultRow -> b) -> (ResultRow -> c) -> (ResultRow -> d) -> (ResultRow -> e) -> (ResultRow -> f) -> (ResultRow -> g) -> ResultRow -> (a, b, c, d, e, f, g);
+public extractTuple7 extractFn1 extractFn2 extractFn3 extractFn4 extractFn5 extractFn6 extractFn7 !resultRow = 
+    strictTuple7 (extractFn1 resultRow) (extractFn2 resultRow) (extractFn3 resultRow) (extractFn4 resultRow) (extractFn5 resultRow) (extractFn6 resultRow) (extractFn7 resultRow);    
+
+/**
+ * Retrieves a list of values (using the same extractor) from each row in the {@link ResultRow@}.
+ * @arg extractFn  a function to extract a value from a column of the {@link ResultRow@}
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         a list of the specified values from the current {@link ResultRow@}
+ */
+extractList :: (Int -> ResultRow -> a) -> ResultRow -> [a];
+public extractList extractFn !resultRow = 
+    let
+        // Determine the column indexes for the {@link ResultRow@}.
+        allColIndexes :: [Int];
+        allColIndexes = upFromTo 1 (columnCount $ resultSetForRow resultRow);
+    in
+        extractPartialList allColIndexes extractFn resultRow;
+  
+/**
+ * Retrieves a list of some values (using the same extractor) from each row in the {@link ResultRow@}.
+ * @arg colOrdinals  a list of the (1-based) column ordinals for which values will be fetched
+ * @arg extractFn    a function to extract a value from a column of the {@link ResultRow@}
+ * @arg resultRow    a {@link ResultRow@}
+ * @return           a list of the specified values from the current {@link ResultRow@}
+ */    
+extractPartialList :: [Int] -> (Int -> ResultRow -> a) -> ResultRow -> [a];
+public extractPartialList !colOrdinals !extractFn !resultRow =  
+    let
+        // Fetch the value of each column for this row.        
+        extractPartialListHelper !colOrdinals =
+            case colOrdinals of
+            [] -> [];
+            colOrdinal : colOrdinalsTail ->
+                (eager (extractFn colOrdinal resultRow)) : extractPartialListHelper colOrdinalsTail;
+            ;
+    in
+        // Force the values to be fetched (in order) before proceeding to the next row.
+        strictList (extractPartialListHelper colOrdinals);    
+
+/**
+ * Retrieves an array of values (using the same extractor) from each row in the {@link ResultRow@}.
+ * @arg extractFn  a function to extract a value from a column of the {@link ResultRow@}
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         an array of the specified values from the current {@link ResultRow@}
+ */
+extractArray :: Typeable a => (Int -> ResultRow -> a) -> ResultRow -> Array a;
+public extractArray extractFn !resultRow = 
+    let
+        // Determine the column ordinals for the resultset.
+        allColOrdinals :: Array Int;
+        allColOrdinals = Array.fromList $ upFromTo 1 (columnCount $ resultSetForRow resultRow);
+    in
+        extractPartialArray allColOrdinals extractFn resultRow;
+
+/**
+ * Retrieves an array of some values (using the same extractor) from each row in the {@link ResultRow@}.
+ * @arg colOrdinals  an array of the (1-based) column ordinals for which values will be fetched
+ * @arg extractFn    a function to extract a value from a column of the {@link ResultRow@}
+ * @arg resultRow    a {@link ResultRow@}
+ * @return           an array of the specified values from the current {@link ResultRow@}
+ */
+extractPartialArray :: Typeable a => Array Int -> (Int -> ResultRow -> a) -> ResultRow -> Array a;
+public extractPartialArray !colOrdinals extractFn !resultRow = 
+    Array.map (\!i -> extractFn i resultRow) colOrdinals;
+
+/**
+ * Retrieves a list of {@link typeConstructor = Dynamic@} values (of the specified types) from a row in the {@link ResultRow@}.
+ * @arg colTypes   the types in which each column value will be extracted
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the data from the current {@link ResultRow@} as a list of {@link typeConstructor = Dynamic@} values
+ */
+extractDynamicsByType :: [ValueType] -> ResultRow -> [Dynamic];
+public extractDynamicsByType !colTypes !resultRow = 
+    let
+        // Determine the column indexes for the resultset.
+        allColIndexes :: [Int];
+        allColIndexes = upFromTo 1 (columnCount $ resultSetForRow resultRow);
+
+        // Fetch the value of each column for this row.
+        rowVals :: [Dynamic];
+        rowVals = zipWith (\!valueType !columnN -> extractDynamic valueType columnN resultRow) colTypes allColIndexes;
+    in
+        // Force the values to be fetched (in order) before proceeding to the next row.
+        strictList rowVals;
+
+/**
+ * Retrieves a list of {@link typeConstructor = Dynamic@} values from a row in the {@link ResultRow@}.
+ * Type value types for the columns will be determined from the {@link ResultRow@} metadata.
+ * @arg resultRow  a {@link ResultRow@}
+ * @return         the data from the current {@link ResultRow@} as a list of {@link typeConstructor = Dynamic@} values
+ */
+extractDynamics :: ResultRow -> [Dynamic];
+public extractDynamics !resultRow = 
+    let
+        // Determine the column indexes for the resultset.
+        allColIndexes :: [Int];
+        allColIndexes = upFromTo 1 (columnCount $ resultSetForRow resultRow);
+
+        // Determine the data type of each column.
+        colTypes :: [ValueType];
+        colTypes = map (columnType (resultSetForRow resultRow)) allColIndexes;
+    in
+        extractDynamicsByType colTypes resultRow;
+
+/**
+ * Fetches all the data from a {@link ResultSet@} as {@link typeConstructor = Dynamic@} values.
+ * @arg resultSet  a {@link ResultSet@}
+ * @return         the data from the {@link ResultSet@} as a list of rows of {@link typeConstructor = Dynamic@} values
+ */
+dynamicDataFromResultSet :: ResultSet -> [[Dynamic]];
+public dynamicDataFromResultSet !resultSet = 
+    let
+        // Determine the column indexes for the resultset.
+        allColIndexes :: [Int];
+        allColIndexes = upFromTo 1 (columnCount resultSet);
+
+        // Determine the data type of each column.
+        colTypes :: [ValueType];
+        colTypes = map (columnType resultSet) allColIndexes;
+    in
+        dataFromResultSet resultSet (extractDynamicsByType colTypes);

@@ -1,0 +1,196 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * Chamenos benchmark implementation for the internet bechmark shootouts see: {@url
+ * http://shootout.alioth.debian.org@}
+ *
+ * This code is based on and inspired by the entries in the The Great Computer
+ * Language Shootout {@url http://shootout.alioth.debian.org/@}.
+ *
+ * This code implements the body of the threads in this benchmark, the threads
+ * are started and controlled by the java program. There is also a pure CAL
+ * version of this benchmark, see {@link module =
+ * "Cal.Benchmarks.Shootout.Chameneos"@}
+ *
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.ChameneosThreadBody;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Int, String, CalValue, JObject;
+    function = eager, input, output, seq, stringToInt, add, unsafeCoerce;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = map, head, strictList, foldLeft1Strict;
+    ;
+
+/** create a new monitor */
+data foreign unsafe import jvm "org.openquark.cal.benchmarks.shootout.CalMonitor"
+    public JCalMonitor deriving Inputable, Outputable;
+
+foreign unsafe import jvm "constructor" public createMonitor :: JCalMonitor;
+
+/** get a monitor, may block */
+foreign unsafe import jvm "method get"
+    private getMonitor :: JCalMonitor -> JObject;
+
+/** put a monitor, may block */
+foreign unsafe import jvm "method put"
+    private putMonitor :: JCalMonitor -> JObject -> ();
+
+/**
+ * Put a value into a scynronisation variable. If the monitor already contains
+ * a value this fuction will block until it is empty.
+ */
+putMonitorVariable :: JCalMonitor -> a -> ();
+public putMonitorVariable !monitor !value =
+    putMonitor monitor (output $ (unsafeCoerce $ value :: CalValue));
+
+/**
+ * Put a value from a scynronisation variable. If the monitor is empty this
+ * fuction will block until it contains a value.
+ */
+takeMonitorVariable :: JCalMonitor -> a;
+public takeMonitorVariable !monitor =
+    unsafeCoerce (input (getMonitor monitor) :: CalValue);
+
+data Color =
+    Blue |
+    Red |
+    Yellow |
+    Faded
+    deriving Inputable, Outputable, Eq
+    ;
+
+/**
+ * A meeting room is a place where Chameneos meet. The meeting room can either
+ * be empty or occupied. The meeting room has a count of the number of meetings
+ * can take place. This is decremented every time a meeting occurs.
+ */
+data MeetingRoom =
+    Empty n :: !Int |
+    Occupied
+        n :: !Int
+        other :: !Color
+    deriving Inputable, Outputable, Eq
+    ;
+
+/** get new color based on the color of two meeting Chameneos */
+complement :: Color -> Color -> Color;
+complement !color1 !color2 =
+    if color1 == color2 then
+        color1
+    else
+        case color1 of
+        Blue ->
+            if color2 == Red then
+                Yellow
+            else
+                Red
+            ;
+        Red ->
+            if color2 == Blue then
+                Yellow
+            else
+                Blue
+            ;
+        Yellow ->
+            if color2 == Blue then
+                Red
+            else
+                Blue
+            ;
+    ;
+
+/**
+ * create new empty meeting room, with can support the specifie dnumber of
+ * meetings
+ */
+makeEmptyRoom :: Int -> JCalMonitor;
+public makeEmptyRoom !n =
+    let
+        meetingRoom :: JCalMonitor;
+        meetingRoom = createMonitor;
+    in
+        meetingRoom
+        `seq`
+        putMonitorVariable meetingRoom (Empty n)
+        `seq`
+        meetingRoom
+    ;
+
+/**
+ * keep entering the meeting room and complementing color until the meeting
+ * room has no more meetings left
+ */
+chameneos :: Color -> JCalMonitor -> JCalMonitor -> Int -> Int;
+public chameneos !color !meeting !occupant !meetingCount =
+    let
+        meetingRoom :: MeetingRoom;
+        meetingRoom = eager $ takeMonitorVariable meeting;
+    in
+        if color == Faded then
+            meetingCount
+        else
+            case meetingRoom of
+            Empty n ->
+                if n == 0 then
+                    putMonitorVariable meeting (Empty 0)
+                    `seq`
+                    chameneos Faded meeting occupant meetingCount
+                else
+                    putMonitorVariable meeting (Occupied n color)
+                    `seq`
+                    chameneos
+                        (complement (takeMonitorVariable occupant) color)
+                        meeting
+                        occupant
+                        (meetingCount + 1)
+                ;
+            Occupied n otherColor ->
+                putMonitorVariable occupant color
+                `seq`
+                putMonitorVariable meeting (Empty (n - 1))
+                `seq`
+                chameneos
+                    (complement otherColor color)
+                    meeting
+                    occupant
+                    (meetingCount + 1)
+                ;
+    ;

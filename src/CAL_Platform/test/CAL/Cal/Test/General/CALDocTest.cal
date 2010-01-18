@@ -1,0 +1,431 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CALDocTest.cal
+ * Creation date: July 26, 2005.
+ * By: Joseph Wong
+ */
+
+// Note: the following comment is used in a unit test in the CALDoc_Test class, so if
+// this comment is modified, then corresponding changes must be made to the unit test cases.
+/**
+ * {@summary This is a test module that tests the compiler's {@em CALDoc@} handling abilities.@}
+ * 
+ * Business Objects - {@url   http://www.businessobjects.com  @}
+ * 
+ * General PR-related requests and questions email: pr@businessobjects.com
+ * 
+ *  {@url
+ *  
+ *   http://www.businessobjects.com @} ..more of this paragraph.
+ *
+ *    {@link function = List.map@}
+ *
+ *{@code foo "\{@ \@ bar @ @@ @@@ \ \n \t \f \ \  {\@ \@}" @}
+ *     
+ * foo {@code
+ *    let
+ *       f = 3.0;
+ *    in
+ *       f + f
+ * @}
+ *
+ *    {@orderedList {@item A@}
+ *
+ *   {@item B
+ *  more {@unorderedList {@item {@summary {@em (More of the summary)@}@} item B@}@}  @} @}
+ *
+ *
+ * foo bar
+ * baz
+ *        
+ * qux
+ *
+ * @author Joseph Wong
+ * @version no version yet
+ * @author (other authors...)
+ * @see module = Prelude, "Cal.IO.File", "Cal.Test.General.M1", Debug
+ * @see function= List.map, "Cal.IO.File.makeFileName"
+ * @see typeClass=Prelude.Eq, "Bounded"
+ * @see typeConstructor =Maybe, "Cal.IO.File.FileName"
+ * @see dataConstructor = Prelude.Left, "Cal.IO.File.FileName"
+ * 
+ * @see module = "Cal.Tutorials.CALDoc"
+ */
+module Cal.Test.General.CALDocTest;
+
+import Cal.Core.Prelude using
+    function = id;
+    typeConstructor = Maybe, String;
+    typeClass = Bounded;
+    dataConstructor = Right;
+    ;
+import Cal.Collections.List;
+
+import Cal.Core.Debug;
+
+import Cal.Core.String;
+
+import Cal.Test.General.M2;
+
+/**
+ * {@unorderedList
+ *  {@item Functions
+ *   {@unorderedList
+ *    {@item Checked qualified: {@link List.map@}@}
+ *    {@item Checked unqualified: {@link id@}@}
+ *    {@item Unchecked qualified: {@link "Array.map"@}@}
+ *    {@item Unchecked qualified (and private in defining module): {@link "Prelude.minBoundInt"@}@}
+ *    {@item Unchecked unqualified: {@link "localDefnCALDocTest"@}@}
+ *    {@item Unchecked unqualified: {@link "id"@}@}
+ *   @}
+ *  @}
+ *  {@item Data Constructors
+ *   {@unorderedList
+ *    {@item Checked qualified: {@link Prelude.Nothing@}@}
+ *    {@item Checked unqualified: {@link Right@}@}
+ *   @}
+ *  @}
+ *  {@item Type Constructors
+ *   {@unorderedList
+ *    {@item Checked qualified: {@link Prelude.Either@}@}
+ *    {@item Checked unqualified: {@link Maybe@}@}
+ *   @}
+ *  @}
+ *  {@item Type Classes
+ *   {@unorderedList
+ *    {@item Checked qualified: {@link Prelude.Outputable@}@}
+ *    {@item Checked unqualified: {@link Bounded@}@}
+ *   @}
+ *  @}
+ *  {@item Modules
+ *   {@unorderedList
+ *    {@item {@link Prelude@}@}
+ *   @}
+ *  @}
+ * @}
+ */
+public testLinksWithoutContext = Prelude.undefined;
+
+/**
+ * This comment contains a number of \@see references, all without context!
+ * 
+ * @see List.map, id, "Array.map", "Prelude.minBoundInt",
+ *  "localDefnCALDocTest", "id",
+ *  
+ *  Prelude.Nothing, Right,
+ *  
+ *  Prelude.Either, Maybe,
+ *  
+ *  Prelude.Outputable, Bounded,
+ *  
+ *  Prelude
+ */
+public testSeeWithoutContext = Prelude.undefined;
+
+/**
+ * {@em Emphasized {@strong then strong@} back to emphasized.@} {@strong Strong
+ * {@em then emphasized@} back to strong.@}
+ * 
+ * {@strong log@}{@sub 2@} 2{@sup {@em n@}@} = {@em n@}
+ */
+public testFormattingInlineTags = Prelude.undefined;
+
+/**
+ * A test algebraic type.
+ * 
+ * @author Joseph Wong
+ * @see dataConstructor = Foo
+ * @see dataConstructor = Bar
+ */
+data public Foo =
+    /** No arg Foo. */
+    public Foo |
+    /**
+     * Bar has arghhhhs.
+     * @arg alpha an integer
+     * @arg beta a Foo
+     * @arg #17 number seventeen!
+     */
+    public Bar
+        alpha :: Prelude.Int
+        beta  :: Foo
+        #17   :: Prelude.Boolean
+    deriving Prelude.Eq;
+
+/**
+ * This is a copy of Prelude.apply.
+ * 
+ * @arg func the function to apply.
+ * @arg arg the argument to the application.
+ * @return the result of the application of (func arg).
+ * @deprecated
+ *      You really should use Prelude.apply instead.
+ *      
+ *      Don't use this function!
+ * @author
+ *      Joseph Wong
+ *      
+ * @version
+ *      the one and only version.
+ * @see
+ * function=
+ * Prelude.apply
+ */
+appl :: (a -> b) -> (a -> b);
+/**/ /* */ /* **/ /*f*/ // these are all valid comments separating the definition from its type signature
+public appl func = func;
+
+private localDefnCALDocTest =
+    let
+        /**
+         * @arg x1 first arg.
+         * @arg x2 second arg.
+         */
+        foo x1 x2 = (x2, x1);
+
+        /**
+         * @arg a eh?
+         * @arg b bee!
+         * @arg c sea~~
+         * @see function = Prelude.undefined
+         */
+        threeArgs :: Prelude.Int -> Prelude.Double -> a -> b;
+        threeArgs = Prelude.undefined;
+    in
+        (foo, threeArgs);
+
+private fact x =
+    let
+        /**
+         * @arg y the arg.
+         */
+        f = fact;
+    in
+        if (x :: Prelude.Int) == 0 then 1 else x * f (x - 1);
+
+private mutualA =
+    let
+        /**
+         * @arg x
+         * @arg y
+         */
+        b = mutualB;
+    in
+        b;
+
+private mutualB x =
+    let
+        /**
+         * @arg x
+         * @arg y
+         */
+        a = mutualA;
+    in
+        (\q -> Prelude.id (\y -> a q y)) x;
+
+private localLocals =
+    let
+        localDefnCALDocTest =
+            let
+                /**
+                 * @arg x1 first arg.
+                 * @arg x2 second arg.
+                 */
+                foo x1 x2 = (x2, x1);
+    
+                /**
+                 * @arg a eh?
+                 * @arg b bee!
+                 * @arg c sea~~
+                 * @see function = Prelude.undefined
+                 */
+                threeArgs :: Prelude.Int -> Prelude.Double -> a -> b;
+                threeArgs = Prelude.undefined;
+            in
+                (foo, threeArgs);
+    
+        fact x =
+            let
+                /**
+                 * @arg y the arg.
+                 */
+                f = fact;
+            in
+                if (x :: Prelude.Int) == 0 then 1 else x * f (x - 1);
+    
+        mutualA =
+            let
+                /**
+                 * @arg x
+                 * @arg y
+                 */
+                b = mutualB;
+            in
+                b;
+    
+        mutualB x =
+            let
+                /**
+                 * @arg x
+                 * @arg y
+                 */
+                a = mutualA;
+            in
+                (\q -> Prelude.id (\y -> a q y)) x;
+    in
+        Prelude.undefined;
+    
+/**
+ * My own Bounded class.
+ * 
+ * @see typeClass
+ * = Prelude.Bounded
+ */
+public class MyBounded a where
+    /**
+     * @return the minimum bound.
+     */
+    public myMinBound :: a;
+    /**
+     * @return the maximum bound.
+     */
+    public myMaxBound :: a;
+    /**
+     * @arg someArgument the argument.
+     * @return the argument unchanged.
+     */
+    public identity :: a -> a;
+    ;
+
+/**
+ * An instance of MyBounded for Foo.
+ * @deprecated Really, the {@link Prelude.Bounded@} should be used instead.
+ * @see typeConstructor = Foo
+ * @see typeClass = MyBounded
+ * @see function = Prelude.undefined, id
+ */
+instance MyBounded Foo where
+    /** myMinBound is not well defined. */
+    myMinBound = Prelude.undefined;
+    /**
+     * @return the max bound of undefined values, which is undefined.
+     */
+    myMaxBound = Prelude.undefined;
+    /**
+     * @arg me myself and I.
+     */
+    identity = Prelude.id;
+    ;
+
+/**
+ * An instance of MyBounded for Int.
+ */
+instance MyBounded Prelude.Int where
+    /** myMinBound for Int is not very well defined. */
+    myMinBound = Prelude.undefined;
+    /**
+     * @return the max bound of Int, of course.
+     */
+    myMaxBound = maxBoundInt;
+    /**
+     * @see function = Prelude.id
+     */
+    identity = Prelude.id;
+    ;
+
+private maxBoundInt = Prelude.maxBound :: Prelude.Int;
+
+/**
+ * An instance of MyBounded for records.
+ */
+instance MyBounded r => MyBounded {r} where
+    /** myMinBound for records is not very well defined. */
+    myMinBound = undefinedMyBoundedRecord;
+    /**
+     * @return the max bound of records... is undefined
+     */
+    myMaxBound = undefinedMyBoundedRecord;
+    /**
+     * This is Prelude.id.
+     */
+    identity = identityMyBoundedRecord;
+    ;
+    
+private undefinedMyBoundedRecord = Prelude.undefined :: MyBounded a => {a};
+
+private identityMyBoundedRecord x = x :: MyBounded a => {a};
+    
+/**
+ * An instance of Bounded for Foo.
+ */
+instance Bounded Foo where
+    /** minBound is not well defined. */
+    minBound = Prelude.undefined;
+    /**
+     * @return really undefined.
+     */
+    maxBound = Prelude.undefined;
+    ;
+
+/**
+ * A test of the argument name disambiguation in the CALDoc documentation generator.
+ * @arg arg_2 this is the first arg.
+ */
+testArgNameDisambiguation :: a -> b -> c;
+public testArgNameDisambiguation = Prelude.undefined;
+
+
+/**
+ * A test of the argument name disambiguation in the CALDoc documentation generator.
+ * @arg arg_3 this is the first arg.
+ * @arg arg_3_1 this is the second arg.
+ */
+testArgNameDisambiguation2 :: a -> b -> c -> d;
+public testArgNameDisambiguation2 = Prelude.undefined;
+
+/**
+ * A test of "intra-word" formatting like Open{@strong Quark@}, or... Quark{@em Platform@}, or
+ * Super{@em Fun{@strong Fun@}Fun@}Stuff - each of these should be one word!
+ * 
+ * Note that in the above, the word Quark{@em Platform@} is intentionally positioned near the
+ * word-wrap boundary of 80 columns, with the 'k' in Quark before the boundary, and the 'm' in
+ * \{@em beyond the boundary.
+ */
+public testIntraWordFormatting = Prelude.undefined;
+
+/** 
+ * A gem that we can run to verify that the module has compiled (used by the
+ * CALRenaming_DeepTest).
+ */
+public returnTrue = Prelude.True;

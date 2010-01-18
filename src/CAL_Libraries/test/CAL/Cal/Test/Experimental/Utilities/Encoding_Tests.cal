@@ -1,0 +1,113 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Encoding_Tests.cal
+ * Creation date: October 2007.
+ * By: Malcolm Sharpe
+ */
+
+module Cal.Test.Experimental.Utilities.Encoding_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Byte, Char, Either, Int, Maybe, String;
+    dataConstructor = False, Just, Nothing, True, Left, Right;
+    function =
+        assert, const, either, equals, error, fromInt, fromJust, id, isJust,
+        isLeft, isRight, seq, snd;
+    ;
+import Cal.Collections.List using
+    function = concatMap, foldLeft, length, map, sum;
+    ;
+import Cal.Core.String using
+    function = fromList, toList;
+    ;
+import Cal.Core.Char using
+    ;
+import Cal.Experimental.Utilities.Encoding using
+    function = codePointToUTF16, encode, decode;
+    ;
+import Cal.Core.Debug;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+
+
+/**
+ * Test the decode function.
+ */
+test_decode :: Boolean;
+private test_decode =
+    // UTF-8
+    assert (decode "UTF-8" (Array.array3 65 66 67) == Just "ABC") &&
+    // UTF-16, big endian with BOM
+    assert (decode "UTF-16" (Array.array6 254 255 0 65 0 66) == Just "AB") &&
+    // UTF-16, big endian without BOM
+    assert (decode "UTF-16" (Array.array6 0 65 0 66 0 67) == Just "ABC") &&
+    // Malformed UTF-16
+    assert (decode "UTF-16" (Array.array3 0 65 0) == Nothing)
+    ;
+
+/**
+ * Test the encode function.
+ */
+test_encode :: Boolean;
+private test_encode =
+    // UTF-8
+    assert (encode "UTF-8" "ABC" == Array.array3 65 66 67) &&
+    // UTF-16, big endian with BOM
+    assert (encode "UTF-16" "AB" == Array.array6 254 255 0 65 0 66) &&
+    // UTF-16, big endian without BOM
+    assert (encode "UTF-16BE" "ABC" == Array.array6 0 65 0 66 0 67)
+    ;
+
+/**
+ * Test the codePointToUTF16 function.
+ */
+test_codePointToUTF16 :: Boolean;
+private test_codePointToUTF16 =
+    // Character on the Basic Multilingual Plane.
+    assert (codePointToUTF16 65 == "A") &&
+    // Character outside the BMP, so it must be represented using a surrogate pair.
+    assert (codePointToUTF16 65536/*0x10000*/ == "\uD800\uDC00") &&
+    // Largest representable character.
+    assert (codePointToUTF16 1114109/*0x10FFFD*/ == "\uDBFF\uDFFD")
+    ;
+
+/**
+ * Run all of the unit tests for the Encoding module.
+ */
+unitTests :: Boolean;
+public unitTests =
+    assert test_decode &&
+    assert test_encode &&
+    assert test_codePointToUTF16
+    ;

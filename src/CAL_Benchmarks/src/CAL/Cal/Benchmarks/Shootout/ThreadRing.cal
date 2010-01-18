@@ -1,0 +1,171 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * Thread-ring benchmark implementation for the internet bechmark shootouts
+ * see: {@url  http://shootout.alioth.debian.org@}
+ *
+ * This code is based on and inspired by the entries in the The Great Computer
+ * Language Shootout {@url http://shootout.alioth.debian.org/@}.
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.ThreadRing;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, JObject, String;
+    function =
+        eager, error, input, intToString, output, seq, stringToInt, toCalValue,
+        unsafeFromCalValue, upFromTo;
+    ;
+import Cal.IO.Console using
+    function = printLine;
+    ;
+import Cal.Experimental.Concurrent.Parallel using
+    function = par, parallelMap;
+    ;
+import Cal.Collections.List using
+    function = cycle, head, map, replicate, tail, zip3;
+    ;
+import Cal.Core.System using
+    function = concurrentRuntime;
+    ;
+
+
+ringSize :: Int;
+ringSize = 503;
+
+/**
+ * this implements the thread body, taking tokens form its input queue,
+ * decrementing the token, and then putting it on the output queue. 
+ * When the token is zero, the id is printed, and exit is called.
+ */
+threadBody :: Int -> SynchronousQueue Int -> SynchronousQueue Int -> ();
+threadBody !id !input !output =
+    let
+        token :: Int;
+        token = eager $ (take input);
+    in
+        if (token == 0) then
+            printLine (intToString id) `seq`
+            exit 0
+        else
+            put output (token - 1) `seq`
+            threadBody id input output
+    ;
+        
+        
+startThreads :: Int -> Int -> [()];
+startThreads !ringSize !token =
+    let
+        queues :: [SynchronousQueue a];
+        queues = map makeSynchronousQueue (replicate ringSize ());
+
+        ids :: [Int];
+        ids = upFromTo 1 ringSize;
+    in
+        //feed the token into the first queue
+        put (head queues) token
+        `par`
+        //create threads running the threadBody func, with ids [1 .. ringSize]
+        parallelMap
+            (\!args -> threadBody args.#1 args.#2 args.#3)
+            (zip3 ids queues (tail $ cycle queues))
+    ;
+
+main :: [String] -> ();
+public main !args =
+    let
+        n :: Int;
+        n = stringToInt (head args);
+    in
+
+        if concurrentRuntime then
+            List.strictList (startThreads ringSize n)
+            `seq`
+            ()
+        else
+            error
+                "You must define the VM arg org.openquark.cal.machine.lecc.concurrent_runtime to run this program"
+    ;
+
+
+/**
+ * A Synchronous queue has no storage. There must always be a matching put for
+ * every take and visa versa
+ */
+data public SynchronousQueue a =
+    private SynchronousQueue jqueue :: !JSynchronousQueue
+    ;
+
+/**
+ * This creates a Synchronous queue. Whenever you attempt to put an element
+ * into the queue it will block if there is not already a thread waiting on
+ * take. Get will block unless there is already a thread waiting on put.
+ */
+makeSynchronousQueue :: () -> SynchronousQueue a;
+public makeSynchronousQueue !unused = SynchronousQueue (jmakeQueue);
+
+/**
+ * Puts an element into the queue. This will block unless there is already a
+ * thread waiting on take.
+ *
+ * @arg queue the queue to add to
+ * @arg item the item to add
+ */
+put :: SynchronousQueue a -> a -> ();
+public put !queue item =
+    jput queue.SynchronousQueue.jqueue (output $ toCalValue item);
+
+/**
+ * Takes an item from a queue. This will block, unless there is already a
+ * thread waiting on put.
+ *
+ * @arg queue the queue to take an item from.
+ */
+take :: SynchronousQueue a -> a;
+public take !queue =
+    unsafeFromCalValue $ input $ jtake queue.SynchronousQueue.jqueue;
+
+data foreign unsafe import jvm "java.util.concurrent.SynchronousQueue"
+    private JSynchronousQueue;
+
+foreign unsafe import jvm "constructor"
+    private jmakeQueue :: JSynchronousQueue;
+
+foreign unsafe import jvm "method put"
+    private jput :: JSynchronousQueue -> JObject -> ();
+
+foreign unsafe import jvm "method take"
+    private jtake :: JSynchronousQueue -> JObject;
+
+
+foreign unsafe import jvm "static method java.lang.System.exit"
+    private exit :: Int -> ();

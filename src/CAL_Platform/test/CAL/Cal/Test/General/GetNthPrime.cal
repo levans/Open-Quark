@@ -1,0 +1,136 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * GetNthPrime.cal
+ * Creation date: Aug 2004
+ * By: Raymond Cypher
+ */
+
+/**
+ * This module contains an implementation for getting the Nth prime. It is used in some
+ * performance tests.
+ * 
+ * @author Raymond Cypher
+ */
+module Cal.Test.General.GetNthPrime;
+
+import Cal.Core.Prelude; 
+import Cal.Utilities.Math;
+
+nonMultiple :: Prelude.Int -> Prelude.Int -> Prelude.Boolean;
+nonMultiple !arg !arg_1 = (arg % arg_1) != ((0 :: Prelude.Int));
+
+isPrime :: Prelude.Int -> Prelude.Boolean;
+isPrime !nToTest = 
+		andList (map (nonMultiple nToTest)
+			(upFromTo ((2 :: Prelude.Int)) (Prelude.round (Math.sqrt
+			(Prelude.fromInt nToTest)))));
+
+//intToDouble :: Prelude.Int -> Prelude.Double;
+//intToDouble x = 1.0;
+
+getNthPrime :: Prelude.Int -> Prelude.Int;
+public getNthPrime !x = subscript (filter isPrime (upFromThen ((3 :: Prelude.Int)) ((5 :: Prelude.Int)))) x;
+
+getNthPrime5000 :: Prelude.Int;
+public getNthPrime5000 = getNthPrime 5000;
+
+subscript :: [a] -> Prelude.Int -> a;
+public subscript !xs !n =
+    case xs of
+    b : bs -> if n == 0 then b
+              else if n > 0 then subscript bs (n - 1)
+              else Prelude.error "List.subscript: negative index.";
+    []     -> Prelude.error "List.subscript: index too large.";
+    ;
+
+filter :: (a -> Prelude.Boolean) -> [a] -> [a];
+//filter p xs applies the predicate function p to each element of the list xs, and returns
+//the list of elements for which the predicate evaluates to True.
+public filter p !xs = 
+    case xs of
+    []     -> [];
+    b : bs -> (let rest = filter p bs;
+               in if p b then b : rest else rest);
+    ;
+    
+upFromThen :: Prelude.Int -> Prelude.Int -> [Prelude.Int];
+//upFromThen start next, creates the arithmetic sequence with first 2 terms start and next. 
+//Same as the Haskell syntax [start, next ..]
+public upFromThen !start !next = iterate (Prelude.add (next - start)) start;
+    
+iterate :: (a -> a) -> a -> [a];
+//iterate f x returns the infinite list [x, f x, f(f x)), f(f(f x)), ...]
+public iterate f x = x : iterate f (f x);
+    
+upFromTo :: Prelude.Int -> Prelude.Int -> [Prelude.Int];
+//same as the Haskell syntax [start .. end]
+public upFromTo !start !end = takeWhile (Prelude.greaterThanEquals (end + 1/2)) (upFrom start);
+    
+andList :: [Prelude.Boolean] -> Prelude.Boolean;
+//andList xs returns True if every element of the list xs is True (and the list is finite). 
+public andList !xs = foldr Prelude.and Prelude.True xs;
+    
+map :: (a -> b) -> [a] -> [b];
+//map f xs applies the function f to each element of the list xs and returns the resulting list.
+public map f !xs =
+    case xs of
+    []     -> [];
+    b : bs -> f b : map f bs;
+    ;
+    
+foldr :: (a -> b -> b) -> b -> [a] -> b;
+//Similar to foldl, except that the folding process on the list xs is started with its righmost element.
+//Often the result of applying foldl or foldr is the same, and the choice between them is a matter of
+//efficiency. Which is better depends on the nature of f.
+public foldr f z !xs = 
+    case xs of
+    []     -> z;
+    b : bs -> f b (foldr f z bs);
+    ;
+    
+upFrom :: Prelude.Int -> [Prelude.Int];
+//upFrom n creates the infinite list [n, n+1, n+2, ...]. It is the same as the Haskell syntax [n ..].
+//(except that the Haskell syntax is defined in terms of class methods of the Enum type class).
+public upFrom !n = n : Prelude.strict upFrom (n + 1);
+    
+    
+takeWhile :: (a -> Prelude.Boolean) -> [a] -> [a];
+//takeWhile p xs returns the longest prefix of the list xs for which the predicate p is True for each element.
+//e.g. takeWhile isEven [6, 2, 1, 2] = [6, 2]
+public takeWhile p !xs =
+    case xs of
+    []     -> [];
+    b : bs -> if p b then b : takeWhile p bs else [];
+    ;
+    

@@ -1,0 +1,418 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * DataDictionary.cal
+ * Creation date: Oct 15, 2004.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains the {@link typeClass = DataDictionary@} type class, which
+ * exposes a simplified view of a database and can be queried more simply than
+ * constructing SQL (directly or using the {@link module = "Cal.Data.Sql"@}
+ * module types). The {@link module = "Cal.Data.SqlDataDictionary"@} module
+ * provides one implementation of a DataDictionary, however others are possible
+ * as well.
+ *
+ * @author Richard Webster
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+module Cal.Data.DataDictionary;
+
+import Cal.Core.Prelude using
+    typeClass = Outputable;
+    typeConstructor = Boolean, Byte, Double, Int, JList, JObject, Maybe, String;
+    dataConstructor = False, True, Nothing, Just;
+    function = error, fromMaybe, isEmpty, not;
+    ;
+import Cal.Collections.List using
+    function = filter, find, head, isSingletonList, map, outputList;
+    ;      
+import Cal.Data.DictionaryQuery using
+    typeConstructor =
+        AggregationType, DatabaseField, Expr, FieldType, JoinSet, Query, 
+        TypedExpr;
+    function =
+        fieldDefaultAggregationType, fieldType, fieldValueType, 
+        isFieldPreaggregated;
+    ;
+import Cal.Data.DataGems using
+    typeConstructor = ResultSet;
+    ;
+import Cal.Utilities.UniqueIdentifier using
+    typeConstructor = UniqueIdentifier;
+    function = getDisplayName, getUniqueIdentifier, getUniqueName;
+    ;
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+import Cal.Utilities.ValueType using
+    typeConstructor = JValueType, ValueType;
+    function = outputValueType;
+    ;
+import Cal.Data.Sql using
+    dataConstructor = Distinct, TopN;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+
+/**
+ * A type representing a folder structure containing database fields.
+ * Folders are just named containers for other database items.
+ * Field items hold a database field and may also have child items.
+ */
+data public DatabaseItem = 
+    private DatabaseFolderItem 
+        name        :: String 
+        children    :: [DatabaseItem]
+    | 
+    private DatabaseFieldItem 
+        field       :: DatabaseField 
+        children    :: [DatabaseItem]
+    ;
+
+/**
+ * Construct a database folder item with the specified name and contents.
+ */
+makeDatabaseFolderItem :: String -> [DatabaseItem] -> DatabaseItem;
+public makeDatabaseFolderItem name children = DatabaseFolderItem name children;
+
+/**
+ * Construct a database field item with the specified field and child items.
+ */
+makeDatabaseFieldItem :: DatabaseField -> [DatabaseItem] -> DatabaseItem;
+public makeDatabaseFieldItem field children = DatabaseFieldItem field children;
+
+instance Show DatabaseItem where
+    show = showDatabaseItem;
+    ;
+
+showDatabaseItem:: DatabaseItem -> String;
+showDatabaseItem item =
+    case item of
+    DatabaseFolderItem {name } -> name;
+    DatabaseFieldItem { field } -> getDisplayName field;
+    ;
+    
+/**
+ * Returns the name of the database item.
+ */
+getDatabaseItemName :: DatabaseItem -> String;
+public getDatabaseItemName databaseItem = 
+    case databaseItem of
+    DatabaseFolderItem {name} -> name;
+    DatabaseFieldItem {field} -> getDisplayName field;
+    ;
+
+/**
+ * Returns whether the database item is a folder.
+ */
+isDatabaseFolderItem :: DatabaseItem -> Boolean;
+public isDatabaseFolderItem databaseItem = 
+    case databaseItem of
+    DatabaseFolderItem {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns whether the database item is a field.
+ */
+isDatabaseFieldItem :: DatabaseItem -> Boolean;
+public isDatabaseFieldItem databaseItem = 
+    case databaseItem of
+    DatabaseFieldItem {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns the child items of a database item.
+ */
+childDatabaseItems :: DatabaseItem -> [DatabaseItem];
+public childDatabaseItems databaseItem = 
+    case databaseItem of
+    (DatabaseFolderItem | DatabaseFieldItem) {children} -> children;
+    ;
+
+/**
+ * Replaces the children of a database item.
+ */
+setDatabaseChildItems :: DatabaseItem -> [DatabaseItem] -> DatabaseItem;
+public setDatabaseChildItems databaseItem newChildItems = 
+    case databaseItem of
+    DatabaseFolderItem {name} -> DatabaseFolderItem name newChildItems;
+    DatabaseFieldItem {field} -> DatabaseFieldItem field newChildItems;
+    ;
+
+instance Outputable DatabaseItem where
+    output = outputDatabaseItemToJObject;
+    ;
+
+foreign unsafe import jvm "constructor org.openquark.util.datadictionary.DatabaseField" private jDatabaseField_new :: String -> String -> JValueType -> FieldType -> AggregationType -> Boolean -> JList -> JObject;
+foreign unsafe import jvm "constructor org.openquark.util.datadictionary.DatabaseFolder" private jDatabaseFolder_new :: String -> JList -> JObject;
+
+outputDatabaseItemToJObject :: DatabaseItem -> JObject;
+private outputDatabaseItemToJObject databaseItem = 
+    case databaseItem of
+    DatabaseFolderItem {name, children} -> 
+        jDatabaseFolder_new name (outputList children);
+    DatabaseFieldItem {field, children} -> 
+        jDatabaseField_new (getUniqueName (getUniqueIdentifier field)) (getDisplayName field) (outputValueType (fieldValueType field)) (fieldType field) (fieldDefaultAggregationType field) (isFieldPreaggregated field) (outputList children);
+    ;
+
+
+/**
+ * A data dictionary exposes database fields and allows queries built from these database fields to be executed.
+ * The data dictionary hides complex details about the underlying database tables, SQL expressions, joins, etc... from the user.
+ */
+public class DataDictionary a where
+    /** Top level items in the tree. */
+    public databaseItems :: a -> [DatabaseItem];
+
+    /** All the database fields in the tree. */
+    public databaseFields :: a -> [DatabaseField];
+
+    /** All named join sets (contexts) in the dictionary. */
+    public joinSets :: a -> [JoinSet];
+
+    /** Build the SQL query text for the specified query. */
+    public queryText :: a -> Query -> String;
+    
+    /** Execute the specified database query to get a resultset. */
+    public executeQuery :: a -> Query -> ResultSet;
+
+    /** Determines if all the fields specified are compatible.  That is, can a single query
+     * contain all of the specified fields and run successfully.  This is generally an issue
+     * with table joining or SQL limitations that prevent the fields from being part of a
+     * single query.
+     */
+    public areFieldsCompatible :: a -> [DatabaseField] -> Boolean;
+    
+    /**
+     * Adds database fields to the data dictionary using the field info specified.
+     * The list of tuples is a list of definitions for the new fields.  The arguments are:
+     * {@unorderedList
+     *      {@item {@link typeConstructor=ValueType@} - The value type of the new field@}
+     *      {@item {@link FieldType@} - The field type of the new field@}
+     *      {@item {@link String@}    - The SQL select clause.  This must be valid SQL for the target server.@}
+     *      {@item {@link String@}    - The SQL where clause.  This must be valid SQL for the target server.@}
+     *      {@item {@link AggregationType@} - The agg type of the new field.@}
+     * @}
+     * The return type contains the updated data dictionary and the list of database fields that
+     * were added.
+     */
+    public addDatabaseFields :: a -> [(ValueType, FieldType, String, String, AggregationType)] -> (a, [DatabaseField]);
+    
+    /**
+     * Looks up one of the new database fields that was added to the data dictionary using the
+     * AddDatabaseFields function.
+     * The tuple defines the field to lookup.  The tuple arguments are:
+     * {@unorderedList
+     *      {@item {@link typeConstructor=ValueType@} - The value type of the field@}
+     *      {@item {@link FieldType@} - The field type of the field@}
+     *      {@item {@link String@}    - The SQL select clause.@}
+     *      {@item {@link String@}    - The SQL where clause.@}
+     *      {@item {@link AggregationType@} - The agg type of the field.@}
+     * @}
+     * The return type is a Maybe which is either the DatabaseField found for the field definition
+     * or nothing if no field could be found.
+     */
+    public getDatabaseField :: a -> (ValueType, FieldType, String, String, AggregationType) -> Maybe DatabaseField;
+    ;
+
+
+/**
+ * Finds the database field with the specified display name (if unique).
+ * If multiple fields have the display name, then {@link Nothing@} will be returned.
+ */
+lookupFieldByName :: DataDictionary a => a -> String -> Maybe DatabaseField;
+public lookupFieldByName !dictionary !fieldName = 
+    let
+        dbFields :: [DatabaseField];
+        dbFields = databaseFields dictionary;
+        
+        matchingFields :: [DatabaseField];
+        matchingFields = filter (\f -> getDisplayName f == fieldName) dbFields;
+    in
+        if (isSingletonList matchingFields) then Just (head matchingFields)
+        else Nothing;
+
+/**
+ * Finds the database field with the specified unique identifier.
+ */
+lookupFieldByID :: DataDictionary a => a -> UniqueIdentifier DatabaseField -> Maybe DatabaseField;
+public lookupFieldByID dictionary fieldID = 
+    let
+        dbFields :: [DatabaseField];
+        dbFields = databaseFields dictionary;
+    in
+        find (\f -> getUniqueIdentifier f == fieldID) dbFields;
+
+/**
+ * Finds the database field with the specified unique name or display name.
+ * First, an attempt is made to find a field with the specified unique name.
+ * If this fails, then a search is made for a field with the specifield display name.
+ * An error is thrown if the field cannot be found.
+ */
+lookupFieldByIdOrName :: DataDictionary a => a -> String -> DatabaseField;
+public lookupFieldByIdOrName !dictionary !fieldName = 
+    let
+        maybeFieldForID :: Maybe DatabaseField;
+        maybeFieldForID   = DataDictionary.lookupFieldByID dictionary (UniqueIdentifier.makeUniqueIdentifierByName fieldName);
+        
+        maybeFieldForName :: Maybe DatabaseField;
+        maybeFieldForName = DataDictionary.lookupFieldByName dictionary fieldName;
+        
+        errorMsg :: String;
+        errorMsg = "lookupFieldByIdOrName:  The field '" ++ fieldName ++ "' could not be found uniquely within the data dictionary." ++
+                (show (map (\x -> "(" ++ (getDisplayName x) ++ ", " ++ (getUniqueName (getUniqueIdentifier x)) ++ ")") (databaseFields dictionary)));
+    in
+        // First try to match the field by ID, then by name.
+        fromMaybe (fromMaybe (error errorMsg) maybeFieldForName) maybeFieldForID;
+
+/**
+ * Returns an untyped query field for the specified table.
+ * The name will be field will be looked up by unique name or display name.
+ */
+untypedFieldExpr :: DataDictionary a => a -> String -> Expr;
+public untypedFieldExpr dictionary fieldName = 
+    DictionaryQuery.untypedField (lookupFieldByIdOrName dictionary fieldName);
+
+/**
+ * Returns a string query field for the specified table.
+ * The name will be field will be looked up by unique name or display name.
+ */
+stringFieldExpr :: DataDictionary a => a -> String -> TypedExpr String;
+public stringFieldExpr dictionary fieldName = 
+    DictionaryQuery.stringField (lookupFieldByIdOrName dictionary fieldName);
+
+/**
+ * Returns a Boolean query field for the specified table.
+ * The name will be field will be looked up by unique name or display name.
+ */
+booleanFieldExpr :: DataDictionary a => a -> String -> TypedExpr Boolean;
+public booleanFieldExpr dictionary fieldName = 
+    DictionaryQuery.booleanField (lookupFieldByIdOrName dictionary fieldName);
+
+/**
+ * Returns a double query field for the specified table.
+ * The name will be field will be looked up by unique name or display name.
+ */
+doubleFieldExpr :: DataDictionary a => a -> String -> TypedExpr Double;
+public doubleFieldExpr dictionary fieldName = 
+    DictionaryQuery.doubleField (lookupFieldByIdOrName dictionary fieldName);
+
+/**
+ * Returns an integer query field for the specified table.
+ * The name will be field will be looked up by unique name or display name.
+ */
+intFieldExpr :: DataDictionary a => a -> String -> TypedExpr Int;
+public intFieldExpr dictionary fieldName = 
+    DictionaryQuery.intField (lookupFieldByIdOrName dictionary fieldName);
+
+/**
+ * Returns a time query field for the specified table.
+ * The name will be field will be looked up by unique name or display name.
+ */
+timeFieldExpr :: DataDictionary a => a -> String -> TypedExpr Time;
+public timeFieldExpr dictionary fieldName = 
+    DictionaryQuery.timeField (lookupFieldByIdOrName dictionary fieldName);
+
+/**
+ * Returns a binary query field for the specified table.
+ * The name will be field will be looked up by unique name or display name.
+ */
+binaryFieldExpr :: DataDictionary a => a -> String -> TypedExpr (Array Byte);
+public binaryFieldExpr dictionary fieldName = 
+    DictionaryQuery.binaryField (lookupFieldByIdOrName dictionary fieldName);
+
+
+/**
+ * Top level items in the tree.
+ * Only fields passing the filter function will be included,
+ * and empty folders will not excluded.
+ */
+filteredDatabaseItems :: DataDictionary a => (DatabaseField -> Boolean) -> a -> [DatabaseItem];
+public filteredDatabaseItems filterFn dictionary = 
+    let
+        origRootItems :: [DatabaseItem];
+        origRootItems = databaseItems dictionary;
+
+        filterItem :: DatabaseItem -> DatabaseItem;
+        filterItem item = 
+            case item of 
+            DatabaseFolderItem {name, children} -> DatabaseFolderItem name (filterList children);
+            DatabaseFieldItem {} -> item;
+            ;
+
+        filterList :: [DatabaseItem] -> [DatabaseItem];
+        filterList items = 
+            filter keepItem (map filterItem items);
+
+        // Filter out any empty folders or field which don't pass the filter function.
+        keepItem :: DatabaseItem -> Boolean;
+        keepItem item = 
+            case item of 
+            DatabaseFolderItem {children} -> not (isEmpty children);
+            DatabaseFieldItem {field} -> filterFn field;
+            ;
+    in
+        filterList origRootItems;
+
+
+/**
+ * Returns up to N distinct values for the specified field in the dictionary.
+ */
+browseDatabaseField :: DataDictionary a => a -> Int -> DatabaseField -> [String];
+public browseDatabaseField dictionary nMaxResults browseField = 
+    let
+        qry1 :: Query;
+        qry1 = DictionaryQuery.project DictionaryQuery.newQuery [DictionaryQuery.untypedField browseField];
+        
+        qry2 :: Query;
+        qry2 = DictionaryQuery.addOption qry1 Distinct;
+        
+        qry3 :: Query;
+        qry3 = DictionaryQuery.addOption qry2 (TopN nMaxResults False False);
+
+        rs :: ResultSet;
+        rs = DataDictionary.executeQuery dictionary qry3;
+    in
+        DataGems.dataFromResultSet rs (DataGems.extractString 1);
+

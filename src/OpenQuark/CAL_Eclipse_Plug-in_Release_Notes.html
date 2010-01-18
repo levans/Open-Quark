@@ -1,0 +1,661 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+
+<html>
+<head>
+  <meta name="generator" content=
+  "HTML Tidy for Windows (vers 14 February 2006), see www.w3.org">
+
+  <title>CAL Eclipse Plug-in Release Notes</title>
+</head>
+
+<body>
+  <div style="WIDTH: 700px">
+    <h1><a href="http://labs.businessobjects.com/cal/">CAL</a>
+    Eclipse Plug-in Release Notes</h1>
+
+    <p>This document includes information about the CAL Eclipse
+    Plug-in. This is a set of plug-ins which together comprise an
+    IDE for CAL development within Eclipse. For instance, bundled
+    functionality includes CAL-specific Eclipse views, error
+    detection, and refactoring support.</p>
+
+    <p>"Using CAL with Eclipse" is the fundamental document that
+    describes how to install the CAL Eclipse Plug-in, and how to
+    use it to develop, run, and test new CAL modules. It is a PDF
+    included in the Open Quark Platform release.</p>
+
+    <h2>1. What's new in the Quark Platform's CAL Eclipse
+    Plug-in:</h2>
+
+    <h3>version 1.7.1_0 (November 15, 2007)</h3>
+
+    <ul>
+    	<li>Compatibility update for Open Quark 1.7.1_0.</li>
+    </ul>
+    		
+    <h3>version 1.7.0_0 (October 26, 2007)</h3>
+
+    <ul>
+    	<li>Eclipse 3.3 is now required to use the plug-in.</li>
+    		
+      <li>Generalized renaming support
+
+        <ul>
+          <li>expanded to include local variables, type variables
+          and data cons field names</li>
+
+          <li>new renaming algorithms address a number of issues
+          that may arise:
+
+            <ul>
+              <li>local definitions which are shadowed by the
+              renamed identifier, and those which shadow the
+              renamed identifier, are also renamed so that they do
+              not conflict with the renaming</li>
+
+              <li>unqualified references to top-level functions
+              which are shadowed by the renamed identifier are
+              qualified to avoid conflicts</li>
+
+              <li>when renaming a punned data cons field name, the
+              user is given a choice to rename either the data cons
+              field, or the local variable</li>
+
+              <li>when a data cons field name is associated with
+              more than one data cons (e.g. when the field name
+              appears in a case alternative containing multiple
+              data cons names), the renamer detects that and
+              confirms with the user that the refactoring operation
+              will rename the named field in all affected data
+              constructors</li>
+            </ul>
+          </li>
+
+          <li>CALDoc tooltips are now available for all identifiers
+          (including local variables, field names, type
+          variables)</li>
+        </ul>
+      </li>
+
+      <li>Auto-complete
+
+        <ul>
+          <li>new auto-completion for CALDoc using templates</li>
+
+          <li>new @arg tag auto-completion</li>
+
+          <li>bug fixes:
+
+            <ul>
+              <li>suggestions for friend statements</li>
+
+              <li>inserts fully-qualified name in import and friend
+              statements</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+
+      <li>New Generate Element Comment action (Alt-Shift-J)</li>
+
+      <li>New templates for type and data constructors, class and
+      class member definitions</li>
+
+      <li>New icon decorator for foreign functions/data</li>
+
+      <li>Improved editor position tracking
+
+        <ul>
+          <li>tooltips and actions such as Open Declaration now
+          track document edits so that for instance inserting
+          characters no longer causes these to have positions which
+          are off by the number of typed characters</li>
+        </ul>
+      </li>
+
+      <li>Refactorings now use incremental file changes
+
+        <ul>
+          <li>undoing a refactoring (such as Clean Imports) causes
+          the last affected text to be selected instead of the
+          entire document.</li>
+        </ul>
+      </li>
+
+      <li>New content for using the Quark environment in an Eclipse
+      plugin
+
+        <ul>
+          <li>new document "Using the Quark Environment Within the
+          Context of an Eclipse Plugin"</li>
+
+          <li>new project CAL_Eclipse_Bridge_Example now included
+          in source distribution</li>
+
+          <li style="list-style: none">
+            <ul>
+              <li>this is a sample project which shows how to use
+              CAL in an Eclipse action</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+
+      <li>Bug fixes, including:
+
+        <ul>
+          <li><a href=
+          "http://groups.google.com/group/cal_language/browse_frm/thread/bb82bf3337536793?hl=en">
+          improved context classloader resource loading
+          behaviour</a></li>
+
+          <li><a href=
+          "http://groups.google.com/group/cal_language/browse_frm/thread/77e84d60b6b58201hl=en">
+          better error message when invoking autocomplete on
+          unbuilt module</a></li>
+        </ul>
+      </li>
+
+      <li>Compatibility update for Embedded CAL</li>
+    </ul>
+
+    <h3>version 1.6.1_0 (September 21, 2007)</h3>
+
+    <ul>
+      <li>CAL Console
+
+        <ul>
+          <li>unqualified symbols in entered code expressions are
+          now automatically qualified if unambiguous</li>
+
+          <li>CAFs are now automatically cached</li>
+
+          <li>added new commands:
+
+            <ul>
+              <li><code>:t</code> &ndash; display the type of a CAL
+              expression</li>
+
+              <li><code>:rs</code> &ndash; reset cached CAFs</li>
+
+              <li><code>:spc</code> and <code>:pc</code> &ndash;
+              display and execute from command history</li>
+            </ul>
+          </li>
+
+          <li>no longer blocks UI when invoked from
+          Workspace/Outline views</li>
+
+          <li>now accessible from the Run menu</li>
+        </ul>
+      </li>
+
+      <li>Quick Outline view
+
+        <ul>
+          <li>new quick view (similar to Java's quick outline view)
+          displays the outline of the current module in-place in
+          the editor area</li>
+
+          <li>invoke using Ctrl-O or select Navigate &rarr; Quick
+          Outline</li>
+        </ul>
+      </li>
+
+      <li>Rename refactoring can now rename entire modules</li>
+
+      <li>Quick fixes
+
+        <ul>
+          <li>new fix for <code>"Unexpected token '='. Was the
+          equality operator ('==') intended?"</code></li>
+
+          <li>new fix for <code>"The module X has not been imported
+          into Y."</code></li>
+        </ul>
+      </li>
+
+      <li>Goto next and previous elements (Ctrl-Shift-Up/Down
+      arrow)
+
+        <ul>
+          <li>new commands to move the cursor to the next/previous
+          top level element definition</li>
+        </ul>
+      </li>
+
+      <li>Source distribution now includes source for archived
+      update site</li>
+
+      <li>Bug fixes, including:
+
+        <ul>
+          <li>New Module Wizard validation improvements</li>
+
+          <li>handling for files with names ending with .cal but
+          invalid module name as file name</li>
+
+          <li>unmanagement of CAL build artifacts in the workspace
+          (.cmi and lecc_runtime files)</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>version 1.6.0_0 (August 29, 2007)</h3>
+
+    <ul>
+      <li>CAL Console page in the Console view
+
+        <ul>
+          <li>new console page allows CAL expressions to be entered
+          and evaluated with respect to the CAL modules in the
+          Eclipse workspace</li>
+        </ul>
+      </li>
+
+      <li>Clean all CAL action
+
+        <ul>
+          <li>new item in the Project menu to clear all build state
+          specific to CAL</li>
+        </ul>
+      </li>
+
+      <li>support for access to CAL modules in JARs
+
+        <ul>
+          <li>now possible to navigate to CAL files which aren't
+          files in the file system.</li>
+
+          <li>supports Car-jars for packaged sets of CAL modules as
+          Eclipse referenced libraries</li>
+        </ul>
+      </li>
+
+      <li>hyperlink detection
+
+        <ul>
+          <li>if the hyperlink modifier is held down and the source
+          element under the mouse can be opened then the element
+          displays as a hyperlink</li>
+        </ul>
+      </li>
+
+      <li>New Module wizard
+
+        <ul>
+          <li>improvements in the selection of default values</li>
+        </ul>
+      </li>
+
+      <li>Content assist
+
+        <ul>
+          <li>improved logic for choosing between qualified and
+          unqualified names</li>
+        </ul>
+      </li>
+
+      <li>sources updated to Java 5</li>
+
+      <li>various bug fixes
+
+        <ul>
+          <li><a href=
+          "http://groups.google.com/group/cal_language/browse_frm/thread/33f4d2304582c6fe?hl=en">
+          includes bug fix for handling of files with no file
+          extension</a></li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>version 1.5.1_0 (July 19, 2007)</h3>
+
+    <ul>
+      <li>source formatter
+
+        <ul>
+          <li>pretty print an entire CAL module using the
+          Source/Format action</li>
+        </ul>
+      </li>
+
+      <li>search
+
+        <ul>
+          <li>new option to find all occurrences where a data
+          constructor is used to construct a value (i.e. excludes
+          locations where unpacking a value)</li>
+
+          <li>dialog initialized with fully-qualified name of
+          symbol under cursor if any (if no text is selected)</li>
+        </ul>
+      </li>
+
+      <li>quick fix
+
+        <ul>
+          <li>new quick fix to insert the fully qualified name of
+          an unimported symbol (as an alternative to the quick fix
+          for importing the symbol)</li>
+
+          <li>new quick fix for cases where you import a module and
+          do not qualify it properly</li>
+        </ul>
+      </li>
+
+      <li>auto-complete
+
+        <ul>
+          <li>new auto-complete for module name segments</li>
+
+          <li>added icons for auto-complete hover suggestions (as
+          with workspace/outline views)</li>
+
+          <li>auto-completed expressions now support argument
+          tabbing</li>
+
+          <li>improved auto-activation behaviour</li>
+
+          <li>improved logic for making (and filtering)
+          suggestions</li>
+        </ul>
+      </li>
+
+      <li>workspace and outline views
+
+        <ul>
+          <li>improvements to CAL source text selection when
+          selecting nodes in these views</li>
+
+          <li>improved sorting of class instances</li>
+
+          <li>added icons for warnings and errors in CAL
+          module</li>
+        </ul>
+      </li>
+
+      <li>CAL Builder
+
+        <ul>
+          <li>now enabled by default when creating new
+          workspaces</li>
+        </ul>
+      </li>
+
+      <li>various bug fixes
+
+        <ul>
+          <li><a href=
+          "http://groups.google.com/group/cal_language/browse_frm/thread/fb56c22aab069acc">
+          Includes fix for startup on Mac OS X</a></li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>version 1.5.0_0 (June 15, 2007)</h3>
+
+    <ul>
+      <li>new features in the CAL Eclipse Plug-in
+
+        <ul>
+          <li>inclusion of help in the CAL Eclipse Plug-in
+
+            <ul>
+              <li>the CAL User's Guide, Using CAL with Eclipse, CAL
+              for Haskell Programmers and Effective CAL are all now
+              available in Eclipse help</li>
+            </ul>
+          </li>
+
+          <li>New Module dialog that can be used for creating new
+          CAL modules</li>
+
+          <li>New Quark Binaries wizard. Creates .classpath and
+          .project files automatically. Verifies the Java compiler
+          settings as well.</li>
+
+          <li>shift or control-hover now shows the source code for
+          the symbol in the CAL editor.</li>
+
+          <li>templates for commonly used CAL syntactic
+          structures.</li>
+
+          <li>insert type declarations action for functions. Works
+          over functions in selected range or whole file if no
+          range is selected.</li>
+        </ul>
+      </li>
+
+      <li>improvements to existing CAL Eclipse Plug-in features
+
+        <ul>
+          <li>tooltips on local function names. Tooltips on module
+          names in import and module statements.</li>
+
+          <li>auto-complete
+
+            <ul>
+              <li>having auto-complete turn on when '.' is
+              pressed.</li>
+
+              <li>property page for auto-complete behavior.</li>
+
+              <li>auto-import symbols for auto-completion.</li>
+            </ul>
+          </li>
+
+          <li>open declaration
+
+            <ul>
+              <li>open declaration now works for foreign
+              functions.</li>
+
+              <li>implement control-click for open declaration
+              action</li>
+            </ul>
+          </li>
+
+          <li>workspace and outline view
+
+            <ul>
+              <li>add rename to the workspace and outline
+              views.</li>
+
+              <li>overlays show the scope of the CAL entities on
+              the icon.</li>
+            </ul>
+          </li>
+
+          <li>CAL compiler error messages
+
+            <ul>
+              <li>nicer error message for when the VM is an older
+              version and the CAL compiler cannot handle projects
+              set to a later version.</li>
+
+              <li>highlights all the text that caused the
+              compilation error instead of just the first
+              character.</li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>version 1.4.0-0 (Apr 11, 2007)</h3>
+
+    <ul>
+      <li>the CAL Eclipse Plug-in is now open-sourced. This is a
+      separate download, with its own release notes.</li>
+
+      <li>CAL Workspace view provides a categorized tree of all CAL
+      entities in the workspace</li>
+
+      <li>outline view shows the CAL entities in a particular
+      module</li>
+
+      <li>editors for CAL metadata</li>
+
+      <li>auto-complete</li>
+
+      <li>rename refactoring</li>
+
+      <li>organize imports refactoring, quick fix</li>
+
+      <li>improved tooltips, open declaration</li>
+
+      <li>CAL Perspective</li>
+
+      <li>branding plug-in</li>
+
+      <li>documentation:
+
+        <ul>
+          <li>new "Using CAL with Eclipse" document</li>
+
+          <li>new video "CAL Eclipse Plug-in Features"</li>
+        </ul>
+      </li>
+
+      <li>compiler update</li>
+
+      <li>various bug fixes, library enhancements and documentation
+      updates</li>
+    </ul>
+
+    <h3>version 1.3.0-0 (Jan 24, 2007)</h3>
+
+    <ul>
+      <li>enhanced search - search terms can be specified as CAL
+      syntactic elements</li>
+
+      <li>open declaration action - navigate to the declaration of
+      an indicated CAL element</li>
+
+      <li>editor tooltips with caldoc</li>
+
+      <li>compiler update</li>
+
+      <li>various bug fixes</li>
+    </ul>
+
+    <h3>version 1.2.0-140 (Nov 30, 2006)</h3>
+
+    <ul>
+      <li>compiler update</li>
+    </ul>
+
+    <h3>version 1.2.0-135 (Oct 27, 2006)</h3>
+
+    <ul>
+      <li>now available simultaneously with the release of Quark
+      1.2.0_135</li>
+
+      <li>compiler update</li>
+
+      <li>various bug fixes</li>
+    </ul>
+
+    <h3>version 1.2.0-133 (Oct 19, 2006)</h3>
+
+    <ul>
+      <li>the initial release of the CAL Eclipse Dev Tools</li>
+    </ul>
+
+    <h2>2. Contact information:</h2>
+
+    <p>The Quark Platform main site: <a href=
+    "http://labs.businessobjects.com/cal/">http://labs.businessobjects.com/cal/</a>.<br>
+
+    Check here for updates and announcements as well.</p>
+
+    <p>There is a <a href=
+    "http://groups.google.com/group/cal_language">Google Group on
+    the CAL Language and Quark Platform</a>.<br>
+    This is the primary place for discussions, announcements, and
+    questions about CAL and Quark.</p>
+
+    <p>In addition, please feel free to send comments or questions
+    to Luke Evans (<a href=
+    "mailto:luke.evans@businessobjects.com">luke.evans@businessobjects.com</a>)
+    or Bo Ilic (<a href=
+    "mailto:bo.ilic@businessobjects.com">bo.ilic@businessobjects.com</a>
+    ).</p>
+
+    <h2>3. System requirements:</h2>
+
+    <ul>
+      <li>Eclipse 3.3 or greater.</li>
+
+      <li>Java 5 update 8 or greater.</li>
+
+      <li>additional memory may be required when the CAL builder is
+      enabled</li>
+    </ul>
+
+    <p>Quark has been tested by us mainly on Windows XP, Linux and
+    Mac OS X, but as a pure Java application may work on other
+    platforms supporting Java 1.4 or greater.</p>
+
+    <h2>4. License:</h2>
+
+    <p>See the notice.html file at the root of the distribution for
+    the Software User Agreement.</p>
+
+    <p>The plug-ins comprising the CAL Eclipse Plug-in are
+    available with the following licensing:</p>
+
+    <ul>
+      <li>Eclipse Public License v1.0
+
+        <ul>
+          <li>org.openquark.cal.eclipse.core</li>
+
+          <li>org.openquark.cal.eclipse.ui</li>
+        </ul>
+      </li>
+
+      <li>BSD license
+
+        <ul>
+          <li>org.openquark.cal.eclipse</li>
+
+          <li>org.openquark.cal.eclipse.bridge</li>
+
+          <li>org.openquark.cal.eclipse.doc</li>
+
+          <li>org.openquark.cal.platform</li>
+
+          <li>org.openquark.cal.runtime</li>
+
+          <li>org.openquark.import</li>
+
+          <li>org.openquark.util</li>
+        </ul>
+      </li>
+    </ul>
+
+    <p>For the precise license terms for each plug-in, please refer
+    to the about.html at the root of the plug-in.</p>
+
+    <p>Note that the CAL Eclipse Plug-in is technically an Eclipse
+    feature that is implemented as a set of Eclipse plug-ins. Some
+    of these plug-ins are derived from the implementation of
+    Eclipse's Java Tooling and are thus licensed under the Eclipse
+    Public License v1.0. The plug-ins that are wrappers around the
+    BSD-licensed Open Quark Framework are themselves BSD-licensed.
+    There are also some plug-ins that are BSD-licensed since they
+    do not derive from any existing EPL-licensed plug-in. It is
+    possible for clients to implement an Eclipse plug-in that makes
+    use of CAL and Open Quark, for example to compile and execute
+    CAL programs, using only the BSD-licensed plug-ins.</p>
+
+    <h2>5. Known issues:</h2>
+
+    <p>Changes in Java classes referred to by CAL foreign
+    references (eg. caused by edits to Java files) will not be
+    picked up until Eclipse is restarted</p>
+  </div>
+</body>
+</html>

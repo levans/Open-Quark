@@ -1,0 +1,244 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * Fannkuch benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org@}
+ * 
+ * This code is based on and inspired by the entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}.
+ * @author Magnus Byne
+ */
+
+module Cal.Benchmarks.Shootout.Fannkuch;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, String;
+    function = eager, max, seq, stringToInt;
+    ;
+import Cal.Core.Debug using
+    function = show;
+    ;
+import Cal.Collections.List using
+    function = head;
+    ;
+import Cal.IO.Console using
+    function = print;
+    ;
+
+data foreign unsafe import jvm "int[]" JIntArray;
+
+foreign unsafe import jvm "newArray" newArray :: Int -> JIntArray;
+
+foreign unsafe import jvm "subscriptArray" subscript :: JIntArray -> Int -> Int;
+
+foreign unsafe import jvm "updateArray" update :: JIntArray -> Int -> Int -> Int;
+
+/** creates an initial sequence, 0 1 2 3 ...*/
+initSeq :: Int -> JIntArray;
+initSeq !size =
+    let
+        go :: JIntArray -> Int -> JIntArray;
+        go !array !i =
+            if i == size then
+                array
+            else
+                update array i i
+                `seq`
+                go array (i + 1)
+            ;
+    in
+        go (newArray size) 0
+    ;
+
+/** prints a sequence*/
+printSeq :: JIntArray -> Int -> Int -> ();
+printSeq !array !start !end =
+    if start == end then
+        print "\n"
+    else
+        print (show (array `subscript` start + 1))
+        `seq`
+        printSeq array (start + 1) end
+    ;
+
+/** rotate elements of array left by one place,
+ * e.g. 1 2 3 -> 2 3 1.
+ */
+rotateL :: JIntArray -> Int -> Int;
+rotateL !array !length =
+    let
+        elem0 :: Int;
+        elem0 = eager $ array `subscript` 0;
+
+        go :: Int -> ();
+        go !i =
+            if i == length then
+                ()
+            else
+                update array i (array `subscript` (i + 1))
+                `seq`
+                go (i + 1)
+            ;
+    in
+        elem0
+        `seq`
+        go 0
+        `seq`
+        update array length elem0
+    ;
+
+/** copy an array*/
+copyArray :: Int -> Int -> JIntArray -> JIntArray -> JIntArray;
+copyArray !start !end !to !from =
+    if start == end then
+        to
+    else
+        update to start (from `subscript` start)
+        `seq`
+        copyArray (start + 1) end to from
+    ;
+
+/** reverse elements of an array between start and end (inclusive)*/
+reverse :: JIntArray -> Int -> Int -> ();
+reverse !array !start !end =
+    let
+        swapHelper :: JIntArray -> Int -> Int -> Int -> Int -> Int;
+        swapHelper !array !i !j !iValue !jValue =
+            update array i jValue
+            `seq`
+            update array j iValue
+            ;
+    in
+        if start < end then
+            swapHelper
+                array
+                start
+                end
+                (array `subscript` start)
+                (array `subscript` end)
+            `seq`
+            reverse array (start + 1) (end - 1)
+        else
+            ()
+    ;
+
+/** count the 'flips' until 1 is at the head of the array*/
+countFlips :: JIntArray -> Int -> Int -> Int;
+countFlips !array !count !m =
+    if subscript array 0 == 0 then
+        count
+    else
+        reverse array 0 (array `subscript` 0)
+        `seq`
+        countFlips array (count + 1) m
+    ;
+
+/** set counts for controlling next permutations*/
+setCount :: JIntArray -> Int -> Int;
+setCount !array !r =
+    if r == 1 then
+        r
+    else
+        update array (r - 1) r
+        `seq`
+        setCount array (r - 1)
+    ;
+
+/** compute the next permuation - return -1 if there are no more*/
+nextPerm :: JIntArray -> JIntArray -> Int -> Int -> Int;
+nextPerm !perm !counts !r !n =
+    if r == n then
+        -1
+    else
+        rotateL perm r
+        `seq`
+        (
+            if update counts r (counts `subscript` r - 1) > 0 then
+                r
+            else
+                nextPerm perm counts (r + 1) n
+        )
+    ;
+
+fannkuch :: Int -> Int;
+fannkuch !n =
+    let
+        loop ::
+            JIntArray -> JIntArray -> JIntArray -> Int -> Int -> Int -> Int;
+        loop !perm !permCopy !count !r !maxFlips !dispCount =
+            if r == -1 then
+                maxFlips
+            else
+                copyArray 0 n permCopy perm
+                `seq`
+                (
+                    //we want to display the first 30 sequences
+                    if dispCount < (30 :: Int) then
+                        printSeq perm 0 n
+                        `seq`
+                        loop
+                            perm
+                            permCopy
+                            count
+                            (nextPerm perm count (setCount count r) n)
+                            (max maxFlips (countFlips permCopy 0 (n - 1)))
+                            (dispCount + 1)
+                    else
+
+                        loop
+                            perm
+                            permCopy
+                            count
+                            (nextPerm perm count (setCount count r) n)
+                            (max maxFlips (countFlips permCopy 0 (n - 1)))
+                            dispCount
+                )
+            ;
+    in
+        loop (initSeq n) (newArray n) (newArray n) n 0 0
+    ;
+
+main :: [String] -> ();
+public main !args =
+    let
+        n = eager $ stringToInt (head args);
+    in
+        print
+            (
+                "Pfannkuchen("
+                ++ show n
+                ++ ") = "
+                ++ show (fannkuch n)
+                ++ "\n"
+            )
+    ;
+

@@ -1,0 +1,706 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * SqlDataDictionary.cal
+ * Creation date: Oct 15, 2004.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains an implementation of a {@link typeClass =
+ * DataDictionary@} based on the {@link Sql@} and {@link DataGems@} modules.
+ *
+ * Information about SQL expressions and join is specified when the data
+ * dictionary is constructed, but users of the data dictionary work with a
+ * simplified query model.
+ *
+ * @author Richard Webster
+ */
+
+module Cal.Data.SqlDataDictionary;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Either, Int, JObject, Maybe, String;
+    dataConstructor = False, True, Nothing, Just;
+    function =
+        equals, error, field1, field2, field3, fromMaybe, fst, isEmpty, 
+        maybeApply, not, snd, uncurry;
+    ;
+import Cal.Collections.List using
+    function =
+        break, concatMap, filter, foldLeftStrict, head, length, lookup, map, 
+        tail;
+    ;      
+import Cal.Data.DictionaryQuery using
+    typeConstructor = AggregationType, DatabaseField, FieldType;
+    ;
+import Cal.Utilities.ValueType using
+    typeConstructor = ValueType;
+    ;
+import Cal.Data.Sql using
+    typeConstructor = JoinType, QueryOption;
+    ;
+import Cal.Data.DataGems using
+    typeConstructor = JDBCConnection, ResultSet;
+    function = jdbcQueryToResultSet;
+    ;
+import Cal.Data.DataDictionary using
+    typeClass = DataDictionary;
+    typeConstructor = DatabaseItem;
+    function =
+        childDatabaseItems, getDatabaseItemName, makeDatabaseFieldItem, 
+        makeDatabaseFolderItem, setDatabaseChildItems;
+    ;
+import Cal.Utilities.UniqueIdentifier using
+    typeClass = UniquelyNamedItem;
+    typeConstructor = UniqueIdentifier;
+    function =
+        getDisplayName, getUniqueIdentifier, getUniqueName, 
+        makeUniqueIdentifierByName;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeClass = XmlElementOutputable, XmlOutputable;
+    typeConstructor = XmlAttribute, XmlNode;
+    function = makeXmlElement, toXmlAttribute;
+    ;
+import Cal.Collections.Set using
+    typeConstructor = Set;
+    ;
+import Cal.Data.SqlParser;
+
+
+/**
+ * An implementation of the {@link typeClass = DataDictionary@} type class based on the 
+ * Sql builder and DataGems functionality.
+ */
+data public SqlDataDictionary = 
+    private SqlDataDictionary 
+        displayName       :: !String
+        uniqueIdentifier  :: !(UniqueIdentifier SqlDataDictionary)
+        connection        :: JDBCConnection
+        sqlBuilder        :: Sql.SqlBuilder
+        baseRestrictions  :: (Maybe (Sql.TypedExpr Boolean))
+        joinSets          :: [Sql.JoinSet]
+        fieldMap          :: [(DatabaseField, Sql.Expr)]
+        rootDatabaseItems :: [DatabaseItem]
+        tempFieldMap      :: [((ValueType, FieldType, String, String, AggregationType), DatabaseField)]
+    ;
+
+/**
+ * Constructs a SQL data dictionary with no folder information.
+ * @arg name             the name of the data dictionary (which will also be used for the unique identifier)
+ * @arg connection       the JDBC database connection to be used when executing queries against this data dictionary 
+ * @arg sqlBuilder       the SQL builder to be used to build SQL text when processing database queries
+ * @arg baseRestriction  this restriction (if specified) will be included in all queries against this dictionary
+ * @arg joinSets         sets of join information to be used when processing queries
+ * @arg fieldInfo        the database fields to be exposed in the dictionary, along with the underlying SQL expressions to which they correspond
+ * @return               a data dictionary based on the specified connection, database expressions, and join information
+ */
+makeSqlDataDictionary :: String -> JDBCConnection -> Sql.SqlBuilder -> Maybe (Sql.TypedExpr Boolean) -> [Sql.JoinSet] 
+                      -> [(DatabaseField, Sql.Expr)] -> SqlDataDictionary;
+public makeSqlDataDictionary !name connection sqlBuilder baseRestriction joinSets fieldInfo = 
+    let
+        uniqueIdentifier :: UniqueIdentifier SqlDataDictionary;
+        uniqueIdentifier = makeUniqueIdentifierByName name;
+
+        correctFieldInfo :: (DatabaseField, Sql.Expr) -> (DatabaseField, Sql.Expr);
+        correctFieldInfo !fInfo = 
+            case fInfo of
+            (dbField, fieldExpr) -> 
+                (updateDbFieldPreAggregatedFlag dbField fieldExpr, fieldExpr);
+            ;
+
+        // Fix up the pre-aggregated flag in the field database items.
+        correctedFieldInfo :: [(DatabaseField, Sql.Expr)];
+        correctedFieldInfo = map correctFieldInfo fieldInfo;
+
+        // Since there is no folder information here, all the fields will be root items.
+        rootDatabaseItems :: [DatabaseItem];
+        rootDatabaseItems = map (\pr -> makeDatabaseFieldItem (fst pr) []) correctedFieldInfo;
+    in
+        SqlDataDictionary name uniqueIdentifier connection sqlBuilder baseRestriction joinSets correctedFieldInfo rootDatabaseItems [];
+
+/**
+ * Constructs a SQL data dictionary with folder information.
+ * The fieldInfo for each database field may specify a list of ancestor dictinary item names.
+ * These can include the names of other database fields.
+ * Folders will be created as needed for any other names.
+ * 
+ * @arg name             the name of the data dictionary (which will also be used for the unique identifier)
+ * @arg connection       the JDBC database connection to be used when executing queries against this data dictionary 
+ * @arg sqlBuilder       the SQL builder to be used to build SQL text when processing database queries
+ * @arg baseRestriction  this restriction (if specified) will be included in all queries against this dictionary
+ * @arg joinSets         sets of join information to be used when processing queries
+ * @arg fieldInfo        the database fields to be exposed in the dictionary, along with the folder path and the underlying SQL expressions to which they correspond
+ * @return               a data dictionary based on the specified connection, database expressions, and join information
+ */
+makeSqlDataDictionary2 :: String -> JDBCConnection -> Sql.SqlBuilder -> Maybe (Sql.TypedExpr Boolean) -> [Sql.JoinSet] 
+                       -> [(DatabaseField, [String], Sql.Expr)] -> SqlDataDictionary;
+public makeSqlDataDictionary2 !name connection sqlBuilder baseRestriction joinSets fieldInfo = 
+    let
+        uniqueIdentifier :: UniqueIdentifier SqlDataDictionary;
+        uniqueIdentifier = makeUniqueIdentifierByName name;
+
+        correctFieldInfo :: (DatabaseField, [String], Sql.Expr) -> (DatabaseField, [String], Sql.Expr);
+        correctFieldInfo !fInfo = 
+            case fInfo of
+            (dbField, folders, fieldExpr) -> 
+                (updateDbFieldPreAggregatedFlag dbField fieldExpr, folders, fieldExpr);
+            ;
+
+        // Fix up the pre-aggregated flag in the field database items.
+        correctedFieldInfo :: [(DatabaseField, [String], Sql.Expr)];
+        correctedFieldInfo = map correctFieldInfo fieldInfo;
+
+        // Extract the database field to expression mapping information from the field info provided.
+        fieldMap :: [(DatabaseField, Sql.Expr)];
+        fieldMap = map (\t3 -> (field1 t3, field3 t3)) correctedFieldInfo;
+
+        // Build a tree (or trees) of database items using the folder information provided with the field info.
+        rootDatabaseItems :: [DatabaseItem];
+        rootDatabaseItems = foldLeftStrict (\cur t3 -> insertDatabaseField cur (field2 t3) (field1 t3)) [] correctedFieldInfo;
+    in
+        SqlDataDictionary name uniqueIdentifier connection sqlBuilder baseRestriction joinSets fieldMap rootDatabaseItems [];
+
+/**
+ * Sets the preaggregated flag for the field based on the contents of its underlying expression.
+ */
+updateDbFieldPreAggregatedFlag :: DatabaseField -> Sql.Expr -> DatabaseField;
+updateDbFieldPreAggregatedFlag dbField fieldExpr = 
+    DictionaryQuery.setFieldPreaggregated dbField (Sql.exprUsesAggregation fieldExpr);
+
+/**
+ * Helper function to insert a field into the items tree in the appropriate folder.
+ */
+insertDatabaseField :: [DatabaseItem] -> [String] -> DatabaseField -> [DatabaseItem];
+insertDatabaseField curItems !parentNames dbField = 
+    case parentNames of
+    [] -> curItems ++ [makeDatabaseFieldItem dbField []];
+    headParentName : tailParentNames -> 
+        let
+            // Check whether there is an existing parent with this name (at this level).
+            precedingItems :: [DatabaseItem];
+            matchingAndRemainingItems :: [DatabaseItem];
+            (precedingItems, matchingAndRemainingItems) = break (\item -> getDatabaseItemName item == headParentName) curItems;
+
+            existingParentFound :: Boolean;
+            existingParentFound = not $ isEmpty matchingAndRemainingItems;
+
+            parentToUpdate :: DatabaseItem;
+            parentToUpdate = head matchingAndRemainingItems;
+            
+            updatedParentItem :: DatabaseItem;
+            updatedParentItem = 
+                let
+                    oldChildItems = childDatabaseItems parentToUpdate;
+                    updatedChildItems = insertDatabaseField oldChildItems tailParentNames dbField;
+                in
+                    setDatabaseChildItems parentToUpdate updatedChildItems;
+    
+            updatedItems :: [DatabaseItem];
+            updatedItems = precedingItems ++ (updatedParentItem : tail matchingAndRemainingItems);
+    
+            // TODO: what happens if the parent should really be a field (which hasn't been encountered yet)?
+            newFolder :: DatabaseItem;
+            newFolder = makeDatabaseFolderItem headParentName (insertDatabaseField [] tailParentNames dbField);
+        in
+            if (existingParentFound) then updatedItems
+            else curItems ++ [newFolder];
+    ;
+
+
+instance UniquelyNamedItem SqlDataDictionary where
+    getDisplayName = getSqlDataDictionaryDisplayName;
+    getUniqueIdentifier = getSqlDataDictionaryUniqueIdentifier;
+    ;
+
+getSqlDataDictionaryDisplayName :: SqlDataDictionary -> String;
+private getSqlDataDictionaryDisplayName dataDictionary = dataDictionary.SqlDataDictionary.displayName;
+
+getSqlDataDictionaryUniqueIdentifier :: SqlDataDictionary -> UniqueIdentifier SqlDataDictionary;
+private getSqlDataDictionaryUniqueIdentifier dataDictionary = dataDictionary.SqlDataDictionary.uniqueIdentifier;
+
+
+instance DataDictionary SqlDataDictionary where
+    databaseItems = sqlDatabaseItems;
+    databaseFields = sqlDatabaseFields;
+    joinSets = sqlJoinSets;
+    queryText = sqlQueryDisplayText;
+    executeQuery = sqlExecuteQuery;
+    areFieldsCompatible = sqlAreFieldsCompatible;
+    addDatabaseFields = sqlAddDatabaseFields;
+    getDatabaseField = sqlGetDatabaseField;
+    ;
+
+/**
+ * Top level database items in the dictionary.
+ */
+sqlDatabaseItems :: SqlDataDictionary -> [DatabaseItem];
+sqlDatabaseItems !dictionary = 
+    dictionary.SqlDataDictionary.rootDatabaseItems;
+
+/**
+ * All the database fields in the tree.
+ */
+sqlDatabaseFields :: SqlDataDictionary -> [DatabaseField];
+sqlDatabaseFields !dictionary = 
+    List.map field1 (dictionary.SqlDataDictionary.fieldMap);
+
+///**
+// * Indicates that the field is preaggregated if it is an expression with an aggregate function.
+// */
+//sqlIsFieldPreaggregated :: SqlDataDictionary -> DatabaseField -> Boolean;
+//private sqlIsFieldPreaggregated dictionary databaseField = 
+//    case dictionary of
+//    SqlDataDictionary {fieldMap} -> 
+//        let
+//            fieldExpr = fromMaybe (error ("The field '" ++ (getDisplayName databaseField) ++ "' does not exist in the dictionary."))
+//                                  (lookup databaseField fieldMap);
+//        in
+//            Sql.exprUsesAggregation fieldExpr;
+//    ;
+
+/**
+ * Named join sets in the dictionary.
+ */
+sqlJoinSets :: SqlDataDictionary -> [DictionaryQuery.JoinSet];
+sqlJoinSets !dictionary = 
+    case dictionary of
+    SqlDataDictionary {joinSets} -> 
+        let
+            convertJoinSet :: Sql.JoinSet -> Maybe DictionaryQuery.JoinSet;
+            convertJoinSet sqlJS = 
+                let
+                    displayName = getDisplayName sqlJS;
+                    uniqueName = getUniqueName $ getUniqueIdentifier sqlJS;
+                in
+                    // Filter out any join sets with empty names.
+                    if (isEmpty displayName || isEmpty uniqueName) then Nothing
+                    else Just $ DictionaryQuery.makeJoinSet displayName (makeUniqueIdentifierByName uniqueName);
+        in
+            List.mapJust convertJoinSet joinSets;
+    ;
+
+/**
+ * Builds the SQL query text (for display) for the specified query.
+ */
+sqlQueryDisplayText :: SqlDataDictionary -> DictionaryQuery.Query -> String;
+sqlQueryDisplayText !dictionary !query = 
+    sqlQueryText True dictionary query;
+
+
+/**
+ * Builds the SQL query text for the specified query.
+ */
+sqlQueryText :: Boolean -> SqlDataDictionary -> DictionaryQuery.Query -> String;
+sqlQueryText !forDisplay !dictionary !dictQuery = 
+    case dictionary of
+    SqlDataDictionary {sqlBuilder} -> 
+        let
+            sqlQuery :: Sql.Query;
+            sqlQuery = toSqlQuery dictionary dictQuery;
+        in
+            Sql.queryText sqlBuilder forDisplay sqlQuery;
+    ;
+
+/**
+ * Returns the SQL expression associated with the specified dictionary field.
+ * An error will be thrown if the field cannot be found in the dictionary.
+ */
+dictFieldToSqlExpr :: SqlDataDictionary -> DatabaseField -> Sql.Expr;
+dictFieldToSqlExpr !dictionary !dictionaryField = 
+    case dictionary of
+    SqlDataDictionary {fieldMap} -> 
+        fromMaybe (error ("The field '" ++ getDisplayName dictionaryField ++ "' does not exist in the dictionary."))
+                  (lookup dictionaryField fieldMap);
+    ;
+
+/**
+ * Converts a dictionary field expression to a Sql expression.
+ */
+dictExprToSqlExpr :: SqlDataDictionary -> DictionaryQuery.Expr -> Sql.Expr;
+dictExprToSqlExpr !dictionary !dictExpr = 
+    DictionaryQuery.abstractExpressionToSqlExpression (dictFieldToSqlExpr dictionary) (baseQueryToSqlQuery dictionary) dictExpr;
+
+/**
+ * Converts an abstract query to a SQL query.
+ */
+toSqlQuery :: SqlDataDictionary -> DictionaryQuery.Query -> Sql.Query;
+toSqlQuery !dictionary !dictQuery = 
+    if (DictionaryQuery.isUnionQuery dictQuery) then 
+        case (DictionaryQuery.componentQueries dictQuery) of
+        (componentQuery1, componentQuery2) ->
+            Sql.unionQuery (toSqlQuery dictionary componentQuery1) (toSqlQuery dictionary componentQuery2) (DictionaryQuery.isUnionAll dictQuery);
+    else 
+        baseQueryToSqlQuery dictionary dictQuery;
+
+
+/**
+ * Converts a base abstract query (not a Union, etc...) to a SQL query.
+ */
+baseQueryToSqlQuery :: SqlDataDictionary -> DictionaryQuery.Query -> Sql.Query;
+private baseQueryToSqlQuery dictionary dictQuery = 
+    case dictionary of
+    SqlDataDictionary {baseRestrictions, fieldMap} -> 
+        let
+            toSqlExpr = dictExprToSqlExpr dictionary;
+
+            dictAnchorFields :: [DictionaryQuery.Expr];
+            dictAnchorFields = DictionaryQuery.anchoringExpressions dictQuery;
+
+            dictProjectedExprsAndAliases :: [(DictionaryQuery.Expr, String)];
+            dictProjectedExprsAndAliases = DictionaryQuery.projectedColumnsWithAliases dictQuery;
+
+            dictRestrictionExprs :: [DictionaryQuery.TypedExpr Boolean];
+            dictRestrictionExprs = DictionaryQuery.restrictionExpressions dictQuery;
+
+            dictFilters :: [DatabaseField];
+            dictFilters = DictionaryQuery.queryFilters dictQuery;
+
+            dictOrderingExprs :: [(DictionaryQuery.Expr, Boolean)];
+            dictOrderingExprs = DictionaryQuery.orderingExpressions dictQuery;
+
+            dictGroupingExprs :: [DictionaryQuery.Expr];
+            dictGroupingExprs = DictionaryQuery.groupingExpressions dictQuery;
+
+            dictQueryOptions :: [QueryOption];
+            dictQueryOptions = DictionaryQuery.queryOptions dictQuery;
+
+            subqueryJoinInfo :: [(JoinType, [(DictionaryQuery.Expr, DictionaryQuery.Expr)])];
+            subqueryJoinInfo = DictionaryQuery.subqueryJoinInfoList dictQuery;
+
+
+            // Convert the various dictionary field expressions to Sql field expressions.
+            anchorFieldExpressions :: [Sql.Expr];
+            anchorFieldExpressions = map toSqlExpr dictAnchorFields;
+
+            sqlProjectedExprsAndAliases :: [(Sql.Expr, String)];
+            sqlProjectedExprsAndAliases = map (\pr -> (toSqlExpr (fst pr), snd pr)) dictProjectedExprsAndAliases;
+
+            sqlRestrictions :: [Sql.TypedExpr Boolean];
+            sqlRestrictions = map (\r -> Sql.toTypedExpr (toSqlExpr (DictionaryQuery.toUntypedExpr r))) dictRestrictionExprs;
+
+            sqlFilterExprs :: [Sql.TypedExpr Boolean];
+            sqlFilterExprs = map (\f -> Sql.toTypedExpr (dictFieldToSqlExpr dictionary f)) dictFilters;
+
+            sqlOrderingExprs :: [(Sql.Expr, Boolean)];
+            sqlOrderingExprs = map (\pr -> (toSqlExpr (fst pr), snd pr)) dictOrderingExprs;
+
+            sqlGroupingExprs :: [Sql.Expr];
+            sqlGroupingExprs = map toSqlExpr dictGroupingExprs;
+
+            subqueryJoins :: [Sql.JoinInfo];
+            subqueryJoins = 
+                let
+                    convertJoinInfo dictJoinInfo = 
+                        let
+                            joinType = fst dictJoinInfo;
+                            exprPairs = snd dictJoinInfo;
+                        in
+                            map (uncurry (convertJoinInfoItem joinType)) exprPairs;
+
+                    convertJoinInfoItem joinType leftDictField rightDictField =
+                        let
+                            leftSqlField :: Sql.TypedExpr String;
+                            leftSqlField  = Sql.toTypedExpr (toSqlExpr leftDictField);
+
+                            rightSqlField :: Sql.TypedExpr String;
+                            rightSqlField = Sql.toTypedExpr (toSqlExpr rightDictField);
+                        in
+                            Sql.makeJoinInfo leftSqlField rightSqlField joinType;
+                in
+                    concatMap convertJoinInfo subqueryJoinInfo;
+
+
+            // Assemble the Sql query.
+            sqlQuery0 :: Sql.Query;
+            sqlQuery0 = Sql.newQuery;
+
+            // Add the projected columns to the query.
+            sqlQuery1 = Sql.projectWithAliases sqlQuery0 sqlProjectedExprsAndAliases;
+
+            // Apply the base restriction, if any, to the SQL query.
+            sqlQuery2 = 
+                case baseRestrictions of
+                Nothing -> sqlQuery1;
+                Just baseRestrictionsValue ->
+                    Sql.restrict sqlQuery1 baseRestrictionsValue;
+                ;
+
+            // Apply any additional restrictions to the SQL query.
+            sqlQuery3 = Sql.restrict2 sqlQuery2 (sqlFilterExprs ++ sqlRestrictions);
+
+            // Apply any sorting to the SQL query.
+            sqlQuery4 = Sql.order2 sqlQuery3 sqlOrderingExprs;
+
+            // Apply any grouping to the SQL query.
+            sqlQuery5 = Sql.group2 sqlQuery4 sqlGroupingExprs;
+
+            // Apply any options to the SQL query.
+            sqlQuery6 = foldLeftStrict Sql.addOption sqlQuery5 dictQueryOptions;
+
+            // Determine the best join set based on the fields used so far, and add these joins to the SQL query.
+            // Take into account the fields to be used for subquery joins, but don't actually add the subquery joins yet.
+            maybeJoinSet = getBestJoinSetForFields dictionary (Sql.join2 sqlQuery6 subqueryJoins) anchorFieldExpressions (DictionaryQuery.preferredJoinSetID dictQuery);
+            sqlQuery7 = Sql.setJoins sqlQuery6 (map Sql.joinSetJoinTree (Prelude.maybeToList maybeJoinSet));
+
+            // Add any subquery joins to the query.
+            sqlQuery8 = Sql.join2 sqlQuery7 subqueryJoins;
+
+            // Trim away any unused joins from the query.
+            // However, take into account any anchor fields that have been specified.
+            sqlQuery9 = Sql.removeUnusedTables2 anchorFieldExpressions sqlQuery8;
+        in
+            sqlQuery9;
+    ;
+
+
+/**
+ * Executes the specified database query to get a resultset.
+ */
+sqlExecuteQuery :: SqlDataDictionary -> DictionaryQuery.Query -> ResultSet;
+private sqlExecuteQuery !dictionary query = 
+    let
+        sql :: String;
+        sql = sqlQueryText False dictionary query;
+    in
+        jdbcQueryToResultSet (dictionary.SqlDataDictionary.connection) sql;
+
+
+/**
+ * Returns the best set of joins for the fields in the specified query.
+ * An error will be thrown if an appropriate join set cannot be found.
+ * If a single table is required, then an arbitrary join set (containing this table) will be returned.
+ * If no tables are needed, then {@link Nothing@} is returned.
+ */
+getBestJoinSetForFields :: SqlDataDictionary -> Sql.Query -> [Sql.Expr] -> Maybe (UniqueIdentifier DictionaryQuery.JoinSet) -> Maybe Sql.JoinSet;
+private getBestJoinSetForFields dictionary sqlQuery anchorFieldExpressions preferredJoinSetID = 
+    let
+        sqlPreferredJoinSetID :: Maybe (UniqueIdentifier Sql.JoinSet);
+        sqlPreferredJoinSetID = maybeApply UniqueIdentifier.convertUniqueIdentifier preferredJoinSetID;
+    in
+        Sql.getBestJoinSetForQueryFields dictionary.SqlDataDictionary.joinSets 
+                                         sqlQuery 
+                                         anchorFieldExpressions 
+                                         sqlPreferredJoinSetID;
+
+/**
+ * Analyze the set of database fields passed in and determine if the fields can be queried for
+ * in a single query.
+ */
+sqlAreFieldsCompatible :: SqlDataDictionary -> [DatabaseField] -> Boolean;
+sqlAreFieldsCompatible !dictionary allFields =
+    case dictionary of
+    SqlDataDictionary {joinSets} -> 
+        let
+            // Note that (for efficiency) this could return the same table more than once in the result list.
+            tablesUsedByField :: DatabaseField -> [Sql.QueryTable];
+            tablesUsedByField !dbField = 
+                let
+                    fieldExpr :: Sql.Expr;
+                    fieldExpr = dictExprToSqlExpr dictionary $ DictionaryQuery.untypedField dbField;
+                in
+                    Sql.getExpressionTables False fieldExpr; 
+
+            allTablesUsed :: [Sql.QueryTable];
+            allTablesUsed = List.removeDuplicates $ List.concatMap tablesUsedByField allFields;
+
+            // Returns True if the join set contains all the query tables.
+            joinSetContainsQueryTables :: Sql.JoinSet -> Boolean;
+            joinSetContainsQueryTables joinSet = 
+                let
+                    joinTree = Sql.joinSetJoinTree joinSet;
+                    joinTreeTables = Sql.getJoinTreeTables joinTree;
+                in
+                    // Check whether all the query tables are included in the join tree tables list.
+                    isEmpty (List.deleteFirsts allTablesUsed joinTreeTables);
+
+            // Determine which of the join sets contain all the necessary tables.
+            compatibleJoinSets :: [Sql.JoinSet];
+            compatibleJoinSets = filter joinSetContainsQueryTables joinSets;
+
+            // For measures, it isn't sufficient to just check whether the fields are in the same join set.
+            // Two measure fields from different database tables in the same join set might not be compatible (depending on join cardinalities).
+            // For example, it is not safe to query for a field from the Orders table with a field from the Orders_Detail table in the same query
+            // since the values from the Orders table will be repeated for each Orders_Detail row for the order.
+            // If more than one measure is specified, check whether they all use the same tables.
+            // TODO: there might be cases where measures based on different tables are still considered compatible (depending on join cardinalities,etc...).
+            measureFieldsCompatible :: Boolean;
+            measureFieldsCompatible = 
+                let
+                    measureFields :: [DatabaseField];
+                    measureFields = filter DictionaryQuery.isMeasureField allFields;
+
+                    // Get the set of table aliases used for a measure field.
+                    tablesForMeasureField :: DatabaseField -> Set String;
+                    tablesForMeasureField !msrField = 
+                        Set.fromListWith Sql.getQueryTableAlias $ tablesUsedByField msrField;
+
+                    allMesureTableSets :: [Set String];
+                    allMesureTableSets = map tablesForMeasureField measureFields;
+                in
+                    if (length measureFields < 2) then True
+                    else
+                        case allMesureTableSets of
+                        headTableSet : tailTableSets -> List.all (equals headTableSet) tailTableSets;
+                        ;
+        in
+            if (length allTablesUsed < 2) then 
+                // If there is only 1 table involved then no joins are needed and the fields
+                // are compatible.
+                True
+            else if (isEmpty compatibleJoinSets) then
+                // Return false if there are multiple tables and no appropriate join set could be found.
+                False
+            else 
+                // There is at least one join set that can join all of the fields together in
+                // a compatible query.
+                // Check that the measures are compatible as well.
+                measureFieldsCompatible;
+    ;
+
+
+sqlAddDatabaseFields :: SqlDataDictionary -> [(ValueType, FieldType, String, String, AggregationType)] -> (SqlDataDictionary, [DatabaseField]);
+sqlAddDatabaseFields !dictionary !newFieldInfo = 
+    case dictionary of
+    SqlDataDictionary {displayName, uniqueIdentifier, connection, sqlBuilder, baseRestrictions, joinSets, fieldMap, rootDatabaseItems, tempFieldMap} -> 
+        let
+            /**
+             * Helper function to create the new database field and its associated SQL expression for the
+             * updated dbFieldToUniverseItemMap.
+             * @arg fieldInfo A tuple describing the new database field to create.
+             * @arg idx The index that will be added to the initial starting index to generate
+             * a unique ID for each map entry created.  It must be incremented with each call. 
+             */
+            createMapEntry :: (ValueType, FieldType, String, String, AggregationType) -> Int -> (DatabaseField, Sql.Expr);
+            createMapEntry !fieldInfo !idx =
+                case fieldInfo of
+                (valueType, fieldType, selectClause, whereClause, aggType) ->
+                    let
+                        startingIdx :: Int;
+                        startingIdx = length fieldMap;
+
+                        displayName = "TEMP_DICT_ITEM_" ++ Prelude.intToString (startingIdx + idx);
+                        uniqueID = makeUniqueIdentifierByName displayName;
+
+                        dbField :: DatabaseField;
+                        dbField = DictionaryQuery.makeDatabaseField displayName
+                                                                    uniqueID
+                                                                    valueType
+                                                                    fieldType
+                                                                    aggType
+                                                                    True;
+                        // TODO: make use of the whereClause text...
+                        sqlExpression :: Sql.Expr;
+                        sqlExpression = SqlParser.parseExpression selectClause;
+                    in
+                        (dbField, sqlExpression);
+                ;
+
+            /** Create all of the new map entries. */
+            newMapEntries :: [(DatabaseField, Sql.Expr)];
+            newMapEntries = List.mapIndexed createMapEntry newFieldInfo;
+
+            updatedFieldMap :: [(DatabaseField, Sql.Expr)];
+            updatedFieldMap = newMapEntries ++ fieldMap;
+
+            newDBFields :: [DatabaseField];
+            newDBFields = map field1 newMapEntries;
+
+            updatedTempFieldMap :: [((ValueType, FieldType, String, String, AggregationType), DatabaseField)];
+            updatedTempFieldMap = List.zip newFieldInfo newDBFields;
+
+            updatedDictionary :: SqlDataDictionary;
+            updatedDictionary = SqlDataDictionary displayName uniqueIdentifier connection sqlBuilder baseRestrictions  
+                                                  joinSets updatedFieldMap rootDatabaseItems updatedTempFieldMap;
+        in
+            (updatedDictionary, newDBFields);
+    ;
+
+sqlGetDatabaseField :: SqlDataDictionary -> (ValueType, FieldType, String, String, AggregationType) -> Maybe DatabaseField;
+sqlGetDatabaseField dictionary fieldInfo =
+    lookup fieldInfo dictionary.SqlDataDictionary.tempFieldMap;
+
+/**
+ * Make a SqlDataDictionary inputable and outputable as an internal value.
+ */
+instance Prelude.Outputable SqlDataDictionary where
+    output = outputSqlDataDictionary;
+    ;
+
+instance Prelude.Inputable SqlDataDictionary where
+    input = inputSqlDataDictionary;
+    ;
+
+outputSqlDataDictionary :: SqlDataDictionary -> JObject;
+private outputSqlDataDictionary dictionary = Prelude.output (dictionaryToInternal dictionary);
+
+inputSqlDataDictionary :: JObject -> SqlDataDictionary;
+private inputSqlDataDictionary obj = internalToSqlDataDictionary (Prelude.input obj);
+
+/**
+ * Converts a {@link typeConstructor = SqlDataDictionary@} to an internal value.
+ */
+dictionaryToInternal :: SqlDataDictionary -> Prelude.CalValue;
+private dictionaryToInternal dictionary = Prelude.unsafeCoerce dictionary;
+
+/**
+ * Converts  an internal value to a {@link typeConstructor = SqlDataDictionary@} value.
+ */
+internalToSqlDataDictionary :: Prelude.CalValue -> SqlDataDictionary;
+private internalToSqlDataDictionary internalValue = Prelude.unsafeCoerce internalValue;
+
+
+
+/**
+ * Allow SQL data dictionary values to be serialized.
+ * For now, just store the unique name of the dictionary.
+ */
+instance XmlElementOutputable SqlDataDictionary where
+    toXmlElement = outputSqlDataDictionaryXmlElement;
+    ;
+
+instance XmlOutputable SqlDataDictionary where
+    toXml = outputSqlDataDictionaryXml;
+    ;
+    
+outputSqlDataDictionaryXml :: String -> SqlDataDictionary -> (Either XmlAttribute XmlNode);
+private outputSqlDataDictionaryXml name value =
+    XmlBuilder.outputFromXmlElementOutputable name value;
+
+outputSqlDataDictionaryXmlElement :: String -> SqlDataDictionary -> XmlNode;
+private outputSqlDataDictionaryXmlElement elemName sqlDataDictionary =
+    let
+        nameAttribute = toXmlAttribute "Name" (getUniqueIdentifier sqlDataDictionary);
+    in
+        makeXmlElement Nothing elemName [nameAttribute] [];
+

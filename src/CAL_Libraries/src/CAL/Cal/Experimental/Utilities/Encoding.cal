@@ -1,0 +1,172 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Encoding.cal
+ * Creation date: October 2007.
+ * By: Malcolm Sharpe
+ */
+
+/**
+ * This module implements simple string encoding and decoding based on Java's
+ * Charset class. It also provides a simple utility for encoding single code
+ * points in UTF-16.
+ * 
+ * @author Malcolm Sharpe
+ */
+module Cal.Experimental.Utilities.Encoding;
+
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable;
+    typeConstructor = Byte, Char, Int, Maybe, String;
+    function = const, error, seq;
+    dataConstructor = Just, Nothing;
+    ;
+import Cal.Core.Exception using
+    typeClass = Exception;
+    function = catch;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+import Cal.Collections.List;
+import Cal.Core.Char;
+import Cal.Core.String;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+
+/**
+ * Convert a code point into a String, which is encoded as UTF-16.
+ */
+codePointToUTF16 :: Int -> String;
+public codePointToUTF16 cp =
+    // At the time of writing, CAL does not support hexadecimal integer literals.
+    // When it does, replace the decimal literals with the commented hexadecimal
+    // literals.
+    if cp <= 65535/*0xFFFF*/
+    then String.fromChar (Char.fromInt cp)
+    else if cp <= 1114111/*0x10FFFF*/
+    then
+        let
+            highPart = (cp - 65536/*0x10000*/) / 1024/*0x400*/;
+            lowPart = (cp - 65536/*0x10000*/) % 1024/*0x400*/;
+            leadingSurrogate = Char.fromInt (55296/*0xD800*/ + highPart);
+            trailingSurrogate = Char.fromInt (56320/*0xDC00*/ + lowPart);
+        in
+            String.fromChar leadingSurrogate ++ String.fromChar trailingSurrogate
+    else
+        error "Code point must be in range [0x000000 - 0x10FFFF]";
+
+data foreign unsafe import jvm "java.lang.CharSequence" private JCharSequence deriving Outputable;
+data foreign unsafe import jvm "java.nio.charset.Charset" private JCharset deriving Outputable;
+data foreign unsafe import jvm "java.nio.ByteBuffer" private JByteBuffer deriving Outputable;
+data foreign unsafe import jvm "java.nio.CharBuffer" private JCharBuffer deriving Outputable;
+data foreign unsafe import jvm "java.nio.Buffer" private JBuffer;
+data foreign unsafe import jvm "java.nio.charset.CharsetDecoder" private JCharsetDecoder;
+data foreign unsafe import jvm "java.nio.charset.CharacterCodingException" private JCharacterCodingException deriving Inputable, Outputable, Show;
+instance Exception JCharacterCodingException where;
+
+foreign unsafe import jvm "static method java.nio.charset.Charset.forName" private jCharset_forName :: String -> JCharset;
+
+foreign unsafe import jvm "method encode" private jCharset_encode :: JCharset -> JCharBuffer -> JByteBuffer;
+foreign unsafe import jvm "method newDecoder" private jCharset_newDecoder :: JCharset -> JCharsetDecoder;
+foreign unsafe import jvm "method decode" private jCharsetDecoder_decode :: JCharsetDecoder -> JByteBuffer -> JCharBuffer;
+
+foreign unsafe import jvm "method toString" private jCharBuffer_toString :: JCharBuffer -> String;
+
+foreign unsafe import jvm "static method java.nio.ByteBuffer.allocate" private jByteBuffer_allocate :: Int -> JByteBuffer;
+foreign unsafe import jvm "static method java.nio.CharBuffer.allocate" private jCharBuffer_allocate :: Int -> JCharBuffer;
+foreign unsafe import jvm "method limit" private jByteBuffer_limit :: JByteBuffer -> Int;
+foreign unsafe import jvm "method put" private jByteBuffer_put :: JByteBuffer -> Byte -> JByteBuffer;
+foreign unsafe import jvm "method put" private jCharBuffer_put :: JCharBuffer -> Char -> JCharBuffer;
+foreign unsafe import jvm "method get" private jByteBuffer_get :: JByteBuffer -> Int -> Byte;
+foreign unsafe import jvm "method rewind" private jByteBuffer_rewind :: JByteBuffer -> JBuffer;
+foreign unsafe import jvm "method rewind" private jCharBuffer_rewind :: JCharBuffer -> JBuffer;
+foreign unsafe import jvm "static method java.nio.CharBuffer.wrap" private jCharBuffer_wrap :: JCharSequence -> JCharBuffer;
+foreign unsafe import jvm "cast" private stringToCharSequence :: String -> JCharSequence;
+
+byteArrayToByteBuffer :: Array Byte -> JByteBuffer;
+private byteArrayToByteBuffer bytes =
+    let
+        len = Array.length bytes;
+        walk !i !bb =
+            if i == len
+            then jByteBuffer_rewind bb `seq` bb
+            else walk (i + 1) (bb `jByteBuffer_put` (Array.subscript bytes i));
+    in
+        walk 0 (jByteBuffer_allocate len);
+
+/**
+ * Decodes an array of bytes into a String using the specified character set.
+ * 
+ * @arg charsetName the name of the charset, as described in the documentation
+ * for Java's Charset class.
+ * @arg bytes the array of bytes to be decoded.
+ * @return Just the decoded String, or Nothing if the input is malformed.
+ */
+decode :: String -> Array Byte -> Maybe String;
+public decode charsetName bytes =
+    let
+        charset = jCharset_forName charsetName;
+        charsetDecoder = jCharset_newDecoder charset;
+        byteBuffer = byteArrayToByteBuffer bytes;
+        charBuffer = jCharsetDecoder_decode charsetDecoder byteBuffer;
+    in
+        (charBuffer `seq`
+         Just (jCharBuffer_toString charBuffer))
+        `catch`
+        (const Nothing :: JCharacterCodingException -> Maybe String);
+
+stringToCharBuffer :: String -> JCharBuffer;
+private stringToCharBuffer = jCharBuffer_wrap # stringToCharSequence;
+
+byteBufferToByteArray :: JByteBuffer -> Array Byte;
+private byteBufferToByteArray bb =
+    Array.makeArrayFromIndices (jByteBuffer_limit bb) (jByteBuffer_get bb);
+
+/**
+ * Encodes a String into an array of bytes using the specified character set.
+ * 
+ * @arg charsetName the name of the charset, as described in the documentation
+ * for Java's Charset class.
+ * @arg s the string to be encoded.
+ * @return the bytes generated by encoding {@code s@}.
+ */
+encode :: String -> String -> Array Byte;
+public encode charsetName s =
+    let
+        charset = jCharset_forName charsetName;
+        charBuffer = stringToCharBuffer s;
+        byteBuffer = jCharset_encode charset charBuffer;
+        bytes = byteBufferToByteArray byteBuffer;
+    in
+        bytes;

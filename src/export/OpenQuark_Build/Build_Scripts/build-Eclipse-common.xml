@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<!--
+    Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+    All rights reserved.
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+    
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+     
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+     
+        * Neither the name of Business Objects nor the names of its contributors
+          may be used to endorse or promote products derived from this software
+          without specific prior written permission.
+     
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    build-Eclipse-common.xml
+    Creation date: Oct 12, 2007.
+    By: Edward Lam
+-->
+
+<!--
+================================================================================================= 
+
+Imported build file for building Eclipse plugins for OpenQuark.
+
+================================================================================================= 
+-->
+
+<project name="build-Eclipse-common" basedir=".">
+
+    <import file="./build-common.xml" />
+
+    <!-- =================================================================== -->
+    <!-- Initialization target                                               -->
+    <!-- =================================================================== -->
+    <target name="init">
+        <condition property="isImportProject">
+            <equals arg1="${plugin.name}" arg2="org.openquark.import"/>
+        </condition>
+    </target>
+
+        
+    <!-- Update the bundle version in the manifest.  -->
+    <target name="updateManifest">
+        <property name="updated.manifest" value="${java.build.dir}/${project.simplename}/META-INF/MANIFEST.MF" />
+        
+        <!-- Copy the manifest to the obj folder so that it can be modified. -->
+        <copy file="${project.dir}/META-INF/MANIFEST.MF" tofile="${updated.manifest}" />
+        
+        <!-- Update the bundle version. -->
+        <manifest file="${updated.manifest}" mode="update">
+            <attribute name="Bundle-Version" value="${bundle.version}"/>
+        </manifest>
+    </target>
+        
+    <!-- Unzip the feature to the Eclipse install location. -->
+    <target name="installEclipseFeature" depends="init">
+        <unzip src="${java.release.out.dir}/features/${project.simplename}.jar" dest="${eclipse.root.folder}/features/${project.simplename}"/>
+    </target>
+    
+    <!-- Copy the plugin .jar or create the plugin folder. -->
+    <target name="installEclipsePlugin" depends="init,copyEclipseJarToPluginInstallFolder,installImportPlugin"/>
+    
+    <!-- Copy the plugin to the Eclipse install location. -->
+    <target name="copyEclipseJarToPluginInstallFolder" unless="isImportProject">
+        <copy file="${java.release.out.dir}/plugins/${project.simplename}.jar" todir="${eclipse.root.folder}/plugins"/>
+    </target>
+        
+    <!-- Since the import project exists in non-jarred form, it must be unzipped instead of copied. -->
+    <target name="installImportPlugin" if="isImportProject">
+        <unzip src="${java.release.out.dir}/plugins/${project.simplename}.jar" dest="${eclipse.root.folder}/plugins/${project.simplename}"/>
+    </target>
+</project>

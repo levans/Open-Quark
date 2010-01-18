@@ -1,0 +1,855 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+ 
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ 
+    * Neither the name of Business Objects nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+UsingQuarkWithStandaloneJars.xml
+Created: June 13, 2007
+By: Joseph Wong
+-->
+<!DOCTYPE book [
+<!ENTITY % sgml.features "IGNORE">
+<!ENTITY % xml.features "INCLUDE">
+<!ENTITY euro "&#8364;">
+<!ENTITY % dbcent PUBLIC "-//OASIS//ENTITIES DocBook Character Entities V4.4//EN" "http://www.oasis-open.org/docbook/xml/4.4/dbcentx.mod">
+%dbcent;
+
+<!ENTITY legal SYSTEM "LegalNotice.xml">
+]>
+<book version="5.0" xmlns="http://docbook.org/ns/docbook"
+      xmlns:xlink="http://www.w3.org/1999/xlink"
+      xmlns:xi="http://www.w3.org/2001/XInclude"
+      xmlns:svg="http://www.w3.org/2000/svg"
+      xmlns:mml="http://www.w3.org/1998/Math/MathML"
+      xmlns:html="http://www.w3.org/1999/xhtml"
+      xmlns:db="http://docbook.org/ns/docbook">
+  <title>Using Quark with Standalone JARs</title>
+
+  <info>
+    <releaseinfo>Last modified: November 14, 2007</releaseinfo>
+
+    <authorgroup>
+      <author>
+        <personname>Joseph Wong</personname>
+      </author>
+    </authorgroup>
+
+    &legal;
+  </info>
+
+  <chapter>
+    <title>Introduction</title>
+
+    <para>There are a number of ways in which programs written in CAL can be
+    deployed. One way to deploy such a program is to generate a
+    <emphasis>standalone JAR</emphasis>, which may contain application and
+    library classes.</para>
+
+    <para>A standalone JAR may package up a CAL application by gathering
+    together all the classes necessary for running a specific CAL function,
+    and a class whose <code>public static void main(String[] args)</code>
+    method runs the CAL function with the supplied command-line arguments.
+    This makes it possible to package up a CAL function into a standalone
+    application.</para>
+
+    <para>The generated main class is able to run the CAL function directly
+    without having to first initialize a CAL workspace. Thus, the start-up
+    time to run the function will be much smaller than in cases where
+    workspace initialization is required (e.g. running the function via
+    <code>BasicCALServices</code> from within a Java program, or starting up
+    ICE or the Gem Cutter and running the function.)</para>
+
+    <para>A standalone JAR may also package up one or more <emphasis>library
+    classes</emphasis> - a library class is a class containing static methods
+    corresponding to the non-private functions and data constructors defined
+    in a particular CAL module. This makes it possible to expose CAL libraries
+    in Java, by defining API modules in CAL (whose functions may include code
+    for marshalling to/from foreign types), from which library classes are
+    generated.</para>
+
+    <para>The Standalone JAR Tool is the command-line tool that builds
+    standalone JARs. A standalone JAR produced by this tool includes only the
+    classes necessary for running the specified CAL applications and
+    supporting the specified CAL library modules, and thus does not take up
+    more space than necessary. User resources are also bundled in the
+    generated standalone JAR, so that the CAL functions may load and use
+    localized resources (such as string properties files) via modules such as
+    <code>Cal.Core.Resource</code> and
+    <code>Cal.Utilities.StringProperties</code>.</para>
+
+    <para>The tool also supports the generation of a companion source zip file
+    containing source files for all generated classes. One can use the zip
+    file in an IDE to link the class files in the JAR to sources, or build a
+    version of the JAR with debug information (e.g. line numbers) from the
+    sources for debugging purposes. Moreover, the library classes will have
+    proper Javadoc comments generated from CALDoc comments. Thus it is
+    possible to use these source files with the <command>javadoc</command>
+    tool to produce API documentation for the standalone libraries.</para>
+
+    <para>We currently support generating standalone applications for CAL
+    functions with the type <code>[String] -&gt; ()</code>. The command-line
+    arguments will be marshalled into a CAL list of <code>String</code>s and
+    passed to the function.</para>
+
+    <para>Unlike other deployment mechanisms (e.g. deploying with Car or
+    Car-jar files), applications and libraries deployed as a standalone JAR
+    does not have access to meta-programming capabilities, such as the ability
+    to query for gems with a given type, the ability to add new modules to the
+    workspace, and the ability to evaluate programmatically constructed CAL
+    expressions.</para>
+
+    <simplesect>
+      <title>Document Overview</title>
+
+      <para>The rest of this document is organized as follows. The section
+      <xref linkend="StandaloneLibraries" /> discusses the details of the
+      creation of library classes from CAL modules. Then, the sections <xref
+      linkend="UsingQuarkc" /> and <xref linkend="UsingQuarklaunch" /> cover
+      the usage of the <command>quarkc</command> and
+      <command>quarklaunch</command> scripts to respectively build a
+      standalone JAR and run applications in the JAR. Finally, the last two
+      sections (<xref linkend="ExampleSpectralNorm" /> and <xref
+      linkend="ExampleDirectedGraphLibrary" />) present ready-made examples on
+      producing a standalone application JAR and a standalone library
+      JAR.</para>
+    </simplesect>
+  </chapter>
+
+  <chapter xml:id="StandaloneLibraries">
+    <title>Standalone Libraries</title>
+
+    <para>The standalone JAR facility enables one to turn any CAL module into
+    a standalone library. A standalone JAR can package up one or more
+    <emphasis>library classes</emphasis> - a library class is a final,
+    non-instantiatable class containing static methods corresponding to the
+    non-private functions and data constructors defined in a particular CAL
+    module.</para>
+
+    <para>The generated library class and its API methods have the following
+    characteristics:</para>
+
+    <itemizedlist>
+      <listitem>
+        <para>Each method takes as its last argument an
+        <code>ExecutionContext</code> representing the context and environment
+        in which the CAL evaluation will occur.</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>Execution contexts can be created via the various
+            <code>makeExecutionContext</code> factory methods in the support
+            class
+            <code>org.openquark.cal.runtime.lecc.StandaloneRuntime</code>.</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para>Excluding the <code>ExecutionContext</code> argument, each
+        method will have an argument for every actual argument of the
+        corresponding CAL function or data constructor. This takes into
+        account the actual arity of the function or data constructor, and not
+        the number of lexically declared parameters.</para>
+      </listitem>
+
+      <listitem>
+        <para>Class methods and functions whose types contain <emphasis>type
+        class constraints</emphasis> are not handled, and are skipped - no API
+        methods will be generated for them.</para>
+      </listitem>
+
+      <listitem>
+        <para>For each function or data constructor that is visible and whose
+        type has no type class constraints, there will be a generated API
+        method where all the arguments (excluding the last
+        <code>ExecutionContext</code> argument) will have the Java type
+        <code>org.openquark.cal.runtime.CalValue</code>, which represents an
+        opaque value in CAL that may be an unevaluated computation. The return
+        type of the method will follow the Java type mapping scheme (see
+        below).</para>
+
+        <para>If the function or data constructor takes at least one argument,
+        then an overloaded version of the API method will also be generated.
+        The argument types of this variant, unlike the above, will also follow
+        the Java type mapping scheme.</para>
+
+        <itemizedlist>
+          <listitem>
+            <para>To help facilitate the use of the first variant in scenarios
+            where there is a mix of potentially unevaluated computations held
+            in <code>CalValue</code>s and plain Java values, there are various
+            <code>toCalValue</code> factory methods in the support class
+            <code>StandaloneRuntime</code> for converting Java values into
+            <code>CalValue</code>s.</para>
+          </listitem>
+        </itemizedlist>
+      </listitem>
+
+      <listitem>
+        <para><emphasis>Java type mapping scheme</emphasis>: the mapping of
+        CAL types to Java types for method arguments and the return value is
+        as follows:<itemizedlist>
+            <listitem>
+              <para>If the CAL type is a foreign type, and the foreign type's
+              implementation visibility is either <code>public</code> or
+              <code>protected</code>, then the corresponding Java type will be
+              the foreign implementation type. This includes the
+              <code>Prelude</code> types <code>Char</code>, <code>Byte</code>,
+              <code>Short</code>, <code>Int</code>, <code>Long</code>,
+              <code>Float</code>, and <code>Double</code>, which correspond to
+              Java primitive types.</para>
+            </listitem>
+
+            <listitem>
+              <para>If the CAL type is the <code>Prelude</code> type
+              <code>Boolean</code>, then the corresponding Java type will be
+              the primitive type <code>boolean</code>.</para>
+            </listitem>
+
+            <listitem>
+              <para><emphasis>(For method return types only)</emphasis> If the
+              CAL type is the <code>Prelude</code> type <code>Unit</code>,
+              then the corresponding Java return type will be
+              <code>void</code>.</para>
+            </listitem>
+
+            <listitem>
+              <para>If the CAL type is a foreign type whose implementation
+              type is not visible, or if the type is an algebraic type, then
+              the corresponding Java type will be
+              <code>org.openquark.cal.runtime.CalValue</code>.</para>
+            </listitem>
+          </itemizedlist></para>
+      </listitem>
+
+      <listitem>
+        <para>Each generated API method will have a Java scope that
+        corresponds to the CAL scope of the associated function/data
+        constructor (i.e. <code>protected</code> in CAL becomes
+        <code>protected</code> in Java, <code>public</code> in CAL becomes
+        <code>public</code> in Java).</para>
+      </listitem>
+
+      <listitem>
+        <para>The generated library class will have proper Javadoc comments
+        generated from the module's CALDoc comments. Thus it is possible to
+        use the source file in the companion source zip file with the
+        <command>javadoc</command> tool to produce API documentation for the
+        library.</para>
+      </listitem>
+    </itemizedlist>
+
+    <para>To export a Java API for a library written in CAL, one can define
+    the desired API for the library in a separate module (whose functions may
+    include code for marshalling to/from foreign types). Then, a standalone
+    JAR can be produced which would include a library class generated from the
+    API module.</para>
+
+    <simplesect>
+      <title>A Simple Example</title>
+
+      <para>Given the following CAL module:</para>
+
+      <para><programlisting>/**
+ * This is a demo of some simple functions exposed via a
+ * standalone library JAR.
+ */
+module Cal.Samples.SimpleLibrary;
+import Cal.Core.Prelude using
+    typeConstructor = Int, JList;
+    ;
+import Cal.Collections.List;
+
+filterOutEvenInternal :: [Int] -&gt; [Int];
+filterOutEvenInternal list = List.filter Prelude.isOdd list;
+
+/**
+ * Filters out the even numbers from the given list.
+ * @arg list a list of integers.
+ * @return the filtered list.
+ */
+filterOutEven :: JList -&gt; JList;
+public filterOutEven list =
+    List.outputList (filterOutEvenInternal (List.inputList list));
+
+/** An infinite list of ones. Can be used with {@link take@}. */
+ones :: [Int];
+public ones = List.repeat 1;
+
+/**
+ * Returns the first {@code n@} elements of the given list in a new list.
+ * @arg n the number of elements to take.
+ * @arg list the list of integers.
+ * @return a list of the requested elements.
+ */
+take :: Int -&gt; [Int] -&gt; JList;
+public take n list = List.outputList (List.take n list);</programlisting></para>
+
+      <para>The library class generated from the CAL module would look like
+      this:</para>
+
+      <para><programlisting>package org.openquark.cal.samples;
+
+import java.util.List;
+import org.openquark.cal.internal.runtime.lecc.RTData;
+import org.openquark.cal.internal.runtime.lecc.RTExecutionContext;
+import org.openquark.cal.internal.runtime.lecc.RTValue;
+import org.openquark.cal.internal.runtime.lecc.StandaloneJarGeneratedCodeInfo;
+import org.openquark.cal.runtime.CALExecutorException;
+import org.openquark.cal.runtime.CalValue;
+import org.openquark.cal.runtime.ExecutionContext;
+import org.openquark.cal_Cal_Samples_SimpleLibrary.Filter_Out_Even;
+import org.openquark.cal_Cal_Samples_SimpleLibrary.Ones;
+import org.openquark.cal_Cal_Samples_SimpleLibrary.Take;
+
+/**
+ * This is a demo of some simple functions exposed via a
+ * standalone library JAR.
+ */
+public final class SimpleLibrary {
+    private SimpleLibrary() {
+    }
+
+    /**
+     * Filters out the even numbers from the given list.
+     * @param list (CAL type: {@code JList})
+     *          a list of integers.
+     * @return (CAL type: {@code JList}) 
+     *          the filtered list.
+     */
+    public static List filterOutEven(final List list,
+        final ExecutionContext executionContext) throws CALExecutorException {
+        // implementation clipped
+    }
+
+    /**
+     * Filters out the even numbers from the given list.
+     * @param list (CAL type: {@code JList})
+     *          a list of integers.
+     * @return (CAL type: {@code JList}) 
+     *          the filtered list.
+     */
+    public static List filterOutEven(final CalValue list,
+        final ExecutionContext executionContext) throws CALExecutorException {
+        // implementation clipped
+    }
+
+    /**
+     * An infinite list of ones. Can be used with {@link #take take}.
+     * @return (CAL type: {@code [Int]}) 
+     */
+    public static CalValue ones(final ExecutionContext executionContext)
+        throws CALExecutorException {
+        // implementation clipped
+    }
+
+    /**
+     * Returns the first &lt;code&gt;n&lt;/code&gt; elements of the given list in a new list.
+     * @param n (CAL type: {@code Int})
+     *          the number of elements to take.
+     * @param list (CAL type: {@code [Int]})
+     *          the list of integers.
+     * @return (CAL type: {@code JList}) 
+     *          a list of the requested elements.
+     */
+    public static List take(final int n, final CalValue list,
+        final ExecutionContext executionContext) throws CALExecutorException {
+        // implementation clipped
+    }
+
+    /**
+     * Returns the first &lt;code&gt;n&lt;/code&gt; elements of the given list in a new list.
+     * @param n (CAL type: {@code Int})
+     *          the number of elements to take.
+     * @param list (CAL type: {@code [Int]})
+     *          the list of integers.
+     * @return (CAL type: {@code JList}) 
+     *          a list of the requested elements.
+     */
+    public static List take(final CalValue n, final CalValue list,
+        final ExecutionContext executionContext) throws CALExecutorException {
+        // implementation clipped
+    }
+
+    // private configuration checking code clipped
+}</programlisting></para>
+
+      <para>Some salient points in this example are:</para>
+
+      <orderedlist>
+        <listitem>
+          <para>The method <code>ones</code> returns a <code>CalValue</code>
+          because the CAL type of the corresponding function is the algebraic
+          type <code>[Int]</code>.</para>
+        </listitem>
+
+        <listitem>
+          <para>To get a <code>java.util.List</code> to be returned, one must
+          employ CAL marshalling functions such as
+          <code>List.outputList</code>, as in the case of
+          <code>filterOutEven</code> and <code>take</code>.</para>
+        </listitem>
+
+        <listitem>
+          <para>The definition of the CAL function <code>ones</code>
+          (<code>List.repeat 1</code>) by itself has a type <code>Num a =&gt;
+          [a]</code>, which has a type class constraint. To make the function
+          exportable, the function's type is specialized by its type
+          declaration to be the non-polymorphic type
+          <code>[Int]</code>.</para>
+        </listitem>
+
+        <listitem>
+          <para>Both <code>filterOutEven</code> and <code>take</code> have two
+          corresponding API methods generated for them: one that takes only
+          <code>CalValue</code>s as arguments, and another that takes values
+          of Java types such as <code>int</code> or
+          <code>java.util.List</code>.</para>
+        </listitem>
+
+        <listitem>
+          <para>The module's CALDoc comments are transformed into appropriate
+          Javadoc comments for documentation purposes.</para>
+        </listitem>
+      </orderedlist>
+    </simplesect>
+
+    <simplesect>
+      <title>An End-to-End Example: The Directed Graph Library</title>
+
+      <para>The <code>CAL_Samples</code> project in the Open Quark source
+      distribution includes a sample standalone library based on the directed
+      graph library written in CAL. It is an end-to-end sample that
+      includes:</para>
+
+      <orderedlist>
+        <listitem>
+          <para>an API module written in CAL
+          (<code>Cal.Samples.DirectedGraphLibrary</code>) that shows how one
+          can expose an existing CAL library as a Java library with
+          appropriate marshalling,</para>
+        </listitem>
+
+        <listitem>
+          <para>a Java wrapper class (<code>ImmutableDirectedGraph</code>)
+          which provides an object-oriented interface on top of the standalone
+          library, and</para>
+        </listitem>
+
+        <listitem>
+          <para>a simple demo app which uses the exposed functionality.</para>
+        </listitem>
+      </orderedlist>
+    </simplesect>
+
+    <simplesect>
+      <title>The Companion Source Zip File</title>
+
+      <para>The standalone JAR facility also supports the generation of a
+      companion source zip file containing source files for all generated
+      classes. One can use the zip file in an IDE to link the class files in
+      the JAR to sources. Also, it is possible to use these source files with
+      the <command>javadoc</command> tool to produce API documentation for the
+      standalone libraries.</para>
+
+      <para>Note that the generated Java sources in the zip file may not
+      correspond exactly to the bytecode in the JAR. However, the classes as
+      defined in source are semantically identical to the classes in the JAR.
+      This makes it easy to debug into the internal operation of a standalone
+      application or library: simply build a version of the JAR with debug
+      information (e.g. line numbers) from the unpacked sources, and debug
+      with this newly created JAR rather than the one produced by the
+      standalone JAR facility. Doing so would allow IDEs and other
+      source-level debuggers to support single-stepping through the entire
+      standalone application or library.</para>
+    </simplesect>
+  </chapter>
+
+  <chapter xml:id="UsingQuarkc">
+    <title>Using the Standalone JAR Tool</title>
+
+    <para>The binary distribution of Open Quark comes with a script for
+    launching the Standalone JAR Tool: <command>quarkc.bat</command> for
+    Windows, and <command>quarkc.sh</command> for Unix, Linux, and Mac
+    platforms. The tool supports the packaging of multiple CAL applications
+    and/or multiple CAL libraries into a single standalone JAR.</para>
+
+    <simplesect>
+      <title>Synopsis</title>
+
+      <para><systemitem class="osname">(Windows)</systemitem><synopsis><command>quarkc</command> <emphasis>workspaceFileName</emphasis> [-verbose] (-main <emphasis>functionName mainClassName</emphasis> | -lib <emphasis>moduleName libClassScope libClassName</emphasis>)+ <emphasis>outputJarName</emphasis> [-src <emphasis>outputSrcZipName</emphasis>]</synopsis></para>
+
+      <para><systemitem class="osname">(Unix/Linux/Mac)</systemitem><synopsis><command>quarkc.sh</command> <emphasis>workspaceFileName</emphasis> [-verbose] (-main <emphasis>functionName mainClassName</emphasis> | -lib <emphasis>moduleName libClassScope libClassName</emphasis>)+ <emphasis>outputJarName</emphasis> [-src <emphasis>outputSrcZipName</emphasis>]</synopsis></para>
+    </simplesect>
+
+    <simplesect>
+      <title>Description</title>
+
+      <variablelist>
+        <varlistentry>
+          <term><emphasis><userinput>workspaceFileName</userinput></emphasis></term>
+
+          <listitem>
+            <para>the name of the workspace declaration file (just the name,
+            no paths are accepted). This file should be in a
+            "<filename>Workspace Declarations</filename>" subdirectory of a
+            directory on the classpath.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><userinput>-verbose</userinput></term>
+
+          <listitem>
+            <para>an optional flag for displaying more detailed status
+            information.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><userinput>-main</userinput></term>
+
+          <listitem>
+            <para>specifies a CAL application to be included with the
+            standalone JAR.</para>
+
+            <variablelist>
+              <varlistentry>
+                <term><emphasis><userinput>functionName</userinput></emphasis></term>
+
+                <listitem>
+                  <para>the fully-qualified name of the CAL function that is
+                  the main entry point for the application.</para>
+                </listitem>
+              </varlistentry>
+
+              <varlistentry>
+                <term><emphasis><userinput>mainClassName</userinput></emphasis></term>
+
+                <listitem>
+                  <para>the fully-qualified name of the Java main class to be
+                  generated.</para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><userinput>-lib</userinput></term>
+
+          <listitem>
+            <para>specifies a CAL library to be included with the standalone
+            JAR.</para>
+
+            <variablelist>
+              <varlistentry>
+                <term><emphasis><userinput>moduleName</userinput></emphasis></term>
+
+                <listitem>
+                  <para>the fully-qualified name of the CAL library
+                  module.</para>
+                </listitem>
+              </varlistentry>
+
+              <varlistentry>
+                <term><emphasis><userinput>libClassScope</userinput></emphasis></term>
+
+                <listitem>
+                  <para>the scope of the generated library class. Can be one
+                  of:</para>
+
+                  <para><userinput>public</userinput> or
+                  <userinput>package</userinput>.</para>
+                </listitem>
+              </varlistentry>
+
+              <varlistentry>
+                <term><emphasis><userinput>libClassName</userinput></emphasis></term>
+
+                <listitem>
+                  <para>the fully-qualified name of the Java main class to be
+                  generated.</para>
+                </listitem>
+              </varlistentry>
+            </variablelist>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><emphasis><userinput>outputJarName</userinput></emphasis></term>
+
+          <listitem>
+            <para>the name of the output JAR file (can specify a path).</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><userinput>-src</userinput>
+          <emphasis><userinput>outputSrcZipName</userinput></emphasis></term>
+
+          <listitem>
+            <para>(optional) specifies the name of the output zip file
+            containing source files for the generated classes.</para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+
+      <para>If additional JARs or classpath entries are required for the
+      foreign types and functions defined in the workspace, they can be
+      specified via a <varname>QUARK_CP</varname> environment variable.</para>
+
+      <para>For example:</para>
+
+      <para><systemitem class="osname">(Windows)</systemitem> <informalexample>
+          <literallayout><userinput>set QUARK_CP=foo.jar;bar.jar
+quarkc foobar.cws -main Foo.Bar foo.bar.MainClass -lib Foo.Baz public foo.Baz foobar.jar</userinput></literallayout>
+        </informalexample></para>
+
+      <para><systemitem class="osname">(Unix/Linux/Mac, using
+      sh/bash)</systemitem> <informalexample>
+          <literallayout><userinput>QUARK_CP=foo.jar:bar.jar ./quarkc.sh foobar.cws \
+  -main Foo.Bar foo.bar.MainClass -lib Foo.Baz public foo.Baz foobar.jar</userinput></literallayout>
+        </informalexample></para>
+    </simplesect>
+  </chapter>
+
+  <chapter xml:id="UsingQuarklaunch">
+    <title>Running Applications in a Standalone JAR</title>
+
+    <para>To run a CAL application packaged as part of a standalone JAR,
+    simply include the standalone JAR, the Quark Platform JARs, and any
+    required external JARs on the classpath, and specify the name of the
+    generated class as the one to run. Command-line arguments will be passed
+    into the CAL function.</para>
+
+    <para>The binary distribution of Open Quark provides a launch script to
+    facilitate the setup of the classpath: <command>quarklaunch.bat</command>
+    for Windows, and <command>quarklaunch.sh</command> for Unix, Linux, and
+    Mac platforms.</para>
+
+    <simplesect>
+      <title>Synopsis</title>
+
+      <para><systemitem class="osname">(Windows)</systemitem> <synopsis><command>quarklaunch</command> <emphasis>jarName</emphasis> <emphasis>mainClassName</emphasis> <emphasis>[args...]</emphasis></synopsis></para>
+
+      <para><systemitem class="osname">(Unix/Linux/Mac)
+      </systemitem><synopsis><command>quarklaunch.sh</command> <emphasis>jarName</emphasis> <emphasis>mainClassName</emphasis> <emphasis>[args...]</emphasis></synopsis></para>
+    </simplesect>
+
+    <simplesect>
+      <title>Description</title>
+
+      <variablelist>
+        <varlistentry>
+          <term><emphasis><userinput>jarName</userinput></emphasis></term>
+
+          <listitem>
+            <para>the name of the standalone JAR. If additional JARs are
+            required, add them to the end, separated by the appropriate
+            separator ('<userinput>;</userinput>' for <systemitem
+            class="osname">Windows</systemitem>, '<userinput>:</userinput>'
+            for <systemitem
+            class="osname">Unix/Linux/Mac</systemitem>).</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><emphasis><userinput>mainClassName</userinput></emphasis></term>
+
+          <listitem>
+            <para>the name of the main class in the standalone JAR.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><emphasis><userinput>args...</userinput></emphasis></term>
+
+          <listitem>
+            <para>0 or more arguments to be passed into the main class.</para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+
+      <para>If additional Java VM arguments are required, they can be
+      specified via a <varname>QUARK_VMARGS</varname> environment
+      variable.</para>
+
+      <para>For example, to specify that Java should run with the server
+      VM:</para>
+
+      <para><systemitem class="osname">(Windows)</systemitem><informalexample>
+          <literallayout><userinput>set QUARK_VMARGS=-server
+quarklaunch foobar.jar foo.bar.MainClass</userinput></literallayout>
+        </informalexample></para>
+
+      <para><systemitem class="osname">(Unix/Linux/Mac, using
+      sh/bash)</systemitem><informalexample>
+          <literallayout><userinput>QUARK_VMARGS=-server ./quarklaunch.sh foobar.jar foo.bar.MainClass</userinput></literallayout>
+        </informalexample></para>
+    </simplesect>
+
+    <simplesect>
+      <title>Things to note</title>
+
+      <para>A standalone JAR must be run with the same Quark system properties
+      as those specified to the Standalone JAR Tool when it built the JAR. If
+      the system properties specified when running the standalone JAR do not
+      match those specified during the build operation, then running a
+      standalone application in the JAR will display an error message (with
+      hints on how to fix the issue) and exit. Similarly, library classes
+      packaged in the JAR will not load successfully in such a case, as the
+      static initializer in each library class would check the properties and
+      throw an exception with the error message.</para>
+    </simplesect>
+  </chapter>
+
+  <chapter xml:id="ExampleSpectralNorm">
+    <title>Example - Running the <code>SpectralNorm</code> Benchmark with a
+    Standalone JAR</title>
+
+    <para>The Open Quark distribution contains implementation for many of the
+    benchmarks included in the <emphasis>Computer Language Benchmarks
+    Game</emphasis> (<uri>http://shootout.alioth.debian.org</uri>). We will
+    demonstrate how to run one of the benchmarks,
+    <code>Cal.Benchmarks.Shootout.SpectralNorm</code>, with a standalone
+    JAR.</para>
+
+    <para>To build the standalone application JAR:</para>
+
+    <orderedlist>
+      <listitem>
+        <para>Launch a Command Prompt on Windows, or a terminal on Unix,
+        Linux, or Mac platforms.</para>
+      </listitem>
+
+      <listitem>
+        <para>Change into the <filename>Quark</filename> directory inside the
+        Open Quark binary distribution.</para>
+      </listitem>
+
+      <listitem>
+        <para>Run the Standalone JAR Tool as follows:</para>
+
+        <para><systemitem
+        class="osname">(Windows)</systemitem><informalexample>
+            <literallayout><userinput>quarkc cal.benchmark.cws -main Cal.Benchmarks.Shootout.SpectralNorm.main \
+  shootout.SpectralNorm spectralnorm.jar</userinput></literallayout>
+          </informalexample><systemitem
+        class="osname">(Unix/Linux/Mac)</systemitem><informalexample>
+            <literallayout><userinput>./quarkc.sh cal.benchmark.cws -main Cal.Benchmarks.Shootout.SpectralNorm.main \
+  shootout.SpectralNorm spectralnorm.jar</userinput></literallayout>
+          </informalexample>You should see the following output: <screen>Open Quark Standalone Jar Tool (version 1.7.0_0)
+Initializing the CAL workspace...
+...CAL workspace initialized.
+Building the standalone jar D:\openquark\Quark\spectralnorm.jar
+Done building the standalone jar D:\openquark\Quark\spectralnorm.jar</screen></para>
+      </listitem>
+    </orderedlist>
+
+    <para>Now that the standalone JAR is built, we can run the benchmark with
+    it via the launch script <command>quarklaunch.bat</command> for Windows,
+    or <command>quarklaunch.sh</command> for Unix, Linux, and Mac platforms.
+    For this example, we will run the benchmark with the argument
+    <userinput>1500</userinput>:</para>
+
+    <para><systemitem class="osname">(Windows)</systemitem><informalexample>
+        <literallayout><userinput>quarklaunch spectralnorm.jar shootout.SpectralNorm 1500</userinput></literallayout>
+      </informalexample><systemitem
+    class="osname">(Unix/Linux/Mac)</systemitem><informalexample>
+        <literallayout><userinput>./quarklaunch.sh spectralnorm.jar shootout.SpectralNorm 1500</userinput></literallayout>
+      </informalexample>You should see the following output:</para>
+
+    <para><screen>1.274224151</screen></para>
+  </chapter>
+
+  <chapter xml:id="ExampleDirectedGraphLibrary">
+    <title>Example - Creating a Standalone Library JAR</title>
+
+    <para>The Open Quark distribution contains a ready-made sample standalone
+    library that exposes a directed graph library written in CAL. We will
+    demonstrate how to create the JAR using the Standalone JAR Tool.</para>
+
+    <para>To build the standalone library JAR:</para>
+
+    <orderedlist>
+      <listitem>
+        <para>Launch a Command Prompt on Windows, or a terminal on Unix,
+        Linux, or Mac platforms.</para>
+      </listitem>
+
+      <listitem>
+        <para>Change into the <filename>Quark</filename> directory inside the
+        Open Quark binary distribution.</para>
+      </listitem>
+
+      <listitem>
+        <para>Run the Standalone JAR Tool as follows:</para>
+
+        <para><systemitem
+        class="osname">(Windows)</systemitem><informalexample>
+            <literallayout><userinput>quarkc cal.samples.cws -lib Cal.Samples.DirectedGraphLibrary \
+  public org.openquark.cal.samples.directedgraph.DirectedGraphLibrary \
+  directedgraph.jar -src directedgraph.src.zip</userinput></literallayout>
+          </informalexample><systemitem
+        class="osname">(Unix/Linux/Mac)</systemitem><informalexample>
+            <literallayout><userinput>./quarkc.sh cal.samples.cws -lib Cal.Samples.DirectedGraphLibrary \
+  public org.openquark.cal.samples.directedgraph.DirectedGraphLibrary \
+  directedgraph.jar -src directedgraph.src.zip</userinput></literallayout>
+          </informalexample>You should see the following output: <screen>Open Quark Standalone Jar Tool (version 1.7.0_0)
+Initializing the CAL workspace...
+...CAL workspace initialized.
+Building the standalone jar D:\openquark\Quark\directedgraph.jar
+Done building the standalone jar D:\openquark\Quark\directedgraph.jar</screen></para>
+      </listitem>
+    </orderedlist>
+
+    <para>We can inspect the library classes generated by opening the source
+    zip file <filename>directedgraph.src.zip</filename> and viewing the files
+    inside. These files contain Javadoc comments generated from the source
+    module's CALDoc comments, and can in fact be used with the
+    <command>javadoc</command> tool to produce the standalone library's API
+    documentation.</para>
+
+    <para>Now that the standalone JAR is built, we can run the directed graph
+    demo with it via the launch script <command>quarklaunch.bat</command> for
+    Windows, or <command>quarklaunch.sh</command> for Unix, Linux, and Mac
+    platforms:</para>
+
+    <para><systemitem class="osname">(Windows)</systemitem><informalexample>
+        <literallayout><userinput>set QUARK_CP=.\samples\simple\
+quarklaunch directedgraph.jar org.openquark.cal.samples.directedgraph.DirectedGraphDemo</userinput></literallayout>
+      </informalexample><systemitem
+    class="osname">(Unix/Linux/Mac)</systemitem><informalexample>
+        <literallayout><userinput>./quarklaunch.sh directedgraph.jar:./samples/simple/ \
+  org.openquark.cal.samples.directedgraph.DirectedGraphDemo</userinput></literallayout>
+      </informalexample></para>
+  </chapter>
+</book>

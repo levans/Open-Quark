@@ -1,0 +1,437 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * NBody benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org/gp4/benchmark.php?test=nbody&lang=all@}
+ * 
+ * This code is based on and inspired by the entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.NBody;
+
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable;
+    typeConstructor = CalValue, Double, Int, JObject, String;
+    function = eager, input, output, seq, stringToInt, unsafeCoerce;
+    ;
+import Cal.Collections.Array;
+import Cal.Collections.List using
+    function = head;
+    ;
+import Cal.Utilities.Math using
+    function = sqrt;
+    ;
+import Cal.Utilities.MessageFormat using
+    function = formatWithPattern;
+    ;
+import Cal.Utilities.Locale using
+    function = invariantLocale;
+    ;
+import Cal.IO.Console using
+    function = printLine;
+    ;
+
+data foreign unsafe import jvm "double[]" JVector deriving Inputable, Outputable;
+
+foreign unsafe import jvm "newArray" newVector :: Int -> JVector;
+
+foreign unsafe import jvm "subscriptArray" get :: JVector -> Int -> Double;
+
+foreign unsafe import jvm "updateArray"
+    set :: JVector -> Int -> Double -> Double;
+
+/** a body is represented by position, velocity and mass*/
+data public Body =
+    Body
+        position :: !JVector
+        velocity :: !JVector
+        mass :: !Double
+    ;
+
+/** construct a vector from three doubles*/
+makeVector :: Double -> Double -> Double -> JVector;
+makeVector !x !y !z =
+    let
+        v :: JVector;
+        v = newVector 3;
+    in
+        set v 0 x
+        `seq`
+        set v 1 y
+        `seq`
+        set v 2 z
+        `seq`
+        v
+    ;
+
+daysPerYear :: Double;
+daysPerYear = 365.24;
+
+pi :: Double;
+pi = 3.141592653589793;
+
+solarMass :: Double;
+solarMass = 4 * pi * pi;
+
+/** calculate the initial offset moment for the sun*/
+computeOffsetMomentum :: BodyArray -> Double;
+computeOffsetMomentum bodies =
+    let
+        offset :: JVector;
+        offset = makeVector 0 0 0;
+
+        sun :: Body;
+        sun = eager (bodies `subscriptBodyArray` 0);
+
+        length :: Int;
+        length = eager $ lengthBodyArray bodies;
+        
+        updateOffsetForBodies :: Int -> ();
+        updateOffsetForBodies !i =
+            if i < length then
+                (
+                    case bodies `subscriptBodyArray` i of
+                    Body position velocity mass ->
+                        set offset 0 (get offset 0 + get velocity 0 * mass)
+                        `seq`
+                        set offset 1 (get offset 1 + get velocity 1 * mass)
+                        `seq`
+                        set offset 2 (get offset 2 + get velocity 2 * mass)
+                        ;
+                )
+                `seq`
+                updateOffsetForBodies (i+1)
+            else
+                ();
+        
+    in
+        updateOffsetForBodies 0
+        `seq`
+        (
+            case sun of
+            Body pos velocity mass ->
+                set velocity 0 (-get offset 0 / solarMass)
+                `seq`
+                set velocity 1 (-get offset 1 / solarMass)
+                `seq`
+                set velocity 2 (-get offset 2 / solarMass)
+                ;
+        )
+    ;
+
+/** calcualte the potential and kenetic energy*/
+energy :: BodyArray -> Double;
+energy !bodies =
+    let
+        numBodies :: Int;
+        numBodies = eager $ lengthBodyArray bodies;
+
+        loop :: Double -> Int -> Int -> Double;
+        loop !energy !i !j =
+            if j < numBodies then
+                case bodies `subscriptBodyArray` i of
+                Body pos1 vel1 mass1 ->
+                    case bodies `subscriptBodyArray` j of
+                    Body pos2 vel2 mass2 ->
+                        let
+                            dx :: Double;
+                            dx = eager $ get pos1 0 - get pos2 0;
+
+                            dy :: Double;
+                            dy = eager $ get pos1 1 - get pos2 1;
+
+                            dz :: Double;
+                            dz = eager $ get pos1 2 - get pos2 2;
+
+                            distance :: Double;
+                            distance =
+                                eager $ sqrt (dx * dx + dy * dy + dz * dz);
+                        in
+                            loop
+                                (energy - mass1 * mass2 / distance)
+                                i
+                                (j + 1)
+                        ;
+                    ;
+            else if i < numBodies then
+                case bodies `subscriptBodyArray` i of
+                Body pos vel mass ->
+                    loop
+                        (
+                            energy
+                            + 0.5 * mass
+                                *
+                                (
+                                    get vel 0 * get vel 0
+                                    + get vel 1 * get vel 1
+                                    + get vel 2 * get vel 2
+                                )
+                        )
+                        (i + 1)
+                        (i + 2)
+                    ;
+            else
+                energy
+            ;
+    in
+        loop 0.0 0 1
+    ;
+
+/** advance state of the bodies by time delta*/
+advance :: Double -> BodyArray -> ();
+advance !dt !bodies =
+    let
+        numBodies :: Int;
+        numBodies = eager $ lengthBodyArray bodies;
+
+        updateVelocity ::
+            JVector -> JVector -> JVector -> JVector -> Double -> Double -> ();
+        updateVelocity !pos1 !pos2 !vel1 !vel2 !mass1 !mass2 =
+            let
+                dx :: Double;
+                dx = eager $ get pos1 0 - get pos2 0;
+
+                dy :: Double;
+                dy = eager $ get pos1 1 - get pos2 1;
+
+                dz :: Double;
+                dz = eager $ get pos1 2 - get pos2 2;
+
+                mag :: Double;
+                mag =
+                    eager
+                        (
+                            let
+                                distance :: Double;
+                                distance =
+                                    eager
+                                    $ sqrt (dx * dx + dy * dy + dz * dz)
+                                    ;
+                            in
+                                dt / (distance * distance * distance)
+                        )
+                    ;
+            in
+                set vel1 0 (get vel1 0 - dx * mass2 * mag)
+                `seq`
+                set vel1 1 (get vel1 1 - dy * mass2 * mag)
+                `seq`
+                set vel1 2 (get vel1 2 - dz * mass2 * mag)
+                `seq`
+
+                set vel2 0 (get vel2 0 + dx * mass1 * mag)
+                `seq`
+                set vel2 1 (get vel2 1 + dy * mass1 * mag)
+                `seq`
+                set vel2 2 (get vel2 2 + dz * mass1 * mag)
+                `seq`
+                ()
+            ;
+
+        updateVelocities :: Int -> Int -> ();
+        updateVelocities !i !j =
+            if j < numBodies then
+                (
+                    case bodies `subscriptBodyArray` i of
+                    Body pos1 vel1 mass1 ->
+                        case bodies `subscriptBodyArray` j of
+                        Body pos2 vel2 mass2 ->
+                            updateVelocity pos1 pos2 vel1 vel2 mass1 mass2;
+                        ;
+                )
+                `seq`
+                updateVelocities i (j + 1)
+            else if i < numBodies then
+                updateVelocities (i + 1) (i + 2)
+            else
+                ()
+            ;
+
+        updatePosition :: Double -> Body -> Double;
+        updatePosition !dt !body =
+            case body of
+            Body pos velocity mass ->
+                set pos 0 (get pos 0 + dt * get velocity 0)
+                `seq`
+                set pos 1 (get pos 1 + dt * get velocity 1)
+                `seq`
+                set pos 2 (get pos 2 + dt * get velocity 2)
+                ;
+            ;
+
+        updatePositions :: Int -> ();
+        updatePositions !i =
+            if i == numBodies then
+                ()
+            else
+                updatePosition dt (eager (bodies `subscriptBodyArray` i))
+                `seq`
+                updatePositions (i + 1)
+            ;
+    in
+
+        updateVelocities 0 1
+        `seq`
+        updatePositions 0
+    ;
+
+main :: [String] -> ();
+public main !args =
+    let
+        n :: Int;
+        n = eager $ stringToInt (head args);
+        bodies :: BodyArray;
+        bodies =
+            bodyArrayFromList
+                [
+                    //the sun
+                    Body (makeVector 0 0 0) (makeVector 0 0 0) solarMass,
+                    //jupiter
+                    Body
+                        (makeVector
+                            4.841431442464721
+                            (-1.1603200440274284)
+                            (-0.10362204447112311)
+                        )
+                        (makeVector
+                            (0.001660076642744037 * daysPerYear)
+                            (0.007699011184197404 * daysPerYear)
+                            (-6.90460016972063E-5 * daysPerYear)
+                        )
+                        (9.547919384243266E-4 * solarMass),
+                    //saturn
+                    Body
+                        (makeVector
+                            8.34336671824458
+                            4.124798564124305
+                            (-0.4035234171143214)
+                        )
+                        (makeVector
+                            (-0.002767425107268624 * daysPerYear)
+                            (0.004998528012349172 * daysPerYear)
+                            (2.3041729757376393E-5 * daysPerYear)
+                        )
+                        (2.858859806661308E-4 * solarMass),
+                    //uranus
+                    Body
+                        (makeVector
+                            12.894369562139131
+                            (-15.111151401698631)
+                            (-0.22330757889265573)
+                        )
+                        (makeVector
+                            (0.002964601375647616 * daysPerYear)
+                            (0.0023784717395948095 * daysPerYear)
+                            (-2.9658956854023756E-5 * daysPerYear)
+                        )
+                        (4.366244043351563E-5 * solarMass),
+                    //neptune
+                    Body
+                        (makeVector
+                            15.379697114850917
+                            (-25.919314609987964)
+                            0.17925877295037118
+                        )
+                        (makeVector
+                            (0.0026806777249038932 * daysPerYear)
+                            (0.001628241700382423 * daysPerYear)
+                            (-9.515922545197159E-5 * daysPerYear)
+                        )
+                        (5.1513890204661145E-5 * solarMass)
+                ]
+            ;
+
+        loop :: Int -> ();
+        loop !n =
+            if n > 0 then
+                advance 0.01 bodies
+                `seq`
+                loop (n - 1)
+            else
+                ()
+            ;
+        /** function to display energy in specified format*/
+        showEnergy :: Double -> ();
+        showEnergy !e =
+            printLine
+                (formatWithPattern
+                    "{0,number,0.000000000}"
+                    invariantLocale
+                    {#1 = e}
+                )
+            ;
+    in
+
+        computeOffsetMomentum bodies
+        `seq`
+        showEnergy (energy bodies)
+        `seq`
+        loop n
+        `seq`
+        showEnergy (energy bodies)
+    ;
+
+
+/** A {@link typeConstructor=Body@} array implemented as a Java array. */
+data foreign unsafe import jvm "java.lang.Object[]" BodyArray deriving Inputable, Outputable;
+
+/** Constructs a {@link BodyArray@} from a list. */
+bodyArrayFromList :: [Body] -> BodyArray;
+bodyArrayFromList !bodies =
+    jObjectToBodyArray $ Array.outputPrimitive $ Array.fromList bodies;
+
+instance Outputable Body where
+    output = outputBodyAsCalValue;
+    ;
+
+outputBodyAsCalValue :: Body -> JObject;
+outputBodyAsCalValue !body = output ((unsafeCoerce body) :: CalValue);
+
+instance Inputable Body where
+    input = inputBodyAsCalValue;
+    ;
+
+inputBodyAsCalValue :: JObject -> Body;
+inputBodyAsCalValue !object = unsafeCoerce ((input object) :: CalValue);
+
+foreign unsafe import jvm "cast" jObjectToBodyArray :: JObject -> BodyArray;
+
+/** @return the i{@sup th@} element in the array. */
+subscriptBodyArray :: BodyArray -> Int -> Body;
+subscriptBodyArray !bodies !i =
+    input (eager $ jSubscriptBodyArray bodies i);
+
+foreign unsafe import jvm "subscriptArray" jSubscriptBodyArray :: BodyArray -> Int -> JObject;
+
+/** @return the length of the array. */
+foreign unsafe import jvm "lengthArray" lengthBodyArray :: BodyArray -> Int;

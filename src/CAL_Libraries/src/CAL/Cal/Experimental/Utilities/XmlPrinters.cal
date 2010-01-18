@@ -1,0 +1,299 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * XmlPrinters.cal
+ * Creation date: September 2007.
+ * By: Malcolm Sharpe
+ */
+
+/**
+ * This module implements functions for printing XML to strings.
+ * 
+ * The forms provided are:
+ * 
+ * - A canonical form for testing, which is loosely based on Canonical XML 1.0.
+ *   The purpose is to have stable, predictable output for tests.
+ *   The public functions implementing this form are {@link xmlDocumentToCanonicalString@},
+ *   {@link xmlNodeToCanonicalString@}, and {@link xmlAttributeToCanonicalString@}.
+ * 
+ * - The First and Second XML Canonical Forms, as defined by
+ *   {@url http://dev.w3.org/cvsweb/2001/XML-Test-Suite/xmlconf/sun/cxml.html?rev=1.3@}.
+ *   These are used for running the XML W3C Conformance Test Suite.
+ *   The public functions implementing these forms include {@link xmlDocumentToFirstXmlCanonicalForm@}
+ *   and {@link xmlDocumentToSecondXmlCanonicalForm@}. 
+ *
+ * @author Malcolm Sharpe
+ */
+module Cal.Experimental.Utilities.XmlPrinters;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Char, Int, Maybe, Ordering, String;
+    dataConstructor = Just, Left, Right, Nothing;
+    function =
+        abs, append, apply, compare, concat, const, error, fst, isEmpty,
+        maybeToList, not, seq, snd;
+    ;
+import Cal.Collections.List using
+    function = any, concatMap, intersperse, map, sortBy;
+    ;
+import Cal.Core.Char;
+import Cal.Core.String using
+    function = fromChar, fromList, toList, toLowerCase;
+    ;
+import Cal.Collections.Map; 
+import Cal.Utilities.Parser using
+    typeConstructor = GenParser;
+    function =
+        anyChar, between, char, digit, exactString, getPosition, hexDigit,
+        label, many, many1, manyTill, notFollowedBy, oneOf, option, optional,
+        pBind, pFail, pMap, pOr, pReturn, pSeq, runParser, satisfy, sepBy,
+        sepEndBy, setPosition, showParseError, skipMany, skipMany1,
+        sourceColumn, spaces, try, makeTSString, runParserSeq, eof;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeConstructor = XmlAttribute, XmlDocument, XmlNode, XmlNotation;
+    dataConstructor =
+        XmlAttribute, XmlElement, XmlCDataSection, XmlDocument, XmlText,
+        XmlComment, XmlProcessingInstruction;
+    function =
+        attributeLocalName, documentNotations, documentRootElement,
+        elementQualifiedName, notationName, notationPublicId, notationSystemId;
+    ;
+
+customizableEscapeChar :: [Map.Map Char String -> Map.Map Char String] -> Char -> String;
+private customizableEscapeChar options =
+    let
+        table = List.foldRight apply Map.empty options;
+    in
+        (\c -> Map.lookupWithDefault c table (String.fromChar c));
+
+customizableEscape :: [Map.Map Char String -> Map.Map Char String] -> String -> String;
+private customizableEscape options =
+    let
+        f = customizableEscapeChar options;
+    in
+        concatMap f # toList;
+
+escapeAmp = Map.insert '&' "&amp;";
+escapeLt = Map.insert '<' "&lt;";
+escapeGt = Map.insert '>' "&gt;";
+escapeQuot = Map.insert '"' "&quot;";
+escapeTab = Map.insert '\u0009' "&#9;";
+escapeLf = Map.insert '\u000A' "&#10;";
+escapeCr = Map.insert '\u000D' "&#13;";
+
+/**
+ * Convert an XML document to a canonical string.
+ */
+xmlDocumentToCanonicalString :: XmlDocument -> String;
+public xmlDocumentToCanonicalString doc =
+    concat $ intersperse "\n" $ map xmlNodeToCanonicalString doc.XmlDocument.topLevelNodes;
+
+/**
+ * Convert an XML node to a canonical string.
+ */
+xmlNodeToCanonicalString :: XmlNode -> String;
+public xmlNodeToCanonicalString node =
+    case node of
+    XmlElement name ignored_namespace attributes content ->
+        "<" ++
+        name ++
+        concatMap (append " " # xmlAttributeToCanonicalString) (sortBy compareAttributes attributes) ++
+        ">" ++
+        concatMap xmlNodeToCanonicalString content ++
+        "</" ++
+        name ++
+        ">"
+        ;
+    (XmlCDataSection|XmlText) {txt} ->
+        canonicalEscapeCharData txt;
+    XmlComment comment ->
+        "<!--" ++ comment ++ "-->";
+    XmlProcessingInstruction target content ->
+        "<?" ++
+        target ++
+        (if 0 == String.length content
+         then ""
+         else " " ++ content) ++
+        "?>";
+    ;
+
+canonicalEscapeCharData :: String -> String;
+private canonicalEscapeCharData =
+    customizableEscape [
+        escapeAmp,
+        escapeLt,
+        escapeGt,
+        escapeCr
+    ];
+
+compareAttributes :: XmlAttribute -> XmlAttribute -> Ordering;
+private compareAttributes attr1 attr2 =
+    /*
+     * Java's String comparing is not exactly the lexicographical order specified
+     * by the spec. The spec specifies sorting by code point value, not UTF-16
+     * character value, which is what we do here. However, since names cannot
+     * contain code points greater than \uFFFF, this order will be correct for
+     * attributes.
+     */
+    compare (attributeLocalName attr1)
+            (attributeLocalName attr2);
+
+compareNotations :: XmlNotation -> XmlNotation -> Ordering;
+private compareNotations attr1 attr2 =
+    /*
+     * Java's String comparing is not exactly the lexicographical order specified
+     * by the spec. The spec specifies sorting by code point value, not UTF-16
+     * character value, which is what we do here. However, since names cannot
+     * contain code points greater than \uFFFF, this order will be correct for
+     * notations.
+     */
+    compare (notationName attr1)
+            (notationName attr2);
+
+/**
+ * Convert an XML attribute to a canonical string.
+ */
+xmlAttributeToCanonicalString :: XmlAttribute -> String;
+public xmlAttributeToCanonicalString attribute =
+    case attribute of
+    XmlAttribute name ignored_namespace attValue ->
+        name ++ "=\"" ++ canonicalEscapeAttribute attValue ++ "\"";
+    ;
+
+canonicalEscapeAttribute :: String -> String;
+private canonicalEscapeAttribute =
+    customizableEscape [
+        escapeAmp,
+        escapeLt,
+        escapeQuot,
+        escapeCr,
+        escapeLf,
+        escapeTab
+    ];
+
+/**
+ * Convert an XML document to the First XML Canonical Form, as defined by
+ * {@url http://dev.w3.org/cvsweb/2001/XML-Test-Suite/xmlconf/sun/cxml.html?rev=1.3@}.
+ */
+xmlDocumentToFirstXmlCanonicalForm :: XmlDocument -> String;
+public xmlDocumentToFirstXmlCanonicalForm doc =
+    concatMap xmlNodeToFirstXmlCanonicalForm doc.XmlDocument.topLevelNodes;
+
+firstXmlCanonicalFormEscape :: String -> String;
+private firstXmlCanonicalFormEscape =
+    customizableEscape [
+        escapeAmp,
+        escapeLt,
+        escapeGt,
+        escapeQuot,
+        escapeTab,
+        escapeLf,
+        escapeCr
+    ];
+
+xmlNodeToFirstXmlCanonicalForm :: XmlNode -> String;
+public xmlNodeToFirstXmlCanonicalForm node =
+    case node of
+    XmlComment {} -> "";
+    XmlProcessingInstruction target content ->
+        "<?" ++ target ++ " " ++ content ++ "?>";
+    (XmlText|XmlCDataSection) charData ->
+        firstXmlCanonicalFormEscape charData;
+    XmlElement name ignored_namespace attributes content ->
+        "<" ++
+        name ++
+        concatMap xmlAttributeToFirstXmlCanonicalForm (sortBy compareAttributes attributes) ++
+        ">" ++
+        concatMap xmlNodeToFirstXmlCanonicalForm content ++
+        "</" ++
+        name ++
+        ">";
+    ;
+
+xmlAttributeToFirstXmlCanonicalForm :: XmlAttribute -> String;
+public xmlAttributeToFirstXmlCanonicalForm attr =
+    " " ++ attr.XmlAttribute.name ++ "=\"" ++ firstXmlCanonicalFormEscape attr.XmlAttribute.value ++ "\"";
+
+/**
+ * Convert an XML document to the Second XML Canonical Form, as defined by
+ * {@url http://dev.w3.org/cvsweb/2001/XML-Test-Suite/xmlconf/sun/cxml.html?rev=1.3@}.
+ * 
+ * This form differs from the first form only in that notations are printed.
+ */
+xmlDocumentToSecondXmlCanonicalForm :: XmlDocument -> String;
+public xmlDocumentToSecondXmlCanonicalForm doc =
+    xmlDocumentDtdToSecondXmlCanonicalForm doc ++
+    xmlDocumentToFirstXmlCanonicalForm doc;
+
+xmlDocumentDtdToSecondXmlCanonicalForm :: XmlDocument -> String;
+public xmlDocumentDtdToSecondXmlCanonicalForm doc =
+    if not (isEmpty $ documentNotations doc) then
+        "<!DOCTYPE " ++ elementQualifiedName (documentRootElement doc) ++ " [\n" ++
+        concatMap xmlNotationToSecondXmlCanonicalForm (sortBy compareNotations $ documentNotations doc) ++
+        "]>\n"
+    else
+        "";
+
+xmlNotationToSecondXmlCanonicalForm :: XmlNotation -> String;
+public xmlNotationToSecondXmlCanonicalForm notation =
+    "<!NOTATION " ++
+    notationName notation ++
+    (case notationPublicId notation of
+     Just pubid ->
+         case notationSystemId notation of
+         Just sysid ->
+             " PUBLIC " ++
+             pubidLiteralToSecondXmlCanonicalForm pubid ++
+             " " ++
+             sysidLiteralToSecondXmlCanonicalForm sysid;
+         Nothing ->
+             " PUBLIC " ++
+             pubidLiteralToSecondXmlCanonicalForm pubid;
+         ;
+     Nothing ->
+         case notationSystemId notation of
+         Just sysid ->
+             " SYSTEM " ++
+             sysidLiteralToSecondXmlCanonicalForm sysid;
+         Nothing ->
+             error "An XML notation must have either a system ID, a public ID, or both.";
+         ;) ++
+    ">\n";
+
+pubidLiteralToSecondXmlCanonicalForm :: String -> String;
+public pubidLiteralToSecondXmlCanonicalForm pubid =
+    "'" ++ pubid ++ "'";
+
+sysidLiteralToSecondXmlCanonicalForm :: String -> String;
+public sysidLiteralToSecondXmlCanonicalForm sysid =
+    "'" ++ sysid ++ "'";

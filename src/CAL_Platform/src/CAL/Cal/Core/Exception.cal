@@ -1,0 +1,381 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Exception.cal
+ * Created: August 29, 2006
+ * By: Bo Ilic
+ */
+
+/**
+ * Provides core support for handling exceptions in CAL.
+ * 
+ * Exceptions can arise in CAL in a number of ways:
+ * {@orderedList
+ *     {@item a Java exception is thrown by a call to a foreign function or a primitive function@}
+ *     {@item a call to the {@link Prelude.error@} function@}
+ *     {@item a pattern matching failure in a case expression or data constructor field selection expression
+ *            e.g. {@code (case Just 10.0 of Nothing -> "abc";)@} and {@code (Left 10.0).Right.value)@}.@} 
+ *     {@item a call to the {@link throw@} function@}  
+ * @}
+ * 
+ * Exceptions in categories 1-3 are called Java exceptions because they are not associated with a specific
+ * CAL type. They can be caught with handlers for type {@link JThrowable@}. They can also be caught with any
+ * CAL foreign type that is an instance of {@link typeClass = Exception@} such that the foreign implementation
+ * type is a Java subclass of java.lang.Throwable, and such that the exception is assignment compatible with the
+ * implementation type. For example, if a foreign function throws a java.lang.NullPointerException, then this can
+ * be caught by a handler for the CAL types JThowable, JRuntimeException, JNullPointerException, but not a handler 
+ * for JIllegalStateException (assuming the natural implied data declarations for these CAL types).
+ * 
+ * Exceptions in category 4 are called CAL exceptions because they are associated with a specific CAL type, namely
+ * the type at which the exception was thrown using the {@link throw@} function. They must be caught at that precise
+ * type.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Core.Exception;
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable, Typeable;
+    typeConstructor = Boolean, Either, Maybe, CalValue, JObject, JClass, String;
+    dataConstructor = Left, Right, False, True, Nothing, Just;
+    function = seq, unsafeCoerce, output, input, foreignClass, undefined, typeOf, toCalValue, unsafeFromCalValue;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+import Cal.Core.Dynamic using
+    typeConstructor = Dynamic;
+    function = toDynamic, fromDynamic;
+    ;
+friend Cal.Test.Core.Exception_Tests;
+
+
+/////////////////////////////////////////////////////////////
+
+/**
+ * The {@link typeClass = Exception@} type class defines the types whose values can be thrown or caught
+ * using the {@link throw@} and {@link catch@} functions.
+ * 
+ * The class has no class methods so declaring instances is easy. It is used to indicate programmer 
+ * intent that a type will be used to represent exception values.
+ */
+public class (Typeable a, Show a) => Exception a where;
+    //there are no class methods in the Exception type class.
+
+/////////////////////////////////////////////////////////////
+
+/**
+ * Exceptions from foreign and primitive function calls can be caught as values of the JThrowable type.
+ */
+data foreign unsafe import jvm public "java.lang.Throwable"
+    public JThrowable deriving Inputable, Outputable, Show;
+
+instance Exception JThrowable where;
+
+
+/////////////////////////////////////////////////////////////
+
+/**
+ * Primitive for raising an exception. Because the return type is polymorphic, an exception can be raised in any expression
+ * in CAL.
+ * 
+ * @arg exception the exception to raise
+ * @return nothing is actually returned since the exception is raised
+ */
+primitive private primThrow :: JThrowable -> a;
+
+/**
+ * Primitive function for catching and handling exceptions.
+ * 
+ * It take an argument {@code expr@} and evaluates it to weak-head normal form. If an exception is raised, then the 
+ * handler function is applied to the raised exception, and the resulting value is returned. Otherwise, the 
+ * {@code expr@} argument is simply returned.
+ * 
+ * @arg expr the expression to evaluate to weak-head normal form
+ * @arg handler the exception handler to call if an exception is raised
+ * @return {@code expr@}, if no exception is raised while evaluating {@code expr@} to weak-head normal form. Otherwise, the result
+ *      of applying the {@code handler@} function on the exception that was raised.
+ */
+primitive private primCatch :: a -> (JThrowable -> a) -> a;
+
+/**
+ * Raise a CAL user-defined exception i.e. one that has a specific CAL type that is a member of the {@link typeClass = Exception@}
+ * type class. Such exceptions must be caught at their specific CAL type.
+ * 
+ * Because the return type is polymorphic, an exception can be raised in any expression
+ * in CAL.
+ * 
+ * @arg exception the exception to raise
+ * @return nothing is actually returned since the exception is raised
+ */
+throw :: Exception e => e -> a;
+public throw exception = primThrow (toJThrowable exception);
+
+/**
+ * Core function for catching and handling exceptions.
+ * 
+ * It take an argument {@code expr@} and evaluates it to weak-head normal form. 
+ * If no exception is raised, then the {@code expr@} argument is simply returned.
+ * If an exception is raised, and the handler function is of the appropriate type to handle the exception,
+ * then the handler function is applied to the raised exception, and the resulting value is returned.
+ * Otherwise, the exception is simply not caught and propagated ownward.
+ * 
+ * @arg expr the expression to evaluate to weak-head normal form
+ * @arg handler the exception handler to call if an exception is raised of the appropriate type
+ * @return {@code expr@}, if no exception is raised while evaluating {@code expr@} to weak-head normal form. Otherwise, the result
+ *      of applying the {@code handler@} function on the exception that was raised if the exception is of the appropriate type.
+ *      Otherwise the expression is not caught but propagated onward.
+ */
+catch :: Exception e => a -> (e -> a) -> a;
+public catch expr handler =
+    expr
+    `primCatch`
+    (
+        \throwable ->
+            case fromJThrowable throwable of
+            Nothing -> primThrow throwable;
+            Just exception -> handler exception;                   
+    );
+
+
+toJThrowable :: Exception e => e -> JThrowable;
+private toJThrowable exception =
+    ((input :: JObject -> JThrowable)
+     # (output :: JCalException -> JObject)     
+     # calException_make 
+     # toCalValue 
+     # toDynamic)
+    exception;
+
+
+foreign unsafe import jvm "method getClass"
+    private throwable_getClass :: JThrowable -> JClass;
+foreign unsafe import jvm "method isAssignableFrom"
+    private class_isAssignableFrom :: JClass -> JClass -> Boolean;
+
+
+fromJThrowable :: Exception e => JThrowable -> Maybe e; 
+private fromJThrowable !throwable =
+    if isCalException throwable then
+        
+        //if the type e is an exception thrown by calling the Exception.throw function i.e. a CAL user generated exception.
+        //Unwrap the value from the holding JCalException
+        
+        (fromDynamic
+         # unsafeFromCalValue
+         # calException_getCALValue
+         # (input :: JObject -> JCalException)
+         # (output :: JThrowable -> JObject))
+        throwable        
+        
+    else  
+        //If the type e is in fact a foreign type whose java type can be assigned a value of the run-time type of
+        //the throwable argument, then do so.
+        //This handles exceptions thrown by a foreign or primitive function, or from within CAL's implementation
+        //(calls to error, pattern matching failures).       
+        //The implementation below is a little tricky and uses the technique of the Prelude.cast function.
+        
+        let
+            valueType :: Maybe e -> e;
+            valueType = undefined;
+            
+            result :: Exception e => Maybe e;
+            result = 
+                case foreignClass (typeOf (valueType result)) of
+                Nothing -> Nothing;
+                Just javaClass -> 
+                    if class_isAssignableFrom javaClass (throwable_getClass throwable) then
+                        Just (unsafeCoerce throwable)
+                    else
+                        Nothing;
+                ;
+        in
+            result;        
+
+/////////////////////////////////////////////////////////////
+
+/**
+ * @arg expr expression to evaluate to weak-head normal form
+ * @return {@code Right expr@} if no exception was raised while evaluating {@code expr@}, otherwise, {@code Left (the exception raised)@}
+ */
+try :: Exception e => a -> Either e a;
+public try expr =
+    Prelude.strict Right expr
+    `catch`
+    Left
+    ; 
+
+/**
+ * {@link finally@} evaluates the argument {@code expr@} to weak-head normal form.
+ * If an exception is raised while doing this, then {@link finally@} evaluates the argument {@code finalizer@}
+ * to weak-head normal form, before re-raising the exception.
+ * Otherwise, {@link finally@} will still evaluate {@code finalizer@} to weak-head normal form before returning {@code expr@}.
+ * @arg expr expression to evaluate to weak-head normal form
+ * @arg finalizer expression to evaluate to weak-head normal form, even if an exception was raised while evaluating expr.
+ * @return expr
+ */
+finally :: a -> b -> a;
+public finally expr finalizer =
+    (
+        expr
+        `primCatch`
+        (
+            \exception -> finalizer `seq` primThrow exception
+        )
+    )
+    `seq`
+    finalizer
+    `seq`
+    expr
+    ;
+        
+/**
+ * {@link bracket@} is used to acquire a resource, do some work with it, and then release the resource even
+ * if an exception is raised while doing the work with the resource.
+ 
+ * If an exception is raised, then {@code bracket@} will re-raise the exception (after performing the release).
+ *  
+ * @arg initializer expression to first evaluate to weak-head normal form e.g. to acquire a resource
+ * @arg exprFunction (exprFunction initializer) is evaluated to weak-head normal form e.g. this is using the resource. 
+ * @arg finalizingFunction (exprFunction initializer) is evaluated last e.g. to release the resource required in initializer.
+ *        Will be evaluated even if evalating (exprFunction initializer) raises an exception.
+ * @return the result of applying exprFunction to initializer.
+ */        
+bracket :: a -> (a -> c) -> (a -> b) -> c;
+public bracket initializer exprFunction finalizingFunction =
+    initializer
+    `seq`
+    finally (exprFunction initializer) (finalizingFunction initializer)
+    ;
+          
+
+/**
+ * @arg throwable
+ * @return {@link True@} if throwable was raised through a call to the {@link Prelude.error@} function.
+ */
+foreign unsafe import jvm "instanceof org.openquark.cal.runtime.CALExecutorException$ExternalException$ErrorFunctionException" 
+    public isError :: JThrowable -> Boolean;
+
+/**
+ * Pattern matching failures arise via an unhandled case alternative e.g.
+ * {@code (case Just 'a' of Nothing -> True;)@} or a data constructor field selection failure e.g.
+ * {@code (Left 'a' :: Either Char Char).Right.value)@}.
+ * @arg throwable
+ * @return {@link True@} if throwable was raised because of a pattern matching failure.
+ */
+foreign unsafe import jvm "instanceof org.openquark.cal.runtime.CALExecutorException$ExternalException$PatternMatchFailure" 
+    public isPatternMatchingFailure :: JThrowable -> Boolean;
+
+/**
+ * @arg exception
+ * @return true if exception is actually of the java.lang.Error subtype.
+ */
+foreign unsafe import jvm "instanceof java.lang.Error" 
+    public isJavaError :: JThrowable -> Boolean;
+
+/**
+ * @arg exception
+ * @return true if exception is actually of the java.lang.Exception subtype.
+ */
+foreign unsafe import jvm "instanceof java.lang.Exception" 
+    public isJavaException :: JThrowable -> Boolean;
+
+/**
+ * @arg exception
+ * @return true if exception is actually of the java.lang.RuntimeException subtype.
+ */
+foreign unsafe import jvm "instanceof java.lang.RuntimeException" 
+    public isJavaRuntimeException :: JThrowable -> Boolean;
+
+/**
+ * @arg exception
+ * @return true if exception is actually of the java.lang.NullPointerException subtype.
+ */
+foreign unsafe import jvm "instanceof java.lang.NullPointerException" 
+    public isJavaNullPointerException :: JThrowable -> Boolean;
+
+/**
+ * @arg exception
+ * @return true if exception is actually of the java.lang.IllegalStateException subtype.
+ */
+foreign unsafe import jvm "instanceof java.lang.IllegalStateException" 
+    public isJavaIllegalStateException :: JThrowable -> Boolean;
+
+/**
+ * @arg exception
+ * @return true if exception is actually of the java.lang.IllegalArgumentException subtype.
+ */
+foreign unsafe import jvm "instanceof java.lang.IllegalArgumentException" 
+    public isJavaIllegalArgumentException :: JThrowable -> Boolean;
+
+/**
+ * @arg exception
+ * @return true if exception is actually of the java.lang.ArithmeticException subtype.
+ */
+foreign unsafe import jvm "instanceof java.lang.ArithmeticException" 
+    public isJavaArithmeticException :: JThrowable -> Boolean;
+
+
+
+/**
+ * Type used as a holder for CAL values that are members of the Exception type class. Since the foreign class is a subtype of
+ * java.lang.Exception it can be used with the exception handling primitives primThrow and primCatch.
+ */
+data foreign unsafe import jvm "org.openquark.cal.internal.foreignsupport.module.Exception.CalException"
+    private JCalException deriving Inputable, Outputable, Show;
+
+foreign unsafe import jvm "instanceof org.openquark.cal.internal.foreignsupport.module.Exception.CalException" 
+    private isCalException :: JThrowable -> Boolean;
+
+foreign unsafe import jvm "constructor" 
+    private calException_make :: CalValue -> JCalException;
+
+foreign unsafe import jvm "method getCALValue" 
+    private calException_getCALValue :: JCalException -> CalValue;
+
+
+
+    
+
+  
+
+
+
+
+
+
+
+
+
+
+                      
+                      

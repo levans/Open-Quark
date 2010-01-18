@@ -1,0 +1,585 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * This Module is used to test the cal benchmark implementations. It redirects stdin and stdout as
+ * needed and compares the resulting outputs with the correct output, taken from
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}
+ */
+module Cal.Benchmarks.Shootout.Test.TestHarness;
+
+
+import Cal.Benchmarks.Shootout.BinaryTrees;
+import Cal.Benchmarks.Shootout.Fannkuch;
+import Cal.Benchmarks.Shootout.Fasta;
+import Cal.Benchmarks.Shootout.KNucleotide;
+import Cal.Benchmarks.Shootout.Mandelbrot;
+import Cal.Benchmarks.Shootout.NBody;
+import Cal.Benchmarks.Shootout.Nsieve;
+import Cal.Benchmarks.Shootout.NsieveBits;
+import Cal.Benchmarks.Shootout.PartialSums;
+import Cal.Benchmarks.Shootout.PiDigits;
+import Cal.Benchmarks.Shootout.Recursive;
+import Cal.Benchmarks.Shootout.RegexDna;
+import Cal.Benchmarks.Shootout.SpectralNorm;
+import Cal.Benchmarks.Shootout.Sumcol;
+import Cal.Benchmarks.Shootout.Revcomp;
+import Cal.Benchmarks.Shootout.Meteor;
+import Cal.Benchmarks.Shootout.Message;
+import Cal.Benchmarks.Shootout.Chameneos;
+
+
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable, Eq;
+    typeConstructor = Byte, Char, Double, Int, String, Maybe, Boolean, Long;
+    dataConstructor = Just, Nothing, True, False, Right;
+    function = eager, fromInt, fst, min, seq, snd, toByte, unsafeCoerce, stringToInt, fromLong, error;
+    ;
+    
+import Cal.IO.File using
+    function = readFile, makeFileName;
+    ;
+
+import Cal.Core.String using
+    function = replaceAllString, replicate, length;
+    ;
+    
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+    
+import Cal.Core.Char;
+
+import Cal.Collections.List using
+    function = accumulateLeft1Strict, head, map, andList, foldLeftStrict;
+    ;
+
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    function = fromList, subscript;
+    ;
+
+import Cal.Utilities.MessageFormat using
+    function = formatWithPattern;
+    ;
+
+import Cal.Utilities.Locale using
+    function = invariantLocale;
+    ;
+
+import Cal.Utilities.Random;
+
+data foreign unsafe import jvm "java.io.PrintStream" private JPrintStream;
+foreign unsafe import jvm "static field java.lang.System.out" private stdout :: JPrintStream;
+data foreign unsafe import jvm "java.io.BufferedReader" private JBufferedReader;
+
+data foreign unsafe import jvm "java.io.InputStream" private JInputStream;
+data foreign unsafe import jvm "java.io.FileInputStream" private JFileInputStream;
+
+foreign unsafe import jvm "static field java.lang.System.in" private stdin :: JInputStream;
+data foreign unsafe import jvm "java.io.Reader" private JReader;
+data foreign unsafe import jvm "java.io.FileReader" private JFileReader;
+foreign unsafe import jvm "constructor" private createBufferedReader :: JReader -> JBufferedReader;
+
+foreign unsafe import jvm "static method java.lang.System.setIn" private setIn :: JInputStream -> ();
+foreign unsafe import jvm "static method java.lang.System.setOut" private setOut :: JPrintStream -> ();
+foreign unsafe import jvm "static method java.lang.System.currentTimeMillis" private currentTimeMillis :: Long;
+
+foreign unsafe import jvm "constructor" private createFileInputStream :: String -> JFileInputStream;
+
+data foreign unsafe import jvm "java.io.OutputStream" private JOutputStream;
+data foreign unsafe import jvm "java.io.FileOutputStream" private JFileOutputStream;
+foreign unsafe import jvm "constructor" private createFileOutputStream :: String -> JFileOutputStream;
+foreign unsafe import jvm "constructor" private createPrintStream :: JOutputStream -> JPrintStream;
+foreign unsafe import jvm "method write" private writeToFile :: JPrintStream -> Int -> ();
+foreign unsafe import jvm "method close" private closeOutput :: JPrintStream -> ();
+foreign unsafe import jvm "method close" private closeInput :: JInputStream -> ();
+
+data foreign unsafe import jvm "java.lang.String[]" JStringArray;
+foreign unsafe import jvm "newArray" stringArray_new :: Int -> JStringArray;
+foreign unsafe import jvm "lengthArray" stringArray_length :: JStringArray -> Int;
+foreign unsafe import jvm "subscriptArray" stringArray_subscript :: JStringArray -> Int -> String;
+foreign unsafe import jvm "updateArray" stringArray_update :: JStringArray -> Int -> String -> String; 
+
+
+foreign unsafe import jvm "static method org.openquark.cal.benchmark.shootout.test.RunJavaImplementations.runByName"  private runJavaImpl :: String -> JStringArray -> ();
+
+data foreign unsafe import jvm "org.openquark.cal.benchmark.shootout.test.NullPrintStream" private JNullPrintStream;
+foreign unsafe import jvm "constructor" private createNullPrintStream :: JNullPrintStream;
+foreign unsafe import jvm "cast" jNullPrintStreamtoJPrintStream :: JNullPrintStream -> JPrintStream;
+
+
+
+foreign unsafe import jvm "method println" private printLn :: JPrintStream -> String -> ();
+
+/**
+ * possible outcomes from a test
+ */
+data Outcome =
+    Passed |
+    Failed |
+    NoOutput |
+    NoExpectedFileGiven deriving Inputable, Outputable, Eq;
+
+instance Show Outcome where
+    show = showOutcome;
+    ;
+
+showOutcome outcome =
+    case outcome of
+    Passed -> "Passed";
+    Failed -> "Failed";
+    NoOutput -> "-";
+    NoExpectedFileGiven -> "-";
+    ;
+
+
+/**
+ * the supported implementations 
+ */
+data Implementation =
+    CAL |
+    Java14 deriving Inputable, Outputable, Eq;
+
+instance Show Implementation where
+    show = showImplementation;
+    ;
+
+showImplementation impl =
+    case impl of
+    CAL -> "CAL";
+    Java14 -> "Java14";
+    ;
+
+
+
+/**
+ * converts a list of strings to a java array of strings, suitable for calling a Java main
+ */
+listOfStringToArrayOfString :: [String] -> JStringArray;
+listOfStringToArrayOfString !strings = 
+    let
+        array :: JStringArray;
+        array = stringArray_new (List.length strings);
+    in
+        fst (foldLeftStrict (\array value -> (stringArray_update (fst array) (snd array) value `seq` (fst array), snd array + 1))
+        (array, 0) strings);
+
+/**
+ * this is used to describe a test
+ */
+data Test = Test 
+        name :: String 
+        run :: [(Implementation, ([String] -> ()))] 
+        args:: [String] 
+        inputFile:: (Maybe String)
+        outputFile :: (Maybe String)
+        expectedFile :: (Maybe String);
+
+
+/**
+ * these are the tests with small input values used to quickly verify the benchmarks correctness.
+ */
+verifyTests :: [Test];
+verifyTests = [
+    Test "binarytrees" [(CAL, BinaryTrees.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.binarytrees" # listOfStringToArrayOfString)] ["10"] Nothing (Just "bin/BinaryTrees.res") (Just "data/binarytrees-output.txt"),
+    Test "fannkuch" [(CAL, Fannkuch.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.fannkuch" # listOfStringToArrayOfString)] ["7"] Nothing (Just "bin/Fannkuch.res") (Just "data/fannkuch-output.txt"),
+    Test "fasta" [(CAL, Fasta.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.fasta" # listOfStringToArrayOfString)] ["1000"] Nothing (Just "bin/Fasta.res") (Just "data/fasta-output.txt") ,
+    Test "knucleotide" [(CAL, KNucleotide.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.knucleotide" # listOfStringToArrayOfString)] [] (Just "data/knucleotide-input.txt") (Just "bin/KNucleotide.res") (Just "data/knucleotide-output.txt"), 
+    Test "mandelbrot" [(CAL, Mandelbrot.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.mandelbrot" # listOfStringToArrayOfString)] ["200"] Nothing (Just "bin/Mandelbrot.pbm") (Just "data/mandelbrot-output.txt"), 
+    Test "nbody" [(CAL, NBody.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.nbody" # listOfStringToArrayOfString)] ["1000"] Nothing (Just "bin/NBody.res") (Just "data/nbody-output.txt"), 
+    Test "nsieve" [(CAL, Nsieve.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.nsieve" # listOfStringToArrayOfString)] ["2"] Nothing (Just "bin/Nsieve.res") (Just "data/nsieve-output.txt"), 
+    Test "nsievebits" [(CAL, NsieveBits.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.nsievebits" # listOfStringToArrayOfString)] ["2"] Nothing (Just "bin/NsieveBits.res") (Just "data/nsievebits-output.txt"), 
+    Test "partialsums" [(CAL, PartialSums.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.partialsums" # listOfStringToArrayOfString)] ["25000"] Nothing (Just "bin/PartialSums.res") (Just "data/partialsums-output.txt"), 
+    Test "pidigits" [(CAL, PiDigits.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.pidigits" # listOfStringToArrayOfString)] ["27"] Nothing (Just "bin/PiDigits.res") (Just "data/pidigits-output.txt"), 
+    Test "recursive" [(CAL, Recursive.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.recursive" # listOfStringToArrayOfString)] ["3"] Nothing (Just "bin/Recursive.res") (Just "data/recursive-output.txt"), 
+    Test "regexdna" [(CAL, RegexDna.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.regexdna" # listOfStringToArrayOfString)] [] (Just "data/regexdna-input.txt") (Just "bin/RegexDna.res") (Just "data/regexdna-output.txt"), 
+    Test "spectralnorm" [(CAL, SpectralNorm.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.spectralnorm" # listOfStringToArrayOfString)] ["100"] Nothing (Just "bin/SpectralNorm.res") (Just "data/spectralnorm-output.txt"), 
+    Test "sumcol" [(CAL, Sumcol.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.sumcol" # listOfStringToArrayOfString)] [] (Just "data/sumcol-input.txt") (Just "bin/SumFile.res") (Just "data/sumcol-output.txt"),
+    Test "revcomp" [(CAL, Revcomp.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.revcomp" # listOfStringToArrayOfString)] [] (Just "data/revcomp-input.txt") (Just "bin/ReverseComplement.res") (Just "data/revcomp-output.txt"), 
+    Test "meteor" [(CAL, Meteor.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.meteor" # listOfStringToArrayOfString)] ["2098"] (Nothing) (Just "bin/Meteor.res") (Just "data/meteor-output.txt") 
+];
+
+javaChameneos :: [Test];
+javaChameneos = [
+    Test "chameneos" [(Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.chameneos" # listOfStringToArrayOfString)] ["5000000"] Nothing (Nothing) (Nothing)
+];
+
+/* note the java message does not exit cleanly - it leaves threads running
+ * you will have to restart ICE if you run this
+ */
+javaMessage :: [Test];
+javaMessage = [
+    Test "message" [(Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.message" # listOfStringToArrayOfString)] ["15000"] Nothing (Nothing) (Nothing)
+];
+
+/**
+ * these tests are used to create the test data needed to run some of the big tests
+ */
+genDataTests :: [Test];
+genDataTests = [
+    Test "fasta" [(CAL, Fasta.main)] ["1000000"] Nothing (Just "bin/KNucleotide-Big.in") Nothing ,
+    Test "fasta" [(CAL, Fasta.main)] ["500000"] Nothing (Just "bin/RegexDna-Big.in") Nothing ,
+    Test "fasta" [(CAL, Fasta.main)] ["2500000"] Nothing (Just "bin/ReverseComplement-Big.in") Nothing,
+    Test "sumcol" [(CAL, sumcolgen)] ["21000"] Nothing (Just "bin/sumcol-big.in") Nothing
+];
+
+
+/**generate test data for the sum-col*/
+sumcolgen !n =
+    foldLeftStrict (\out n -> printLn out (show (n - 50)) `seq` out) stdout 
+      (List.take (1000 * (stringToInt (head n))) (Random.randomBoundedInts Random.initialSeed 100)) `seq`
+    ();
+
+
+/**
+ * these are the version of the tests with the parameters used for benchmarking performance,
+ * they output to /dev/null
+ */
+bigTests :: [Test];
+bigTests = [
+    Test "binarytrees" [(CAL, BinaryTrees.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.binarytrees" # listOfStringToArrayOfString)] ["16"] Nothing Nothing Nothing,
+    Test "fannkuch" [(CAL, Fannkuch.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.fannkuch" # listOfStringToArrayOfString)] ["11"] Nothing Nothing Nothing,
+    Test "fasta" [(CAL, Fasta.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.fasta" # listOfStringToArrayOfString)] ["25000000"] Nothing Nothing Nothing ,
+    Test "knucleotide" [(CAL, KNucleotide.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.knucleotide" # listOfStringToArrayOfString)] [] (Just "bin/KNucleotide-Big.in") Nothing Nothing, 
+    Test "mandelbrot" [(CAL, Mandelbrot.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.mandelbrot" # listOfStringToArrayOfString)] ["3000"] Nothing Nothing Nothing, 
+    Test "nbody" [(CAL, NBody.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.nbody" # listOfStringToArrayOfString)] ["20000000"] Nothing Nothing Nothing, 
+    Test "nsieve" [(CAL, Nsieve.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.nsieve" # listOfStringToArrayOfString)] ["9"] Nothing Nothing Nothing, 
+    Test "nsievebits" [(CAL, NsieveBits.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.nsievebits" # listOfStringToArrayOfString)] ["11"] Nothing Nothing Nothing, 
+    Test "partialsums" [(CAL, PartialSums.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.partialsums" # listOfStringToArrayOfString)] ["2500000"] Nothing Nothing Nothing, 
+    Test "pidigits" [(CAL, PiDigits.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.pidigits" # listOfStringToArrayOfString)] ["2500"] Nothing Nothing Nothing, 
+    Test "recursive" [(CAL, Recursive.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.recursive" # listOfStringToArrayOfString)] ["11"] Nothing Nothing Nothing, 
+    Test "regexdna" [(CAL, RegexDna.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.regexdna" # listOfStringToArrayOfString)] [] (Just "bin/RegexDna-Big.in") Nothing Nothing, 
+    Test "spectralnorm" [(CAL, SpectralNorm.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.spectralnorm" # listOfStringToArrayOfString)] ["5500"] Nothing Nothing Nothing, 
+    Test "sumcol" [(CAL, Sumcol.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.sumcol" # listOfStringToArrayOfString)] [] (Just "bin/sumcol-big.in") Nothing Nothing, 
+    Test "revcomp" [(CAL, Revcomp.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.revcomp" # listOfStringToArrayOfString)] [] (Just "bin/ReverseComplement-Big.in") Nothing Nothing, 
+    Test "meteor" [(CAL, Meteor.main), (Java14, runJavaImpl "org.openquark.cal.benchmarks.shootout.java.meteor" # listOfStringToArrayOfString)] ["2098"] (Nothing) (Nothing) (Nothing), 
+    Test "message" [(CAL, Message.main)] ["15000"] (Nothing) Nothing Nothing, 
+    Test "chameneos" [(CAL, Chameneos.main)] ["5000000"] (Nothing) (Nothing) (Nothing)//, 
+];
+
+/**
+ * these are the version of the tests with the parameters used for benchmarking performance,
+ * but which write output to files.
+ */
+bigTestsOutput :: [Test];
+bigTestsOutput = [
+    Test "binarytrees" [(CAL, BinaryTrees.main), (Java14, runJavaImpl "binarytrees" # listOfStringToArrayOfString)] ["16"] Nothing (Just "bin/BinaryTrees.res") Nothing,
+    Test "fannkuch" [(CAL, Fannkuch.main), (Java14, runJavaImpl "fannkuch" # listOfStringToArrayOfString)] ["11"] Nothing (Just "bin/Fannkuch.res") Nothing,
+    Test "fasta" [(CAL, Fasta.main), (Java14, runJavaImpl "fasta" # listOfStringToArrayOfString)] ["25000000"] Nothing (Just "bin/Fasta.res") Nothing ,
+    Test "knucleotide" [(CAL, KNucleotide.main), (Java14, runJavaImpl "knucleotide" # listOfStringToArrayOfString)] [] (Just "bin/KNucleotide-Big.in") (Just "bin/KNucleotide.res") Nothing, 
+    Test "mandelbrot" [(CAL, Mandelbrot.main), (Java14, runJavaImpl "mandelbrot" # listOfStringToArrayOfString)] ["3000"] Nothing (Just "bin/Mandelbrot.pbm") Nothing, 
+    Test "nbody" [(CAL, NBody.main), (Java14, runJavaImpl "nbody" # listOfStringToArrayOfString)] ["20000000"] Nothing (Just "bin/NBody.res") Nothing, 
+    Test "nsieve" [(CAL, Nsieve.main), (Java14, runJavaImpl "nsieve" # listOfStringToArrayOfString)] ["9"] Nothing (Just "bin/Nsieve.res") Nothing, 
+    Test "nsievebits" [(CAL, NsieveBits.main), (Java14, runJavaImpl "nsievebits" # listOfStringToArrayOfString)] ["11"] Nothing (Just "bin/NsieveBits.res") Nothing, 
+    Test "partialsums" [(CAL, PartialSums.main), (Java14, runJavaImpl "partialsums" # listOfStringToArrayOfString)] ["2500000"] Nothing (Just "bin/PartialSums.res") Nothing, 
+    Test "pidigits" [(CAL, PiDigits.main), (Java14, runJavaImpl "pidigits" # listOfStringToArrayOfString)] ["2500"] Nothing (Just "bin/PiDigits.res") Nothing, 
+    Test "recursive" [(CAL, Recursive.main), (Java14, runJavaImpl "recursive" # listOfStringToArrayOfString)] ["11"] Nothing (Just "bin/Recursive.res") Nothing, 
+    Test "regexdna" [(CAL, RegexDna.main), (Java14, runJavaImpl "regexdna" # listOfStringToArrayOfString)] [] (Just "bin/RegexDna-Big.in") (Just "bin/RegexDna.res") Nothing, 
+    Test "spectralnorm" [(CAL, SpectralNorm.main), (Java14, runJavaImpl "spectralnorm" # listOfStringToArrayOfString)] ["5500"] Nothing (Just "bin/SpectralNorm.res") Nothing, 
+    Test "sumcol" [(CAL, Sumcol.main), (Java14, runJavaImpl "sumcol" # listOfStringToArrayOfString)] [] (Just "bin/sumcol-big.in") (Just "bin/SumFile.res") Nothing, 
+    Test "revcomp" [(CAL, Revcomp.main), (Java14, runJavaImpl "revcomp" # listOfStringToArrayOfString)] [] (Just "bin/ReverseComplement-Big.in") (Just "bin/ReverseComplement.res") Nothing 
+];
+
+
+setOutputStream :: JPrintStream -> JPrintStream;
+setOutputStream !new =
+    let
+        old :: JPrintStream;
+        old = stdout;
+    in
+        old `seq` setOut new `seq` old;
+
+setInputStream :: JInputStream -> JInputStream;
+setInputStream !new =
+    let 
+        old :: JInputStream;
+        old = stdin;
+    in
+        old `seq` setIn new `seq` old;
+
+openFileForOutput :: String ->  JPrintStream;
+openFileForOutput name = 
+    createPrintStream (unsafeCoerce (createFileOutputStream name));
+
+openFileForInput :: String ->  JInputStream;
+openFileForInput name =
+    let 
+        x :: JFileInputStream;
+        x= eager $ createFileInputStream (name);
+    in
+    unsafeCoerce x;
+
+/**
+ * Comapre two files, ignoring \r (the language shootouts are run on a unix system)
+ * @arg name1 the first file
+ * @arg name2 the second file
+ * @return true if the files are equivalent
+ */
+filesEqual :: String -> String -> Boolean;
+filesEqual name1 name2 =
+    let 
+        f1 :: Prelude.Either File.IOError String;
+        f1 = readFile $ makeFileName name1;
+        
+        f2 :: Prelude.Either File.IOError String;
+        f2 = readFile $ makeFileName name2;
+    in
+        case f1 of
+        Right c1 -> 
+            case f2 of
+            Right c2 -> replaceAllString c1 "\\r" "" == replaceAllString c2 "\\r" "";
+            _ -> error $ "Problem reading file " ++ name2;
+            ;
+            _ -> error $ "Problem with file " ++ name1;
+    ;
+    
+ 
+
+/**
+ * run a list of tests
+ */
+runTests :: Int -> [Test] -> [[(String, Implementation, Long, Outcome)]];
+runTests iterations tests =
+    map (\t -> runTest iterations t) tests;
+ 
+
+/**
+ * pad a showable item to fixed widith for tabular display
+ * the itemis left justified within the fixed space
+ */
+pad item width =
+    let
+        str = show item;
+    in
+        str ++ (replicate (width - (length str)) ' ');
+
+/**
+ * pad a showable item to fixed widith for tabular display
+ * the item is right justified within the fixed space
+ */
+padRight item width =
+    let
+        str = show item;
+    in
+        (replicate (width - (length str)) ' ') ++ str;
+
+/**
+ * format a list of test results into a string in a tabular form
+ * @arg results a list of results
+ * @return the results formated in a string
+ */
+showTests results =
+    let
+        formatTest :: Long -> (String, Implementation, Long, Outcome) -> String;
+        formatTest best test = 
+            case test of 
+            (name, impl, time, outcome) ->
+                (pad impl 6) ++
+                (padRight time 6) ++ "ms " ++
+                (compareToBest best time) ++
+                (pad outcome 12);
+            ;
+        
+        formatHeader :: [(String, Implementation, Long, Outcome)] -> String;
+        formatHeader tests = 
+            case (head tests) of 
+                (name, impl, time, outcome) ->
+                    (pad name 18);
+            ;
+
+        formatSet :: [(String, Implementation, Long, Outcome)] -> String;
+        formatSet tests =
+            let 
+                best = fastestTime tests;
+            in
+                formatHeader tests ++ 
+                foldLeftStrict (\acc result -> acc ++ formatTest best result) "" tests;
+                
+                
+        
+        fastestTime :: [(String, Implementation, Long, Outcome)] -> Long;
+        fastestTime tests = 
+            List.minimum (map (\test -> test.#3) tests);
+        
+        compareToBest :: Long -> Long -> String;
+        compareToBest best this =
+            if (best == 0) then
+                "--- "
+            else
+                (formatWithPattern "{0,number,###0.0} " invariantLocale {#1=((fromLong this) / (fromLong best))::Double});
+    in
+        foldLeftStrict (\acc testSet -> acc ++ formatSet testSet ++ "\n") "" results;
+
+
+/**
+ * run a single test implementation
+ * @arg iterations the number of times to run the test to average the result
+ * @arg name the test name
+ * @arg impl the type of test implmentation
+ * @arg run the function that will run the implmentation
+ * @arg args the arguments for the test
+ * @arg inputFile the file to read input from, or nothing
+ * @arg outputFile the file to write the output to
+ * @arg expectedFile the expected output. If this is provided the result will be compared and the test can be marked as passed/failed
+ * @return a record describing the outcome of the test.
+ */
+runImpl :: Int -> a -> Implementation -> (b -> c) -> b -> Maybe String -> Maybe String -> Maybe String -> (a, Implementation, Long, Outcome);
+runImpl iterations name impl run args inputFile outputFile expectedFile =
+    let
+        oldStdin :: JInputStream;
+        oldStdin = 
+            eager (case inputFile of
+            Just name -> setInputStream $ openFileForInput name;
+            Nothing -> stdin;
+            );
+        
+        oldStdout :: JPrintStream;
+        oldStdout = 
+            eager (case outputFile of
+            Just name -> setOutputStream $ openFileForOutput name;
+            Nothing -> setOutputStream $ jNullPrintStreamtoJPrintStream createNullPrintStream;
+            );
+        
+        startClock :: Long;
+        startClock = currentTimeMillis;
+        
+        stopClock :: Long;
+        stopClock = currentTimeMillis;
+        
+        loop :: Int -> ();
+        loop !n =
+            if (n>0) then
+                run args `seq` loop (n-1)
+            else
+                ();
+    in
+        //save the old stdin/stdout and set the input/output streams
+        oldStdin `seq` 
+        oldStdout `seq`
+        
+        //run the test and time it
+        startClock `seq`            
+        loop iterations `seq`
+        stopClock `seq`
+        
+        //close the output stream and restore if needed
+        (case outputFile of
+        Just outname -> 
+            closeOutput stdout `seq` setOutputStream oldStdout `seq` ();
+        _ -> ();) `seq`
+        
+        //close the input stream and restore if needed
+        (case inputFile of
+        Just inname -> 
+            closeInput stdin `seq` setInputStream oldStdin `seq` ();
+        _ -> ();) `seq`
+        
+        //test the output file against the expected file
+        ( name, impl, (stopClock - startClock) / (fromInt iterations) , eager $ (case expectedFile of
+        Just testname -> 
+            case outputFile of
+            Just outname -> 
+                if (filesEqual outname testname) then
+                    Passed
+                else
+                    Failed;
+            _ -> NoOutput;
+            ;
+        _ -> NoExpectedFileGiven;
+        ));
+
+
+/**
+ * run a test for each impl, redirecting stdin and stdout and compare the output with a testfile.
+ */
+runTest :: Int -> Test -> [(String, Implementation, Long, Outcome)];
+runTest iterations test =
+    case test of
+    Test name impl args inputFile outputFile expectedFile ->
+        map (\impl -> runImpl iterations name impl.#1 impl.#2 args inputFile outputFile expectedFile) impl;       
+    ;
+   
+/**
+ * run the verification tests and format the results
+ */
+verify =
+    showTests $ runTests 1 verifyTests;
+
+/** 
+ * generate the input files (DNA tests) for the big tests
+ */
+prepare =
+    showTests $ runTests 1 genDataTests;
+
+/** 
+ * run the big tests for timming - you must have run prepare beforehand
+ */
+big =
+    showTests $ runTests 1 bigTests;
+
+big5 =
+    showTests $ runTests 5 bigTests;
+
+/**run a particular test - this may be used in conjunction with the :pt command*/
+runOne testSet testName testImpl = 
+    let 
+        test = List.head $ List.filter (\a -> a.Test.name == testName) testSet;
+        impl = 
+            case test of
+            Test name impl args inputFile outputFile expectedFile ->
+                Test name (List.filter (\a -> a.#1 == testImpl) impl) args inputFile outputFile expectedFile;
+            ;
+    in
+        showTests $ [runTest 1 impl];
+    
+
+/** make a pt script for testing a set of benchmarks with the :pt command
+ * e.g. 
+ * makePtScripts bigTests "bigTests" CAL
+ * makePtScripts bigTests "bigTests" Java14
+ */
+makePtScripts tests testsName testImpl =
+ foldLeftStrict (\s t -> s ++ ":pt runOne " ++ testsName ++ " \"" ++ t.Test.name ++"\" " ++ (show testImpl) ++ "\n") ""
+ (map (\t -> case t of
+            Test name impl args inputFile outputFile expectedFile ->
+                Test name (List.filter (\a -> a.#1 == testImpl) impl) args inputFile outputFile expectedFile;
+            ) tests);
+
+/**
+ * Verify all the CAL verify tests pass
+ */
+testModule :: Boolean;
+public testModule =
+    andList (map (\outcome -> 
+        if (outcome.#2 == CAL) then outcome.#4 == Passed else True) (Prelude.concat (runTests 1 verifyTests)));
+

@@ -1,0 +1,2420 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * DictionaryQuery.cal
+ * Creation date: Oct 15, 2004.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains the model for constructing high-level database queries
+ * against data dictionaries.
+ * Much of this model resembles the {@link Sql@} module functionality; however
+ * complex concepts like database tables and joins are omitted. 
+ * 
+ * @author Richard Webster
+ */
+
+module Cal.Data.DictionaryQuery;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Num, Ord, Outputable;
+    typeConstructor =
+        Boolean, Byte, Double, Either, Int, JObject, Maybe, Ordering, String;
+    dataConstructor = False, True, Nothing, Just;
+    function =
+        compare, error, field1, field2, field3, fromJust, fromMaybe, fst, 
+        input, intToString, isEmpty, isNothing, maybeToList, not, output, snd, 
+        toDouble, upFrom;
+    ;
+import Cal.Collections.List using
+    function =
+        any, concatMap, deleteFirsts, drop, elemIndex, filter, find, foldLeft, 
+        foldLeftStrict, head, isElem, isSingletonList, length, 
+        lookupWithDefault, map, removeDuplicates, repeat, reverse, take, zip, 
+        zipWith;
+    ;      
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, JoinType, QueryOption, TimeInterval;
+    dataConstructor = Distinct, TopN;
+    ;
+import Cal.Utilities.UniqueIdentifier using
+    typeClass = UniquelyNamedItem;
+    typeConstructor = UniqueIdentifier;
+    function = getDisplayName, getUniqueName, makeUniqueIdentifierByName;
+    ;
+import Cal.Utilities.ValueType using
+    typeConstructor = JValueType, ValueType;
+    dataConstructor =
+        StringType, IntType, DoubleType, BooleanType, TimeType, BinaryType;
+    function = outputValueType;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeClass =
+        XmlAttributeInputable, XmlAttributeOutputable, XmlElementInputable, 
+        XmlElementOutputable, XmlInputable, XmlOutputable;
+    typeConstructor = XmlAttribute, XmlNode;
+    function = elementAttributeValue, toXmlAttribute;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Utilities.Range using
+    typeConstructor = Range;
+    function =
+        hasLeftEndpoint, hasRightEndpoint, includesLeftEndpoint, 
+        includesRightEndpoint, leftEndpoint, rightEndpoint;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+
+/**
+ * The field type inicates whether a database field represents a dimension, measure, detail, or filter.
+ * This is not the same as the value type (string, double, int, etc...) of a database field.
+ */
+data foreign unsafe import jvm public "org.openquark.util.datadictionary.FieldType" 
+    public FieldType deriving Eq, Inputable, Outputable, Show;
+
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.FieldType.DETAIL"    public detailFieldType    :: FieldType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.FieldType.DIMENSION" public dimensionFieldType :: FieldType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.FieldType.MEASURE"   public measureFieldType   :: FieldType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.FieldType.FILTER"    public filterFieldType    :: FieldType;
+
+foreign unsafe import jvm "method getValue" private fieldValueInt :: FieldType -> Int;
+
+
+instance XmlAttributeInputable FieldType where
+    fromXmlAttribute = inputFieldTypeXmlAttribute;
+    ;
+
+instance XmlInputable FieldType where
+    fromXml = inputFieldTypeXml;
+    ;
+    
+inputFieldTypeXml :: (Either XmlAttribute XmlNode) -> FieldType;
+private inputFieldTypeXml attributeOrNode =
+    XmlBuilder.inputFromXmlAttributeInputable attributeOrNode;
+
+inputFieldTypeXmlAttribute :: XmlAttribute -> FieldType;
+private inputFieldTypeXmlAttribute attribute = 
+    let
+        fieldTypeName :: String;
+        fieldTypeName = XmlBuilder.attributeValue attribute;
+
+        allFieldTypes :: [FieldType];
+        allFieldTypes = [detailFieldType, dimensionFieldType, measureFieldType, filterFieldType];
+    in
+        fromMaybe (error ("Unexpected field type '" ++ fieldTypeName ++ "'."))
+                  (List.find (\!fieldType -> show fieldType == fieldTypeName) allFieldTypes);
+
+
+instance XmlAttributeOutputable FieldType where
+    toXmlAttribute = outputFieldTypeXmlAttribute;
+    ;
+
+instance XmlOutputable FieldType where
+    toXml = outputFieldTypeXml;
+    ;
+
+outputFieldTypeXml :: String -> FieldType -> (Either XmlAttribute XmlNode);
+private outputFieldTypeXml name value =
+    XmlBuilder.outputFromXmlAttributeOutputable name value;
+
+outputFieldTypeXmlAttribute :: String -> FieldType -> XmlAttribute;
+private outputFieldTypeXmlAttribute attrName fieldType =
+     toXmlAttribute attrName (show fieldType);
+
+
+/**
+ * The field aggregation type indicates how values of the field should be combined to get a single result value.
+ */
+data foreign unsafe import jvm public "org.openquark.util.datadictionary.AggregationType" 
+    public AggregationType deriving Eq, Show;
+
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.AggregationType.NONE"  public noAggregationType    :: AggregationType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.AggregationType.SUM"   public sumAggregationType   :: AggregationType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.AggregationType.MAX"   public maxAggregationType   :: AggregationType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.AggregationType.MIN"   public minAggregationType   :: AggregationType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.AggregationType.AVG"   public avgAggregationType   :: AggregationType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.AggregationType.COUNT" public countAggregationType :: AggregationType;
+foreign unsafe import jvm "static field org.openquark.util.datadictionary.AggregationType.DISTINCT_COUNT" public distinctCountAggregationType :: AggregationType;
+
+foreign unsafe import jvm "method getValue" private aggregationValueInt :: AggregationType -> Int;
+
+
+// Make AggregationType XML Input and Outputable
+instance XmlAttributeInputable AggregationType where
+    fromXmlAttribute = inputAggregationTypeXmlAttribute;
+    ;
+
+instance XmlInputable AggregationType where
+    fromXml = inputAggregationTypeXml;
+    ;
+    
+inputAggregationTypeXml :: (Either XmlAttribute XmlNode) -> AggregationType;
+private inputAggregationTypeXml attributeOrNode =
+    XmlBuilder.inputFromXmlAttributeInputable attributeOrNode;
+
+inputAggregationTypeXmlAttribute :: XmlAttribute -> AggregationType;
+private inputAggregationTypeXmlAttribute attribute = 
+    let
+        aggrTypeName :: String;
+        aggrTypeName = XmlBuilder.attributeValue attribute;
+
+        allAggregationTypes :: [AggregationType];
+        allAggregationTypes = [noAggregationType, sumAggregationType, maxAggregationType, minAggregationType, avgAggregationType, countAggregationType];
+    in
+        fromMaybe (error ("Unexpected aggregation type '" ++ aggrTypeName ++ "'."))
+                  (List.find (\!aggrType -> show aggrType == aggrTypeName) allAggregationTypes);
+
+
+instance XmlAttributeOutputable AggregationType where
+    toXmlAttribute = outputAggregationTypeXmlAttribute;
+    ;
+
+instance XmlOutputable AggregationType where
+    toXml = outputAggregationTypeXml;
+    ;
+    
+outputAggregationTypeXml :: String -> AggregationType -> (Either XmlAttribute XmlNode);
+private outputAggregationTypeXml name value =
+    XmlBuilder.outputFromXmlAttributeOutputable name value;
+
+outputAggregationTypeXmlAttribute :: String -> AggregationType -> XmlAttribute;
+private outputAggregationTypeXmlAttribute attrName aggrType =
+     toXmlAttribute attrName (show aggrType);
+
+
+/**
+ * A database field exposed from a data dictionary.
+ */
+data public DatabaseField = 
+    private DatabaseField 
+        displayName             :: String
+        uniqueID                :: (UniqueIdentifier DatabaseField)
+        valueType               :: ValueType
+        fieldType               :: FieldType
+        defaultAggregationType  :: AggregationType
+        isPreaggregated         :: Boolean
+    ;
+
+/**
+ * Construct a database field.
+ */
+makeDatabaseField :: String -> UniqueIdentifier DatabaseField -> ValueType -> FieldType -> AggregationType -> Boolean -> DatabaseField;
+public makeDatabaseField = DatabaseField;
+
+public stringDatabaseField fieldType name = stringDatabaseField2 fieldType name (makeUniqueIdentifierByName name) False;
+public stringDatabaseField2 fieldType name uniqueID isPreaggregated = makeDatabaseField name uniqueID StringType fieldType countAggregationType isPreaggregated;
+
+public intDatabaseField fieldType name = intDatabaseField2 fieldType name (makeUniqueIdentifierByName name) False;
+public intDatabaseField2 fieldType name uniqueID isPreaggregated = makeDatabaseField name uniqueID IntType fieldType sumAggregationType isPreaggregated;
+
+public doubleDatabaseField fieldType name = doubleDatabaseField2 fieldType name (makeUniqueIdentifierByName name) False;
+public doubleDatabaseField2 fieldType name uniqueID isPreaggregated = makeDatabaseField name uniqueID DoubleType fieldType sumAggregationType isPreaggregated;
+
+public booleanDatabaseField fieldType name = booleanDatabaseField2 fieldType name (makeUniqueIdentifierByName name) False;
+public booleanDatabaseField2 fieldType name uniqueID isPreaggregated = makeDatabaseField name uniqueID BooleanType fieldType countAggregationType isPreaggregated;
+
+public timeDatabaseField fieldType name = timeDatabaseField2 fieldType name (makeUniqueIdentifierByName name) False;
+public timeDatabaseField2 fieldType name uniqueID isPreaggregated = makeDatabaseField name uniqueID TimeType fieldType countAggregationType isPreaggregated;
+
+public binaryDatabaseField fieldType name = binaryDatabaseField2 fieldType name (makeUniqueIdentifierByName name) False;
+public binaryDatabaseField2 fieldType name uniqueID isPreaggregated = makeDatabaseField name uniqueID BinaryType fieldType countAggregationType isPreaggregated;
+
+/**
+ * Implement support for {@code UniquelyNamedItem@}
+ */
+instance UniquelyNamedItem DatabaseField where
+    getDisplayName = getFieldDisplayName;
+    getUniqueIdentifier = getFieldUniqueIdentifier; 
+    ;
+
+getFieldDisplayName !field = field.DatabaseField.displayName;
+getFieldUniqueIdentifier !field = field.DatabaseField.uniqueID;
+
+/**
+ * Returns the value type of a database field.
+ */
+fieldValueType :: DatabaseField -> ValueType;
+public fieldValueType !field = field.DatabaseField.valueType;
+
+/**
+ * Returns the field type of the field (which is different from the field value type).
+ */
+fieldType :: DatabaseField -> FieldType;
+public fieldType !field = field.DatabaseField.fieldType;
+
+
+/**
+ * Returns the default aggregation type of the field (sum, min, max, etc...).
+ */
+fieldDefaultAggregationType :: DatabaseField -> AggregationType;
+public fieldDefaultAggregationType !field = field.DatabaseField.defaultAggregationType;
+
+/**
+ * Returns whether a measure field already includes aggregation.
+ */
+isFieldPreaggregated :: DatabaseField -> Boolean;
+public isFieldPreaggregated !field = field.DatabaseField.isPreaggregated;
+
+/**
+ * Sets whether a measure field includes aggregation.
+ */
+setFieldPreaggregated :: DatabaseField -> Boolean -> DatabaseField;
+public setFieldPreaggregated !field newIsPreaggregated = 
+    case field of
+    DatabaseField {displayName, uniqueID, valueType, fieldType, defaultAggregationType} -> 
+        DatabaseField displayName uniqueID valueType fieldType defaultAggregationType newIsPreaggregated;
+    ;
+
+/**
+ * Returns whether the field is numeric.
+ */
+isNumericField :: DatabaseField -> Boolean;
+public isNumericField field = 
+    case (fieldValueType field) of
+    (DoubleType | IntType) -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns whether the field is marked as a dimension.
+ */
+isDimensionField :: DatabaseField -> Boolean;
+public isDimensionField field = dimensionFieldType == fieldType field;
+
+/**
+ * Returns whether the field is marked as a detail field.
+ */
+isDetailField :: DatabaseField -> Boolean;
+public isDetailField field = detailFieldType == fieldType field;
+
+/**
+ * Returns whether the field is marked as a measure.
+ */
+isMeasureField :: DatabaseField -> Boolean;
+public isMeasureField field = measureFieldType == fieldType field;
+
+/**
+ * Returns whether the field is marked as a filter.
+ */
+isFilterField :: DatabaseField -> Boolean;
+public isFilterField field = filterFieldType == fieldType field;
+
+/**
+ * Allow DatabaseFields to be compared for equality.
+ * This will compare only the unique identifiers.
+ */
+instance Eq DatabaseField where
+    equals = equalsDatabaseField;
+    notEquals = notEqualsDatabaseField;
+    ;
+
+equalsDatabaseField !f1 !f2 = getFieldUniqueIdentifier f1 == getFieldUniqueIdentifier f2;
+notEqualsDatabaseField !f1 !f2 = not $ equalsDatabaseField f1 f2;
+
+instance Ord DatabaseField where
+    lessThan = lessThanDatabaseField;
+    lessThanEquals = lessThanEqualsDatabaseField;
+    greaterThanEquals = greaterThanEqualsDatabaseField;
+    greaterThan = greaterThanDatabaseField;
+    compare = compareDatabaseField;
+    max = maxDatabaseField;
+    min = minDatabaseField;
+    ;
+
+lessThanDatabaseField :: DatabaseField -> DatabaseField -> Boolean;
+lessThanDatabaseField !dbf1 !dbf2 = getFieldUniqueIdentifier dbf1 < getFieldUniqueIdentifier dbf2;
+
+lessThanEqualsDatabaseField :: DatabaseField -> DatabaseField -> Boolean;
+lessThanEqualsDatabaseField !dbf1 !dbf2 = getFieldUniqueIdentifier dbf1 <= getFieldUniqueIdentifier dbf2;
+
+greaterThanEqualsDatabaseField :: DatabaseField -> DatabaseField -> Boolean;
+greaterThanEqualsDatabaseField !dbf1 !dbf2 = getFieldUniqueIdentifier dbf1 >= getFieldUniqueIdentifier dbf2;
+
+greaterThanDatabaseField :: DatabaseField -> DatabaseField -> Boolean;
+greaterThanDatabaseField !dbf1 !dbf2 = getFieldUniqueIdentifier dbf1 > getFieldUniqueIdentifier dbf2;
+
+compareDatabaseField :: DatabaseField -> DatabaseField -> Ordering;
+compareDatabaseField !dbf1 !dbf2 = compare (getFieldUniqueIdentifier dbf1) (getFieldUniqueIdentifier dbf2);
+
+maxDatabaseField :: DatabaseField -> DatabaseField -> DatabaseField;
+maxDatabaseField !dbf1 !dbf2 = if (getFieldUniqueIdentifier dbf1 <= getFieldUniqueIdentifier dbf2) then dbf2 else dbf1;
+
+minDatabaseField :: DatabaseField -> DatabaseField -> DatabaseField;
+minDatabaseField !dbf1 !dbf2 = if (getFieldUniqueIdentifier dbf1 <= getFieldUniqueIdentifier dbf2) then dbf1 else dbf2;
+
+// Allow DatabaseFields to be output to Java values and input from Java values.
+instance Outputable DatabaseField where
+    output = outputDatabaseFieldToJObject;
+    ;
+
+instance Inputable DatabaseField where
+    input = inputDatabaseFieldFromJObject;
+    ;
+
+data foreign unsafe import jvm public "org.openquark.util.datadictionary.DatabaseField" public JDatabaseField deriving Inputable, Outputable;
+
+foreign unsafe import jvm "constructor" 
+    private jDatabaseField_new :: String -> String -> JValueType -> FieldType -> AggregationType -> Boolean -> JDatabaseField;
+
+foreign unsafe import jvm "method getName" private jDatabaseFieldName :: JDatabaseField -> String;
+foreign unsafe import jvm "method getUniqueName" private jDatabaseFieldUniqueName :: JDatabaseField -> String;
+foreign unsafe import jvm "method getDataType" private jDatabaseFieldDataTypeObj :: JDatabaseField -> JObject;
+foreign unsafe import jvm "method getFieldType" private jDatabaseFieldType :: JDatabaseField -> FieldType;
+foreign unsafe import jvm "method getDefaultAggregationType" private jDatabaseFieldDefaultAggregationType :: JDatabaseField -> AggregationType;
+foreign unsafe import jvm "method isPreaggregated" private jDatabaseFieldIsPreaggregated :: JDatabaseField -> Boolean;
+
+
+outputDatabaseField :: DatabaseField -> JDatabaseField;
+public outputDatabaseField !field = 
+    case field of
+    DatabaseField {displayName, uniqueID, valueType, fieldType, defaultAggregationType, isPreaggregated} -> 
+        jDatabaseField_new (getUniqueName uniqueID) displayName (outputValueType valueType) fieldType defaultAggregationType isPreaggregated;
+    ;
+
+outputDatabaseFieldToJObject :: DatabaseField -> JObject;
+outputDatabaseFieldToJObject !field = output (outputDatabaseField field);
+
+inputDatabaseField :: JDatabaseField -> DatabaseField;
+inputDatabaseField !jField = 
+    let
+        displayName = jDatabaseFieldName jField;
+        uniqueIdentifier = makeUniqueIdentifierByName (jDatabaseFieldUniqueName jField);
+        valueType = input (jDatabaseFieldDataTypeObj jField) :: ValueType;
+        fieldType = jDatabaseFieldType jField;
+        defaultAggregationType = jDatabaseFieldDefaultAggregationType jField;
+        isPreaggregated = jDatabaseFieldIsPreaggregated jField;
+    in
+        DatabaseField displayName uniqueIdentifier valueType fieldType defaultAggregationType isPreaggregated;
+
+inputDatabaseFieldFromJObject :: JObject -> DatabaseField;
+inputDatabaseFieldFromJObject !jObject = inputDatabaseField (input jObject);
+
+
+instance Show DatabaseField where
+    show = showDatabaseField;
+    ;
+showDatabaseField:: DatabaseField -> String;
+showDatabaseField !field = getDisplayName field;
+
+// Allow DatabaseField to be inputable/outputable as XML
+instance XmlElementInputable DatabaseField where
+    fromXmlElement = inputDatabaseFieldXmlElement;
+    ;
+
+instance XmlInputable DatabaseField where
+    fromXml = inputDatabaseFieldXml;
+    ;
+
+inputDatabaseFieldXml :: (Either XmlAttribute XmlNode) -> DatabaseField;
+private inputDatabaseFieldXml attributeOrNode =
+    XmlBuilder.inputFromXmlElementInputable attributeOrNode;
+
+inputDatabaseFieldXmlElement :: XmlNode -> DatabaseField;
+private inputDatabaseFieldXmlElement xmlElement = 
+    let
+        //efficiency note: the type signatures are needed for use with elementAttributeTextWithDefault since
+        //otherwise the type of these let variables is XmlDeserializable a => a
+    
+        displayName :: String;
+        displayName = elementAttributeValue xmlElement "DisplayName";
+        
+        uniqueID :: UniqueIdentifier DatabaseField;
+        uniqueID = elementAttributeValue xmlElement "UniqueID";
+        
+        valueType :: ValueType;
+        valueType = elementAttributeValue xmlElement "ValueType";
+        
+        fieldType :: FieldType;
+        fieldType = elementAttributeValue xmlElement "FieldType";
+        
+        defaultAggregationType :: AggregationType;
+        defaultAggregationType = elementAttributeValue xmlElement "DefaultAggregationType";
+        
+        isPreaggregated :: Boolean;
+        isPreaggregated = elementAttributeValue xmlElement "IsPreaggregated";
+    in
+        makeDatabaseField displayName uniqueID valueType fieldType defaultAggregationType isPreaggregated;
+
+
+instance XmlElementOutputable DatabaseField where
+    toXmlElement = outputDatabaseFieldXmlElement;
+    ;
+
+instance XmlOutputable DatabaseField where
+    toXml = outputDatabaseFieldXml;
+    ;
+
+outputDatabaseFieldXml :: String -> DatabaseField -> (Either XmlAttribute XmlNode);
+private outputDatabaseFieldXml name value =
+    XmlBuilder.outputFromXmlElementOutputable name value;
+
+outputDatabaseFieldXmlElement :: String -> DatabaseField -> XmlNode;
+private outputDatabaseFieldXmlElement elemName !dbField =
+    case dbField of
+    DatabaseField {displayName, uniqueID, valueType, fieldType, defaultAggregationType, isPreaggregated} ->
+        let
+            attributes = [
+                toXmlAttribute "DisplayName" displayName,
+                toXmlAttribute "UniqueID" uniqueID,
+                toXmlAttribute "ValueType" valueType,
+                toXmlAttribute "FieldType" fieldType,
+                toXmlAttribute "DefaultAggregationType" defaultAggregationType,
+                toXmlAttribute "IsPreaggregated"isPreaggregated 
+            ];
+        in
+            XmlBuilder.makeXmlElement Nothing elemName attributes [];
+    ;
+
+
+/**
+ * A set of joins (or context).
+ * This type only identifies the join set.
+ * The dictionary will have its own private implementation of the actual joins.
+ */
+data public JoinSet = 
+    private JoinSet 
+        displayName     :: String 
+        uniqueID        :: (UniqueIdentifier JoinSet);
+
+/**
+ * Construct a new join set identfier.
+ */
+makeJoinSet :: String -> UniqueIdentifier JoinSet -> JoinSet;
+public makeJoinSet = JoinSet;
+
+/**
+ * Implement support for {@code UniquelyNamedItem@}
+ */
+instance UniquelyNamedItem JoinSet where
+    getDisplayName = getJoinSetDisplayName;
+    getUniqueIdentifier = getJoinSetUniqueIdentifier; 
+    ;
+
+getJoinSetDisplayName !joinSet      = joinSet.JoinSet.displayName;
+getJoinSetUniqueIdentifier !joinSet = joinSet.JoinSet.uniqueID;
+
+
+
+/**
+ * A database expression which can be used in a dictionary query.
+ * Expressions can reference database fields, constant values, database functions applied to other expressions, etc....
+ */
+data public Expr =
+    private FieldExpr 
+        field               :: DatabaseField
+    |
+    private ConstExpr 
+        constValue          :: ConstValue
+    |
+    private ListExpr 
+        listValues          :: [Expr]
+    |
+    private FunctionExpr 
+        func                :: DbFunction 
+        arguments           :: [Expr]
+    |
+    private SubQueryExpr 
+        subquery            :: Query
+    |
+    private SubQueryColumnExpr 
+        subquery            :: Query 
+        subqueryTableAlias  :: String 
+        subqueryExpr        :: Expr
+
+    deriving Eq, Show
+    ;
+
+
+/**
+ * Returns {@link True@} if the expression represents a field.
+ */
+isFieldExpr :: Expr -> Boolean;
+public isFieldExpr !expr =
+    case expr of
+    FieldExpr {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns the field from a field expression.
+ */
+getFieldFromExpr :: Expr -> DatabaseField;
+public getFieldFromExpr !expr = 
+    case expr of
+    FieldExpr {field} -> field;
+    _ -> error "Not a field expression";
+    ;
+
+/**
+ * Returns whether the specified expression is a list of expressions.
+ */
+isListExpr :: Expr -> Boolean;
+public isListExpr !expr = 
+    case expr of
+    ListExpr {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns the list of expressions from a list expression.
+ */
+getExpressionsFromList :: Expr -> [Expr];
+public getExpressionsFromList !expr = 
+    case expr of
+    ListExpr {listValues} -> listValues;
+    _ -> error "Not a list expression";
+    ;
+
+/**
+ * Returns whether the specified expressions is a constant value.
+ */
+isConstantExpr :: Expr -> Boolean;
+public isConstantExpr !expr = 
+    case expr of
+    ConstExpr {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns whether the specified expression is a string constant value.
+ */
+isStringConstantExpr :: Expr -> Boolean;
+public isStringConstantExpr !expr = 
+    case expr of
+    ConstExpr {constValue} -> 
+        case constValue of
+        StringValue {} -> True;
+        _ -> False;
+        ;
+    _ -> False;
+    ;
+
+/**
+ * Returns the string constant value for the expression.
+ */
+getStringConstantValue :: Expr -> String;
+public getStringConstantValue !expr = 
+    case expr of
+    ConstExpr {constValue} -> 
+        case constValue of
+        StringValue {strValue} -> strValue;
+        _ -> error "Not a string constant expression";
+        ;
+    _ -> error "Not a string constant expression";
+    ;
+
+/**
+ * Returns {@link True@} if the expression represents a function (or operator) application.
+ */
+isFunctionExpr :: Expr -> Boolean;
+public isFunctionExpr !expr =
+    case expr of
+    FunctionExpr {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns the function type from a function expression.
+ */
+getFunctionFromFunctionExpr :: Expr -> DbFunction;
+public getFunctionFromFunctionExpr !expr =
+    case expr of
+    FunctionExpr {func} -> func;
+    _ -> error "Not a function expression";
+    ;
+
+/**
+ * Returns the arguments from a function expression.
+ */
+getArgumentsFromFunctionExpr :: Expr -> [Expr];
+public getArgumentsFromFunctionExpr !expr =
+    case expr of
+    FunctionExpr {arguments} -> arguments;
+    _ -> error "Not a function expression";
+    ;
+
+
+/**
+ * {@code TypedExpr@} wraps an untyped {@link Expr@} and adds information about the expression data type.
+ */
+data public TypedExpr a = 
+    private TypedExpr 
+        untypedExpr     :: Expr
+    deriving Show
+    ;
+
+/**
+ * Returns the untyped expression from a typed expression.
+ */
+toUntypedExpr :: TypedExpr a -> Expr;
+public toUntypedExpr !typedExpr = typedExpr.TypedExpr.untypedExpr;
+
+/**
+ * Returns a typed expression from the untyped expression.
+ */
+toTypedExpr :: Expr -> TypedExpr a;
+public toTypedExpr = TypedExpr;
+
+
+/**
+ * Returns the type of the values represented by this typed expression.
+ */
+typeOfExpr :: Prelude.Typeable a => TypedExpr a -> Prelude.TypeRep;
+public typeOfExpr !expr = 
+    head (Prelude.typeArguments (Prelude.typeOf expr));
+
+instance Eq (TypedExpr a) where
+    equals = equalsTypedExpr;
+    notEquals = notEqualsTypedExpr;
+    ;
+
+/**
+ * Checks whether 2 typed expressions are equal.
+ */
+equalsTypedExpr !expr1 !expr2 = toUntypedExpr expr1 == toUntypedExpr expr2;
+notEqualsTypedExpr !expr1 !expr2 = not $ equalsTypedExpr expr1 expr2;
+
+
+/**
+ * A constant value.
+ */
+data private ConstValue =
+    private NullValue 
+    |
+    private StringValue 
+        strValue :: String
+    |
+    private NumberValue 
+        numValue :: Double
+    |
+    private BooleanValue 
+        boolValue :: Boolean
+    |
+    private TimeValue 
+        timeValue :: Time
+
+    deriving Eq, Show
+    ;
+
+stringConstant :: String -> TypedExpr String;
+public stringConstant strValue = TypedExpr $ ConstExpr $ StringValue strValue;
+
+numericConstant :: Num a => a -> TypedExpr a;
+public numericConstant numValue = TypedExpr $ ConstExpr $ NumberValue $ toDouble numValue;
+
+booleanConstant :: Boolean -> TypedExpr Boolean;
+public booleanConstant !boolValue = 
+    if boolValue then trueConstant else falseConstant;
+
+trueConstant :: TypedExpr Boolean;
+public trueConstant = TypedExpr $ ConstExpr $ BooleanValue True;
+
+falseConstant :: TypedExpr Boolean;
+public falseConstant = TypedExpr $ ConstExpr $ BooleanValue  False;
+
+timeConstant :: Time -> TypedExpr Time;
+public timeConstant timeValue = TypedExpr $ ConstExpr $ TimeValue timeValue;
+
+nullValue :: TypedExpr a;
+public nullValue = TypedExpr $ ConstExpr NullValue;
+
+
+untypedListExpr :: [Expr] -> Expr;
+public untypedListExpr listValues = ListExpr listValues;
+
+/**
+ * This doesn't need to be exposed since it can only be used with the IN binary operator anyway.
+ */
+listExpr :: [TypedExpr a] -> TypedExpr [a];
+private listExpr listValues = TypedExpr $ ListExpr (map toUntypedExpr listValues);
+
+
+/**
+ * Creates a field expression based on a subquery.
+ * Any ordering will be removed from the subquery (unless it uses {@link TopN@}).
+ * 
+ * TODO: is there a way to make this typed based on the (one and only) result column in the query?
+ */
+subQueryExpr :: Query -> Expr;
+public subQueryExpr !subquery = 
+    let
+        // Remove any ordering from the subquery (unless it uses TopN).
+        fixedSubquery :: Query;
+        fixedSubquery = if (isTopNQuery subquery) then subquery else removeOrdering subquery;
+    in
+        // Check that there is only 1 return column in the subquery.
+        if (isSingletonList (projectedColumns fixedSubquery)) then SubQueryExpr fixedSubquery
+        else error "Only subqueries returning a single column can be used as field expressions";
+
+/**
+ * Creates field expressions which reference expressions from a subquery.
+ */
+subqueryColumnExprs :: Query -> String -> [Expr] -> [Expr];
+private subqueryColumnExprs subquery subqueryTableAlias subqueryExprs = 
+    let
+        updateSubqueryForExpr :: Query -> Expr -> Query;
+        updateSubqueryForExpr currentSubquery expr = 
+            let
+                // Ensure that the specified expression is projected from the subquery with a specified alias name.
+                existingColsAndAliases :: [(Expr, String)];
+                existingColsAndAliases = projectedColumnsWithAliases currentSubquery;
+
+                colAliases :: [String];
+                colAliases = map snd existingColsAndAliases;
+
+                exprIndex :: Int;
+                exprIndex = fromMaybe (length existingColsAndAliases) (elemIndex expr (projectedColumns currentSubquery));
+
+                defaultAlias :: String;
+                defaultAlias = defaultColumnAlias exprIndex;
+
+                newAliases :: [String];
+                newAliases = List.replaceAt exprIndex defaultAlias colAliases;
+            in
+                case (List.lookup expr existingColsAndAliases) of
+                Nothing -> 
+                    // If the expression is not already projected from the subquery, then add it with a default alias.
+                    projectColumnWithAlias currentSubquery (toTypedExpr expr) defaultAlias;
+                Just exprAlias -> 
+                    // If the expression is projected, but has no alias, then assign a default alias for the projected column.
+                    // If the expression is projected with an alias, then nothing needs to be done.
+                    if (isEmpty exprAlias) then setColumnAliases currentSubquery newAliases
+                    else currentSubquery;
+                ;
+
+        // Modify the subquery so that it projects all of the necessary expressions with alias names.
+        updatedSubquery :: Query;
+        updatedSubquery = List.foldLeftStrict updateSubqueryForExpr subquery subqueryExprs;
+    in
+        map (SubQueryColumnExpr updatedSubquery subqueryTableAlias) subqueryExprs;
+
+/**
+ * Returns a default column alias.
+ * The column index is the zero-based index of the expression in the query's projected columns.
+ */
+defaultColumnAlias :: Int -> String;
+private defaultColumnAlias !colIndex = "COL_VALUE" ++ (intToString (colIndex + 1));
+
+
+/**
+ * Constructs an expression to wrap the specified field.
+ * An error will be thrown if the field is a filter since filters cannot be used in the expression language.
+ */
+makeFieldExpr :: DatabaseField -> Expr;
+private makeFieldExpr !field = 
+    if (not $ isFilterField field) then FieldExpr field
+    else error ("The field '" ++ getDisplayName field ++ "' is a filter and cannot be used in expressions.");
+
+/**
+ * Returns a query field for the specified table.
+ */
+untypedField :: DatabaseField -> Expr;
+public untypedField field = makeFieldExpr field;
+
+/**
+ * TODO: perhaps these functions should check that the value type of the field is correct...
+ */
+stringField :: DatabaseField -> TypedExpr String;
+public stringField field = TypedExpr (makeFieldExpr field);
+
+booleanField :: DatabaseField -> TypedExpr Boolean;
+public booleanField field = TypedExpr (makeFieldExpr field);
+
+doubleField :: DatabaseField -> TypedExpr Double;
+public doubleField field = TypedExpr (makeFieldExpr field);
+
+intField :: DatabaseField -> TypedExpr Int;
+public intField field = TypedExpr (makeFieldExpr field);
+
+timeField :: DatabaseField -> TypedExpr Time;
+public timeField field = TypedExpr (makeFieldExpr field);
+
+binaryField :: DatabaseField -> TypedExpr (Array Byte);
+public binaryField field = TypedExpr (makeFieldExpr field);
+
+
+untypedFunctionExpr :: DbFunction -> [Expr] -> Expr;
+public untypedFunctionExpr func arguments = FunctionExpr func arguments;
+
+functionExpr0 :: DbFunction -> TypedExpr a;
+private functionExpr0 func = TypedExpr (untypedFunctionExpr func []);
+
+functionExpr1 :: DbFunction -> TypedExpr a -> TypedExpr b;
+private functionExpr1 func arg1 = TypedExpr (untypedFunctionExpr func [toUntypedExpr arg1]);
+
+functionExpr2 :: DbFunction -> TypedExpr a -> TypedExpr b -> TypedExpr c;
+private functionExpr2 func arg1 arg2 = TypedExpr (untypedFunctionExpr func [toUntypedExpr arg1, toUntypedExpr arg2]);
+
+functionExpr3 :: DbFunction -> TypedExpr a -> TypedExpr b -> TypedExpr c -> TypedExpr d;
+private functionExpr3 func arg1 arg2 arg3 = TypedExpr (untypedFunctionExpr func [toUntypedExpr arg1, toUntypedExpr arg2, toUntypedExpr arg3]);
+
+functionExpr4 :: DbFunction -> TypedExpr a -> TypedExpr b -> TypedExpr c -> TypedExpr d -> TypedExpr e;
+private functionExpr4 func arg1 arg2 arg3 arg4 = TypedExpr (untypedFunctionExpr func [toUntypedExpr arg1, toUntypedExpr arg2, toUntypedExpr arg3, toUntypedExpr arg4]);
+
+
+// Unary expressions.
+untypedUnaryExpr :: DbFunction -> Expr -> Expr;
+public untypedUnaryExpr func argument = FunctionExpr func [argument];
+
+notExpr :: TypedExpr Boolean -> TypedExpr Boolean;
+public notExpr = functionExpr1 Sql.OpNot;
+
+bitwiseNotExpr :: TypedExpr Int -> TypedExpr Int;
+public bitwiseNotExpr = functionExpr1 Sql.OpBitNot;
+
+negateExpr :: Num a => TypedExpr a -> TypedExpr a;
+public negateExpr = functionExpr1 Sql.OpNegate;
+
+isNullExpr :: TypedExpr a -> TypedExpr Boolean;
+public isNullExpr = functionExpr1 Sql.OpIsNull;
+
+isNotNullExpr :: TypedExpr a -> TypedExpr Boolean;
+public isNotNullExpr = functionExpr1 Sql.OpIsNotNull;
+
+/*
+// TODO: is there any way to make this only accept subqueries?
+existsExpr :: TypedExpr [a] -> TypedExpr Boolean;
+public existsExpr subqueryExpr = functionExpr1 Sql.OpExists subqueryExpr;
+*/
+
+// Binary expressions.
+untypedBinaryExpr :: DbFunction -> Expr -> Expr -> Expr;
+public untypedBinaryExpr func leftArgument rightArgument = FunctionExpr func [leftArgument, rightArgument];
+
+eqExpr :: Eq a => TypedExpr a -> TypedExpr a -> TypedExpr Boolean;
+public eqExpr = functionExpr2 Sql.OpEq;
+
+notEqExpr :: Eq a => TypedExpr a -> TypedExpr a -> TypedExpr Boolean;
+public notEqExpr = functionExpr2 Sql.OpNotEq;
+
+ltExpr :: Ord a => TypedExpr a -> TypedExpr a -> TypedExpr Boolean;
+public ltExpr = functionExpr2 Sql.OpLt;
+
+gtExpr :: Ord a => TypedExpr a -> TypedExpr a -> TypedExpr Boolean;
+public gtExpr = functionExpr2 Sql.OpGt;
+
+ltEqExpr :: Ord a => TypedExpr a -> TypedExpr a -> TypedExpr Boolean;
+public ltEqExpr = functionExpr2 Sql.OpLtEq;
+
+gtEqExpr :: Ord a => TypedExpr a -> TypedExpr a -> TypedExpr Boolean;
+public gtEqExpr = functionExpr2 Sql.OpGtEq;
+
+andExpr :: TypedExpr Boolean -> TypedExpr Boolean -> TypedExpr Boolean;
+public andExpr b1 b2 = 
+    if (b1 == trueConstant) then b2
+    else if (b2 == trueConstant) then b1
+    else if (b1 == falseConstant || b2 == falseConstant) then falseConstant
+    else functionExpr2 Sql.OpAnd b1 b2;
+
+orExpr :: TypedExpr Boolean -> TypedExpr Boolean -> TypedExpr Boolean;
+public orExpr b1 b2 = 
+    if (b1 == falseConstant) then b2
+    else if (b2 == falseConstant) then b1
+    else if (b1 == trueConstant || b2 == trueConstant) then trueConstant
+    else functionExpr2 Sql.OpOr b1 b2;
+
+likeExpr :: TypedExpr String -> TypedExpr String -> TypedExpr Boolean;
+public likeExpr = functionExpr2 Sql.OpLike;
+
+inExpr :: Eq a => TypedExpr a -> [TypedExpr a] -> TypedExpr Boolean;
+public inExpr leftExpr listValueExprs = functionExpr2 Sql.OpIn leftExpr (listExpr listValueExprs);
+
+inExpr2 :: Eq a => TypedExpr a -> TypedExpr [a] -> TypedExpr Boolean;
+public inExpr2 leftExpr listValuesExpr = functionExpr2 Sql.OpIn leftExpr listValuesExpr;
+
+concatExpr :: TypedExpr String -> TypedExpr String -> TypedExpr String;
+public concatExpr = functionExpr2 Sql.OpCat;
+
+
+numBinaryExpr :: Num a => DbFunction -> TypedExpr a -> TypedExpr a -> TypedExpr a;
+private numBinaryExpr = functionExpr2;
+
+public addExpr      = numBinaryExpr Sql.OpPlus;
+public subtractExpr = numBinaryExpr Sql.OpMinus;
+public multiplyExpr = numBinaryExpr Sql.OpMul;
+public divideExpr   = numBinaryExpr Sql.OpDiv;
+public modulusExpr  = numBinaryExpr Sql.OpMod;
+
+intBinaryExpr :: DbFunction -> TypedExpr Int -> TypedExpr Int -> TypedExpr Int;
+private intBinaryExpr = functionExpr2;
+
+public bitwiseAndExpr = intBinaryExpr Sql.OpBitAnd;
+public bitwiseOrExpr  = intBinaryExpr Sql.OpBitOr;
+public bitwiseXorExpr = intBinaryExpr Sql.OpBitXor;
+
+
+// Other operators.
+betweenExpr :: Ord a => TypedExpr a -> TypedExpr a -> TypedExpr a -> TypedExpr Boolean;
+public betweenExpr leftExpr lowerExpr upperExpr = functionExpr3 Sql.OpBetween leftExpr lowerExpr upperExpr;
+
+simpleCaseExpr :: Eq a => TypedExpr a -> [(TypedExpr a, TypedExpr b)] -> Maybe (TypedExpr b) -> TypedExpr b;
+public simpleCaseExpr caseExpr whenValueAndResults elseValue = 
+    let
+        unTypedExprs = toUntypedExpr caseExpr 
+                        : concatMap (\pr -> [toUntypedExpr (fst pr), toUntypedExpr (snd pr)]) whenValueAndResults 
+                        ++ map toUntypedExpr (maybeToList elseValue);
+    in
+        TypedExpr (untypedFunctionExpr Sql.OpCase_Simple unTypedExprs);
+
+searchedCaseExpr :: [(TypedExpr Boolean, TypedExpr b)] -> Maybe (TypedExpr b) -> TypedExpr b;
+public searchedCaseExpr whenConditionAndResults elseValue = 
+    let
+        unTypedExprs = concatMap (\pr -> [toUntypedExpr (fst pr), toUntypedExpr (snd pr)]) whenConditionAndResults 
+                        ++ map toUntypedExpr (maybeToList elseValue);
+    in
+        TypedExpr (untypedFunctionExpr Sql.OpCase_Searched unTypedExprs);
+
+
+// Numeric functions.
+absExpr :: Num a => TypedExpr a -> TypedExpr a;
+public absExpr = functionExpr1 Sql.AbsFunction;
+
+acosExpr :: TypedExpr Double -> TypedExpr Double;
+public acosExpr = functionExpr1 Sql.AcosFunction;
+
+asinExpr :: TypedExpr Double -> TypedExpr Double;
+public asinExpr = functionExpr1 Sql.AsinFucntion;
+
+atanExpr :: TypedExpr Double -> TypedExpr Double;
+public atanExpr = functionExpr1 Sql.AtanFunction;
+
+atan2Expr :: TypedExpr Double -> TypedExpr Double -> TypedExpr Double;
+public atan2Expr = functionExpr2 Sql.Atan2Function;
+
+ceilingExpr :: Num a => TypedExpr a -> TypedExpr Int;
+public ceilingExpr = functionExpr1 Sql.CeilingFunction;
+
+cosExpr :: TypedExpr Double -> TypedExpr Double;
+public cosExpr = functionExpr1 Sql.CosFunction;
+
+cotExpr :: TypedExpr Double -> TypedExpr Double;
+public cotExpr = functionExpr1 Sql.CotFunction;
+
+degreesExpr :: TypedExpr Double -> TypedExpr Double;
+public degreesExpr = functionExpr1 Sql.DegreesFunction;
+
+expExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public expExpr = functionExpr1 Sql.ExpFunction;
+
+floorExpr :: Num a => TypedExpr a -> TypedExpr Int;
+public floorExpr = functionExpr1 Sql.FloorFunction;
+
+logExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public logExpr = functionExpr1 Sql.LogFunction;
+
+log10Expr :: Num a => TypedExpr a -> TypedExpr Double;
+public log10Expr = functionExpr1 Sql.Log10Function;
+
+modExpr :: TypedExpr Int -> TypedExpr Int -> TypedExpr Int;
+public modExpr = functionExpr2 Sql.ModFunction;
+
+piExpr :: TypedExpr Double;
+public piExpr = functionExpr0 Sql.PiFunction;
+
+powerExpr :: (Num a, Num b) => TypedExpr a -> TypedExpr b -> TypedExpr a;
+public powerExpr = functionExpr2 Sql.PowerFunction;
+
+radiansExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public radiansExpr = functionExpr1 Sql.RadiansFunction;
+
+randExpr :: TypedExpr Int -> TypedExpr Double;
+public randExpr = functionExpr1 Sql.RandFunction;
+
+roundExpr :: TypedExpr Double -> TypedExpr Int -> TypedExpr Double;
+public roundExpr = functionExpr2 Sql.RoundFunction;
+
+signExpr :: Num a => TypedExpr a -> TypedExpr Int;
+public signExpr = functionExpr1 Sql.SignFunction;
+
+sinExpr :: TypedExpr Double -> TypedExpr Double;
+public sinExpr = functionExpr1 Sql.SinFunction;
+
+sqrtExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public sqrtExpr = functionExpr1 Sql.SqrtFunction;
+
+tanExpr :: TypedExpr Double -> TypedExpr Double;
+public tanExpr = functionExpr1 Sql.TanFunction;
+
+// TODO: is this the correct signature?
+truncateExpr :: Num a => TypedExpr a -> TypedExpr Int;
+public truncateExpr = functionExpr1 Sql.TruncateFunction;
+
+
+// Conversion functions.
+
+/**
+ * Converts an integer value to a double value.
+ * The assumption here is that the database will do an implicit conversion
+ * between these 2 types, so no function will be applied in the generated SQL.
+ * A function could be used here if necessary.
+ */
+intToDoubleExpr :: TypedExpr Int -> TypedExpr Double;
+public intToDoubleExpr expr = toTypedExpr (toUntypedExpr expr);
+
+/**
+ * Converts a value to a string value.
+ */
+convertToStringExpr :: TypedExpr a -> TypedExpr String;
+public convertToStringExpr = functionExpr1 Sql.ConvertToStringFunction;
+
+/**
+ * Converts a value to a int value.
+ */
+convertToIntExpr :: TypedExpr a -> TypedExpr Int;
+public convertToIntExpr = functionExpr1 Sql.ConvertToIntFunction;
+
+/**
+ * Converts a value to a double value.
+ */
+convertToDoubleExpr :: TypedExpr a -> TypedExpr Double;
+public convertToDoubleExpr = functionExpr1 Sql.ConvertToDoubleFunction;
+
+// TODO: are other conversion functions needed?
+
+
+// String functions.
+asciiExpr :: TypedExpr String -> TypedExpr Int;
+public asciiExpr = functionExpr1 Sql.AsciiFunction;
+
+charExpr :: TypedExpr Int -> TypedExpr String;
+public charExpr = functionExpr1 Sql.CharFunction;
+
+differenceExpr :: TypedExpr String -> TypedExpr String -> TypedExpr Int;
+public differenceExpr = functionExpr2 Sql.DifferenceFunction;
+
+insertExpr :: TypedExpr String -> TypedExpr Int -> TypedExpr Int -> TypedExpr String -> TypedExpr String;
+public insertExpr stringExpr start length insertStr = functionExpr4 Sql.InsertFunction stringExpr start length insertStr;
+
+lcaseExpr :: TypedExpr String -> TypedExpr String;
+public lcaseExpr = functionExpr1 Sql.LcaseFunction;
+
+leftExpr :: TypedExpr String -> TypedExpr Int -> TypedExpr String;
+public leftExpr = functionExpr2 Sql.LeftFunction;
+
+lengthExpr :: TypedExpr String -> TypedExpr Int;
+public lengthExpr = functionExpr1 Sql.LengthFunction;
+
+locateExpr :: TypedExpr String -> TypedExpr String -> TypedExpr Int;
+public locateExpr searchExpr stringExpr = functionExpr2 Sql.LocateFunction searchExpr stringExpr;
+
+locate2Expr :: TypedExpr String -> TypedExpr String -> TypedExpr Int -> TypedExpr Int;
+public locate2Expr searchExpr stringExpr start = functionExpr3 Sql.LocateFunction searchExpr stringExpr start;
+
+ltrimExpr :: TypedExpr String -> TypedExpr String;
+public ltrimExpr = functionExpr1 Sql.LtrimFunction;
+
+repeatExpr :: TypedExpr String -> TypedExpr Int -> TypedExpr String;
+public repeatExpr stringExpr count = functionExpr2 Sql.RepeatFunction stringExpr count;
+
+replaceExpr :: TypedExpr String -> TypedExpr String -> TypedExpr String -> TypedExpr String;
+public replaceExpr stringExpr searchStr replacementStr = functionExpr3 Sql.ReplaceFunction stringExpr searchStr replacementStr;
+
+rightExpr :: TypedExpr String -> TypedExpr Int -> TypedExpr String;
+public rightExpr = functionExpr2 Sql.RightFunction;
+
+rtrimExpr :: TypedExpr String -> TypedExpr String;
+public rtrimExpr = functionExpr1 Sql.RtrimFunction;
+
+soundexExpr :: TypedExpr String -> TypedExpr String;
+public soundexExpr = functionExpr1 Sql.SoundexFunction;
+
+spaceExpr :: TypedExpr Int -> TypedExpr String;
+public spaceExpr nSpaces = functionExpr1 Sql.SpaceFunction nSpaces;
+
+substringExpr :: TypedExpr String -> TypedExpr Int -> TypedExpr Int -> TypedExpr String;
+public substringExpr stringExpr start length = functionExpr3 Sql.SubstringFunction stringExpr start length;
+
+ucaseExpr :: TypedExpr String -> TypedExpr String;
+public ucaseExpr = functionExpr1 Sql.UcaseFunction;
+
+
+// Misc functions.
+databaseExpr :: TypedExpr String;
+public databaseExpr = functionExpr0 Sql.DatabaseFunction;
+
+ifNullExpr :: TypedExpr a -> TypedExpr a -> TypedExpr a;
+public ifNullExpr = functionExpr2 Sql.IfNullFunction;
+
+nullIfExpr :: TypedExpr a -> TypedExpr a -> TypedExpr a;
+public nullIfExpr = functionExpr2 Sql.NullIfFunction;
+
+userExpr :: TypedExpr String;
+public userExpr = functionExpr0 Sql.UserFunction;
+
+
+// Date/Time functions.
+dayNameExpr :: TypedExpr Time -> TypedExpr String;
+public dayNameExpr = functionExpr1 Sql.DayNameFunction;
+
+dayOfWeekExpr :: TypedExpr Time -> TypedExpr Int;
+public dayOfWeekExpr = functionExpr1 Sql.DayOfWeekFunction;
+
+dayOfMonthExpr :: TypedExpr Time -> TypedExpr Int;
+public dayOfMonthExpr = functionExpr1 Sql.DayOfMonthFunction;
+
+dayOfYearExpr :: TypedExpr Time -> TypedExpr Int;
+public dayOfYearExpr = functionExpr1 Sql.DayOfYearFunction;
+
+hourExpr :: TypedExpr Time -> TypedExpr Int;
+public hourExpr = functionExpr1 Sql.HourFunction;
+
+minuteExpr :: TypedExpr Time -> TypedExpr Int;
+public minuteExpr = functionExpr1 Sql.MinuteFunction;
+
+monthExpr :: TypedExpr Time -> TypedExpr Int;
+public monthExpr = functionExpr1 Sql.MonthFunction;
+
+monthNameExpr :: TypedExpr Time -> TypedExpr String;
+public monthNameExpr = functionExpr1 Sql.MonthNameFunction;
+
+nowExpr :: TypedExpr Time;
+public nowExpr = functionExpr0 Sql.NowFunction;
+
+quarterExpr :: TypedExpr Time -> TypedExpr Int;
+public quarterExpr = functionExpr1 Sql.QuarterFunction;
+
+secondExpr :: TypedExpr Time -> TypedExpr Int;
+public secondExpr = functionExpr1 Sql.SecondFunction;
+
+// TODO: create helper functions for Sql.TimestampAddFunction and TimestampDiffFunction...
+
+weekExpr :: TypedExpr Time -> TypedExpr Int;
+public weekExpr = functionExpr1 Sql.WeekFunction;
+
+yearExpr :: TypedExpr Time -> TypedExpr Int;
+public yearExpr = functionExpr1 Sql.YearFunction;
+
+dateTimeAddExpr :: TimeInterval -> TypedExpr Int -> TypedExpr Time -> TypedExpr Time;
+public dateTimeAddExpr timeInterval =  functionExpr2 (Sql.DateTimeAddFunction timeInterval);
+
+dateTimeDiffExpr :: TimeInterval -> TypedExpr Time -> TypedExpr Time -> TypedExpr Int;
+public dateTimeDiffExpr timeInterval = functionExpr2 (Sql.DateTimeDiffFunction timeInterval);
+
+
+// Aggregate functions.
+untypedAggregationExpr :: DbFunction -> Expr -> Expr;
+public untypedAggregationExpr aggrOp baseExpr = 
+    if (Sql.isAggregationFunction aggrOp) then FunctionExpr aggrOp [baseExpr]
+    else error "The specified function is not an aggregation function.";
+
+countExpr :: TypedExpr a -> TypedExpr Int;
+public countExpr = functionExpr1 Sql.AggrCount;
+
+sumExpr :: Num a => TypedExpr a -> TypedExpr a;
+public sumExpr = functionExpr1 Sql.AggrSum;
+
+avgExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public avgExpr = functionExpr1 Sql.AggrAvg;
+
+minExpr :: Ord a => TypedExpr a -> TypedExpr a;
+public minExpr = functionExpr1 Sql.AggrMin;
+
+maxExpr :: Ord a => TypedExpr a -> TypedExpr a;
+public maxExpr = functionExpr1 Sql.AggrMax;
+
+distinctCountExpr :: TypedExpr a -> TypedExpr Int;
+public distinctCountExpr = functionExpr1 Sql.AggrDistinctCount;
+
+distinctSumExpr :: Num a => TypedExpr a -> TypedExpr a;
+public distinctSumExpr = functionExpr1 Sql.AggrDistinctSum;
+
+distinctAvgExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public distinctAvgExpr = functionExpr1 Sql.AggrDistinctAvg;
+
+countAllExpr :: TypedExpr Double;
+public countAllExpr = functionExpr0 Sql.AggrCountAll;
+
+stdDevExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public stdDevExpr = functionExpr1 Sql.AggrStdDev;
+
+stdDevPExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public stdDevPExpr = functionExpr1 Sql.AggrStdDevP;
+
+varianceExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public varianceExpr = functionExpr1 Sql.AggrVar;
+
+variancePExpr :: Num a => TypedExpr a -> TypedExpr Double;
+public variancePExpr = functionExpr1 Sql.AggrVarP;
+
+
+
+/**
+ * A dictionary query uses database expressions to specify a desired set of result data.
+ * Database expressions are used to specify the projected columns as well as to order and filter the results.
+ */
+data public Query =
+    private Query 
+        options             :: [QueryOption]
+        columns             :: [(Expr, String)]
+        restriction         :: (Maybe (TypedExpr Boolean))
+        orderings           :: [(Expr, Boolean)]
+        groups              :: [Expr]           
+        groupRestriction    :: (Maybe (TypedExpr Boolean))
+        anchorExprs         :: [Expr]                     
+        subqueryJoinInfo    :: [(JoinType, [(Expr, Expr)])]
+        preferredJoinSetID  :: (Maybe (UniqueIdentifier JoinSet))
+        filters             :: [DatabaseField]
+    |
+    private Union 
+        query1              :: Query  
+        query2              :: Query  
+        unionAll            :: Boolean
+
+    deriving Eq, Show
+    ;
+
+
+/**
+ * Creates a new, empty query.
+ */
+newQuery :: Query;
+public newQuery = Query [] [] Nothing [] [] Nothing [] [] Nothing [];
+
+/**
+ * Combines the 2 queries into a {@link Union@} query.
+ */
+unionQuery :: Query -> Query -> Boolean -> Query;
+public unionQuery !query1 !query2 unionAll = 
+    let
+        query1Cols = projectedColumns query1;
+        query2Cols = projectedColumns query2;
+
+        // Remove any ordering from the first query.
+        updatedQuery1 = removeOrdering query1;
+    in
+        // Check that the queries have the same number of columns.
+        if (length query1Cols == length query2Cols) then Union updatedQuery1 query2 unionAll
+        else error "Both queries in a Union must have the same number of columns";
+
+/**
+ * Returns an query that intersects the specified queries.
+ * The difference will be done on the first N columns in the 2 queries.
+ */
+intersectionQuery :: Query -> Query -> Query;
+public intersectionQuery query1 query2 = 
+    let
+        query1Cols = projectedColumns query1;
+        query2Cols = projectedColumns query2;
+
+        // Join the 2 queries, preserving the projected columns and ordering of the first query.
+        joinResult = joinQueries Sql.InnerJoin query1 query2 (zip query1Cols query2Cols) [] [head query2Cols];
+
+        joinedQuery = field1 joinResult;
+        updatedQuery2Cols = field3 joinResult;
+    in
+        // Anchor the columns in the 2nd query to force this subquery to be included.
+        addAnchorExpressions joinedQuery updatedQuery2Cols;
+
+/**
+ * Returns an query that produces the intersection of the specified queries.
+ * The intersection will be done on the first columns in each of the 2 queries.
+ * 
+ * TODO: get rid of this function and use the intersectionQuery function once this is working properly...
+ */
+intersectionQuerySimple :: Query -> Query -> Query;
+public intersectionQuerySimple query1 query2 = 
+    let
+        query1Expr :: TypedExpr String;
+        query1Expr = toTypedExpr (head (projectedColumns query1));
+
+        restrictionSubqueryExpr = toTypedExpr (subQueryExpr query2);
+
+        intersectionRestriction = inExpr2 query1Expr restrictionSubqueryExpr;
+    in
+        restrict query1 intersectionRestriction;
+
+
+/**
+ * Returns an query that produces the difference of the specified queries.
+ * The difference will be done on the first N columns in the 2 queries.
+ * 
+ * TODO: this function isn't working correctly when one of the queries in a union query...
+ */
+differenceQuery :: Query -> Query -> Query;
+public differenceQuery query1 query2 = 
+    let
+        query1ProjectedColumns = projectedColumns query1;
+        query1ColumnAliases = projectedColumnAliases query1;
+        query1Ordering = orderingExpressions query1;
+
+        nProjectionExprs = length query1ProjectedColumns;
+        nOrderExprs = length query1Ordering;
+
+        // Wrap the first query in a subquery.
+        allQueryExprs1 = query1ProjectedColumns ++ map fst query1Ordering;
+        allSubqueryColumnExprs1 = subqueryColumnExprs query1 "" allQueryExprs1;
+
+        updatedProjectedColumns = take nProjectionExprs allSubqueryColumnExprs1;
+        updatedOrderingExprs = drop nProjectionExprs allSubqueryColumnExprs1;
+
+        diffQuery1 = projectWithAliases newQuery (zip updatedProjectedColumns query1ColumnAliases);
+        diffQuery2 = order2 diffQuery1 (zip updatedOrderingExprs (map snd query1Ordering));
+
+        // Wrap the second query if it contains TopN, etc...
+        wrappedQuery2 = wrapQueryIfNeeded query2;
+
+        diffColumnRestrictions = zipWith (\expr1 expr2 -> toTypedExpr (untypedBinaryExpr Sql.OpEq expr1 expr2)) updatedProjectedColumns (projectedColumns wrappedQuery2);
+        diffQuery = restrict2 wrappedQuery2 diffColumnRestrictions;
+        diffRestriction = notExpr (toTypedExpr (untypedUnaryExpr Sql.OpExists (subQueryExpr diffQuery)));
+    in
+        restrict diffQuery2 diffRestriction;
+
+/**
+ * Returns an query that produces the difference of the specified queries.
+ * The difference will be done on the first columns in each of the 2 queries.
+ * 
+ * TODO: get rid of this function and use the differenceQuery function once this is working properly...
+ */
+differenceQuerySimple :: Query -> Query -> Query;
+public differenceQuerySimple query1 query2 = 
+    let
+        query1Expr :: TypedExpr String;
+        query1Expr = toTypedExpr (head (projectedColumns query1));
+
+        restrictionSubqueryExpr = toTypedExpr (subQueryExpr query2);
+
+        diffRestriction = notExpr (inExpr2 query1Expr restrictionSubqueryExpr);
+    in
+        restrict query1 diffRestriction;
+
+
+/**
+ * Queries such as {@link TopN@} queries cannot be modified in certain ways without changing which rows are returned.
+ * In these cases, it is necessary to wrap the query in an enclosing query before making certain changes to the query.
+ */
+wrapQueryIfNeeded :: Query -> Query;
+private wrapQueryIfNeeded query = 
+    let
+        // TODO: are there any other cases in which the query needs to be wrapped in an enclosing query?
+        needToWrapQuery :: Query -> Boolean;
+        needToWrapQuery query = isTopNQuery query;
+    in
+        if (needToWrapQuery query) then wrapQuery query else query;
+
+/**
+ * Wraps the query in an outer query which projects the same columns as the original.
+ * The ordering from the original query is also preserved.
+ */
+wrapQuery :: Query -> Query;
+public wrapQuery !query = 
+    field1 $ wrapQuery2 query [];
+
+/**
+ * Wraps the query in an outer query which projects the same columns as the original.
+ * The ordering from the original query is also preserved.
+ * The wrapped query will be returned along with wrapped versions of the specified additional expressions.
+ */
+wrapQuery2 :: Query -> [Expr] -> (Query, [Expr]);
+public wrapQuery2 !query !additionalExprs = 
+    let
+        origAliases = projectedColumnAliases query ++ repeat "";
+        originalOrdering = orderingExpressions query;
+
+        origProjectedExprs = projectedColumns query;
+        origOrderingExprs = map fst originalOrdering;
+
+        additionalProjectedExprs = deleteFirsts (removeDuplicates (origOrderingExprs ++ additionalExprs)) origProjectedExprs;
+
+        allSubqueryProjectedExprs = origProjectedExprs ++ additionalProjectedExprs;
+        wrappedQueryExprs = subqueryColumnExprs query "" allSubqueryProjectedExprs;
+
+        wrappedQueryProjectedExprs = take (length origProjectedExprs) wrappedQueryExprs;
+
+        exprMap = zip allSubqueryProjectedExprs wrappedQueryExprs;
+        lookupNewExpr origExpr = lookupWithDefault origExpr exprMap (error "Failed to find expression in wrapped query");
+
+        // Preverse the ordering from the original query.
+        newOrdering = map (\pr -> (lookupNewExpr (fst pr), snd pr)) originalOrdering;
+
+        wrappedQuery = order2 (projectWithAliases newQuery (zip wrappedQueryProjectedExprs origAliases)) newOrdering;
+
+        wrappedAdditionalExprs = map lookupNewExpr additionalExprs;
+    in
+        (wrappedQuery, wrappedAdditionalExprs);
+
+/**
+ * Returns whether this query is a {@link Union@} of 2 other queries.
+ */
+isUnionQuery :: Query -> Boolean;
+public isUnionQuery query = 
+    case query of
+    Union {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns whether this query is a UNION ALL query.
+ */
+isUnionAll :: Query -> Boolean;
+public isUnionAll query = 
+    case query of
+    Union {unionAll} -> unionAll;
+    _ -> False;
+    ;
+
+/**
+ * Returns the 2 component queries of a union, intersection, or difference query.
+ */
+componentQueries :: Query -> (Query, Query);
+public componentQueries query = 
+    case query of
+    Union {query1, query2} -> (query1, query2);
+    _ -> error "The query is not a union";
+    ;
+
+/**
+ * Adds an option to the query.
+ */
+addOption :: Query -> QueryOption -> Query;
+public addOption !query newOption = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} ->
+        let
+            nonConflictingOptions :: [QueryOption];
+            nonConflictingOptions = filter (\o -> not (areConflictingOptions newOption o)) options;
+        in
+            Query (nonConflictingOptions ++ [newOption]) columns restriction orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Add the option to both queries.
+        Union (addOption query1 newOption) (addOption query2 newOption) unionAll;
+    ;
+
+/**
+ * Sets the {@link TopN@} option on the query.
+ * 
+ * TODO: perhaps it should be possible to remove the TopN option by specifying zero for N...
+ */
+setTopNOption :: Query -> Int -> Boolean -> Boolean -> Query;
+public setTopNOption !query n percent withTies = 
+    addOption query (TopN n percent withTies);
+
+/**
+ * Returns the query options.
+ * For {@link Union@} queries this will return the options for the first query.
+ */
+queryOptions :: Query -> [QueryOption];
+public queryOptions !query = 
+    case query of
+    Query {options} -> options;
+    Union {query1} -> queryOptions query1;
+    ;
+
+/**
+ * Returns whether the specified option conflict or whether they can coexist.
+ * In most cases the same type of option will be considered to conflict since it can only be set once.
+ */
+areConflictingOptions :: QueryOption -> QueryOption -> Boolean;
+private areConflictingOptions !option1 !option2 = 
+    case option1 of
+    Distinct -> 
+        case option2 of
+        Distinct -> True;
+        TopN {} -> False;
+        ;
+    TopN {} ->
+        case option2 of
+        Distinct -> False;
+        TopN {} -> True;
+        ;
+    ;
+
+/**
+ * Returns whether a {@link TopN@} option is specified for the query.
+ */
+isTopNQuery :: Query -> Boolean;
+public isTopNQuery !query =
+    case query of
+    Query {options} ->
+        any Sql.isTopNOption options; 
+
+    Union {query1, query2} -> 
+        // Check whether either component query is a topN query.
+        isTopNQuery query1 || isTopNQuery query2;
+    ;
+
+/**
+ * Returns the ID of the preferred join set, if any.
+ * For a {@link Union@} query, the join set of the first query will be returned.
+ */
+preferredJoinSetID :: Query -> Maybe (UniqueIdentifier JoinSet);
+public preferredJoinSetID !query = 
+    case query of
+    Query {preferredJoinSetID} -> preferredJoinSetID;
+    Union {query1} -> preferredJoinSetID query1;
+    ;
+
+/**
+ * Sets the preferred join set.
+ */
+setPreferredJoinSetID :: Query -> UniqueIdentifier JoinSet -> Query;
+public setPreferredJoinSetID !query newPreferredJoinSetID = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} ->
+        Query options columns restriction orderings groups groupRestriction anchorExprs subqueryJoinInfo (Just newPreferredJoinSetID) filters;
+    Union {query1, query2, unionAll} -> 
+        // Set the preferred join set for both component queries.
+        Union (setPreferredJoinSetID query1 newPreferredJoinSetID) (setPreferredJoinSetID query2 newPreferredJoinSetID) unionAll;
+    ;
+
+
+/**
+ * Adds the specified expression as a result column in the query.
+ */
+projectColumn :: Query -> TypedExpr a -> Query;
+public projectColumn !query newColumn = 
+    project query [toUntypedExpr newColumn];
+
+/**
+ * Adds the specified expression as a result column in the query.
+ */
+projectColumnWithAlias :: Query -> TypedExpr a -> String -> Query;
+public projectColumnWithAlias !query newColumn columnAlias = 
+    projectWithAliases query [(toUntypedExpr newColumn, columnAlias)];
+
+/**
+ * Adds the specified expressions as result columns in the query.
+ */
+project :: Query -> [Expr] -> Query;
+public project !query newColumns = 
+    let
+        newColumnsAndAliases :: [(Expr, String)];
+        newColumnsAndAliases = zip newColumns (repeat "");
+    in
+        projectWithAliases query newColumnsAndAliases;
+
+/**
+ * Adds the specified expressions as result columns with the corresponding aliases in the query.
+ * 
+ * TODO: don't add the same expression multiple times...
+ */
+projectWithAliases :: Query -> [(Expr, String)] -> Query;
+public projectWithAliases !query newColumns = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} ->
+        Query options (columns ++ newColumns) restriction orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Project the column in both queries.
+        Union (projectWithAliases query1 newColumns) (projectWithAliases query2 newColumns) unionAll;
+    ;
+
+/**
+ * Returns the projected columns for the query.
+ * For {@link Union@} queries, this will return only the projected columns for the first query.
+ */
+projectedColumnsWithAliases :: Query -> [(Expr, String)];
+public projectedColumnsWithAliases !query = 
+    case query of
+    Query {columns} -> columns;
+    Union {query1}  -> projectedColumnsWithAliases query1;
+    ;
+
+/**
+ * Returns the aliases for the query's projected columns.
+ */
+projectedColumnAliases :: Query -> [String];
+public projectedColumnAliases !query = 
+    map field2 (projectedColumnsWithAliases query);
+
+/**
+ * Returns the projected columns for the query.
+ * For {@link Union@} queries, this will return only the projected columns for the first query.
+ */
+projectedColumns :: Query -> [Expr];
+public projectedColumns !query = 
+    case query of
+    Query {columns} -> map fst columns;
+    Union {query1} -> projectedColumns query1;
+    ;
+
+/**
+ * Removes all projected columns from the query.
+ */
+removeProjectedColumns :: Query -> Query;
+public removeProjectedColumns !query = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        Query options [] restriction orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Remove the projected columns from both queries.
+        Union (removeProjectedColumns query1) (removeProjectedColumns query2) unionAll;
+    ;
+
+/**
+ * Removes the specified expression from the projected columns list.
+ * For {@link Union@} queries, the specified expression will be removed from the both queries along with the
+ * corresponding columns in the other query.
+ */
+removeProjectedColumn :: Query -> Expr -> Query;
+public removeProjectedColumn !query !exprToRemove = 
+    let
+        exprIndicesInQuery :: Query -> [Int];
+        exprIndicesInQuery !qry = 
+            case qry of
+            Query {columns} ->
+                List.findIndices (\c -> field1 c == exprToRemove) columns;
+            Union {query1, query2} -> 
+                removeDuplicates (exprIndicesInQuery query1 ++ exprIndicesInQuery query2);
+            ;
+
+        // Determine the combined set of indices to be removed.
+        indicesToRemove :: [Int];
+        indicesToRemove = exprIndicesInQuery query;
+
+        // Remove the appropriate columns from a query.
+        removeExprs :: Query -> Query;
+        removeExprs !qry =
+            case qry of
+            Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} ->
+                let
+                    newColumns :: [(Expr, String)];
+                    newColumns = List.filterIndexed (\!column !index -> not $ isElem index indicesToRemove) columns;
+                in
+                    Query options newColumns restriction orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+            Union {query1, query2, unionAll} -> 
+                Union (removeExprs query1) (removeExprs query2) unionAll;
+            ;
+    in
+        removeExprs query;
+
+/**
+ * Sets the aliases for the first N projected columns.
+ * Any other existing aliases will be left untouched.
+ */
+setColumnAliases :: Query -> [String] -> Query;
+public setColumnAliases !query !newAliases = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        let
+            projectedExprs :: [Expr];
+            oldAliases :: [String];
+            (projectedExprs, oldAliases) = List.unzip columns;
+
+            finalAliases :: [String];
+            finalAliases = newAliases ++ drop (length newAliases) oldAliases;
+
+            newColumns :: [(Expr, String)];
+            newColumns = zip projectedExprs finalAliases;
+        in
+            Query options newColumns restriction orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Set the column aliases in both queries.
+        Union (setColumnAliases query1 newAliases) (setColumnAliases query2 newAliases) unionAll;
+    ;
+
+
+/**
+ * Adds a restriction on the rows returned by the query.
+ */
+restrict :: Query -> TypedExpr Boolean -> Query;
+public restrict !query !newRestriction = 
+    let
+        restrictHelper :: Query -> TypedExpr Boolean -> Query;
+        restrictHelper !query !newRestriction = 
+            case query of
+            Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+                let
+                    mergedRestriction :: TypedExpr Boolean;
+                    mergedRestriction = 
+                        case restriction of
+                        Nothing -> newRestriction;
+                        Just existingRestriction -> andExpr existingRestriction newRestriction;
+                        ;
+
+                    mergedGroupRestriction :: TypedExpr Boolean;
+                    mergedGroupRestriction = 
+                        case groupRestriction of
+                        Nothing -> newRestriction;
+                        Just existingGroupRestriction -> andExpr existingGroupRestriction newRestriction;
+                        ;
+                in
+                    // Don't change anything if the new criteria is simply 'True'.
+                    if (newRestriction == trueConstant) then
+                        query
+                    else if (isGroupRestriction newRestriction) then
+                        Query options columns restriction orderings groups (Just mergedGroupRestriction) anchorExprs subqueryJoinInfo preferredJoinSetID filters
+                    else
+                        Query options columns (Just mergedRestriction) orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+            Union {query1, query2, unionAll} -> 
+                // Restrict both queries.
+                Union (restrict query1 newRestriction) (restrict query2 newRestriction) unionAll;
+            ;
+    in
+        // Split up the restriction into separate ANDed expressions and apply each individually.
+        // This is needed in cases where the restriction expression contains some record restrictions
+        // and some group restrictions.
+        foldLeftStrict restrictHelper query (getAndedBooleanExprs newRestriction);
+
+/**
+ * Adds the specified restrictions on the rows returned by the query.
+ */
+restrict2 :: Query -> [TypedExpr Boolean] -> Query;
+public restrict2 !query !newRestrictions = 
+    foldLeftStrict restrict query newRestrictions;
+
+/**
+ * Returns whether the restriction expression applies to groups or record values.
+ */
+isGroupRestriction :: TypedExpr Boolean -> Boolean;
+isGroupRestriction !restriction = 
+    exprUsesAggregation (toUntypedExpr restriction);
+
+/**
+ * Returns whether the expression uses aggregate functions.
+ * 
+ * TODO: is there anything else to look for?
+ */
+exprUsesAggregation :: Expr -> Boolean;
+public exprUsesAggregation !expr = 
+    case expr of
+   (FieldExpr |
+    ConstExpr |
+    SubQueryExpr |
+    SubQueryColumnExpr) {} -> False;
+    ListExpr  {listValues} -> any exprUsesAggregation listValues;
+    FunctionExpr {func, arguments} -> Sql.isAggregationFunction func || any exprUsesAggregation arguments;
+    ;
+
+/**
+ * Returns the restriction expressions (including group restrictions) for the query.
+ * For {@link Union@} queries, this only returns the restrictions for the first query.
+ */
+restrictionExpressions :: Query -> [TypedExpr Boolean];
+public restrictionExpressions !query = 
+    case query of
+    Query {restriction, groupRestriction} -> Prelude.maybeToList restriction ++ Prelude.maybeToList groupRestriction;
+    Union {query1} -> restrictionExpressions query1;
+    ;
+
+/**
+ * Returns the record restriction expression (if any).
+ * This does not include any group restriction expressions.
+ * For {@link Union@} queries, this only returns the restrictions for the first query.
+ */
+recordRestrictionExpression :: Query -> Maybe (TypedExpr Boolean);
+public recordRestrictionExpression !query = 
+    case query of
+    Query {restriction} -> restriction;
+    Union {query1} -> recordRestrictionExpression query1;
+    ;
+
+/**
+ * Returns the group restriction expression (if any).
+ * For {@link Union@} queries, this only returns the restrictions for the first query.
+ */
+groupRestrictionExpression :: Query -> Maybe (TypedExpr Boolean);
+public groupRestrictionExpression !query = 
+    case query of
+    Query {groupRestriction} -> groupRestriction;
+    Union {query1} -> groupRestrictionExpression query1;
+    ;
+
+/**
+ * Removes all record restrictions (not group restrictions) from the query.
+ */
+removeRecordRestrictions :: Query -> Query;
+public removeRecordRestrictions !query = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        Query options columns Nothing orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Remove record restrictions in both queries.
+        Union (removeRecordRestrictions query1) (removeRecordRestrictions query2) unionAll;
+    ;
+
+/**
+ * Removes all group restrictions (not record restrictions) from the query.
+ */
+removeGroupRestrictions :: Query -> Query;
+public removeGroupRestrictions !query = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        Query options columns restriction orderings groups Nothing anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Remove record restrictions in both queries.
+        Union (removeGroupRestrictions query1) (removeGroupRestrictions query2) unionAll;
+    ;
+
+/**
+ * Returns a list of expressions which are ANDed together, if any.
+ */
+getAndedBooleanExprs :: TypedExpr Boolean -> [TypedExpr Boolean];
+public getAndedBooleanExprs !expr = 
+    case (toUntypedExpr expr) of
+    FunctionExpr {func, arguments} -> 
+        case func of
+        Sql.OpAnd -> concatMap (getAndedBooleanExprs # toTypedExpr) arguments;
+        _ -> [expr];
+        ;
+    _ -> [expr];
+    ;
+
+
+/**
+ * Adds sorting on the specified expression.
+ */
+order :: Ord a => Query -> TypedExpr a -> Boolean -> Query;
+public order !query sortExpr sortAscending = 
+    order2 query [(toUntypedExpr sortExpr, sortAscending)];
+
+/**
+ * Adds sorting on the specified fields.
+ */
+order2 :: Query -> [(Expr, Boolean)] -> Query;
+public order2 !query newOrderings = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        Query options columns restriction (orderings ++ newOrderings) groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Add ordering to only the 2nd query.
+        Union query1 (order2 query2 newOrderings) unionAll;
+    ;
+
+/**
+ * Inserts ordering at the specified (zero-based) index in the ordering list.
+ */
+insertOrdering :: Ord a => Query -> Int -> TypedExpr a -> Boolean -> Query;
+public insertOrdering !query pos sortExpr sortAscending = 
+    insertOrderings query pos [(toUntypedExpr sortExpr, sortAscending)];
+
+/**
+ * Inserts ordering info at the specified (zero-based) index in the ordering list.
+ */
+insertOrderings :: Query -> Int -> [(Expr, Boolean)] -> Query;
+public insertOrderings !query pos newOrderings = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        let
+            updatedOrdering :: [(Expr, Boolean)];
+            updatedOrdering = List.insertListAt pos newOrderings orderings;
+        in
+            Query options columns restriction updatedOrdering groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Add ordering to only the 2nd query.
+        Union query1 (insertOrderings query2 pos newOrderings) unionAll;
+    ;
+
+/**
+ * Removes all ordering from the query.
+ */
+removeOrdering :: Query -> Query;
+public removeOrdering !query = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        Query options columns restriction [] groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Remove ordering from both queries (even though the first one shouldn't have any ordering to begin with).
+        Union (removeOrdering query1) (removeOrdering query2) unionAll;
+    ;
+
+/**
+ * Returns the ordering info for the query.
+ */
+orderingExpressions :: Query -> [(Expr, Boolean)];
+public orderingExpressions !query = 
+    case query of
+    Query {orderings} -> orderings;
+    Union {query2}    -> orderingExpressions query2;
+    ;
+
+
+/**
+ * Adds grouping to the query.
+ */
+group :: Ord a => Query -> TypedExpr a -> Query;
+public group !query newGroup = 
+    group2 query [toUntypedExpr newGroup];
+
+/**
+ * Adds grouping on the specified fields.
+ */
+group2 :: Query -> [Expr] -> Query;
+public group2 !query newGroupFields = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} ->
+        Query options columns restriction orderings (groups ++ newGroupFields) groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID filters;
+
+    Union {query1, query2, unionAll} -> 
+        // Add grouping to both queries.
+        Union (group2 query1 newGroupFields) (group2 query2 newGroupFields) unionAll;
+    ;
+
+/**
+ * Returns the grouping expressions for the query.
+ * For {@link Union@} queries this returns the grouping expressions for the first query.
+ */
+groupingExpressions :: Query -> [Expr];
+public groupingExpressions query = 
+    case query of
+    Query {groups} -> groups;
+    Union {query1} -> groupingExpressions query1;
+    ;
+
+/**
+ * Projects the specified expressions from the query, and group and order (ASC) on the expressions.
+ */
+projectGroupAndOrder :: Query -> [Expr] -> Query;
+public projectGroupAndOrder !query !exprs = 
+    order2 (group2 (project query exprs) exprs) (zip exprs $ repeat True);
+
+
+/**
+ * Adds an anchor expression to the query.
+ * This will force the underlying database tabled referenced by the anchor expression to be included in the query.
+ * However, the anchor expression will not be projected from the query.
+ */
+addAnchorExpression :: Query -> TypedExpr a -> Query;
+public addAnchorExpression !query anchorExpr = 
+    addAnchorExpressions query [toUntypedExpr anchorExpr];
+
+/**
+ * Adds anchor expressions (which force the tables used to be included in the query).
+ */
+addAnchorExpressions :: Query -> [Expr] -> Query;
+public addAnchorExpressions !query newAnchorExprs = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        Query options columns restriction orderings groups groupRestriction (anchorExprs ++ newAnchorExprs) subqueryJoinInfo preferredJoinSetID filters;
+    Union {query1, query2, unionAll} -> 
+        // Add the anchor expressions to both queries.
+        Union (addAnchorExpressions query1 newAnchorExprs) (addAnchorExpressions query2 newAnchorExprs) unionAll;
+    ;
+
+/**
+ * Returns the list of anchoring expressions (which force the tables used to be included in the query).
+ * For {@link Union@} queries this returns the anchor expressions for the first query.
+ */
+anchoringExpressions :: Query -> [Expr];
+public anchoringExpressions !query = 
+    case query of
+    Query {anchorExprs} -> anchorExprs;
+    Union {query1} -> anchoringExpressions query1;
+    ;
+
+
+/**
+ * Adds a filter to the query.
+ * The database field specified must be of the filter type.
+ */
+addQueryFilter :: Query -> DatabaseField -> Query;
+public addQueryFilter !query !newFilter = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        let
+            // Confirm that the specified database fields are filters.
+            checkFilter :: DatabaseField -> DatabaseField;
+            checkFilter !filter = 
+                if (isFilterField filter) then filter
+                else error ("The field '" ++ getDisplayName filter ++ "' is not a filter.");
+        in
+            Query options columns restriction orderings groups groupRestriction anchorExprs subqueryJoinInfo preferredJoinSetID (removeDuplicates (filters ++ [checkFilter newFilter]));
+
+    Union {query1, query2, unionAll} -> 
+        Union (addQueryFilter query1 newFilter) (addQueryFilter query2 newFilter) unionAll;
+    ;
+
+/**
+ * Returns a list of the filters used in a query.
+ * For {@link Union@} queries this returns the filters from the first query.
+ */
+queryFilters :: Query -> [DatabaseField];
+public queryFilters !query = 
+    case query of
+    Query {filters} -> filters;
+    Union {query1} -> queryFilters query1;
+    ;
+
+
+/**
+ * Adds information to the query for a subquery join.
+ */
+addSubqueryJoinInfo :: Query -> JoinType -> [(Expr, Expr)] -> Query;
+addSubqueryJoinInfo !query joinType joinExprs = 
+    case query of
+    Query {options, columns, restriction, orderings, groups, groupRestriction, anchorExprs, subqueryJoinInfo, preferredJoinSetID, filters} -> 
+        Query options columns restriction orderings groups groupRestriction anchorExprs (subqueryJoinInfo ++ [(joinType, joinExprs)]) preferredJoinSetID filters;
+    _ -> query;
+    ;
+
+/**
+ * Returns information about linked subqueries.
+ */
+subqueryJoinInfoList :: Query -> [(JoinType, [(Expr, Expr)])];
+public subqueryJoinInfoList !query = 
+    case query of
+    Query {subqueryJoinInfo} -> subqueryJoinInfo;
+    _ -> [];
+    ;
+
+/**
+ * Joins 2 queries together on the specified expressions.
+ * Both queries will be wrapped as subqueries and joined together.
+ * The modified query will be returned along with expression for referencing the specified 
+ * expression from {@code query1@} and {@code query2@} in the joined query.
+ * The projected columns and ordering from the first query will be preserved in the joined query.
+ */
+joinQueries :: JoinType -> Query -> Query -> [(Expr, Expr)] -> [Expr] -> [Expr] -> (Query, [Expr], [Expr]);
+public joinQueries joinType !query1 !query2 joinExprs query1Exprs query2Exprs = 
+    let
+        query1ProjectedColumns = projectedColumnsWithAliases query1;
+        query1Ordering = orderingExpressions query1;
+        allQuery1Exprs = map field1 query1ProjectedColumns ++ map field1 query1Ordering ++ query1Exprs;
+
+        nProjectionExprs = length query1ProjectedColumns;
+        nOrderExprs = length query1Ordering;
+
+        (joinedQuery, allUpdatedQuery1Exprs, updatedQuery2Exprs) = 
+            joinQueries2 joinType query1 query2 joinExprs allQuery1Exprs query2Exprs;
+
+        updatedProjectionExprs = take nProjectionExprs allUpdatedQuery1Exprs;
+        updatedOrderingExprs = take nOrderExprs (drop nProjectionExprs allUpdatedQuery1Exprs);
+        updatedQuery1Exprs = drop (nProjectionExprs + nOrderExprs) allUpdatedQuery1Exprs;
+
+        joinedQuery2 = projectWithAliases joinedQuery (zip updatedProjectionExprs (map field2 query1ProjectedColumns));
+        joinedQuery3 = order2 joinedQuery2 (zip updatedOrderingExprs (map field2 query1Ordering));
+    in
+        (joinedQuery3, updatedQuery1Exprs, updatedQuery2Exprs);
+
+/**
+ * Joins 2 queries together on the specified expressions.
+ * Both queries will be wrapped as subqueries and joined together.
+ * The modified query will be returned along with expression for referencing the specified 
+ * expression from {@code query1@} and {@code query2@} in the joined query.
+ * The joined query will have no projected columns or ordering.
+ */
+joinQueries2 :: JoinType -> Query -> Query -> [(Expr, Expr)] -> [Expr] -> [Expr] -> (Query, [Expr], [Expr]);
+private joinQueries2 joinType !query1 !query2 joinExprs query1Exprs query2Exprs = 
+    let
+        // Get subquery column expression for the join and projection expressions for the 1st query.
+        allQueryExprs1 = map field1 joinExprs ++ query1Exprs;
+        allSubqueryColumnExprs1 = subqueryColumnExprs query1 "" allQueryExprs1;
+
+        // Get subquery column expression for the join and projection expressions for the 2nd query.
+        allQueryExprs2 = map field2 joinExprs ++ query2Exprs;
+        allSubqueryColumnExprs2 = subqueryColumnExprs query2 "" allQueryExprs2;
+
+        nJoinExprs = length joinExprs;
+        updatedJoinExprs = take nJoinExprs (zip allSubqueryColumnExprs1 allSubqueryColumnExprs2);
+        updatedQuery1Exprs = drop nJoinExprs allSubqueryColumnExprs1;
+        updatedQuery2Exprs = drop nJoinExprs allSubqueryColumnExprs2;
+
+        joinQuery = addSubqueryJoinInfo newQuery joinType updatedJoinExprs;
+    in
+        (joinQuery, updatedQuery1Exprs, updatedQuery2Exprs);
+
+
+/**
+ * This wraps the specified query as a subquery and returns expressions which can be accessed in an outer query.
+ */
+makeSubqueryTable :: Query -> [Expr] -> [Expr];
+public makeSubqueryTable !query queryExprs = 
+    subqueryColumnExprs query "" queryExprs;
+
+
+/**
+ * Returns an expression which aggregates an expression from the specified query.
+ * The first projected expression of the query will be aggregated.
+ */
+summarizeQueryValues :: Query -> DbFunction -> Expr;
+public summarizeQueryValues !query aggrOp = 
+    let
+        // Aggregate the first column of the query.
+        summarizedExpr :: Expr;
+        summarizedExpr = head (projectedColumns query);
+
+        // Wrap the query as a subquery and get an expression to reference the summarized expression.
+        subqueryExpr :: Expr;
+        subqueryExpr = head (makeSubqueryTable query [summarizedExpr]);
+
+        // Summaryize the expression.
+        aggregatedValueExpr :: Expr;
+        aggregatedValueExpr = untypedAggregationExpr aggrOp subqueryExpr;
+
+        // Create a new query including only this summarized expression.
+        aggregatedValueQuery :: Query;
+        aggregatedValueQuery = project newQuery [aggregatedValueExpr];
+    in
+        // Check that there is at least one projected column in the query.
+        if (isEmpty $ projectedColumns query) then error "The specified query must project at least 1 expression."
+        else subQueryExpr aggregatedValueQuery;
+
+
+/**
+ * Returns the {@link Sql.Expr@} corresponding to this abstract expression.
+ * The specified field conversion function will be used to convert dictionary field references to
+ * the underlying Sql expression.
+ */
+abstractExpressionToSqlExpression :: (DatabaseField -> Sql.Expr) -> (Query -> Sql.Query) -> Expr -> Sql.Expr;
+public abstractExpressionToSqlExpression fieldLookupFn convertQueryFn !abstractExpr = 
+    case abstractExpr of
+    FieldExpr {field} -> 
+        fieldLookupFn field;
+
+    ConstExpr {constValue} -> 
+        case constValue of
+        NullValue                -> Sql.toUntypedExpr (Sql.nullValue);
+        StringValue {strValue}   -> Sql.toUntypedExpr (Sql.stringConstant strValue);
+        NumberValue {numValue}   -> Sql.toUntypedExpr (Sql.numericConstant numValue);
+        BooleanValue {boolValue} -> Sql.toUntypedExpr (Sql.booleanConstant boolValue);
+        TimeValue {timeValue}    -> Sql.toUntypedExpr (Sql.timeConstant timeValue);
+        ;
+    ListExpr {listValues} -> 
+        Sql.untypedListExpr (map (abstractExpressionToSqlExpression fieldLookupFn convertQueryFn) listValues);
+
+    FunctionExpr {func, arguments} -> 
+        Sql.untypedFunctionExpr func (map (abstractExpressionToSqlExpression fieldLookupFn convertQueryFn) arguments);
+
+    SubQueryExpr {subquery} -> 
+        Sql.subQueryExpr (convertQueryFn subquery);
+
+    SubQueryColumnExpr {subquery, subqueryTableAlias, subqueryExpr} -> 
+        let
+            queryTable :: Sql.QueryTable;
+            queryTable = Sql.makeSubQueryTable (convertQueryFn subquery) subqueryTableAlias;
+
+            exprFieldName :: String;
+            exprFieldName = fromMaybe (error "Failed to find alias for expression")
+                                      (List.lookup subqueryExpr (projectedColumnsWithAliases subquery));
+        in
+            Sql.untypedField queryTable exprFieldName;
+    ;
+
+/**
+ * Returns a list of the fields used in an expression.
+ * This will not include fields from subqueries.
+ * This will not include filter fields.
+ * 
+ * TODO: this should include certain fields from subqueries in some cases (fields which are references to this query from an inner query)...
+ */
+expressionFields :: Expr -> [DatabaseField];
+public expressionFields !expr = 
+    case expr of
+    FieldExpr {field} -> [field];
+    ListExpr {listValues} -> concatMap expressionFields listValues;
+    FunctionExpr {arguments} -> concatMap expressionFields arguments;
+   (ConstExpr |
+    SubQueryExpr |
+    SubQueryColumnExpr) {} -> [];
+    ;
+
+/**
+ * Returns a list of the dictionary expressions used in a query.
+ */
+queryExpressions :: Query -> [Expr];
+private queryExpressions !query = 
+    case query of
+    Query {columns, restriction, orderings, groups, groupRestriction, anchorExprs} ->
+        let
+            columnExprs :: [Expr];
+            columnExprs = map field1 columns;
+
+            restrictionExprs :: [Expr];
+            restrictionExprs = 
+                case restriction of
+                Nothing -> [];
+                Just restrictionValue -> [toUntypedExpr restrictionValue];
+                ;
+
+            groupRestrictionExprs :: [Expr];
+            groupRestrictionExprs = 
+                case groupRestriction of
+                Nothing -> [];
+                Just groupRestrictionValue -> [toUntypedExpr groupRestrictionValue];
+                ;
+
+            orderingExprs :: [Expr];
+            orderingExprs = map field1 orderings;
+
+            allExprs :: [Expr];
+            allExprs = columnExprs ++ restrictionExprs ++ orderingExprs ++ groups ++ groupRestrictionExprs ++ anchorExprs;
+        in
+            removeDuplicates allExprs;
+
+    Union {query1, query2} -> 
+        removeDuplicates (queryExpressions query1 ++ queryExpressions query2);
+    ;
+
+/**
+ * Returns a list of the fields used in a query.
+ */
+queryFields :: Query -> [DatabaseField];
+public queryFields !query = 
+    removeDuplicates $ concatMap expressionFields (queryExpressions query);
+
+
+/**
+ * Returns a list of queries used by this query (and the query itself).
+ * The list will be ordered such that a query's child queries will follow it.
+ * The root query will be the first one in the list returned.
+ */
+allComponentQueries :: Query -> [Query];
+public allComponentQueries !query = 
+    let
+        // Initially build the list with the parent queries at the end of the list.
+        // This will make it easier to remove any duplicate queries while leaving the 
+        // remaining queries in the correct order.
+        componentQueriesHelper :: Query -> [Query];
+        componentQueriesHelper !query = 
+            case query of
+            Query {} -> 
+                let
+                    childExprs :: [Expr];
+                    childExprs = queryExpressions query;
+
+                    childExprQueries :: [Query];
+                    childExprQueries = concatMap expressionQueries childExprs;
+                in
+                    concatMap componentQueriesHelper childExprQueries ++ [query];
+
+            Union {query1, query2} -> 
+                componentQueriesHelper query1 ++ componentQueriesHelper query2 ++ [query];
+            ;
+    in
+        // Remove the duplicate queries and reverse the list so the parent queries come first.
+        reverse $ removeDuplicates (componentQueriesHelper query);
+
+/**
+ * Returns a list of queries used by the expression.
+ * This will not recursively search for other subqueries inside of the expression queries.
+ */
+expressionQueries :: Expr -> [Query];
+expressionQueries !expr = 
+    case expr of
+   (FieldExpr |
+    ConstExpr) {} -> [];
+    ListExpr {listValues} -> concatMap expressionQueries listValues;
+    FunctionExpr {arguments} -> concatMap expressionQueries arguments;
+   (SubQueryExpr |
+    SubQueryColumnExpr) {subquery} -> [subquery];
+    ;
+
+
+/**
+ * Constructs a GROUP BY query which groups all non-measure fields and aggregates all measures (if not preaggregated).
+ * The results will be ordered by the non-measure fields as well (in the order specified).
+ */
+makeGroupingQuery :: [Expr] -> Query;
+public makeGroupingQuery !exprs = 
+    let
+        noMeasuresInExpr :: Expr -> Boolean;
+        noMeasuresInExpr expr = 
+            let
+                fields = expressionFields expr;
+                measures = filter isMeasureField fields;
+            in
+                isEmpty measures; 
+
+        nonMeasureExprs :: [Expr];
+        nonMeasureExprs = removeDuplicates (filter noMeasuresInExpr exprs);
+
+        measureAggregationFunction :: DatabaseField -> DbFunction;
+        measureAggregationFunction msrField = 
+            let
+                // Default to Sum if no other aggregation is specified.
+                measureAggregationMap = [(noAggregationType,    Sql.AggrSum),
+                                         (sumAggregationType,   Sql.AggrSum),
+                                         (maxAggregationType,   Sql.AggrMax),
+                                         (minAggregationType,   Sql.AggrMin),
+                                         (avgAggregationType,   Sql.AggrAvg),
+                                         (countAggregationType, Sql.AggrCount),
+                                         (distinctCountAggregationType, Sql.AggrDistinctCount)];    
+            in
+                lookupWithDefault (fieldDefaultAggregationType msrField) measureAggregationMap Sql.AggrSum;
+
+        // Fix each measure to be aggregated (using its default aggr function), if not preaggregated.
+        fixMeasureExpr :: Expr -> Expr;
+        fixMeasureExpr expr = 
+            let
+                dbField = getFieldFromExpr expr;
+                aggrFn = measureAggregationFunction dbField;
+            in
+                if (isFieldExpr expr 
+                    && isMeasureField dbField
+                    && not (isFieldPreaggregated dbField)) 
+                then untypedUnaryExpr aggrFn expr
+                else expr;
+
+        fixedExprs :: [Expr];
+        fixedExprs = map fixMeasureExpr exprs;
+
+        // Group and order by the non-measure expressions.
+        q1 = project newQuery fixedExprs;
+        q2 = group2 q1 nonMeasureExprs;
+        q3 = order2 q2 (zip nonMeasureExprs (repeat True));
+    in
+        q3;
+
+/**
+ * Convert a range of values for a field into the equivalent restriction expression.
+ * @arg makeConstantFn  a function to produce a database constant expression from a value
+ * @arg field           the database field to be restricted
+ * @arg range           the range of values to which the field will be restricted
+ * @return              a Boolean expression restricting the field to the specified range
+ */
+rangeToRestrictionExpr :: Ord a => (a -> TypedExpr a) -> TypedExpr a -> Range a -> TypedExpr Boolean;
+public rangeToRestrictionExpr makeConstantFn field !range = 
+    let
+        startValue = makeConstantFn (leftEndpoint range);
+        startOperator = if (includesLeftEndpoint range) then gtEqExpr else gtExpr;
+        startRestriction = startOperator field startValue;
+
+        endValue = makeConstantFn (rightEndpoint range);
+        endOperator = if (includesRightEndpoint range) then ltEqExpr else ltExpr;
+        endRestriction = endOperator field endValue;
+    in
+        if (hasLeftEndpoint range) then
+            if (hasRightEndpoint range) then andExpr startRestriction endRestriction
+            else startRestriction
+        else
+            if (hasRightEndpoint range) then endRestriction
+            else trueConstant;
+

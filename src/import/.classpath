@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/antlr.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/asm-all-3.0.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/commons-collections-3.1.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/icu4j.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/junit.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/log4j.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/xercesImpl.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/xmlParserAPIs.jar"/>
+<!-- 
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/commons-logging.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/Concurrent.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/izmado.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/axis/1.1/axis.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/axis/1.1/commons-discovery.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/axis/1.1/jaxrpc.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/axis/1.1/saaj.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/axis/1.1/wsdl4j.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/classes12.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/nls_charset12.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/xmlparserv2.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/awxml.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/External/java/olap_api.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/Framework/java/corbaidl.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/Framework/java/cecore.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/Framework/java/celib.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/Framework/java/ceplugins_core.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/Framework/java/cesession.jar"/>
+        <classpathentry exported="true" kind="lib" path="Titan_Research/win32_x86/release/bin/Connectivity/java/ConnectionServer.jar"/>
+        <classpathentry exported="true" kind="lib" path="Main/PI/External/Apache/java/db-derby/10.1.3.1/derby.jar"/>
+        <classpathentry exported="true" kind="lib" path="Main/PI/External/Microsoft/sqljdbc/1.0.809.102/enu/sqljdbc.jar"/>
+ -->
+	<classpathentry excluding="Main/|Titan_Research/" kind="src" path=""/>
+	<classpathentry kind="output" path=""/>
+</classpath>

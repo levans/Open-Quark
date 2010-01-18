@@ -1,0 +1,919 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Debug.cal
+ * Created: March 28, 2005
+ * By: Bo Ilic
+ */
+
+/**
+Defines some useful functions and type classes for use when debugging CAL programs. 
+
+In general, the functions in this module should not be relied upon in production code. They are
+intended for debugging purposes only, and their precise semantics and operation are subject to change.
+
+{@link Show@} instances are provided for the {@link Prelude@} types.  Show instances for non-Prelude
+types should be added to their home modules, not to this one.
+
+@author Bo Ilic
+*/
+
+module Cal.Core.Debug;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor =
+        Boolean, Byte, CalValue, Char, Decimal, Double, Either,
+        ExecutionContext, Float, Int, Integer, JCollection, JList, JMap,
+        JObject, Long, Maybe, Ordering, Short, String, TypeRep;
+    dataConstructor = True, Left, Right, Nothing, Just, LT, EQ, GT;
+    function =
+        concat, equals, error, executionContext, input, intToString, output,
+        seq, toCalValue, toDouble;
+    ;
+import Cal.Collections.List using
+    function = join, map;
+    ;
+//we want to maintain the generality and functional independence of the Debug module.
+//Please do not add more imports.    
+    
+//debugging functions
+
+/** 
+ * Prints its first argument to the standard output stream, and then returns its second argument.
+ * @arg message the message to trace to the standard output stream
+ * @arg value the value to return
+ * @return the value
+ * @see trace
+ */
+traceOnStdOut :: String -> a -> a;
+public traceOnStdOut !message = seq (jPrintToStandardOut message);
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Debug.Debug.printToStandardOut"
+    private jPrintToStandardOut :: String -> ();    
+
+/** 
+ * Prints its first argument to the standard error stream, and then returns its second argument.
+ * @arg message the message to trace to the standard error stream
+ * @arg value the value to return
+ * @return the value
+ */
+trace :: String -> a -> a;
+public trace !message = seq (jPrintToStandardError message);
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Debug.Debug.printToStandardError"
+    private jPrintToStandardError :: String -> ();    
+
+/** 
+ * Traces the specified showable value and returns its original value.
+ * @arg message  a message to be included with each trace output, followed by the Show form of the value
+ * @arg val      the value to be traced and returned
+ * @return       the original value after tracing it
+ * @see trace
+ */
+traceShowable :: (Show a) => String -> a -> a;
+public traceShowable !message val = trace (message ++ (show val) ++ "\n") val;
+
+/**
+ * Augments a list of values such that a trace message will be displayed when members at a specified interval are accessed.
+ * This could be useful for tracking progress of a lengthy operation over a long list.
+ * @arg message   a message to be included with each trace output, followed by the list index value
+ * @arg interval  the interval between list members for which trace messages will be displayed
+ * @arg lst       the list to be augmented
+ * @return        the list augmented with tracing information for every nth element
+ */
+traceListMemberAccess :: String -> Int -> [a] -> [a];
+public traceListMemberAccess message !interval lst = 
+    if interval <= 0 then
+        lst
+    else
+        List.mapIndexed (\val !idx -> if (idx % interval == 0) then trace (message ++ intToString idx ++ "\n") val else val) lst;
+
+/**
+ * Modifies the specified transformation function to trace the input value and the result value when evaluated.
+ * @arg message      a message to be included with each trace output, followed by the input and result values
+ * @arg transformFn  the function to be augmented to include tracing information
+ * @return           a modified version of the transformation function which includes tracing of the input and result values
+ * @see traceTransformationDifferences
+ * @see trace, traceShowable
+ */
+traceTransformation :: (Show a, Show b) => String -> (a -> b) -> (a -> b);
+public traceTransformation message transformFn = 
+    let
+        newTransformFn inVal = 
+            let
+                resultVal = transformFn inVal;
+            in
+                trace (message ++ "\n    input:  " ++ show inVal ++ "\n    output: " ++ show resultVal ++ "\n") resultVal;
+    in
+        newTransformFn;
+
+/**
+ * Modifies the specified transformation function to trace the input value and the result value when evaluated.
+ * The trace output will only be done if the transformed value is not equal to the input value.
+ * @arg message      a message to be included with each trace output, followed by the input and result values
+ * @arg transformFn  the function to be augmented to include tracing information
+ * @return           a modified version of the transformation function which includes tracing of the input and result values
+ * @see traceTransformation
+ * @see trace, traceShowable
+ */
+traceTransformationDifferences :: (Show a, Eq a) => String -> (a -> a) -> (a -> a);
+public traceTransformationDifferences message transformFn = 
+    let
+        newTransformFn inVal = 
+            let
+                resultVal = transformFn inVal;
+            in
+                if (inVal == resultVal) then resultVal
+                else trace (message ++ "\n    input:  " ++ show inVal ++ "\n    output: " ++ show resultVal ++ "\n") resultVal;
+    in
+        newTransformFn;
+
+
+/**
+The type class {@code Show@} is intended for debug purposes only. In particular, the output string format
+may change- do not write code that depends on the particular output format of the {@link show@} method.
+ 
+The {@code Show@} type class can be used in {@em deriving@} clauses. For a type with n arguments, {@code T a1 ... an@}, this will
+automatically create an instance definition {@code instance (Show a1, Show a2, ..., Show an) => Show (T a1 ... an) where ...@} using a
+canonical boilerplate definition for the instance methods. Deriving an instance of Show can expose details of the implementation of the
+the type to clients. Clients are not supposed to write production code that relys on the implementation of a Show instance,
+but this is still something worth being aware of.
+
+When T is an algebraic type, the derived {@link show@} class method will display the fully qualified name of the data constructor,
+followed by calling show on each of the field values of the data constructor, in the order in which they are declared in the
+definition of the data constructor. If the data constructor has arguments, then the whole result string will be parenthesized.
+
+When T is a foreign type whose underlying implementation type is a Java object type, the derived {@link equals@} class method is
+implemented by calling the Java method java.lang.String.valueOf(Object) on the underlying Java object.
+
+When T is a foreign type whose underlying type is a Java primitive type (char, boolean, byte, short, int, long, float, or double),
+the derived {@link equals@} class method is implemented by calling the appropriate toString method in the standard Java wrapper classes
+such as java.lang.Int.toString(int).
+
+As with all instances of Show, the behavior of the derived instances is subject to change.
+*/
+public class Show a where
+    /**
+     * Constructs a string representation of the argument, which is a value of the instance type.
+     * The output is intended to be used for debugging purposes only- do not write code that depends on the
+     * particular output format.
+     * 
+     * @arg value the value whose string representation is to be returned.
+     * @return a string representation of the argument.
+     */
+    public show :: a -> String
+        default showDefault;
+    ;
+    
+showDefault :: Show a => a -> String;
+private showDefault = showInternal;
+    
+/**
+ * Any record type whose field types are all members of the {@code Show@} type class is itself a member of the {@code Show@} type class.
+ * In particular, any tuple type whose component types are all members of the {@code Show@} type class is itself a member of the 
+ * {@code Show@} type class.
+ * 
+ * Calling {@code show@} on a record will result in displaying a record-literal like {@code String@} value, where the fields are in
+ * field-name order, and the field values are the result of calling {@code show@} on each of the field values.
+ * Field-name order is an ordering on field-names such that ordinal fields are first, in numeric order, followed by the
+ * textual fields, in alphabetic order. If the record is in fact a tuple, then tuple notation will be used instead.
+ * 
+ * As with all instances of {@code Show@}, the precise {@code String@} output is subject to change.
+ */    
+instance Show r => Show {r} where
+    show = showRecord;    
+    ;      
+    
+primitive private showRecord :: Show r => {r} -> String;   
+
+/**
+ * The {@link typeClass = Show@} instance for the {@link typeConstructor = Prelude.Function@} type simply calls
+ * {@link function = showInternal@}.
+ */
+instance Show (a -> b) where;
+
+instance Show Boolean where
+    show = showBoolean;
+    ;
+    
+showBoolean :: Boolean -> String;
+private showBoolean !x =
+    if x then
+        "Cal.Core.Prelude.True"
+    else
+        "Cal.Core.Prelude.False";   
+
+/** Used for derived Show instances for foreign types with implementation type boolean. */
+foreign unsafe import jvm "static method java.lang.Boolean.toString"
+    private showForeignBoolean :: Boolean -> String;
+
+    
+instance Show Char where
+    show = showChar;
+    ;
+    
+/** @return the Char value, surrounded by single quotes. */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Debug.Debug.showChar"
+    private showChar :: Char -> String;           
+
+/** Used for derived Show instances for foreign types with implementation type char. */
+foreign unsafe import jvm "static method java.lang.Character.toString"
+    private showForeignChar :: Char -> String;    
+
+    
+    
+instance Show Byte where
+    show = showByte;
+    ;    
+/** Used for derived Show instances for foreign types with implementation type byte. */
+foreign unsafe import jvm "static method java.lang.Byte.toString"
+    private showByte :: Byte -> String;    
+    
+    
+instance Show Short where
+    show = showShort;
+    ;    
+/** Used for derived Show instances for foreign types with implementation type short. */
+foreign unsafe import jvm "static method java.lang.Short.toString"
+    private showShort :: Short -> String;    
+    
+    
+instance Show Int where
+    show = showInt;
+    ;    
+/** Used for derived Show instances for foreign types with implementation type int. */
+foreign unsafe import jvm "static method java.lang.Integer.toString"
+    private showInt :: Int -> String;      
+    
+    
+instance Show Long where 
+    show = showLong;
+    ;     
+/** Used for derived Show instances for foreign types with implementation type long. */
+foreign unsafe import jvm "static method java.lang.Long.toString"
+    private showLong :: Long -> String;     
+
+    
+instance Show Float where
+    show = showFloat;
+    ;    
+/** Used for derived Show instances for foreign types with implementation type float. */
+foreign unsafe import jvm "static method java.lang.Float.toString"
+    private showFloat :: Float -> String;
+   
+    
+instance Show Double where
+    show = showDouble;
+    ;    
+/** Used for derived Show instances for foreign types with implementation type double. */
+foreign unsafe import jvm "static method java.lang.Double.toString"
+    private showDouble :: Double -> String;    
+        
+
+instance Show Ordering where
+    show = showOrdering;
+    ;
+
+showOrdering :: Ordering -> String;
+private showOrdering !x = 
+    case x of
+    LT -> "Cal.Core.Prelude.LT";
+    EQ -> "Cal.Core.Prelude.EQ";
+    GT -> "Cal.Core.Prelude.GT";
+    ; 
+
+instance (Show a) => Show (Maybe a) where
+    show = showMaybe;
+    ;
+    
+showMaybe :: (Show a) => Maybe a -> String;
+private showMaybe !maybe = 
+    case maybe of
+    Nothing -> "Cal.Core.Prelude.Nothing";
+    Just value -> "Cal.Core.Prelude.Just " ++ show value;
+    ;      
+                
+    
+instance (Show a, Show b) => Show (Either a b) where
+    show = showEither;
+    ;
+      
+showEither :: (Show a, Show b) => Either a b -> String;
+private showEither !x =
+    case x of
+    Left value -> "Cal.Core.Prelude.Left " ++ show value;
+    Right value -> "Cal.Core.Prelude.Right " ++ show value;
+    ;
+    
+
+instance Show String where
+    show = showString;
+    ;
+    
+/** @return the String value, surrounded by double quotes if not null, and "null" otherwise */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Debug.Debug.showString"
+    private showString :: String -> String;     
+    
+
+instance Show () where
+    show = showUnit;
+    ;
+    
+showUnit :: () -> String;
+private showUnit !x =
+    "()";
+
+
+instance Show Integer where
+    show = showInteger;
+    ;
+
+/** handles the case where the Integer object is null */    
+showInteger :: Integer -> String;
+showInteger !integerValue = show (output integerValue);
+  
+
+instance Show Prelude.Decimal where
+    show = showDecimal;
+    ;
+    
+/** handles the case where the Decimal object is null */    
+showDecimal :: Decimal -> String;
+showDecimal !decimalValue = show (output decimalValue);    
+    
+
+instance Show TypeRep where
+    show = Prelude.typeRepToString;
+    ;
+    
+    
+instance Show JObject where
+    show = showJObject;
+    ;    
+/**
+ * Used for derived Show instances for foreign types with an object implementation type.
+ * note: we want to handle the null object values here without terminating in an error
+ * and thus don't implement as java.lang.Object.toString().
+ */
+foreign unsafe import jvm "static method java.lang.String.valueOf"
+    private showJObject :: JObject -> String;    
+    
+
+instance (Show a) => Show [a] where
+    show = showList;
+    ;
+    
+showList :: (Show a) => [a] -> String;
+private showList !list = 
+    concat ["[",
+            join ", " (map show list),
+            "]"];
+
+instance Show JList where
+    show = showJList;
+    ;
+    
+/** handles the case where the JList object is null */    
+showJList :: JList -> String;
+showJList !list = show (output list);   
+
+
+instance Show JCollection where
+    show = showJCollection;
+    ;
+    
+/** handles the case where the JCollection object is null */    
+showJCollection :: JCollection -> String;
+showJCollection !collection = show (output collection);   
+
+
+instance Show JMap where
+    show = showJMap;
+    ;
+    
+/** handles the case where the JMap object is null */    
+showJMap :: JMap -> String;
+showJMap !map = show (output map);   
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+Various functions for displaying the internal machine representation of a CAL value, and for gathering useful 
+debugging statistics about that value. These functions all have in common that they don't modify the CalValue 
+in any way, and thus are useful, when combined with tracing (such as with the Debug.trace function), for viewing 
+the actual state of values in CAL as execution is occurring, without altering the execution's reduction sequence.
+*/
+
+/**
+ * The {@link show@} class method for {@link CalValue@} just calls {@link showInternal@} on its argument.
+ * In particular, unlike most {@link show@} instance methods, it does not evaluate its argument.
+ */
+instance Show CalValue where
+    show = showInternal;
+    ;
+    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Debug.Debug.showInternal" 
+    private showInternalValue :: CalValue -> String;
+    
+/**
+ * Displays the internal representation of a value. This representation is subject to change,
+ * and should not be relied upon in production code. It is intended to assist in debugging, and for the 
+ * purposes of understanding the lazy evaluation behavior of CAL.
+ * 
+ * It is important to note that {@link showInternal@} does no evaluation of the value argument, and so does
+ * not change the order of reduction in any way. This is unlike {@link Debug.show@}, or most other means of
+ * displaying a value of a CAL computation. This can be a great advantage, however, the drawback is that
+ * {@link showInternal@} is displaying an internal form and thus can be less readable, and less customizable
+ * than using other means.
+ *
+ * {@link showInternal@} will show some of the sharing of graph nodes in the graph structure of the value.
+ * If a node having one or more children is shared, its first appearance will be marked 
+ * e.g. <@nodeNumber = nodeText>, and subsequent appearances will just display as <@nodeNumber>.
+ * Nodes having zero children that are shared (such as function nodes or simple value nodes) are not
+ * shown as being shared. This makes the output easier to read while showing the most important sharing.
+ * To see more of the graph structure, use {@link showInternalGraph@}. 
+ * 
+ * {@link showInternal@} can fail to produce a representation of the {@link CalValue@} if an exception in
+ * Object.toString() on one of the foreign objects held onto by the value graph occurs. In these cases, the returned
+ * value will indicate that a problem occurred and attempt to display a partial output.
+ * 
+ * @arg value CAL value for which to display the internal representation 
+ * @return the internal representation of the value
+ * @see showInternalGraph, internalValueStats
+ */ 
+/*
+ * @implementation 
+ * showInternal does not traverse the CalValue graph by using the
+ * Java call stack, and hence will not throw a java.lang.StackOverflowError. For example,
+ * it can handle displaying evaluated CAL lists that are thousands of elements long.
+ * Also, showInternal will successfully display cyclic value graphs.
+ */
+showInternal :: a -> String;    
+public showInternal value = showInternalValue (toCalValue (output (toCalValue value)));  
+
+
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Debug.Debug.showInternalGraph" 
+    private showInternalValueGraph :: CalValue -> String;
+ 
+/**
+ * Displays the internal representation of a value, including information about shared nodes and indirection nodes.
+ * This representation is subject to change, and should not be relied upon in production code. It is intended to assist
+ * in debugging, and for the purposes of understanding the lazy evaluation behavior of CAL.
+ * 
+ * It is important to note that {@link showInternalGraph@} does no evaluation of the value argument, and so does
+ * not change the order of reduction in any way. This is unlike {@link Debug.show@}, or most other means of
+ * displaying a value of a CAL computation. This can be a great advantage, however, the drawback is that
+ * {@link showInternalGraph@} is displaying an internal form and thus can be less readable, and less customizable
+ * than using other means.
+ *
+ * {@link showInternalGraph@} attempts to show more of the graph structure of the value. If a node is shared, 
+ * its first appearance will be marked e.g. <@nodeNumber = nodeText>, and subsequent appearances will just
+ * display as <@nodeNumber>. Indirections are shown using an asterix (*). 
+ * To see less of the graph structure, and potentially a more readable output, use {@link showInternal@}.
+ * 
+ * {@link showInternalGraph@} can fail to produce a representation of the {@link CalValue@} if an exception in
+ * Object.toString() on one of the foreign objects held onto by the value graph occurs. In these cases, the returned
+ * value will indicate that a problem occurred and attempt to display a partial output.
+ * 
+ * @arg value CAL value for which to display the internal representation 
+ * @return the internal representation of the value
+ * @see showInternal, internalValueStats 
+ */
+/*
+ * @implementation 
+ * showInternalGraph does not traverse the CalValue graph by using the
+ * Java call stack, and hence will not throw a java.lang.StackOverflowError. For example,
+ * it can handle displaying evaluated CAL lists that are thousands of elements long.
+ * Also, showInternalGraph will successfully display cyclic value graphs.
+ */    
+showInternalGraph :: a -> String;    
+public showInternalGraph value = showInternalValueGraph (toCalValue (output (toCalValue value)));
+
+
+data foreign unsafe import jvm "org.openquark.cal.runtime.DebugSupport$InternalValueStats"
+    private InternalValueStats deriving Show, Inputable, Outputable;
+
+foreign unsafe import jvm "static method org.openquark.cal.runtime.DebugSupport$InternalValueStats.make" 
+    private internalValueStatsHelper :: CalValue -> InternalValueStats;
+
+/**
+ * Calculates various statistics concerning the internal machine representation of the argument value. Currently these
+ * are the distinct node count, the distinct indirection node count and the number of shared nodes.
+ * The value is not evaluated or modified in any way by the computation.
+ * 
+ * @arg value CAL value for which to compute statistics.
+ * @return the gathered internal value statistics for the argument value. 
+ * @see distinctNodeCount, distinctIndirectionNodeCount, sharedNodeCount
+ * @see showInternal, showInternalGraph
+ */    
+internalValueStats :: a -> InternalValueStats;
+public internalValueStats value = internalValueStatsHelper (toCalValue (output (toCalValue value)));
+
+/**    
+ * Returns the number of distinct nodes in the internal graph representing the value that created {@link InternalValueStats@}. 
+ * The distinct node count provides a measure of how much space the value is taking. Nodes which
+ * are shared and appear multiple times within the graph are only counted once.
+ * 
+ * This number is for debugging purposes only and should not be relied upon in production code. It is subject
+ * to change and its precise value will in general depend on the particular machine used.
+ * 
+ * @arg valueStats statistics about a particular CAL value
+ * @return the number of distinct nodes in the graph of nodes of the value that created {@link InternalValueStats@}.
+ * @see internalValueStats
+ */    
+foreign unsafe import jvm "method getNDistinctNodes" 
+    public distinctNodeCount :: InternalValueStats -> Int;
+   
+/**    
+ * Returns the number of distinct indirection nodes in the internal graph representing the value that created {@link InternalValueStats@}.
+ * The distinct indirection node count provides a measure of how much uncompacted or wasted space the {@link CalValue@} is taking.
+ * Indirection nodes which are shared and appear multiple times within the graph are only counted once.
+ * 
+ * This number is for debugging purposes only and should not be relied upon in production code. It is subject
+ * to change and its precise value will in general depend on the particular machine used.
+ * 
+ * @arg valueStats statistics about a particular CAL value
+ * @return the number of distinct indirection nodes in the graph of nodes of the value that created {@link InternalValueStats@}.
+ * @see internalValueStats
+ */         
+foreign unsafe import jvm "method getNDistinctIndirectionNodes" 
+    public distinctIndirectionNodeCount :: InternalValueStats -> Int;
+ 
+/**    
+ * Returns the number of shared nodes in the internal graph representing the value that created {@link InternalValueStats@}.
+ * The shared node count provides a measure of how graph-like (rather than tree-like) the {@link CalValue@} is.
+ * 
+ * This number is for debugging purposes only and should not be relied upon in production code. It is subject
+ * to change and its precise value will in general depend on the particular machine used.
+ * 
+ * @arg valueStats statistics about a particular CAL value
+ * @return the number of shared nodes in the graph of nodes of the value that created {@link InternalValueStats@}.
+ * @see internalValueStats
+ */    
+foreign unsafe import jvm "method getNSharedNodes" 
+    public sharedNodeCount :: InternalValueStats -> Int;    
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @return retrieve the current system time in milliseconds.
+ */
+foreign unsafe import jvm "static method java.lang.System.currentTimeMillis" 
+    public getSystemTime :: Prelude.Long;
+
+/** Evaluates the given expression {@code f@} to WHNF and returns the time taken to evaluate it. */
+evalTime :: a -> Prelude.Long;
+public evalTime f =
+    let
+        start :: Long;
+        start = getSystemTime;
+        
+        end :: Long;
+        end = getSystemTime;
+    in
+        Prelude.seq (Prelude.seq (Prelude.seq start f) end) (end - start);
+        
+/**
+ * Evaluates the given expressions ({@code f1@} and {@code f2@}) to WHNF and returns a record containing
+ * the time to evalute each expression and the difference expressed as an absolute and a percentage of the
+ * first time.
+ */    
+compareEvalTimes :: a -> b -> {time1 :: Prelude.Long, time2 :: Prelude.Long, timeDiff :: Prelude.Long, percentDiff :: Prelude.Double};
+public compareEvalTimes f1 f2 =
+    let 
+        t1 :: Long;
+        t1 = evalTime f1;
+        
+        t2 :: Long;
+        t2 = evalTime f2;
+        
+        diff :: Long;
+        diff = t1 - t2;
+    in
+        Prelude.seq (diff) {time1 = t1, time2 = t2, timeDiff = diff, percentDiff = (percentDif t1 t2)};
+
+/**
+ * Calculates the difference between two values as a percentage of the first value
+ * and rounds the result to two decimal places.
+ */        
+percentDif :: Prelude.Long -> Prelude.Long -> Prelude.Double;
+percentDif !x !y = 
+    let 
+        raw :: Double;
+        raw = ((Prelude.toDouble x) - (Prelude.toDouble y)) / (Prelude.toDouble x);        
+    in
+        ((toDouble (Prelude.round (raw * 10000))) / 100.0);
+
+/**
+ * Returns {@link True@} if the evaluate times of the two expressions ({@code f1@} and {@code f2@}) are withing the 
+ * given percent margin.  ex. {@code sameEvalTimes expr1 expr2 10.0@} returns true if the evaluation
+ * times of {@code expr1@} and {@code expr2@} are within 10 percent of each other.
+ */
+sameEvalTimes :: a -> b -> Double -> Boolean;
+public sameEvalTimes f1 f2 !margin = 
+    let result :: {percentDiff :: Double, time1 :: Long, time2 :: Long, timeDiff :: Long};
+        result = compareEvalTimes f1 f2; in ((Prelude.abs result.percentDiff) <= margin);
+    
+/**
+ * Performs the same as {@link sameEvalTimes@} but traces the result of {@link compareEvalTimes@}.    
+ */
+sameEvalTimesTrace :: a -> b -> Double -> Boolean;
+public sameEvalTimesTrace f1 f2 !margin = 
+    let 
+        result :: {percentDiff :: Double, time1 :: Long, time2 :: Long, timeDiff :: Long};
+        result = compareEvalTimes f1 f2; 
+    in 
+        trace (show result ++ "\n") ((Prelude.abs result.percentDiff) <= margin);
+    
+/**
+ * {@code sleep@} for a specified number of milliseconds and then return.
+ * This function can be useful in writing benchmarks to provide a dramatic slowdown. 
+ * 
+ * @arg millis milliseconds to sleep for.
+ * @arg valueToReturn value to return after sleeping
+ * @return returns {@code valueToReturn@} after sleeping for {@code millis@} milliseconds.
+ */
+sleep :: Long -> a -> a;
+public sleep !millis !valueToReturn = 
+    thread_sleep millis
+    `seq`
+    valueToReturn;
+    
+foreign unsafe import jvm "static method java.lang.Thread.sleep"
+    private thread_sleep :: Long -> ();
+    
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//start- determine the machine type at runtime
+
+/**
+ * Enumeration indicating the supported machine types (lecc or g). The purpose of this is for writing
+ * unit tests that depend on machine type. Do not use in production code.
+ * @see function = machineType
+ */
+data public MachineType =
+    /**
+     * The Lazily Evaluating CAL Compiler (formerly Luke's Experimental CAL Compiler) machine type.
+     * Compiles CAL source to Java byte codes which are then run directly as a jvm program.
+     */
+    public MachineType_Lecc |
+    /**
+     * The g machine type. Compiles CAL source to in memory graph manipulation instruction sequences which are then
+     * run in an interpreter.
+     */    
+    public MachineType_G
+    
+    deriving Eq, Show
+    ;
+
+/**
+ * Outputs to an object of Java type org.openquark.cal.runtime.MachineType, 
+ * which is a convenient and efficient Java representation for values of the MachineType type.
+ */
+instance Outputable MachineType where
+    output = outputMachineTypeToJObject;
+    ;
+ 
+/**
+ * Inputs from an object of Java type org.openquark.cal.runtime.MachineType, 
+ * which is a convenient and efficient Java representation for values of the MachineType type.
+ */    
+instance Inputable MachineType where
+    input = inputMachineTypeFromJObject;
+    ;
+
+outputMachineTypeToJObject :: MachineType -> JObject;
+private outputMachineTypeToJObject !machineType =
+    case machineType of
+    MachineType_Lecc -> output jMachineType_Lecc;
+    MachineType_G -> output jMachineType_G;    
+    ;
+       
+inputMachineTypeFromJObject :: JObject -> MachineType;
+private inputMachineTypeFromJObject !jMachineType =            
+    inputMachineType (input jMachineType);
+    
+inputMachineType :: JMachineType -> MachineType;
+private inputMachineType !jMachineType =
+    if jMachineType == jMachineType_Lecc then
+        MachineType_Lecc
+    else if jMachineType == jMachineType_G then
+        MachineType_G
+    else
+        error ("unrecognized machine type " ++ show jMachineType);
+    
+    
+data foreign unsafe import jvm "org.openquark.cal.runtime.MachineType"
+    private JMachineType deriving Eq, Show, Inputable, Outputable;
+
+foreign unsafe import jvm "static field org.openquark.cal.runtime.MachineType.LECC"
+    private jMachineType_Lecc :: JMachineType;
+foreign unsafe import jvm "static field org.openquark.cal.runtime.MachineType.G"
+    private jMachineType_G :: JMachineType;
+
+
+foreign unsafe import jvm "method debug_getMachineType"
+    debug_getMachineType :: CalValue -> JMachineType;
+ 
+/**
+ * The currently executing machine type. This function can be used to write unit tests that are only valid for
+ * a particular machine. 
+ * @return the currently executing machine type. 
+ */
+/*
+ * @implementation it is not possible to reliably get machine type from the system property. This is because a single
+ * jvm instance can run multiple machines is succession e.g. as in the unit tests.
+ */    
+machineType :: MachineType;
+public machineType =
+    input # output # debug_getMachineType # toCalValue $ {};
+    
+//end- determine the machine type at runtime        
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin - tracing support
+
+
+foreign unsafe import jvm "method isTracingEnabled"
+    private executionContext_isTracingEnabled :: ExecutionContext -> Boolean;   
+foreign unsafe import jvm "method setTracingEnabled"
+    private executionContext_setTracingEnabled :: ExecutionContext -> Boolean -> ();   
+
+/**
+ * Returns true if tracing is currently enabled. 
+ * 
+ * Note that the particular build configuration of CAL must be capable of tracing before tracing will
+ * actually occur, even if {@link isTracingEnabled@} returns {@link True@}. Currently builds are capable 
+ * of tracing if the system property "org.openquark.cal.machine.debug_capable" is set.
+ * This is typically done by including the line "-Dorg.openquark.cal.machine.debug_capable"
+ * in the VM arguments when invoking Java on a program that makes use of the CAL platform. 
+ * 
+ * @arg ignored an ignored argument. {@link isTracingEnabled@} is not a pure function since the value it returns 
+ *    depends on the state of the current execution context. The ignored argument is needed in order for this function not
+ *    to be treated as a constant (CAF) always returning the same value.
+ * @return true if tracing is enabled and false otherwise.
+ * @see setTracingEnabled, traceShowsThreadName, traceShowsFunctionArgs
+ */    
+isTracingEnabled :: () -> Boolean;
+public isTracingEnabled ignored = executionContext_isTracingEnabled executionContext;
+
+/**
+ * Enables tracing to occur for subsequent function calls. 
+ * 
+ * Note that the particular build configuration of CAL must be capable of tracing before tracing will
+ * actually occur, even if {@link isTracingEnabled@} returns {@link True@}. Currently builds are capable 
+ * of tracing if the system property "org.openquark.cal.machine.debug_capable" is set.
+ * This is typically done by including the line "-Dorg.openquark.cal.machine.debug_capable"
+ * in the VM arguments when invoking Java on a program that makes use of the CAL platform. 
+ * 
+ * @arg tracingEnabled true to enable tracing of subsequent calls, false to disable tracing for subsequent calls.
+ * @return will always return ().
+ * @see isTracingEnabled, setTraceShowsThreadName, setTraceShowsFunctionArgs
+ */ 
+setTracingEnabled :: Boolean -> ();
+public setTracingEnabled !tracingEnabled = executionContext_setTracingEnabled executionContext tracingEnabled;
+
+   
+foreign unsafe import jvm "method traceShowsThreadName"
+    private executionContext_traceShowsThreadName :: ExecutionContext -> Boolean;    
+foreign unsafe import jvm "method setTraceShowsThreadName"
+    private executionContext_setTraceShowsThreadName :: ExecutionContext -> Boolean -> ();  
+ 
+/**
+ * Returns true if function tracing will also display the name of the thread that is executing the particular function
+ * call as part of the trace.
+ * 
+ * @arg ignored an ignored argument. {@link traceShowsThreadName@} is not a pure function since the value it returns 
+ *    depends on the state of the current execution context. The ignored argument is needed in order for this function not
+ *    to be treated as a constant (CAF) always returning the same value.
+ * @return true if tracing will show the name of the executing thread.
+ * @see setTraceShowsThreadName, isTracingEnabled, traceShowsFunctionArgs
+ */    
+traceShowsThreadName :: () -> Boolean;
+public traceShowsThreadName ignored = executionContext_traceShowsThreadName executionContext;
+  
+/**
+ * Enables function tracing to also display the name of the thread that is executing the particular function call 
+ * as part of the trace.
+ * 
+ * @see traceShowsThreadName, setTraceShowsFunctionArgs, setTracingEnabled
+ */
+setTraceShowsThreadName :: Boolean -> ();
+public setTraceShowsThreadName !traceShowsThreadName = executionContext_setTraceShowsThreadName executionContext traceShowsThreadName;    
+    
+foreign unsafe import jvm "method traceShowsFunctionArgs"
+    private executionContext_traceShowsFunctionArgs :: ExecutionContext -> Boolean;    
+foreign unsafe import jvm "method setTraceShowsFunctionArgs"
+    private executionContext_setTraceShowsFunctionArgs :: ExecutionContext -> Boolean -> ();
+ 
+/**
+ * Returns true if function tracing will also display the values of the function arguments as part of the trace.
+ * Note that no evaluation is done on the arguments in order to show their traced value. 
+ * 
+ * @arg ignored an ignored argument. {@link traceShowsFunctionArgs@} is not a pure function since the value it returns 
+ *    depends on the state of the current execution context. The ignored argument is needed in order for this function not
+ *    to be treated as a constant (CAF) always returning the same value.
+ * @return true if tracing will show the values of the arguments passe
+ * @see setTraceShowsFunctionArgs, isTracingEnabled, traceShowsThreadName
+ */        
+traceShowsFunctionArgs :: () -> Boolean;    
+public traceShowsFunctionArgs ignored = executionContext_traceShowsFunctionArgs executionContext;
+ 
+/**
+ * Enables function tracing to also display the values of the function arguments as part of the trace.
+ * Note that no evaluation is done on the arguments in order to show their traced value. 
+ * 
+ * @see traceShowsFunctionArgs, setTracingEnabled, setTraceShowsThreadName
+ */
+setTraceShowsFunctionArgs :: Boolean -> ();
+public setTraceShowsFunctionArgs !traceShowsFunctionArgs =
+    executionContext_setTraceShowsFunctionArgs executionContext traceShowsFunctionArgs;     
+
+foreign unsafe import jvm "method getTracedFunctions"
+    private executionContext_getTracedFunctions :: ExecutionContext -> JObject;   
+foreign unsafe import jvm "method addTracedFunction"
+    private executionContext_addTracedFunction :: ExecutionContext -> String -> ();   
+foreign unsafe import jvm "method removeTracedFunction"
+    private executionContext_removeTracedFunction :: ExecutionContext -> String -> ();   
+
+/**
+ * Returns a list of the function names for which tracing is enabled. 
+ * These are the function for which tracing has been enabled by a call
+ * to {@link setTracingEnabledFor@}.
+ * Tracing for the functions in this list will occur regardless of the value
+ * returned by {@link isTracingEnabled@}.
+ * 
+ * Note that the particular build configuration of CAL must be capable of tracing before tracing will
+ * actually occur. Currently builds are capable of tracing if the system property 
+ * "org.openquark.cal.machine.debug_capable" is set.
+ * This is typically done by including the line "-Dorg.openquark.cal.machine.debug_capable"
+ * in the VM arguments when invoking Java on a program that makes use of the CAL platform. 
+ * 
+ * @arg ignored an ignored argument. {@link getTraceEnabledFunctions@} is not a pure function since the value it returns 
+ *    depends on the state of the current execution context. The ignored argument is needed in order for this function not
+ *    to be treated as a constant (CAF) always returning the same value.
+ * @return a {@link List@} of {@link String@} showing which functions have tracing enabled.
+ * @see setTracingEnabled, setTracingEnabledFor
+ */  
+getTraceEnabledFunctions :: () -> [String];
+public getTraceEnabledFunctions ignored = input (executionContext_getTracedFunctions executionContext);
+
+/**
+ * Enables/disables tracing to occur for subsequent calls to the named function.
+ * This setting supersedes the tracing status set by {@link setTracingEnabled@}. 
+ * 
+ * Note that the particular build configuration of CAL must be capable of tracing before tracing will
+ * actually occur, even if {@link isTracingEnabled@} returns {@link True@}. Currently builds are capable 
+ * of tracing if the system property "org.openquark.cal.machine.debug_capable" is set.
+ * This is typically done by including the line "-Dorg.openquark.cal.machine.debug_capable"
+ * in the VM arguments when invoking Java on a program that makes use of the CAL platform. 
+ * 
+ * @arg functionName the name of the function for which tracing will be enabled/disabled.
+ * @arg tracingEnabled true to enable tracing of subsequent calls, false to disable tracing for subsequent calls.
+ * @return will always return ().
+ * @see isTracingEnabled, setTraceShowsThreadName, setTraceShowsFunctionArgs
+ */ 
+setTracingEnabledFor :: String -> Boolean -> ();
+public setTracingEnabledFor !functionName !tracingEnabled = 
+    if tracingEnabled then
+        executionContext_addTracedFunction executionContext functionName
+    else 
+        executionContext_removeTracedFunction executionContext functionName;
+
+
+//end - tracing support
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+    

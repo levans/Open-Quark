@@ -1,0 +1,905 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * SqlType.cal
+ * Creation date: Aug 2, 2007.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains a type describing type data types of SQL database values.
+ * The types are more fine-grained than in {@code ValueType@}.
+ * Also, some of the types include additional information, such as the precision/scale or maximum character length.
+ */
+module Cal.Data.SqlType;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Either, Int, JObject, Maybe, String;
+    dataConstructor = True, False;
+    typeClass = Eq, Inputable, Outputable;
+    function = eager, error, fromMaybe, input, intToString, output, stringToInt;
+    ;
+import Cal.Core.String;
+import Cal.Collections.List;
+import Cal.Utilities.ValueType using
+    typeConstructor = ValueType;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeClass =
+        XmlAttributeInputable, XmlAttributeOutputable, XmlInputable, 
+        XmlOutputable;
+    typeConstructor = XmlAttribute, XmlNode;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+
+
+/**
+ * SqlType includes a classification of a SQL data type, as well as more detailed information (such as length or precision) of 
+ * certain data types.
+ * This corresponds to the {@code java.sql.Types@} JDBC type constants.
+ */
+data public SqlType = 
+    /**
+     * The SmallInt type is for integer values (typically 8-bit).
+     */
+    public SqlType_TinyInt
+    |
+    /**
+     * The SmallInt type is for integer values (typically 16-bit).
+     */
+    public SqlType_SmallInt
+    |
+    /**
+     * The Integer type is for integer values (typically 32-bit).
+     */
+    public SqlType_Integer
+    |
+    /**
+     * The Integer type is for integer values (typically 64-bit).
+     */
+    public SqlType_BigInt
+    |
+    /**
+     * The Decimal type is a fixed-precision numeric type.
+     * The total number of digits (precision) and the number of digits to the right of the decimal point (scale) can be specified.
+     * Decimal values are intended to be stored with the specified precision or higher (whereas Numeric values should use exactly 
+     * the specified precision).
+     * @arg precision  the total number of digits in the value
+     * @arg scale      the number of digits to the right of the decimal point (cannot be greater than the precision value)
+     */
+    public SqlType_Decimal
+        precision :: !Int
+        scale     :: !Int
+    |
+    /**
+     * The Numeric type is a fixed-precision numeric type.
+     * The total number of digits (precision) and the number of digits to the right of the decimal point (scale) can be specified.
+     * Numeric values are intended to be stored with exactly the specified precision (whereas Double values can use the specified 
+     * precision or higher).
+     * @arg precision  the total number of digits in the value
+     * @arg scale      the number of digits to the right of the decimal point (cannot be greater than the precision value)
+     */
+    public SqlType_Numeric
+        precision :: !Int
+        scale     :: !Int
+    |
+    /**
+     * The Real type is a floating-point numeric type (typically with 7 digits of mantissa).
+     */
+    public SqlType_Real
+    |
+    /**
+     * The Float type is a floating-point numeric type (typically with 15 digits of mantissa).
+     */
+    public SqlType_Float
+    |
+    /**
+     * The Double type is a floating-point numeric type (typically with 15 digits of mantissa).
+     */
+    public SqlType_Double
+    |
+    /**
+     * The Bit type handles a single bit values (on/off).
+     */
+    public SqlType_Bit
+    |
+    /**
+     * The Boolean type is for True/False values.
+     */
+    public SqlType_Boolean
+    |
+    /**
+     * The Char type is a fixed-length character string type.
+     * The fixed number of characters is specified.
+     * Shorter values will be padded with trailing spaces.
+     * @arg length  the number of characters in the string
+     */
+    public SqlType_Char
+        length :: !Int
+    |
+    /**
+     * The VarChar type is a variable-length character string type.
+     * The maximum number of characters is specified.
+     * @arg length  the maximum number of characters in the string
+     */
+    public SqlType_VarChar        
+        length :: !Int
+    |
+    /**
+     * The LongVarChar type handles variable-length character strings which could be very long.
+     */
+    public SqlType_LongVarChar
+    |
+    /**
+     * The CLOB (Character Large Object) type handles variable-length character strings which could be very long.
+     */
+    public SqlType_Clob
+    |
+    /**
+     * The Binary type is a fixed-length binary type
+     * @arg length  the number of bytes in the binary values
+     */
+    public SqlType_Binary
+        length :: !Int
+    |
+    /**
+     * The VarBinary type is a variable-length binary type.
+     * @arg length  the maximum number of bytes in the binary values
+     */
+    public SqlType_VarBinary
+        length :: !Int
+    |
+    /**
+     * The LongVarBinary type handles variable-length binary values which could be very long.
+     */
+    public SqlType_LongVarBinary
+    |
+    /**
+     * The Blob type handles variable-length binary values which could be very long.
+     */
+    public SqlType_Blob
+    |
+    /**
+     * The Date type handles Year/Month/Day values.
+     */
+    public SqlType_Date
+    |
+    /**
+     * The Time type handles Hour/Minute/Second values (and possibly fractions of a second).
+     */
+    public SqlType_Time
+    |
+    /** 
+     * The TimeStamp type combines the Date an Time type information, handling Year/Month/Day and Hour/Minute/Second.
+     */
+    public SqlType_TimeStamp
+    |
+    /**
+     * The Array type is used for handling arrays of values.
+     */
+    public SqlType_Array
+    |
+    /**
+     * The DataLink type is used for referencing values external to the database (using URLs or the like).
+     */
+    public SqlType_Datalink
+    |
+    /**
+     * The Distinct type is used for handling distinct values of some other type.
+     */
+    public SqlType_Distinct
+        // TODO: is the base type information available?
+    |
+    /**
+     * The JavaObject type is used for handling serialized Java Objects.
+     */
+    public SqlType_JavaObject
+    |
+    /**
+     * The Ref type is used for referencing a instance of a Struct type.
+     */
+    public SqlType_Ref
+        // TODO: should anything be here?
+    |
+    /**
+     * The Struct type is used for handling SQL structured types, consisting of a number of attributes.
+     */
+    public SqlType_Struct
+        // TODO: put the struct/attr info here?
+    |
+    /**
+     * The Null type can be used in cases where there is no value.
+     */
+    public SqlType_Null
+    |
+    /**
+     * The Other type is used for any type not otherwise listed here.
+     */
+    public SqlType_Other
+
+    deriving Eq
+    ;
+
+/**
+ * Returns the SqlType for a specified JDBC type code and other info.
+ */
+fromJdbcMetadata :: Int -> Int -> Int -> SqlType;
+public fromJdbcMetadata !jdbcTypeCode columnSize decimalDigits = 
+    case jdbcTypeCode of
+    -7   -> SqlType_Bit;
+    -6   -> SqlType_TinyInt;
+    5    -> SqlType_SmallInt;
+    4    -> SqlType_Integer;
+    -5   -> SqlType_BigInt;
+    6    -> SqlType_Float;
+    7    -> SqlType_Real;
+    8    -> SqlType_Double;
+    2    -> SqlType_Numeric columnSize decimalDigits;
+    3    -> SqlType_Decimal columnSize decimalDigits;
+    1    -> SqlType_Char columnSize;
+    12   -> SqlType_VarChar columnSize;
+    -1   -> SqlType_LongVarChar;
+    91   -> SqlType_Date;
+    92   -> SqlType_Time;
+    93   -> SqlType_TimeStamp;
+    -2   -> SqlType_Binary columnSize;
+    -3   -> SqlType_VarBinary columnSize;
+    -4   -> SqlType_LongVarBinary;
+    0    -> SqlType_Null;
+    1111 -> SqlType_Other;
+    2000 -> SqlType_JavaObject;
+    2001 -> SqlType_Distinct;
+    2002 -> SqlType_Struct;
+    2003 -> SqlType_Array;
+    2004 -> SqlType_Blob;
+    2005 -> SqlType_Clob;
+    2006 -> SqlType_Ref;
+    70   -> SqlType_Datalink;
+    16   -> SqlType_Boolean;
+    _ -> 
+        Debug.trace ("Unknown JDBC data type value: " ++ intToString jdbcTypeCode ++ ".\n") SqlType_Other;
+    ;
+
+/**
+ * Returns whether the SQL type corresponds to one of the 'long' types (LongVarChar, LongVarBinary, Blob, or Clob).
+ */
+isLongType :: SqlType -> Boolean;
+public isLongType !sqlType = 
+    case sqlType of
+    (SqlType_LongVarChar | SqlType_LongVarBinary | SqlType_Blob | SqlType_Clob) {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns the {@link typeConstructor = ValueType@} which best matches the SQL type.
+ * NullType will be returned if there are no other appropriate ValueType mappings.
+ */
+toValueType :: SqlType -> ValueType;
+public toValueType !sqlType = 
+    case sqlType of
+    (SqlType_TinyInt
+     | SqlType_SmallInt
+     | SqlType_Integer) {} -> ValueType.IntType;
+
+    (SqlType_BigInt     // BigInt values can be too large for a regular Int, so map them to the Double value type.
+     | SqlType_Decimal
+     | SqlType_Numeric
+     | SqlType_Real
+     | SqlType_Float
+     | SqlType_Double) {} -> ValueType.DoubleType;
+
+    (SqlType_Bit
+     | SqlType_Boolean) -> ValueType.BooleanType;
+
+    (SqlType_Char
+     | SqlType_VarChar
+     | SqlType_LongVarChar
+     | SqlType_Clob) {} -> ValueType.StringType;
+
+    (SqlType_Binary
+     | SqlType_VarBinary
+     | SqlType_LongVarBinary
+     | SqlType_Blob) {} -> ValueType.BinaryType;
+
+    (SqlType_Date
+     | SqlType_Time
+     | SqlType_TimeStamp) {} -> ValueType.TimeType;
+
+    (SqlType_Array
+     | SqlType_Datalink
+     | SqlType_Distinct
+     | SqlType_JavaObject
+     | SqlType_Ref
+     | SqlType_Struct
+     | SqlType_Null
+     | SqlType_Other) {} -> ValueType.NullType;
+    ;
+
+/**
+ * Returns a sensible SQL type for the specified ValueType.
+ * A length (for strings) may optionally be specified.
+ */
+fromValueType :: ValueType -> Maybe Int -> SqlType;
+public fromValueType !valueType maybeLength = 
+    case valueType of
+    ValueType.NullType    -> SqlType_Null;
+    ValueType.StringType  -> SqlType_VarChar $ fromMaybe 255 maybeLength;
+    ValueType.IntType     -> SqlType_Integer;
+    ValueType.DoubleType  -> SqlType_Double;
+    ValueType.BooleanType -> SqlType_Boolean;
+    ValueType.TimeType    -> SqlType_TimeStamp;
+    ValueType.BinaryType  -> SqlType_LongVarBinary;
+    ;
+
+/**
+ * Allow SqlType values to be shown.
+ */
+instance Show SqlType where
+    show = sqlTypeToString;
+    ;
+
+/**
+ * Returns a stringified form of the SqlType.
+ */
+sqlTypeToString :: SqlType -> String;
+sqlTypeToString !sqlType = 
+    // Make sure the strings below stay in sync with the strings in sqlTypeFromString.
+    case sqlType of
+    SqlType_TinyInt            -> "TinyInt";
+    SqlType_SmallInt           -> "SmallInt";
+    SqlType_Integer            -> "Integer";
+    SqlType_BigInt             -> "BigInt";
+    SqlType_Decimal {precision, scale} -> "Decimal(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> "Numeric(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> "Real";
+    SqlType_Float              -> "Float";
+    SqlType_Double             -> "Double";
+    SqlType_Bit                -> "Bit";
+    SqlType_Boolean            -> "Boolean";
+    SqlType_Char {length}      -> "Char(" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> "VarChar(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> "LongVarChar";
+    SqlType_Clob               -> "Clob";
+    SqlType_Binary {length}    -> "Binary(" ++ intToString length ++ ")";
+    SqlType_VarBinary {length} -> "VarBinary(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> "LongVarBinary";
+    SqlType_Blob               -> "Blob";
+    SqlType_Date               -> "Date";
+    SqlType_Time               -> "Time";
+    SqlType_TimeStamp          -> "TimeStamp";
+    SqlType_Array              -> "Array";
+    SqlType_Datalink           -> "Datalink";
+    SqlType_Distinct           -> "Distinct";
+    SqlType_JavaObject         -> "JavaObject";
+    SqlType_Ref                -> "Ref";
+    SqlType_Struct             -> "Struct";
+    SqlType_Null               -> "Null";
+    SqlType_Other              -> "Other";
+    ;
+
+/**
+ * Returns the SQL type corresponding to the specified string.
+ * This can convert a string produced by {@link sqlTypeToString@} back into the original SqlType value.
+ */
+sqlTypeFromString :: String -> SqlType;
+sqlTypeFromString !sqlTypeString = 
+    let
+        typeName :: String;
+        typeArgs :: [Int];
+        (typeName, typeArgs) = 
+            // The first string should be the type name, and any following args should be Int values.
+            case String.multiSplitString ["(", ",", " ", ")"] sqlTypeString of
+            [] -> error "No type name specified.";
+            typeName : typeArgStrings -> (typeName, List.map stringToInt typeArgStrings);
+            ;
+    in
+        // Make sure the strings below stay in sync with the strings in sqlTypeToString.
+        if (typeName == "TinyInt") then SqlType_TinyInt
+        else if (typeName == "SmallInt") then SqlType_SmallInt
+        else if (typeName == "Integer") then SqlType_Integer
+        else if (typeName == "BigInt") then SqlType_BigInt
+        else if (typeName == "Decimal") then SqlType_Decimal (List.subscript typeArgs 0) (List.subscript typeArgs 1)
+        else if (typeName == "Numeric") then SqlType_Numeric (List.subscript typeArgs 0) (List.subscript typeArgs 1)
+        else if (typeName == "Real") then SqlType_Real
+        else if (typeName == "Float") then SqlType_Float
+        else if (typeName == "Double") then SqlType_Double
+        else if (typeName == "Bit") then SqlType_Bit
+        else if (typeName == "Boolean") then SqlType_Boolean
+        else if (typeName == "Char") then SqlType_Char (List.head typeArgs)
+        else if (typeName == "VarChar") then SqlType_VarChar (List.head typeArgs)
+        else if (typeName == "LongVarChar") then SqlType_LongVarChar
+        else if (typeName == "Clob") then SqlType_Clob
+        else if (typeName == "Binary") then SqlType_Binary (List.head typeArgs)
+        else if (typeName == "VarBinary") then SqlType_VarBinary (List.head typeArgs)
+        else if (typeName == "LongVarBinary") then SqlType_LongVarBinary
+        else if (typeName == "Blob") then SqlType_Blob
+        else if (typeName == "Date") then SqlType_Date
+        else if (typeName == "Time") then SqlType_Time
+        else if (typeName == "TimeStamp") then SqlType_TimeStamp
+        else if (typeName == "Array") then SqlType_Array
+        else if (typeName == "Datalink") then SqlType_Datalink
+        else if (typeName == "Distinct") then SqlType_Distinct
+        else if (typeName == "JavaObject") then SqlType_JavaObject
+        else if (typeName == "Ref") then SqlType_Ref
+        else if (typeName == "Struct") then SqlType_Struct
+        else if (typeName == "Null") then SqlType_Null
+        else if (typeName == "Other") then SqlType_Other
+        else error ("Unexpected SQL type '" ++ typeName ++ "'.");
+
+/**
+ * Allow SqlType to be serialized to XML.
+ */
+instance XmlAttributeInputable SqlType where
+    fromXmlAttribute = inputSqlTypeXmlAttribute;
+    ;
+
+instance XmlInputable SqlType where
+    fromXml = inputSqlTypeXml;
+    ;
+
+inputSqlTypeXml :: (Either XmlAttribute XmlNode) -> SqlType;
+inputSqlTypeXml attributeOrNode =
+    XmlBuilder.inputFromXmlAttributeInputable attributeOrNode;
+
+inputSqlTypeXmlAttribute :: XmlAttribute -> SqlType;
+inputSqlTypeXmlAttribute attribute =
+     sqlTypeFromString (XmlBuilder.attributeValue attribute);
+
+instance XmlAttributeOutputable SqlType where
+    toXmlAttribute = outputSqlTypeXmlAttribute;
+    ;
+
+instance XmlOutputable SqlType where
+    toXml = outputSqlTypeXml;
+    ;
+
+outputSqlTypeXml :: String -> SqlType -> (Either XmlAttribute XmlNode);
+outputSqlTypeXml name value =
+    XmlBuilder.outputFromXmlAttributeOutputable name value;
+
+outputSqlTypeXmlAttribute :: String -> SqlType -> XmlAttribute;
+outputSqlTypeXmlAttribute attrName sqlType =
+     XmlBuilder.toXmlAttribute attrName (sqlTypeToString sqlType);
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// This following Inputable and Outputable implementaions for SqlType were 
+// automatically generated.
+// 
+// The Java classes corresponding to the type constructors were also automatically generated.
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+/** 
+ * Foreign type for org.openquark.util.database.SqlType.
+ * Cal.Data.SqlType.SqlType outputs to and inputs from this type.
+ */
+data foreign unsafe import jvm public "org.openquark.util.database.SqlType"
+    public JSqlType deriving Inputable, Outputable;
+
+/** 
+ * Foreign type for org.openquark.util.database.SqlType.SqlType_Decimal.
+ * This Java class corresponds to the SqlType_Decimal data constructor.
+ */
+data foreign unsafe import jvm "org.openquark.util.database.SqlType$SqlType_Decimal"
+    private JSqlType_Decimal deriving Inputable, Outputable;
+
+/** 
+ * Foreign type for org.openquark.util.database.SqlType.SqlType_Numeric.
+ * This Java class corresponds to the SqlType_Numeric data constructor.
+ */
+data foreign unsafe import jvm "org.openquark.util.database.SqlType$SqlType_Numeric"
+    private JSqlType_Numeric deriving Inputable, Outputable;
+
+/** 
+ * Foreign type for org.openquark.util.database.SqlType.SqlType_Char.
+ * This Java class corresponds to the SqlType_Char data constructor.
+ */
+data foreign unsafe import jvm "org.openquark.util.database.SqlType$SqlType_Char"
+    private JSqlType_Char deriving Inputable, Outputable;
+
+/** 
+ * Foreign type for org.openquark.util.database.SqlType.SqlType_VarChar.
+ * This Java class corresponds to the SqlType_VarChar data constructor.
+ */
+data foreign unsafe import jvm "org.openquark.util.database.SqlType$SqlType_VarChar"
+    private JSqlType_VarChar deriving Inputable, Outputable;
+
+/** 
+ * Foreign type for org.openquark.util.database.SqlType.SqlType_Binary.
+ * This Java class corresponds to the SqlType_Binary data constructor.
+ */
+data foreign unsafe import jvm "org.openquark.util.database.SqlType$SqlType_Binary"
+    private JSqlType_Binary deriving Inputable, Outputable;
+
+/** 
+ * Foreign type for org.openquark.util.database.SqlType.SqlType_VarBinary.
+ * This Java class corresponds to the SqlType_VarBinary data constructor.
+ */
+data foreign unsafe import jvm "org.openquark.util.database.SqlType$SqlType_VarBinary"
+    private JSqlType_VarBinary deriving Inputable, Outputable;
+
+/** Constructor for SqlType_TinyInt.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_TinyInt"
+    private jSqlType_TinyInt_new :: JSqlType;
+
+/** Constructor for SqlType_SmallInt.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_SmallInt"
+    private jSqlType_SmallInt_new :: JSqlType;
+
+/** Constructor for SqlType_Integer.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Integer"
+    private jSqlType_Integer_new :: JSqlType;
+
+/** Constructor for SqlType_BigInt.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_BigInt"
+    private jSqlType_BigInt_new :: JSqlType;
+
+/** Constructor for SqlType_Decimal.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Decimal"
+    private jSqlType_Decimal_new :: Int -> Int -> JSqlType;
+
+/** Constructor for SqlType_Numeric.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Numeric"
+    private jSqlType_Numeric_new :: Int -> Int -> JSqlType;
+
+/** Constructor for SqlType_Real.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Real"
+    private jSqlType_Real_new :: JSqlType;
+
+/** Constructor for SqlType_Float.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Float"
+    private jSqlType_Float_new :: JSqlType;
+
+/** Constructor for SqlType_Double.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Double"
+    private jSqlType_Double_new :: JSqlType;
+
+/** Constructor for SqlType_Bit.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Bit"
+    private jSqlType_Bit_new :: JSqlType;
+
+/** Constructor for SqlType_Boolean.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Boolean"
+    private jSqlType_Boolean_new :: JSqlType;
+
+/** Constructor for SqlType_Char.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Char"
+    private jSqlType_Char_new :: Int -> JSqlType;
+
+/** Constructor for SqlType_VarChar.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_VarChar"
+    private jSqlType_VarChar_new :: Int -> JSqlType;
+
+/** Constructor for SqlType_LongVarChar.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_LongVarChar"
+    private jSqlType_LongVarChar_new :: JSqlType;
+
+/** Constructor for SqlType_Clob.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Clob"
+    private jSqlType_Clob_new :: JSqlType;
+
+/** Constructor for SqlType_Binary.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Binary"
+    private jSqlType_Binary_new :: Int -> JSqlType;
+
+/** Constructor for SqlType_VarBinary.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_VarBinary"
+    private jSqlType_VarBinary_new :: Int -> JSqlType;
+
+/** Constructor for SqlType_LongVarBinary.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_LongVarBinary"
+    private jSqlType_LongVarBinary_new :: JSqlType;
+
+/** Constructor for SqlType_Blob.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Blob"
+    private jSqlType_Blob_new :: JSqlType;
+
+/** Constructor for SqlType_Date.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Date"
+    private jSqlType_Date_new :: JSqlType;
+
+/** Constructor for SqlType_Time.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Time"
+    private jSqlType_Time_new :: JSqlType;
+
+/** Constructor for SqlType_TimeStamp.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_TimeStamp"
+    private jSqlType_TimeStamp_new :: JSqlType;
+
+/** Constructor for SqlType_Array.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Array"
+    private jSqlType_Array_new :: JSqlType;
+
+/** Constructor for SqlType_Datalink.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Datalink"
+    private jSqlType_Datalink_new :: JSqlType;
+
+/** Constructor for SqlType_Distinct.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Distinct"
+    private jSqlType_Distinct_new :: JSqlType;
+
+/** Constructor for SqlType_JavaObject.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_JavaObject"
+    private jSqlType_JavaObject_new :: JSqlType;
+
+/** Constructor for SqlType_Ref.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Ref"
+    private jSqlType_Ref_new :: JSqlType;
+
+/** Constructor for SqlType_Struct.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Struct"
+    private jSqlType_Struct_new :: JSqlType;
+
+/** Constructor for SqlType_Null.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Null"
+    private jSqlType_Null_new :: JSqlType;
+
+/** Constructor for SqlType_Other.*/
+foreign unsafe import jvm "constructor org.openquark.util.database.SqlType$SqlType_Other"
+    private jSqlType_Other_new :: JSqlType;
+
+/** Retrieve the precision field from an instance of JSqlType_Decimal.*/
+foreign unsafe import jvm "method getPrecision"
+    private jSqlType_Decimal_getPrecision :: JSqlType_Decimal -> Int;
+
+/** Retrieve the scale field from an instance of JSqlType_Decimal.*/
+foreign unsafe import jvm "method getScale"
+    private jSqlType_Decimal_getScale :: JSqlType_Decimal -> Int;
+
+/** Retrieve the precision field from an instance of JSqlType_Numeric.*/
+foreign unsafe import jvm "method getPrecision"
+    private jSqlType_Numeric_getPrecision :: JSqlType_Numeric -> Int;
+
+/** Retrieve the scale field from an instance of JSqlType_Numeric.*/
+foreign unsafe import jvm "method getScale"
+    private jSqlType_Numeric_getScale :: JSqlType_Numeric -> Int;
+
+/** Retrieve the length field from an instance of JSqlType_Char.*/
+foreign unsafe import jvm "method getLength"
+    private jSqlType_Char_getLength :: JSqlType_Char -> Int;
+
+/** Retrieve the length field from an instance of JSqlType_VarChar.*/
+foreign unsafe import jvm "method getLength"
+    private jSqlType_VarChar_getLength :: JSqlType_VarChar -> Int;
+
+/** Retrieve the length field from an instance of JSqlType_Binary.*/
+foreign unsafe import jvm "method getLength"
+    private jSqlType_Binary_getLength :: JSqlType_Binary -> Int;
+
+/** Retrieve the length field from an instance of JSqlType_VarBinary.*/
+foreign unsafe import jvm "method getLength"
+    private jSqlType_VarBinary_getLength :: JSqlType_VarBinary -> Int;
+
+/** 
+ * Retrieve the ordinal value from an instance of JSqlType.
+ * The ordinal can be used to determine which data constructor the JSqlType
+ * instance corresponds to.*/
+foreign unsafe import jvm "method getDCOrdinal"
+    private jSqlType__getDCOrdinal :: JSqlType -> Int;
+
+/** 
+ * Input an instance of SqlType.
+ * Translates an instance of JSqlType to
+ * an instance of SqlType.*/
+inputSqlType :: JSqlType -> SqlType;
+public inputSqlType jSqlType_ =
+    case jSqlType__getDCOrdinal jSqlType_ of
+    0 -> SqlType_TinyInt;
+    1 -> SqlType_SmallInt;
+    2 -> SqlType_Integer;
+    3 -> SqlType_BigInt;
+    4 ->
+        let
+            /** Cast the JSqlType value to a JSqlType_Decimal*/
+            jSqlType_Decimal :: JSqlType_Decimal;
+            jSqlType_Decimal =
+                eager (castJSqlType_ToJSqlType_Decimal jSqlType_);
+        in
+            SqlType_Decimal
+                (eager (jSqlType_Decimal_getPrecision jSqlType_Decimal))
+                (eager (jSqlType_Decimal_getScale jSqlType_Decimal))
+        ;
+    5 ->
+        let
+            /** Cast the JSqlType value to a JSqlType_Numeric*/
+            jSqlType_Numeric :: JSqlType_Numeric;
+            jSqlType_Numeric =
+                eager (castJSqlType_ToJSqlType_Numeric jSqlType_);
+        in
+            SqlType_Numeric
+                (eager (jSqlType_Numeric_getPrecision jSqlType_Numeric))
+                (eager (jSqlType_Numeric_getScale jSqlType_Numeric))
+        ;
+    6 -> SqlType_Real;
+    7 -> SqlType_Float;
+    8 -> SqlType_Double;
+    9 -> SqlType_Bit;
+    10 -> SqlType_Boolean;
+    11 ->
+        let
+            /** Cast the JSqlType value to a JSqlType_Char*/
+            jSqlType_Char :: JSqlType_Char;
+            jSqlType_Char = eager (castJSqlType_ToJSqlType_Char jSqlType_);
+        in
+            SqlType_Char (eager (jSqlType_Char_getLength jSqlType_Char))
+        ;
+    12 ->
+        let
+            /** Cast the JSqlType value to a JSqlType_VarChar*/
+            jSqlType_VarChar :: JSqlType_VarChar;
+            jSqlType_VarChar =
+                eager (castJSqlType_ToJSqlType_VarChar jSqlType_);
+        in
+            SqlType_VarChar
+                (eager (jSqlType_VarChar_getLength jSqlType_VarChar))
+        ;
+    13 -> SqlType_LongVarChar;
+    14 -> SqlType_Clob;
+    15 ->
+        let
+            /** Cast the JSqlType value to a JSqlType_Binary*/
+            jSqlType_Binary :: JSqlType_Binary;
+            jSqlType_Binary =
+                eager (castJSqlType_ToJSqlType_Binary jSqlType_);
+        in
+            SqlType_Binary
+                (eager (jSqlType_Binary_getLength jSqlType_Binary))
+        ;
+    16 ->
+        let
+            /** Cast the JSqlType value to a JSqlType_VarBinary*/
+            jSqlType_VarBinary :: JSqlType_VarBinary;
+            jSqlType_VarBinary =
+                eager (castJSqlType_ToJSqlType_VarBinary jSqlType_);
+        in
+            SqlType_VarBinary
+                (eager (jSqlType_VarBinary_getLength jSqlType_VarBinary))
+        ;
+    17 -> SqlType_LongVarBinary;
+    18 -> SqlType_Blob;
+    19 -> SqlType_Date;
+    20 -> SqlType_Time;
+    21 -> SqlType_TimeStamp;
+    22 -> SqlType_Array;
+    23 -> SqlType_Datalink;
+    24 -> SqlType_Distinct;
+    25 -> SqlType_JavaObject;
+    26 -> SqlType_Ref;
+    27 -> SqlType_Struct;
+    28 -> SqlType_Null;
+    29 -> SqlType_Other;
+    ;
+
+/** 
+ * Input an instance of SqlType.
+ * Translates an instance of JObject to
+ * an instance of SqlType.*/
+inputSqlTypeFromJObject :: JObject -> SqlType;
+private inputSqlTypeFromJObject jObject = inputSqlType (input jObject);
+
+instance Inputable SqlType where
+    input = inputSqlTypeFromJObject;
+    ;
+
+/** 
+ * Output an instance of SqlType.
+ * Translates an instance of SqlType to
+ * an instance of JSqlType.*/
+outputSqlType :: SqlType -> JSqlType;
+public outputSqlType !dcInstance =
+    case dcInstance of
+    SqlType_TinyInt -> jSqlType_TinyInt_new;
+    SqlType_SmallInt -> jSqlType_SmallInt_new;
+    SqlType_Integer -> jSqlType_Integer_new;
+    SqlType_BigInt -> jSqlType_BigInt_new;
+    SqlType_Decimal _ _ ->
+        jSqlType_Decimal_new
+            dcInstance.SqlType_Decimal.precision
+            dcInstance.SqlType_Decimal.scale
+        ;
+    SqlType_Numeric _ _ ->
+        jSqlType_Numeric_new
+            dcInstance.SqlType_Numeric.precision
+            dcInstance.SqlType_Numeric.scale
+        ;
+    SqlType_Real -> jSqlType_Real_new;
+    SqlType_Float -> jSqlType_Float_new;
+    SqlType_Double -> jSqlType_Double_new;
+    SqlType_Bit -> jSqlType_Bit_new;
+    SqlType_Boolean -> jSqlType_Boolean_new;
+    SqlType_Char _ -> jSqlType_Char_new dcInstance.SqlType_Char.length;
+    SqlType_VarChar _ ->
+        jSqlType_VarChar_new dcInstance.SqlType_VarChar.length;
+    SqlType_LongVarChar -> jSqlType_LongVarChar_new;
+    SqlType_Clob -> jSqlType_Clob_new;
+    SqlType_Binary _ -> jSqlType_Binary_new dcInstance.SqlType_Binary.length;
+    SqlType_VarBinary _ ->
+        jSqlType_VarBinary_new dcInstance.SqlType_VarBinary.length;
+    SqlType_LongVarBinary -> jSqlType_LongVarBinary_new;
+    SqlType_Blob -> jSqlType_Blob_new;
+    SqlType_Date -> jSqlType_Date_new;
+    SqlType_Time -> jSqlType_Time_new;
+    SqlType_TimeStamp -> jSqlType_TimeStamp_new;
+    SqlType_Array -> jSqlType_Array_new;
+    SqlType_Datalink -> jSqlType_Datalink_new;
+    SqlType_Distinct -> jSqlType_Distinct_new;
+    SqlType_JavaObject -> jSqlType_JavaObject_new;
+    SqlType_Ref -> jSqlType_Ref_new;
+    SqlType_Struct -> jSqlType_Struct_new;
+    SqlType_Null -> jSqlType_Null_new;
+    SqlType_Other -> jSqlType_Other_new;
+    ;
+
+/** 
+ * Output an instance of SqlType.
+ * Translates an instance of SqlType to
+ * an instance of JObject.*/
+outputSqlTypeToJObject :: SqlType -> JObject;
+private outputSqlTypeToJObject !dcInstance =
+    output (outputSqlType dcInstance);
+
+instance Outputable SqlType where
+    output = outputSqlTypeToJObject;
+    ;
+
+/** Cast an instance of JSqlType to JSqlType_Decimal*/
+foreign unsafe import jvm "cast"
+    private castJSqlType_ToJSqlType_Decimal :: JSqlType -> JSqlType_Decimal;
+
+/** Cast an instance of JSqlType to JSqlType_Numeric*/
+foreign unsafe import jvm "cast"
+    private castJSqlType_ToJSqlType_Numeric :: JSqlType -> JSqlType_Numeric;
+
+/** Cast an instance of JSqlType to JSqlType_Char*/
+foreign unsafe import jvm "cast"
+    private castJSqlType_ToJSqlType_Char :: JSqlType -> JSqlType_Char;
+
+/** Cast an instance of JSqlType to JSqlType_VarChar*/
+foreign unsafe import jvm "cast"
+    private castJSqlType_ToJSqlType_VarChar :: JSqlType -> JSqlType_VarChar;
+
+/** Cast an instance of JSqlType to JSqlType_Binary*/
+foreign unsafe import jvm "cast"
+    private castJSqlType_ToJSqlType_Binary :: JSqlType -> JSqlType_Binary;
+
+/** Cast an instance of JSqlType to JSqlType_VarBinary*/
+foreign unsafe import jvm "cast"
+    private castJSqlType_ToJSqlType_VarBinary :: JSqlType -> JSqlType_VarBinary;
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+// End of automatically generated Inputable/Outputable code.
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+

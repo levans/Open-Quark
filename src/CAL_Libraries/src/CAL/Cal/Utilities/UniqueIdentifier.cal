@@ -1,0 +1,339 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * UniqueIdentifier.cal
+ * Creation date: Dec 8, 2004.
+ * By: Richard Webster
+ */
+
+/**
+ * {@link typeConstructor = UniqueIdentifier@} is a type-safe way of representing a unique name for some value.
+ * For example, a {@code (UniqueIdentifier Dimension)@} represents a unique identifier for a {@code Dimension@}.
+ *
+ * There are functions to build a {@link typeConstructor = UniqueIdentifier@} from a unique name {@link typeConstructor = String@}, 
+ * and to get the unique name {@link typeConstructor = String@} from a {@link typeConstructor = UniqueIdentifier@}.
+ * The {@link convertUniqueIdentifier@} function can be used to coerce one type of identifier to another type (with the same unique name).
+ *
+ * This module also contains the {@link UniquelyNamedItem@} type class which can be implemented by any type that has both a unique identifier and display name.
+ *
+ * @author Richard Webster
+ */
+
+module Cal.Utilities.UniqueIdentifier;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Ord, Outputable;
+    typeConstructor = Boolean, Either, JObject, Maybe, Ordering, String;
+    dataConstructor = True, Nothing, Just;
+    function = compare, error, not, output;
+    ;
+import Cal.Collections.List using
+    function = join;
+    ;      
+import Cal.Core.String;        
+import Cal.Utilities.XmlBuilder using
+    typeClass =
+        XmlAttributeInputable, XmlAttributeOutputable, XmlInputable, 
+        XmlOutputable;
+    typeConstructor = XmlAttribute, XmlNode;
+    function = toXmlAttribute;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+   
+import Cal.Collections.Map;
+
+data public UniqueIdentifier a = 
+    private UniqueName 
+        name :: !String
+        ;
+
+makeUniqueIdentifierByName :: String -> UniqueIdentifier a;
+public makeUniqueIdentifierByName !name = 
+    UniqueName name;
+
+/**
+ * Constructs a unique ID using the specified name path.
+ * 
+ * TODO: use a special data constructor so that it is easy to identify unique IDs based on a name path...
+ */
+makeUniqueIdentifierByNamePath :: [String] -> UniqueIdentifier a;
+public makeUniqueIdentifierByNamePath !namePieces =
+    let
+        fullName = "[" ++ join "].[" namePieces ++ "]";
+    in
+        UniqueName fullName;
+
+/**
+ * Contructs a unique ID using the specified name, if it exists in the list of names
+ * specified then name2 is tried and so on till we get a name that's unique.
+ */
+makeUniqueIdentifierWithinList :: String -> [UniqueIdentifier a] -> UniqueIdentifier a;
+public makeUniqueIdentifierWithinList name identifiers = 
+    let
+        // a list of names with the first having the number specified and subsequent ones having incremented numbers 
+        numberedNames :: String -> Prelude.Int -> [String];
+        numberedNames name num = (name ++ (Prelude.intToString num)) : (numberedNames name (num+1));
+        
+        getFirstUniqueName :: [String] -> [UniqueIdentifier a] -> UniqueIdentifier a;
+        getFirstUniqueName names identifiers =
+            let
+                uniqueName = List.head names;
+                
+                predicate :: UniqueIdentifier a -> Boolean;
+                predicate identifier = Prelude.equals uniqueName (getUniqueName identifier);
+            in
+                if (List.any predicate identifiers) then // if this name exists we have to go on to the next one
+                    getFirstUniqueName (List.tail names) identifiers
+                else // the name doesn't exist, return it as a unique identifier
+                    makeUniqueIdentifierByName uniqueName;
+    in
+        getFirstUniqueName (name : (numberedNames name 2)) identifiers;
+        
+/**
+ * Returns the pieces of the qualified name held by unique identifier.
+ * 
+ * TODO: add a special data constructor for indentifiers which represent a qualified name as a string.
+ */
+getIndentifierNamePieces :: UniqueIdentifier a -> [String];
+public getIndentifierNamePieces !indentifier = 
+    case indentifier of 
+        UniqueName {name} ->
+            let
+                // Assume that the qualified name is of the form [name1].[name2].[name3].etc...
+                nameLength = String.length name;
+                namePieces = String.splitString "].[" (String.substring name 1 (nameLength - 1));
+            in
+                if (nameLength == 0) then [] else namePieces;
+    ;
+
+/**
+ * Returns the string representation of the unique identifier
+ */
+getUniqueName :: UniqueIdentifier a -> String;
+public getUniqueName !identifier = identifier.UniqueName.name;
+
+appendStringToUniqueIdentifier :: UniqueIdentifier a -> String ->  UniqueIdentifier a;
+public appendStringToUniqueIdentifier !id !str = 
+    makeUniqueIdentifierByName (getUniqueName id ++ str); 
+
+
+/**
+ * Equality testing
+ */
+instance Eq (UniqueIdentifier a) where
+  equals = equalsUniqueIdentifiers; 
+  notEquals = notEqualsUniqueIdentifiers;
+  ;
+
+// private helper functions to implement equality testing
+private equalsUniqueIdentifiers !a !b =
+    case a of 
+    UniqueName {name} -> 
+        case b of
+        UniqueName {name=name2} -> name == name2;       
+        ;
+    ;
+
+private notEqualsUniqueIdentifiers !a !b = not (equalsUniqueIdentifiers a b); 
+
+
+/**
+ * Ordering.
+ */
+instance Ord (UniqueIdentifier a) where
+    lessThan = lessThanUniqueIdentifier;
+    lessThanEquals = lessThanEqualsUniqueIdentifier;
+    greaterThanEquals = greaterThanEqualsUniqueIdentifier;
+    greaterThan = greaterThanUniqueIdentifier;
+    compare = compareUniqueIdentifier;
+    max = maxUniqueIdentifier;
+    min = minUniqueIdentifier;
+    ;
+
+lessThanUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier a -> Boolean;
+lessThanUniqueIdentifier !uid1 !uid2 = uid1.UniqueName.name < uid2.UniqueName.name;
+
+lessThanEqualsUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier a -> Boolean;
+lessThanEqualsUniqueIdentifier !uid1 !uid2 = uid1.UniqueName.name <= uid2.UniqueName.name;
+
+greaterThanEqualsUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier a -> Boolean;
+greaterThanEqualsUniqueIdentifier !uid1 !uid2 = uid1.UniqueName.name >= uid2.UniqueName.name;
+
+greaterThanUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier a -> Boolean;
+greaterThanUniqueIdentifier !uid1 !uid2 = uid1.UniqueName.name > uid2.UniqueName.name;
+
+compareUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier a -> Ordering;
+compareUniqueIdentifier !uid1 !uid2 = compare uid1.UniqueName.name uid2.UniqueName.name;
+
+maxUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier a -> UniqueIdentifier a;
+maxUniqueIdentifier !uid1 !uid2 = if (uid1.UniqueName.name <= uid2.UniqueName.name) then uid2 else uid1;
+
+minUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier a -> UniqueIdentifier a;
+minUniqueIdentifier !uid1 !uid2 = if (uid1.UniqueName.name <= uid2.UniqueName.name) then uid1 else uid2;
+
+
+/**
+ * implement {@code Show@} type class 
+ */
+instance Show (UniqueIdentifier a) where
+    show = showUniqueIdentifier;
+    ;
+
+showUniqueIdentifier :: UniqueIdentifier a -> String;
+private showUniqueIdentifier !id = id.UniqueName.name;
+
+/**
+ * Converts a unique ID of one type to a unique ID of another type.
+ */
+convertUniqueIdentifier :: UniqueIdentifier a -> UniqueIdentifier b;
+public convertUniqueIdentifier !uniqueID = Prelude.unsafeCoerce uniqueID;     
+
+/**
+ * {@code JRefinedUniqueIdentifier@} Java type  
+ */
+data foreign unsafe import jvm public "org.openquark.cal.foreignsupport.module.UniqueIdentifier.RefinedUniqueIdentifier"
+    public JUniqueIdentifier deriving Outputable;
+
+instance Inputable JUniqueIdentifier where
+    input = jObjectToJUniqueIdentifier;
+    ;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.UniqueIdentifier.RefinedUniqueIdentifier.MakeUniqueSofaMember"
+    public jObjectToJUniqueIdentifier :: JObject -> JUniqueIdentifier;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.UniqueIdentifier.RefinedUniqueIdentifier.MakeUniqueName" 
+    private jUniqueIdentifierFromName :: String -> JUniqueIdentifier;
+foreign unsafe import jvm "method isUniqueName"
+    private isJUniqueName :: JUniqueIdentifier -> Boolean;
+foreign unsafe import jvm "method getUniqueName"
+    private jGetUniqueName :: JUniqueIdentifier -> String;
+
+// support inputable / outputable type classes
+instance Outputable (UniqueIdentifier a) where
+    output = outputUniqueIdentifier;
+    ;
+
+instance Inputable (UniqueIdentifier a) where
+    input = inputUniqueIdentifier;
+    ;
+
+//TODO: make this private later (once the refinement code calls output instead of this method)...
+outputUniqueIdentifier :: UniqueIdentifier a -> JObject;
+public outputUniqueIdentifier !uniqueId = output (uniqueIdentifierToJUniqueIdentifier uniqueId);
+
+/**
+ * Converts from {@link typeConstructor = UniqueIdentifier@} to {@link JUniqueIdentifier@}
+ */
+uniqueIdentifierToJUniqueIdentifier :: UniqueIdentifier a -> JUniqueIdentifier;
+public uniqueIdentifierToJUniqueIdentifier !uniqueId = 
+    jUniqueIdentifierFromName uniqueId.UniqueName.name;
+    
+inputUniqueIdentifier :: JObject -> UniqueIdentifier a;
+private inputUniqueIdentifier !uniqueId = jUniqueIdentifierToUniqueIdentifier (jObjectToJUniqueIdentifier uniqueId);
+
+/**
+ * Converts from {@link JUniqueIdentifier@} to {@link typeConstructor = UniqueIdentifier@} 
+ */
+jUniqueIdentifierToUniqueIdentifier :: JUniqueIdentifier -> UniqueIdentifier a;
+public jUniqueIdentifierToUniqueIdentifier !jUniqueIdentifier =
+    if (isJUniqueName jUniqueIdentifier) then
+        makeUniqueIdentifierByName (jGetUniqueName jUniqueIdentifier)
+    else
+        error "Unexpected type of unique identifier";
+
+
+/**
+ * Serialize and deserialize a {@code UniqueIdentifier@} 
+ */
+
+instance XmlAttributeInputable (UniqueIdentifier a) where
+    fromXmlAttribute = inputUniqueIdentifierXmlAttribute;
+    ;
+
+instance XmlInputable (UniqueIdentifier a) where
+    fromXml = inputUniqueIdentifierXml;
+    ;
+    
+inputUniqueIdentifierXml :: (Either XmlAttribute XmlNode) -> UniqueIdentifier a;
+private inputUniqueIdentifierXml attributeOrNode =
+    XmlBuilder.inputFromXmlAttributeInputable attributeOrNode;
+
+inputUniqueIdentifierXmlAttribute :: XmlAttribute -> UniqueIdentifier a;
+private inputUniqueIdentifierXmlAttribute attribute =
+     makeUniqueIdentifierByName (XmlBuilder.attributeValue attribute);
+
+
+instance XmlAttributeOutputable (UniqueIdentifier a) where
+    toXmlAttribute = outputUniqueIdentifierXmlAttribute;
+    ;
+
+instance XmlOutputable (UniqueIdentifier a) where
+    toXml = outputUniqueIdentifierXml;
+    ;
+    
+outputUniqueIdentifierXml :: String -> UniqueIdentifier a -> (Either XmlAttribute XmlNode);
+private outputUniqueIdentifierXml name value =
+    XmlBuilder.outputFromXmlAttributeOutputable name value;
+
+outputUniqueIdentifierXmlAttribute :: String -> UniqueIdentifier a -> XmlAttribute;
+private outputUniqueIdentifierXmlAttribute attrName uniqueIdentifier =
+     toXmlAttribute attrName (getUniqueName uniqueIdentifier);
+
+
+/** 
+ * Type class used by types with a display name and a unique names.
+ */  
+public class UniquelyNamedItem a where
+    public getDisplayName :: a -> String;
+    public getUniqueIdentifier :: a -> UniqueIdentifier a;
+    ; 
+
+/**
+ * Returns {@link True@} if both objects have the same unique ID.
+ */
+equalUniqueIdentifiers :: UniquelyNamedItem a => a -> a -> Boolean;
+public equalUniqueIdentifiers !ndf1 !ndf2 = 
+    (getUniqueIdentifier ndf1) == (getUniqueIdentifier ndf2);
+
+findMatchingUniquelyNamedItemById :: UniquelyNamedItem a => [a] -> UniqueIdentifier a -> Maybe a;
+public findMatchingUniquelyNamedItemById !items id =
+    case items of
+    [] -> Nothing;
+    item:restOfItems -> 
+        if (getUniqueIdentifier item) == id then
+            Just item
+        else
+            findMatchingUniquelyNamedItemById restOfItems id
+        ;
+    ;

@@ -1,0 +1,364 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * XmlBuilder_Tests.cal
+ * Created: June 12, 2007
+ * By: Tom Haggie
+ */
+
+/**
+ * Tests for the {@link module = XmlBuilder@} module. 
+ * 
+ * @author Tom Haggie
+ */
+
+module Cal.Test.Utilities.XmlBuilder_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Double, Either, Int, Integer, Long, String;
+    dataConstructor = Just, Left, Nothing, False, Right, True;
+    function = isEmpty, not, assert, error;
+    ;
+import Cal.Graphics.Color using
+    typeConstructor = Color;
+    ;
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+import Cal.Utilities.Range using
+    typeConstructor = Range;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeConstructor = XmlAttribute, XmlNode;
+    function =
+        elementAttributeByName, elementChildElementByName,
+        elementChildElements, fromXml, inputFromXmlElementInputable,
+        makeXmlAttribute, makeXmlAttributeWithNamespace, makeXmlComment,
+        makeXmlDocument, makeXmlElement, makeXmlNamespace,
+        makeXmlProcessingInstruction, toXml, toXmlElement, xmlDocumentToString,
+        xmlElementToString;
+    typeClass = XmlElementInputable, XmlInputable, XmlOutputable;
+    ;
+
+import Cal.Core.Record using
+    typeConstructor = Dictionary;
+    function =
+        unsafeBuildList, unsafeBuildRecord, fieldNames, strictRecord, toTuple2,
+        unsafeBuildRecordFromList, unsafeBuildListFromRecord;
+    ;
+
+import Cal.Core.Debug;
+
+import Cal.Collections.List;
+
+import Cal.Core.String;
+
+import Cal.Utilities.QuickCheck using
+    typeClass = Arbitrary;
+    typeConstructor = Gen, Property, Result;
+    function = 
+        arbitrary, classify, coarbitrary, forAll, generate, implies, makeChooseOneOfGen, makeDefaultGenParams, makeGen, 
+        mapGen, quickCheck, summarize, testResults, defaultConfig;
+    ; 
+
+
+sampleBoolean1 = True;
+sampleBoolean2 = False;
+
+sampleInt1 = 0 :: Int;
+sampleInt2 = 1 :: Int;
+sampleInt3 = -1;
+sampleInt4 = Prelude.minBound;
+sampleInt5 = Prelude.maxBound;
+
+sampleInteger1 = 0;
+sampleInteger2 = 1 :: Integer;
+sampleInteger3 = -1;
+
+sampleLong1 = 0;
+sampleLong2 = 1 :: Long;
+sampleLong3 = -1;
+sampleLong4 = Prelude.minBound;
+sampleLong5 = Prelude.maxBound;
+
+sampleString1 = "";
+sampleString2 = "simple";
+sampleString3 = "with space";
+sampleString4 = "!@#$%^&*()_-+=~`{}[]|\\;:\"'<,>./?";
+    
+sampleDouble1 = 0.0;
+sampleDouble2 = 1.0 :: Double;
+sampleDouble3 = -1.0;
+
+sampleColor1 = Color.red;
+sampleColor2 = Color.white;
+sampleColor3 = Color.blue;
+
+sampleTime1 :: Time;
+sampleTime1 = Time.now;
+
+sampleRange1 = Range.makeIsLessThanRange sampleInt1;
+sampleRange2 = Range.makeIsLessThanEqualsRange sampleInt1;
+sampleRange3 = Range.makeIsGreaterThanEqualsRange sampleInt1;
+sampleRange4 = Range.makeIsGreaterThanRange sampleInt1;
+sampleRange5 = Range.makeBetweenIncludingEndpointsRange sampleInt1 sampleInt2;
+sampleRange6 = Range.makeBetweenIncludingLeftEndpointRange sampleInt1 sampleInt2;
+sampleRange7 = Range.makeBetweenIncludingRightEndpointRange sampleInt1 sampleInt2;
+sampleRange8 = Range.makeBetweenExcludingEndpointsRange sampleInt1 sampleInt2;
+sampleRange9 = Range.makeEntireRange;
+
+sampleList1 = [sampleBoolean1, sampleBoolean2];
+sampleList2 = [sampleInt1, sampleInt2, sampleInt3, sampleInt4, sampleInt5];
+sampleList3 = [sampleString1, sampleString2, sampleString3, sampleString4];
+sampleList4 = [sampleDouble1, sampleDouble2, sampleDouble3];
+sampleList5 = [sampleColor1, sampleColor2, sampleColor3];
+sampleList6 = [[sampleString1, sampleString2], [sampleString3, sampleString4]];
+sampleList7 = [sampleRange1, sampleRange2, sampleRange3, sampleRange4, sampleRange5, sampleRange6, sampleRange7, sampleRange8, sampleRange9];
+sampleList8 = [sampleTime1];
+sampleList9 = [sampleInteger1, sampleInteger2, sampleInteger3];
+sampleList10 = [sampleLong1, sampleLong2, sampleLong3, sampleLong4, sampleLong5];
+sampleList11 = [sampleRecord12, sampleRecord13];
+
+//sampleRecord = { 
+sampleRecord1 = {bool=sampleBoolean2};
+sampleRecord2 = {int=sampleInt2};
+sampleRecord3 = {integer=sampleInteger2};
+sampleRecord4 = {long=sampleLong2};
+sampleRecord5 = {string=sampleString2};
+sampleRecord6 = {double=sampleDouble2};
+sampleRecord7 = {color=sampleColor2};
+sampleRecord8 = {time=sampleTime1};
+sampleRecord9 = {range=sampleRange2};
+sampleRecord10 = {list=sampleList2};
+sampleRecord11 = (
+    sampleBoolean2, 
+    sampleInt2, 
+    sampleInteger2,
+    sampleLong2, 
+    sampleString2, 
+    sampleDouble2, 
+    sampleColor2, 
+    sampleTime1, 
+    sampleRange2, 
+    sampleList11
+);
+
+genRecord :: Boolean -> Int -> Integer -> Long -> String -> Double -> Color -> Time -> (Range Int) -> [Int] -> {boolTest :: Boolean, colorTest :: Color, doubleTest :: Double, intTest :: Int, integerTest :: Integer, listTest :: [Int], longTest :: Long, rangeTest :: (Range Int), stringTest :: String, timeTest :: Time};
+genRecord boolVal intVal integerVal longVal stringVal doubleVal colorVal timeVal rangeVal listVal =
+    {
+    boolTest=boolVal,
+    intTest=intVal,
+    integerTest=integerVal,
+    longTest=longVal,
+    stringTest=stringVal,
+    doubleTest=doubleVal,
+    colorTest=colorVal,
+    timeTest=timeVal,
+    rangeTest=rangeVal,
+    listTest=listVal
+    };
+
+sampleRecord12 = 
+    genRecord sampleBoolean2 sampleInt2 sampleInteger2 sampleLong2 sampleString2 sampleDouble2 sampleColor2 sampleTime1 sampleRange2 sampleList2;
+
+sampleRecord13 = 
+    genRecord sampleBoolean1 sampleInt1 sampleInteger1 sampleLong1 sampleString1 sampleDouble1 sampleColor1 sampleTime1 sampleRange1 sampleList2;
+
+recordOfAllRecords = {
+    boolRecord=sampleRecord1,
+    intRecord=sampleRecord2,
+    integerRecord=sampleRecord3,
+    longRecord=sampleRecord4,
+    stringRecord=sampleRecord5,
+    doubleRecord=sampleRecord6,
+    colorRecord=sampleRecord7,
+    timeRecord=sampleRecord8,
+    rangeRecord=sampleRecord9,
+    listRecord=sampleRecord10,
+    tupleRecord=sampleRecord11,
+    similarRecord1=sampleRecord12,
+    similarRecord2=sampleRecord13
+}; 
+    
+validate value = 
+    let
+        attributeOrNode = toXml "n" value;
+        value2 = fromXml attributeOrNode;
+    in
+        value == value2;
+
+validateList values =
+    let
+        validateListInternal =
+            case values of
+            [] -> True;
+            h : t -> (validate h) && validateList t;
+            ;
+    in
+        validateListInternal && (validate values);
+    
+// Can't use the normal validate for NaN as NaN != NaN
+validateNaN =
+    let
+        value = Prelude.notANumber;
+        attributeOrNode = toXml "n" value;
+        value2 = fromXml attributeOrNode;
+    in
+        Prelude.isNotANumber value2;
+
+/**
+ * Can't use the normal validate as we only support XmlOutput not XmlInput
+ * So we just get the length of the xml string so we force all the records
+ * to be serialized to an xml string. 
+ */
+validateRecords = 
+    let
+        element = toXmlElement "RecordOfAllRecords" recordOfAllRecords;
+        text = xmlElementToString element;
+    in
+        not (isEmpty text);
+
+/**
+ * quickCheck property for testing the cal implementations of fromXml and toXml
+ * convert a record to xml and than back again and test equality
+ */
+prop_toFromXmlRecord :: {x::Double, y::Int, #4::Int, #5::{x::Int}} -> Boolean;
+prop_toFromXmlRecord r = 
+    (fromXml $ toXml "x" r) == r;
+
+
+public unitTests = 
+    Prelude.assert 
+    (
+        (validateList sampleList1) &&
+        (validateList sampleList2) &&
+        (validateList sampleList3) &&
+        (validateList sampleList4) &&
+        (validateList sampleList5) &&
+        (validateList sampleList6) &&
+        (validateList sampleList7) &&
+        (validateList sampleList8) &&
+        (validateList sampleList9) &&
+        (validateList sampleList10) &&
+        // sampleList11 is of records so can't be validated (see validateRecords) 
+        validateRecords &&
+        validateNaN &&
+        (quickCheck prop_toFromXmlRecord)
+    );
+
+
+simpleXml :: String;
+simpleXml = 
+    xmlDocumentToString $
+        makeXmlDocument [
+             makeXmlComment "this is an XML comment",
+             makeXmlProcessingInstruction "foo" "",
+             makeXmlProcessingInstruction "bar" "some value here",
+             makeXmlElement Nothing "root" [] [
+                 makeXmlElement Nothing "a" [] [
+                      makeXmlElement Nothing "a1" [] [], 
+                      makeXmlElement Nothing "a2" [] []
+                     ],
+                 makeXmlElement Nothing "b" [] [
+                     ],
+                 makeXmlElement Nothing "c" [] [
+                      makeXmlElement Nothing "c1" [] []
+                     ]
+                ]
+            ];
+
+// Test some elements with namespaces (with no prefixes).
+namespaceTest :: String;
+namespaceTest = 
+    xmlDocumentToString $
+        makeXmlDocument [
+             makeXmlElement (Just $ makeXmlNamespace "" "1234567890") "root" [] [
+                 makeXmlElement (Just $ makeXmlNamespace "" "abcdefghijklmnopqrstuvwxyz") "a" [] [
+                      makeXmlElement (Just $ makeXmlNamespace "" "1234567890") "a1" [] [], 
+                      makeXmlElement Nothing "a2" [] []
+                     ],
+                 makeXmlElement (Just $ makeXmlNamespace "" "1234567890") "b" [] [
+                     ],
+                 makeXmlElement Nothing "c" [] [
+                      makeXmlElement Nothing "c1" [] []
+                     ]
+                ]
+            ];
+
+// Test some elements and attributes with namespaces (with prefixes).
+namespacePrefixTest :: String;
+namespacePrefixTest = 
+    xmlDocumentToString $
+        makeXmlDocument [
+             makeXmlElement (Just $ makeXmlNamespace "x" "1234567890") "root" [] [
+                 makeXmlElement (Just $ makeXmlNamespace "x" "abcdefghijklmnopqrstuvwxyz") "a" [] [
+                      makeXmlElement (Just $ makeXmlNamespace "x" "1234567890") "a1" [] [], 
+                      makeXmlElement Nothing "a2" [] []
+                     ],
+                 makeXmlElement (Just $ makeXmlNamespace "x" "1234567890") "b" [] [
+                     ],
+                 makeXmlElement Nothing "c" [] [
+                      makeXmlElement Nothing "c1" [] []
+                     ],
+                 makeXmlElement Nothing "d" [
+                     makeXmlAttribute "id" "555",
+                     makeXmlAttributeWithNamespace (makeXmlNamespace "x" "1234567890") "color" "green",
+                     makeXmlAttributeWithNamespace (makeXmlNamespace "y" "jjjjjjjjjjjjjjjjjjj") "size" "12"
+                     ] [
+                      makeXmlElement Nothing "d1" [] []
+                     ]
+                ]
+            ];
+
+// Test creating an element with duplicate attriute names.
+// This should throw an error when run.
+dupAttr1 :: XmlNode;
+dupAttr1 = makeXmlElement Nothing "test" 
+                         [makeXmlAttribute "id" "555", 
+                          makeXmlAttribute "id" "111"] 
+                         [];
+
+// Test creating an element with duplicate attriute name/URIs (even though the namespace prefixes are different).
+// This should throw an error when run.
+dupAttr2 :: XmlNode;
+dupAttr2 = makeXmlElement Nothing "test2" 
+                          [makeXmlAttributeWithNamespace (makeXmlNamespace "x" "1234567890") "id" "555", 
+                           makeXmlAttributeWithNamespace (makeXmlNamespace "y" "1234567890") "id" "111"] 
+                          [];
+        
+
+public testModule =
+    assert unitTests
+    || error "Problem with XmlBuilder_Tests testModule"
+    ;
+

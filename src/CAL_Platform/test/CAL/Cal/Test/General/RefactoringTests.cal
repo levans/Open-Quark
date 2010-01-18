@@ -1,0 +1,240 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * RefactoringTests.cal
+ * Creation date: Jun 30, 2004.
+ * By: Iulian Radu
+ */
+
+/*
+ * This is a test module for refactoring features. 
+
+ * Currently it contains only test expressions for Rename SC operation. The comments for
+ * each expression describe the effects of the following renamings:
+ *     "another" to "r"
+ *     "equalsNewType" to "whatever"
+ *     "foreignSC" to "foreignSCRenamed"
+ *     (in module M1) "rac1" to "rac1Renamed"
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Test.General.RefactoringTests;
+
+import Cal.Core.Prelude;
+import Cal.Test.General.M1 using
+    function = rac1;
+ // function = rac1Renamed
+    ;
+
+andAB :: Prelude.Boolean -> Prelude.Boolean -> Prelude.Boolean;
+public andAB a b = Prelude.and a another;
+
+another :: Prelude.Boolean;
+public another = Prelude.True;
+
+nothing :: (Prelude.Boolean -> Prelude.Int) -> Prelude.Boolean -> Prelude.Int;
+public nothing r b1 = if (another) then (r (Prelude.and another b1)) else (r Prelude.True);  
+    // nothing r2 b1 = if (r) then (r2 (Prelude.and r b1)) else (r2 Prelude.True);  
+
+public conflictLet =
+    let r = 1.0;            
+     // r3 = 1.0;
+        r2 :: Prelude.Double;
+        r2 = r + 1;         
+     // r2 = r3 + 1
+    in
+        let 
+            r :: Prelude.Boolean;
+        //  r4 :: Prelude.Boolean;
+            r = Prelude.True;  
+        //  r4 = Prelude.True;
+            r3 = 2.0;
+        in
+            Prelude.and another r;  
+         // Prelude.and r r4
+
+public conflictLet2 =
+    let r = 1.0;        
+     // r2 = 1.0;
+    in
+        Prelude.and another  
+     // Prelude.and r
+        (let 
+            another = r;         
+         // another = r2
+         in another == (2.0 + r));  
+         // another == (2.0 + r2)
+
+testLambdaConflict :: Prelude.Boolean;
+public testLambdaConflict = (\ r -> Prelude.and another r) Prelude.True;  
+                            // r2 -> Prelude.and r r2) Prelude.True
+
+something :: Prelude.Boolean -> Prelude.Boolean;
+public something r = Prelude.and another (let a = 3.0; in r); 
+             // r2 = Prelude.and r (let a = 3.0; in r2);
+
+data public NewType =
+    public NewTypeC1 |
+    public NewTypeC2;
+
+instance Prelude.Eq NewType where
+    equals = equalsNewType;
+          // whatever
+    notEquals = notEqualsNewType;
+    ;
+
+equalsNewType :: NewType -> NewType -> Prelude.Boolean;
+// whatever :: NewType -> ...
+private equalsNewType a b = 
+     // whatever a b =
+    case a of
+    NewTypeC1 -> case b of
+        NewTypeC1 -> Prelude.True;
+        _ -> Prelude.False;
+        ;
+    NewTypeC2 -> case b of
+        NewTypeC2 -> Prelude.True;
+        _ -> Prelude.False;
+        ;
+    ;
+
+notEqualsNewType :: NewType -> NewType -> Prelude.Boolean;
+private notEqualsNewType a b = Prelude.not (equalsNewType a b);
+                            // Prelude.not (whatever a b);
+
+andNewTypeTest :: NewType -> NewType -> Prelude.Boolean;
+private andNewTypeTest a b = Prelude.and (equalsNewType a b) (equalsNewType a b);
+                         //  Prelude.and (whatever a b) (whatever a b);
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.RefactoringTests.Cast.intToShort"        
+    public foreignSC :: Prelude.Int -> Prelude.Short;
+        // foreignSCRenamed
+
+
+// Renaming "equalsNewType" to "whatever" should not cause conflict
+private conflictTest0 =
+    let
+        whatever = 1;
+    in
+        2.0;
+
+// Renaming equalsNewType to whatever should cause conflict with local var whatever=1
+private conflictTest1 =
+  let
+    whatever = 1;
+ // 
+  in
+    Prelude.not (equalsNewType NewTypeC1 NewTypeC1);
+
+// Renaming equalsNewType to whatever should cause conflict with local var whatever=True, and whatever=1
+private conflictTest2 =
+  let
+    whatever = 1.0;
+  in
+    Prelude.and 
+    (whatever == 1.0)
+    (let
+       whatever = Prelude.True;
+     in
+       if (whatever) then (equalsNewType NewTypeC1 NewTypeC2) else Prelude.False)
+  ;
+
+// Renaming equalsNewTYpe to whatever should cause conflict with argument whatever
+private conflictTest3 whatever =
+  equalsNewType whatever;
+
+// Renaming equalsNewType to whatever should cause conflict with case pattern whatever
+private conflictTest4 x =
+  case x of
+  Prelude.Just whatever -> equalsNewType NewTypeC1 NewTypeC1;
+  _ -> Prelude.False;
+  ;
+
+private conflict_recordCase1 =
+    case {a = 1.0, b = 2.0, c = 3.0} of
+        {r | c = ccc} -> r.a + ccc + (if (another) then 1.0 else 2.0); 
+     // {r2 | c = ccc} -> r2.a + ccc + (if (r) then 1.0 else 2.0);
+    ;
+
+private conflict_recordCase2 =
+    case {a = 1.0, b = 2.0, c = (if (another) then 3.0 else 0.0)} of 
+                              // if (r) then 3.0...
+        {x | c = r} -> r + (if (another) then 1.0 else 2.0); 
+      //{x | c = r2} -> r2 + (if (r) then 1.0 else 2.0);
+    ;
+
+private conflict_recordCase3 =
+    case {a = 1.0, b = 2.0, c = (if (another) then 3.0 else 0.0)} of 
+                            //  (if (r) then ...
+        {r2 | c = r} -> r + (if (another) then 1.0 else 2.0); 
+     // {r2 | c = r3} -> r3 + (if (r) then 1.0 else 2.0);
+    ;
+
+private foreignTest = foreignSC (let foreignSC = 1; in foreignSC);
+                   // foreignSCRenamed (let foreignSC = 1; in foreignSC);
+
+private imported1 = (rac1 "1") + (M1.rac1 "2");
+              //    (rac1Renamed "1") + (M1.rac1Renamed "2");
+private imported2 rac1 = M1.rac1 rac1;
+               // rac1 = M1.rac1Renamed rac1;
+private imported3 rac1Renamed = rac1 rac1Renamed;
+               // rac1Renamed2 = rac1Renamed rac1Renamed2
+private imported4 rac1Renamed = rac1;
+               // rac1Renamed2 = rac1Renamed;
+
+// Renaming any function to "arg1" should cause a conflict.
+data public RefactoringTestType1 =
+    public RefactoringTestType1C1 
+        arg1 :: !Prelude.Double
+        arg2 :: !Prelude.Double |
+    public RefactoringTestType1C2
+        arg1 :: !Prelude.Double
+        arg2 :: !Prelude.Double
+    ;
+
+// Rename conflictDouble to arg1, then undo.  Unpunning is not undone.
+public usesRefactoringTestType1 arg =
+    case arg of
+    RefactoringTestType1C1 {arg1} -> arg1 + conflictDouble;
+    RefactoringTestType1C2 {arg2 = foo} -> foo + conflictDouble;
+    ;
+
+//  Rename conflictDouble to arg1, then undo.  Unpunning of arg1 is not undone.
+private conflict_recordCase4 =
+    case {arg1 = 2.0} of 
+    {x | arg1} -> arg1 + conflictDouble; 
+    ;
+
+// Renaming conflictDouble to "arg1" should case a conflict with the first case alt argument in usesRefactoringTestType1
+// Renaming conflictDouble to "foo" should case a conflict with the second case alt pattern var in usesRefactoringTestType1
+private conflictDouble = 2.0;

@@ -1,0 +1,996 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * String.cal
+ * Created: Oct 14, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines many useful functions for the {@link Prelude.String@} type. Note that the {@code String@} type itself is defined
+ * in the {@link Prelude@} module due to the fact that it is supported via built-in notation for {@code String@} literals.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Core.String;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Boolean, Char, Int, Maybe, Ordering, String;
+    dataConstructor = False, True, Nothing, Just, LT, EQ, GT;
+    function = 
+        assert, compare, concat, concatMap, eager, empty, isEmpty, not;
+    ;
+import Cal.Collections.List;
+import Cal.Core.Char;
+import Cal.Utilities.Locale using
+    typeConstructor = Locale;
+    ;
+//we want to maintain the generality and functional independence of the String module.
+//Please do not add more imports.
+    
+
+/**
+ * Converts the string to a list of characters.
+ * 
+ * @arg stringValue the string to be converted.
+ * @return a list of characters in the string.
+ */
+toList :: String -> [Char];  
+public toList !stringValue =
+    let
+        stringToCharHelper :: String -> Int -> Int -> [Char];
+        stringToCharHelper !s !i !len = 
+            if i >= len then
+                []
+            else
+                (subscript s i) : (stringToCharHelper s (i + 1) len);
+    in
+        stringToCharHelper stringValue 0 (length stringValue);
+
+/**
+ * Converts the list of characters to a string.
+ * 
+ * @arg listOfChars the list of characters.
+ * @return a string constructed from the list of characters.
+ */
+fromList :: [Char] -> String;
+public fromList !listOfChars = 
+    Prelude.charactersToString listOfChars;
+
+/**
+ * Converts a single character to a string of length 1 holding that character.
+ * 
+ *  @arg char the character to represent as a {@code String@}.
+ *  @return a string of length 1 holding the character.
+ */
+foreign unsafe import jvm "static method java.lang.String.valueOf"
+    public fromChar :: Char -> String;
+
+/**
+ * Converts all of the characters in the specified string to upper case using
+ * the rules of the default locale {@link Locale.defaultLocale@}.
+ * 
+ * Case mapping is based on the Unicode Standard. Note that the returned string
+ * may not have the same length as the original string.
+ * 
+ * @arg stringValue the string to be converted.
+ * @return the string converted to uppercase.
+ * 
+ * @see Locale.defaultLocale
+ */
+foreign unsafe import jvm "method toUpperCase" public toUpperCase :: String -> String;
+
+/**
+ * Converts all of the characters in the specified string to upper case using
+ * the rules of the specified locale.
+ * 
+ * Case mapping is based on the Unicode Standard. Note that the returned string
+ * may not have the same length as the original string.
+ * 
+ * @arg stringValue the string to be converted.
+ * @arg locale the locale whose rules are to be used.
+ * @return the string converted to uppercase.
+ */
+foreign unsafe import jvm "method toUpperCase" public toUpperCaseInLocale :: String -> Locale -> String;
+
+/* @example */
+toUpperCaseExamples :: Boolean;
+private toUpperCaseExamples =
+    assert (toUpperCase "this is a test" == "THIS IS A TEST")
+    && assert (toUpperCase "" == "")
+    ;
+
+/**
+ * Converts all of the characters in the specified string to lower case using
+ * the rules of the default locale {@link Locale.defaultLocale@}.
+ * 
+ * Case mapping is based on the Unicode Standard. Note that the returned string
+ * may not have the same length as the original string.
+ * 
+ * @arg stringValue the string to be converted.
+ * @return the string converted to lowercase.
+ * 
+ * @see Locale.defaultLocale
+ */
+foreign unsafe import jvm "method toLowerCase" public toLowerCase :: String -> String;
+
+/**
+ * Converts all of the characters in the specified string to lower case using
+ * the rules of the specified locale.
+ * 
+ * Case mapping is based on the Unicode Standard. Note that the returned string
+ * may not have the same length as the original string.
+ * 
+ * @arg stringValue the string to be converted.
+ * @arg locale the locale whose rules are to be used.
+ * @return the string converted to lowercase.
+ */
+foreign unsafe import jvm "method toLowerCase" public toLowerCaseInLocale :: String -> Locale -> String;
+
+/* @example */
+toLowerCaseExamples :: Boolean;
+private toLowerCaseExamples =
+    assert (toLowerCase "oNe Two and THREE" == "one two and three")
+    && assert (toLowerCase "" == "") 
+    ;
+
+/**
+ * Returns a new string that is a substring of the specified string. 
+ * The substring begins at the specified {@code beginIndex@} and extends to the character at index {@code endIndex - 1@}. 
+ * Thus the length of the substring is {@code endIndex-beginIndex@}. 
+ * 
+ * @arg originalString the string whose substring is to be returned.
+ * @arg beginIndex the beginning index, inclusive.
+ * @arg endIndex the ending index, exclusive.
+ * @return the specified substring.
+ */
+foreign unsafe import jvm "method substring"
+    public substring :: String -> Int -> Int -> String;
+
+/**
+ * Replaces each substring of the specified string that matches the given regular expression with the given replacement. 
+ * 
+ * @arg originalString the original string.
+ * @arg regex the regular expression to which the original string is to be matched.
+ * @arg replacementString the replacement string.
+ * @return the resulting string.
+ */
+foreign unsafe import jvm "method replaceAll"
+    public replaceAllString :: String -> String -> String -> String;
+
+/**
+ * Returns whether the strings are lexographically equal, ignoring case differences.
+ * This function returns {@link True@} if the two strings {@code x@} and {@code y@} are
+ * of the same length, and each corresponding pair of characters in the two strings satisfy
+ * the following:
+ * 
+ * Two characters {@code a@} and {@code b@} are considered the same, ignoring case if at least one of the following is true:
+ * {@unorderedList
+ * {@item {@code a == b@}@}
+ * {@item {@code {@link toLowerCase@} a == toLowerCase b@}@}
+ * {@item {@code {@link toUpperCase@} a == toUpperCase b@}@}
+ * @}
+ * 
+ * @arg x the first string to compare.
+ * @arg y the second string to compare.
+ * @return {@link True@} if the argument strings are equal, ignoring case; {@link False@} otherwise.
+ * 
+ */
+//todoBI     
+//@see equals, toLowerCase, toUpperCase    
+foreign unsafe import jvm "method equalsIgnoreCase"
+    public equalsIgnoreCase :: String -> String -> Boolean;
+    
+/**
+ * Compares two strings lexographically, ignoring case differences.
+ * 
+ * @arg stringValue1 the first string to compare.
+ * @arg stringValue2 the second string to compare.
+ * @return {@link LT@}, {@link EQ@}, or {@link GT@} if {@code stringValue1@} is respectively less than, equal to, or greater
+ *         than {@code stringValue2@}, ignoring case.
+ */  
+compareIgnoreCase :: String -> String -> Ordering;
+public compareIgnoreCase !stringValue1 !stringValue2 =
+    Prelude.intToOrdering (stringValue1 `jCompareStringIgnoreCase` stringValue2);
+
+//may return values other than -1, 0, 1.
+foreign unsafe import jvm "method compareToIgnoreCase"
+    private jCompareStringIgnoreCase :: String -> String -> Int;
+      
+
+/* @example */
+compareStringsExamples :: Boolean;
+private compareStringsExamples =
+    assert (compare "aaabc" "aaAaa" == GT)
+    && assert (compare "A" "aa" == LT)
+    && assert (compare "abc" "abc" == EQ)
+    && assert (compare "" "abc" == LT)
+    && assert (compare "x" "" == GT)
+    && assert (compare "aaa" "aab" == LT)
+    && assert (compare "xy" "x" == GT)
+    && assert (compareIgnoreCase "abcDeF" "AbCdEF" == EQ)
+    && assert (compareIgnoreCase "aAAbc" "aaaaa" == GT)
+    && assert (compareIgnoreCase "" "abc" == LT) 
+    ;
+
+/**
+ * Finds the index of the first occurrence of {@code charToFind@} in {@code stringToSearch@} or -1 if the character does not occur.
+ * 
+ * @arg charToFind
+ * @arg stringToSearch
+ * @return the index of the first occurrence of {@code charToFind@} in {@code stringToSearch@} or -1 if the character does not occur.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.indexOf"
+    public indexOf :: Char -> String -> Int;
+    
+/**
+ * Finds the index of the first occurrence at index greater than or equal to {@code fromIndex@} of {@code charToFind@} in
+ * {@code stringToSearch@} or -1 if the character does not occur from {@code fromIndex@} onwards.
+ * 
+ * There are no invalid values of {@code fromIndex@}. {@code fromIndex < 0@} is taken as starting the search from the start of
+ * {@code stringToSearch@} while {@code fromIndex >= length stringToSearch@} always returns -1. 
+ * 
+ * @arg charToFind
+ * @arg fromIndex index to start searching from. 
+ * @arg stringToSearch
+ * @return the index of the first occurrence at index greater than or equal to {@code fromIndex@} of {@code charToFind@} in
+ *         {@code stringToSearch@} or -1 if the character does not occur from {@code fromIndex@} onwards.
+ */    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.indexOf"
+    public indexOfFrom :: Char -> Int -> String -> Int;    
+ 
+/**
+ * Finds the index of the first occurrence of {@code stringToFind@} in {@code stringToSearch@} or -1 if the {@code stringToFind@}
+ * does not occur.
+ * 
+ * @arg stringToFind
+ * @arg stringToSearch
+ * @return the index of the first occurrence of {@code stringToFind@} in {@code stringToSearch@} or -1 if the character does
+ *         not occur.
+ */    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.indexOf"
+    public indexOfString :: String -> String -> Int;
+ 
+/**
+ * Finds the index of the first occurrence at index greater than or equal to {@code fromIndex@} of {@code stringToFind@} in
+ * {@code stringToSearch@} or -1 if {@code stringToFind@} does not occur from {@code fromIndex@} onwards.
+ * 
+ * There are no invalid values of {@code fromIndex@}. {@code fromIndex < 0@} is taken as starting the search from the start of
+ * {@code stringToSearch@} while {@code fromIndex >= length stringToSearch@} always returns -1. 
+ * 
+ * @arg stringToFind
+ * @arg fromIndex index to start searching from. 
+ * @arg stringToSearch
+ * @return the index of the first occurrence at index greater than or equal to {@code fromIndex@} of {@code stringToFind@} in
+ *         {@code stringToSearch@} or -1 if {@code stringToFind@} does not occur from {@code fromIndex@} onwards.
+ */      
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.indexOf"
+    public indexOfStringFrom :: String -> Int -> String -> Int;   
+    
+    
+    
+/**
+ * Finds the index of the last occurrence of {@code charToFind@} in {@code stringToSearch@} or -1 if the character does not occur.
+ * 
+ * @arg charToFind
+ * @arg stringToSearch
+ * @return the index of the last occurrence of {@code charToFind@} in {@code stringToSearch@} or -1 if the character does not occur.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.lastIndexOf"
+    public lastIndexOf :: Char -> String -> Int;
+    
+/**
+ * Finds the index of the last occurrence at index less than or equal to {@code fromIndex@} of {@code charToFind@} in
+ * {@code stringToSearch@} or -1 if the character does not occur from {@code fromIndex@} and earlier.
+ * 
+ * There are no invalid values of {@code fromIndex@}. {@code fromIndex < 0@} always returns -1, and
+ * {@code fromIndex >= length stringToSearch@} is taken as starting the search from the last index of {@code stringToSearch@}.
+ * 
+ * @arg charToFind
+ * @arg fromIndex index to start searching from. 
+ * @arg stringToSearch
+ * @return the index of the last occurrence at index less than or equal to {@code fromIndex@} of {@code charToFind@} in
+ *         {@code stringToSearch@} or -1 if the character does not occur from {@code fromIndex@} and earlier.
+ */    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.lastIndexOf"
+    public lastIndexOfFrom :: Char -> Int -> String -> Int;    
+ 
+/**
+ * Finds the index of the last occurrence of {@code stringToFind@} in {@code stringToSearch@} or -1 if the {@code stringToFind@}
+ * does not occur.
+ * 
+ * @arg stringToFind
+ * @arg stringToSearch
+ * @return the index of the last occurrence of {@code stringToFind@} in {@code stringToSearch@} or -1 if the character does not occur.
+ */    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.lastIndexOf"
+    public lastIndexOfString :: String -> String -> Int;
+ 
+/**
+ * Finds the index of the last occurrence at index less than or equal to {@code fromIndex@} of {@code stringToFind@} in
+ * {@code stringToSearch@} or -1 if {@code stringToFind@} does not occur from {@code fromIndex@} and earlier.
+ * 
+ * There are no invalid values of {@code fromIndex@}. {@code fromIndex < 0@} always returns -1, and
+ * {@code fromIndex >= length stringToSearch@} is taken as starting the search from the last index of {@code stringToSearch@}.
+ * 
+ * @arg stringToFind
+ * @arg fromIndex index to start searching from. 
+ * @arg stringToSearch
+ * @return the index of the last occurrence at index less than or equal to {@code fromIndex@} of {@code stringToFind@} in
+ *         {@code stringToSearch@} or -1 if {@code stringToFind@} does not occur from {@code fromIndex@} and earlier.
+ */      
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.lastIndexOf"
+    public lastIndexOfStringFrom :: String -> Int -> String -> Int;
+        
+
+/**
+ * Trims leading and trailing whitespace from the string.
+ * 
+ * For this function, a whitespace is defined to be any character in the range {@code '\u0000'@}-{@code '\u0020'@}. 
+ * 
+ * @arg stringToTrim the string to be trimmed.
+ * @return a copy of {@code stringToTrim@} with leading and trailing whitespace removed.
+ */
+foreign unsafe import jvm "method trim" 
+    public trim :: String -> String;
+
+/* @example */
+trimExamples :: Boolean;
+private trimExamples =
+    assert (trim "   \n\n  \tone two \tthree\t\n\n" == "one two \tthree")
+    && assert (trim "   \n   \t   " == "")
+    && assert (trim "" == "") 
+    ;
+ 
+/**
+ * Returns whether {@code stringToTest@} starts with the specified prefix.
+ *
+ * @arg prefix
+ * @arg stringToTest the string to be tested for starting with {@code prefix@}. 
+ * @return {@link True@} if {@code stringToTest@} starts with the string {@code prefix@}.  
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.startsWith"
+    public startsWith :: String -> String -> Boolean;
+    
+/* @example */
+startsWithExamples :: Boolean;
+private startsWithExamples =
+    assert (startsWith "some" "sometimes")
+    && assert (not (startsWith "ome" "sometimes"))
+    && assert (not (startsWith "etc" ""))
+    && assert (startsWith "" "etc")
+    ;
+
+/**
+ * Returns whether {@code stringToTest@} starts with the specified prefix beginning at the specified offset index of
+ * {@code stringToTest@}. The result is {@link False@} if {@code offsetIndex@} is not a valid index into {@code stringToTest@}.
+ *
+ * @arg prefix
+ * @arg offsetIndex index into {@code stringToTest@} from which to start testing.
+ * @arg stringToTest the string to be tested for starting with {@code prefix@}. 
+ * @return {@link True@} if {@code stringToTest@} starts with the string {@code prefix@} beginning at the specified offset index.  
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.startsWith"
+    public startsWithFrom :: String -> Int -> String -> Boolean;
+
+/**
+ * Returns whether {@code stringToTest@} ends with the specified suffix.
+ * 
+ * @arg suffix 
+ * @arg stringToTest the string to be tested for ending with {@code suffix@}.  
+ * @return {@link True@} if {@code stringToTest@} ends with the string {@code suffix@}.  
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.endsWith"
+    public endsWith :: String -> String -> Boolean;
+    
+/* @example */
+endsWithExamples :: Boolean;
+private endsWithExamples =
+    assert (endsWith "" "what")
+    && assert (endsWith "ever" "forever")
+    && assert (not (endsWith "eve" "forever"))
+    ;
+
+/**
+ * Retrieves the character at the specified (0-based) position in the string
+ * 
+ * @arg string the string.
+ * @arg position the position of the character to be retrieved.
+ * @return the character at the specified position of the specified string.
+ */
+foreign unsafe import jvm "method charAt"
+    public subscript :: String -> Int -> Char;
+
+/**
+ * Returns the length of the string. The length is equal to the number of characters contained in the string.
+ * 
+ * @arg string the string whose length is to be returned.
+ * @return the length of the string.
+ */
+foreign unsafe import jvm "method length"
+    public length :: String -> Int;
+
+
+/**
+ * Breaks up the specified string where the separator text occurs.
+ * The substring pieces are returned (not including the separator characters).
+ * 
+ * @arg separator the separator.
+ * @arg stringValue the string to be split.
+ * @return a list of the substring pieces.
+ */
+splitString :: String -> String -> [String];
+public splitString !separator !stringValue = 
+    let
+        sepLength :: Int;
+        sepLength = length separator;
+        
+        sepPos :: Int;
+        sepPos = indexOfString separator stringValue;
+        
+        firstPart :: String;
+        firstPart = substring stringValue 0 sepPos;
+        
+        secondPart :: String;
+        secondPart = substring stringValue (sepPos + sepLength) (length stringValue);
+    in
+        if (sepPos < 0) then
+            [stringValue]
+        else
+            firstPart : splitString separator secondPart;
+
+
+/**
+ * Breaks up the specified string where any of the separators occur.
+ * The substring pieces are returned (not including the separator chars);
+ * the separators are matched in the order they are specified, e.g.:
+ *     {@code "what is this"@} split by {@code [" is", "i"]@} gives {@code ["what", " th", "s"]@}
+ * 
+ * @arg separators the list of separators.
+ * @arg stringValue the string to be split.
+ * @return a list of the substring pieces.
+ */
+multiSplitString :: [String] -> String -> [String];
+public multiSplitString !separators !stringValue =
+    let
+        // Breaks up the strings by applying each of the separators and concatenating the resulting lists
+        // Note: empty lists may be produced (ex: mssh [";"," "] ["hi  hi; "] = ["hi","","hi","",""])
+        multiSplitStringHelper :: [String] -> [String] -> [String];
+        multiSplitStringHelper !separators !strings = 
+            case separators of
+            [] -> strings;
+            fs : ss -> multiSplitStringHelper ss (concatMap (splitString fs) strings);
+            ;
+    in          
+        List.filter (not # isEmpty) (multiSplitStringHelper separators [stringValue]);
+
+
+     
+
+/**
+ * Breaks up a string into a list of strings, one for each line. Line breaks are determined by the {@code '\n'@} character.
+ * 
+ * e.g. {@code lines "this is\na test of\nthe lines function" = ["this is", "a test of", "the lines function"]@}
+ * 
+ * @arg string the string to be split. 
+ * @return a list of strings, one for each line in the specified string.
+ */
+lines :: String -> [String];
+public lines !string = 
+    splitString "\n" string;
+
+/* @example */
+linesExamples :: Boolean;
+private linesExamples =
+    assert (lines "A quick\nbrown fox jumped\nover " == ["A quick","brown fox jumped","over "])
+    && assert (lines "  A quick brown fox\n\n jumped\nover " == ["  A quick brown fox",""," jumped","over "])
+    && assert (lines "" == [""])
+    ;
+
+
+/**
+ * Breaks up a string into a list of strings, one for each word. Whitespace is eliminated. Here whitespace
+ * is defined to be one of the following characters: {@code ' '@}, {@code '\t'@}, {@code '\n'@}.
+ * 
+ * @arg string the string to be split.
+ * @return a list of strings, one for each word in the specified string.
+ */
+words :: String -> [String];
+public words !string = 
+    multiSplitString [" ","\t","\n"] string;
+
+/* @example */
+wordsExamples :: Boolean;
+private wordsExamples =
+    assert (words "\n\n\none   \t   \n two \n\n  three" == ["one","two","three"]) &&
+    assert (words "\n\n\none" == ["one"]) &&
+    assert (words "" == []) 
+    ;
+
+/**
+ * Converts a list of strings into a single string, where the original strings are now separated by newlines ({@code '\n'@}).
+ * 
+ * @arg listOfLines a list of strings to be concatenated into a single string, separated by newlines ({@code '\n'@}).
+ * @return a concatenation of the strings, separated by newlines ({@code '\n'@}).
+ */
+unlines :: [String] -> String;
+public unlines =
+    concatMap (\!line -> (line ++ "\n"));
+    
+/* @example */
+unlinesExamples :: Boolean;
+private unlinesExamples =
+    assert (unlines ["first", "second line", " third "] == "first\nsecond line\n third \n")
+    && assert (unlines [] == "") 
+    ;    
+
+/**
+ * Converts a list of words into a single string, where the original words are separated by spaces ({@code ' '@}).
+ * 
+ * @arg listOfWords a list of strings to be concatenated into a single string, separated by spaces ({@code ' '@}).
+ * @return a concatenation of the strings, separated by spaces.
+ */
+unwords :: [String] -> String;
+public unwords !listOfWords =
+    if isEmpty listOfWords then
+        empty 
+    else
+        List.foldRight1 (\!w !s -> (concat [w, " ", s])) listOfWords;
+
+/* @example */
+unwordsExamples :: Boolean;
+private unwordsExamples =
+    assert (unwords ["what", "is", "this"] == "what is this")
+    && assert (unwords [] == "")
+    ;
+
+
+/**
+ * Replaces any sequence of whitespace characters with a single space. Here the definition of whitespace follows that
+ * of the {@link Char.isWhitespace@} function.
+ * 
+ * @arg inputString the input string.
+ * @return a copy of the input string where any sequence of whitespace characters is replaced with a single space.
+ */
+normalizeWhitespace :: String -> String;
+public normalizeWhitespace !inputString = 
+    let 
+        normalizeHelper :: Int -> Int -> Boolean -> JStringBuilder -> String;
+        normalizeHelper !index !size !dropNextWhitespaceChar !result =
+            if (index < size) then
+                if Char.isWhitespace (subscript inputString index) then
+                    if dropNextWhitespaceChar then
+                        normalizeHelper (index + 1) size True result
+                    else
+                        normalizeHelper (index + 1) size True (stringBuilder_appendChar result ' ')
+                else
+                    normalizeHelper (index + 1) size False (stringBuilder_appendChar result (subscript inputString index))
+            else
+                stringBuilder_toString result;  
+    in
+        normalizeHelper 0 (length inputString) False stringBuilder_new0;
+    
+/* @example */
+normalizeWhitespaceExamples :: Boolean;
+normalizeWhitespaceExamples =
+    assert (normalizeWhitespace "   This    is  a\n sentence\t\t with  \tsome whitespace.\n" == " This is a sentence with some whitespace. ")
+    && assert (normalizeWhitespace "apple" == "apple")
+    && assert (normalizeWhitespace "" == "")
+    && assert (normalizeWhitespace " " == " ")
+    && assert (normalizeWhitespace "\t" == " ")
+    ;
+
+//////////////////////////////////////////////////////////////
+//CAL support for working with java.lang.StringBuilder
+
+
+data foreign unsafe import jvm "java.lang.StringBuilder" 
+    private JStringBuilder deriving Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "constructor"
+    private stringBuilder_new0 :: JStringBuilder;
+
+foreign unsafe import jvm "constructor"
+    private stringBuilder_new1 :: Int -> JStringBuilder;
+    
+foreign unsafe import jvm "constructor"
+    private stringBuilder_new2 :: String -> JStringBuilder;    
+    
+foreign unsafe import jvm "method append"
+    private stringBuilder_appendChar :: JStringBuilder -> Char -> JStringBuilder;  
+    
+foreign unsafe import jvm "method charAt"
+    private stringBuilder_charAt :: JStringBuilder -> Int -> Char; 
+    
+foreign unsafe import jvm "method setCharAt"
+    private stringBuilder_setCharAt :: JStringBuilder -> Int -> Char -> ();  
+    
+foreign unsafe import jvm "method toString"
+    private stringBuilder_toString :: JStringBuilder -> String; 
+    
+foreign unsafe import jvm "method reverse"
+    private stringBuilder_reverse :: JStringBuilder -> JStringBuilder;  
+ 
+/**
+ * Reverses the sequence of characters of a string. 
+ * {@code reverse@} is O(n) time where n is the length of the string.
+ * 
+ * @arg string to be reversed.
+ * @return a string containing the characters in the specified argument string, in reverse order.
+ */    
+reverse :: String -> String;    
+public reverse !string = (stringBuilder_toString # stringBuilder_reverse # stringBuilder_new2) string;  
+
+/* @example */
+reverseExamples :: Boolean;
+reverseExamples =
+    assert (reverse "happy" == "yppah")
+    && assert (reverse "" == "")
+    ;
+        
+
+/**
+ * {@code map mapFunction string@} applies the function {@code mapFunction@} to each character of {@code string@} and returns the
+ * resulting string.
+ * 
+ * @arg mapFunction
+ *        a function to be applied to each element of the argument string.
+ * @arg string
+ *        the string to which the {@code mapFunction@} is applied element-wise.
+ * @return the string obtained by applying {@code mapFunction@} to each element of string.
+ */
+map :: (Char -> Char) -> String -> String;
+public map mapFunction !string =
+    let        
+        size :: Int;
+        size = length string;
+          
+        mapHelper :: Int -> Int -> JStringBuilder -> String;
+        //note: we pass size as an explicit argument so it can be plinged.
+        mapHelper !index !size !result =
+            if index < size then                
+                mapHelper (index + 1) size (stringBuilder_appendChar result (mapFunction (subscript string index)))
+            else
+                stringBuilder_toString result;      
+   in
+        mapHelper 0 size (stringBuilder_new1 size); 
+   
+/* @example */
+mapExamples :: Boolean;
+mapExamples =
+    assert (map Char.toUpperCase "abc" == "ABC")  
+    && assert (map Char.toUpperCase "" == "")
+    && assert (map (Prelude.max 'e') "abefgfeba" == "eeefgfeee")
+    && assert (map (Prelude.id) "orange" == "orange")
+    ;
+
+/**
+ * This is the strict version of {@code foldLeft@}. It is used for efficiency reasons in certain situations. 
+ * 
+ * @arg foldFunction the function to be used in folding the string.
+ * @arg initialValue the initial value for the folding process.
+ * @arg string the string to be folded over.
+ * @return the single result obtained from folding {@code foldFunction@} over the string.
+ */
+//todoBI restore see tag
+//@see foldLeft, foldRight
+/*
+ * @implementation notice that the difference between the implementation of foldLeftStrict and
+ * foldLeft is just in the plinging.
+ */     
+foldLeftStrict ::  (a -> Char -> a) -> a -> String -> a;
+public foldLeftStrict foldFunction !initialValue !string =
+    let         
+        foldHelper !index !size !value =
+            if index < (size :: Int) then
+                foldHelper (index + 1) size (foldFunction value (eager (subscript string index)))
+            else
+                value;
+    in
+        foldHelper 0 (length string) initialValue; 
+    
+/* @example */
+foldLeftStrictExamples :: Boolean;
+foldLeftStrictExamples =
+    assert (foldLeftStrict Prelude.max 'a' "here is a sentence" == 't')
+    ;
+
+/**
+ * {@code filter keepIfTrueFunction string@} applies the predicate function to each character of the string, and returns
+ * the string of characters for which the predicate evaluates to {@link True@}.
+ * 
+ * @arg keepIfTrueFunction
+ *        a predicate which returns {@link True@} for characters that should be kept, and {@link False@} for characters that
+ *        should be dropped.
+ * @arg string
+ *        the string.
+ * @return the string of those characters that satisfy the given predicate.
+ */
+filter :: (Char -> Boolean) -> String -> String;
+public filter keepIfTrueFunction !string =
+    let
+        filterHelper :: Int -> Int -> JStringBuilder -> String;
+        filterHelper !index !size !result =
+            if index < size then
+                let
+                    value :: Char;                    
+                    value = eager (subscript string index);                                        
+                in
+                    if keepIfTrueFunction value then
+                        filterHelper (index + 1) size (stringBuilder_appendChar result value)
+                    else
+                        filterHelper (index + 1) size result
+            else    
+                stringBuilder_toString result;
+    in
+        filterHelper 0 (length string) stringBuilder_new0;
+             
+/* @example */
+filterExamples :: Boolean;
+filterExamples =
+    assert (filter Char.isUpperCase "Apple, Pear, Orange" == "APO")
+    //filter for vowels
+    && assert (filter (\c -> case Char.toLowerCase c of ('a' | 'e' | 'i' | 'o' | 'u') -> True; _ -> False;) "Apple, Pear, Orange" == "AeeaOae")
+    && assert (filter (Prelude.const False) "This is a sentence." == "")   
+    ;
+
+/**
+ * {@code takeWhile takeWhileTrueFunction string@} returns the longest prefix of the string for which {@code takeWhileTrueFunction@}
+ * is {@link True@} for each element.
+ * 
+ * e.g. {@code takeWhile {@link Char.isUpperCase@} "ABCdef" == "ABC"@}
+ * 
+ * @arg takeWhileTrueFunction a predicate to be applied to the elements of the string.
+ * @arg string the string from which elements are to be taken.
+ * @return the longest prefix of the string for which {@code takeWhileTrueFunction@} is {@link True@} 
+ *         for each element.
+ */
+takeWhile :: (Char -> Boolean) -> String -> String;
+public takeWhile takeWhileTrueFunction !string =
+    
+    case findIndex (not # takeWhileTrueFunction) string of
+    Nothing ->
+        string;
+    Just indexWherePredIsFirstFalse ->
+        substring string 0 indexWherePredIsFirstFalse;
+    ;
+    
+/* @example */
+takeWhileExamples :: Boolean;
+takeWhileExamples =
+    assert (takeWhile Char.isUpperCase "ABCdefGHI" == "ABC")
+    && assert (takeWhile Char.isUpperCase "ABCDEFGHI" == "ABCDEFGHI")
+    && assert (takeWhile Char.isUpperCase "abcDEF" == "")
+    && assert (takeWhile Char.isUpperCase "" == "")
+    ;    
+
+/**
+ * {@code dropWhile dropWhileTrueFunction string@} drops the longest prefix of the string for which {@code dropWhileTrueFunction@}
+ * is {@link True@} for each element.
+ * 
+ * e.g. {@code dropWhile {@link Char.isUpperCase@} "ABCdefGHI" == "defGHI"@}
+ * 
+ * @arg dropWhileTrueFunction a predicate to be applied to the elements of the string.
+ * @arg string the string from which elements are to be taken.
+ * @return the remainder of the string after having dropped the longest prefix in
+ *         which {@code dropWhileTrueFunction@} is {@link True@} for each element.
+ */
+dropWhile :: (Char -> Boolean) -> String -> String;
+public dropWhile dropWhileTrueFunction !string =
+    
+    case findIndex (not # dropWhileTrueFunction) string of
+    Nothing -> 
+        empty;
+        
+    Just indexWherePredIsFirstFalse ->
+        substring string indexWherePredIsFirstFalse (length string);
+    ;
+    
+/* @example */
+dropWhileExamples :: Boolean;
+dropWhileExamples =
+    assert (dropWhile Char.isUpperCase "ABCdefGHI" == "defGHI")
+    && assert (dropWhile Char.isUpperCase "ABCDEFGHI" == "")
+    && assert (dropWhile Char.isUpperCase "abcDEF" == "abcDEF")
+    && assert (dropWhile Char.isUpperCase "" == "")
+    ;
+           
+/**
+ * {@code find predicate string@} returns the first value of string for which the predicate function is {@link True@}, if there is
+ * one, or {@link Nothing@} otherwise.
+ * 
+ * e.g. {@code find {@link Char.isWhitespace@} "This is a sentence." == {@link Just@} ' '@}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the string.
+ * @arg string the string to be searched.
+ * @return the first value of string for which the predicate function is {@link True@}, if there is one, or {@link Nothing@}
+ *         otherwise.
+ */
+find :: (Char -> Boolean) -> String -> Maybe Char;
+public find predicate !string =
+    let 
+        findHelper :: Int -> Int -> Maybe Char;
+        findHelper !index !size =
+            if index >= (size :: Int) then
+                Nothing                        
+            else
+                let
+                    value :: Char;
+                    value = eager (subscript string index);
+                in
+                    if predicate value then
+                        Just value
+                    else
+                        findHelper (index + 1) size;                                 
+    in
+        findHelper 0 (length string);      
+    
+/* @example */
+findExamples :: Boolean;
+private findExamples =
+    assert (find Char.isUpperCase "abcDEFghi" == Just 'D')
+    && assert (find Char.isWhitespace "This is a sentence." == Just ' ')
+    && assert (find Char.isUpperCase "apple, orange, pear" == Nothing)
+    && assert (find Char.isUpperCase "" == Nothing)
+    && assert (find Char.isUpperCase "Apple" == Just 'A')
+    && assert (find Char.isLowerCase "APPLE, ORANGE, PEAr" == Just 'r')    
+    ;
+
+/**
+ * {@code findIndex predicate string@} returns the first index of string for which the predicate function is {@link True@}, if
+ * there is one, or {@link Nothing@} otherwise. The index is 0-based.
+ * 
+ * e.g. {@code findIndex {@link Char.isUpperCase@} "abcDEFghi" == {@link Just@} 3@}
+ * 
+ * @arg predicate a predicate to be applied to the elements of the string.
+ * @arg string the string to be searched.
+ * @return the first index of string for which the predicate function is {@link True@}, if there is one, or {@link Nothing@}
+ *         otherwise.
+ */
+//todoBI restore @see tag
+//* @see findIndices 
+findIndex :: (Char -> Boolean) -> String -> Maybe Int;
+public findIndex predicate !string =
+    let 
+        findIndexHelper :: Int -> Int -> Maybe Int;
+        findIndexHelper !index !size =
+            if index >= size then
+                Nothing                        
+            else if predicate (eager (subscript string index)) then
+                Just index
+            else
+                findIndexHelper (index + 1) size;                                 
+    in
+        findIndexHelper 0 (length string); 
+
+/* @example */
+findIndexExamples :: Boolean;
+private findIndexExamples =
+    assert (findIndex Char.isUpperCase "abcDEFghi" == Just 3)
+    && assert (findIndex Char.isWhitespace "This is a sentence." == Just 4)
+    && assert (findIndex Char.isUpperCase "apple, orange, pear" == Nothing)
+    && assert (findIndex Char.isUpperCase "" == Nothing)
+    && assert (findIndex Char.isUpperCase "Apple" == Just 0)
+    && assert (findIndex Char.isLowerCase "APPLE, ORANGE, PEAr" == Just 18)    
+    ;
+
+//////////////////////////////////////////////////////////////////////
+// Crystal Reports functions
+
+
+// Crystal Report's Basic syntax string functions
+
+/**
+ * Removes leading whitespace from a string. Here the definition of whitespace follows that
+ * of the {@link Char.isWhitespace@} function.
+ * 
+ * @arg string the string.
+ * @return the string with leading whitespace removed.
+ */
+trimLeft :: String -> String;
+public trimLeft !string = dropWhile Char.isWhitespace string;
+
+/**
+ * Removes trailing whitespace from a string. Here the definition of whitespace follows that
+ * of the {@link Char.isWhitespace@} function.
+ * 
+ * @arg string the string.
+ * @return the string with trailing whitespace removed.
+ */
+trimRight :: String -> String;
+public trimRight !string = (reverse # (dropWhile Char.isWhitespace) # reverse) string;
+
+//todoBI the foreign function String.trim does not just trim whitespace. It also trims control characters...
+///**
+// * Removes leading and trailing whitespace from a string.
+// * 
+// * @arg string the string.
+// * @return the string with leading and trailing whitespace removed.
+// */
+//trim :: String -> String;
+//public trim !string = trimRight (trimLeft string); 
+
+/**
+ * Constructs a string of a specified number of spaces.
+ * 
+ * @arg n the number of spaces.
+ * @return a string of n spaces.
+ */
+space :: Int -> String;
+public space !n = replicate n ' ';   
+
+/**
+ * {@code replicate nCopies charToReplicate@} is a string of length {@code nCopies@}, with every character equal to
+ * {@code charToReplicate@}.
+ * 
+ * @arg nCopies the number of copies.
+ * @arg charToReplicate the char to be replicated.
+ * @return a string of length {@code nCopies@}, with every character equal to {@code charToReplicate@}.
+ */    
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.String.StringSupport.replicate" 
+    public replicate :: Int -> Char -> String;
+    
+/* @example */
+replicateExamples :: Boolean;
+replicateExamples =
+    assert (replicate 3 '*' == "***")
+    ;
+
+
+/**
+ * @return {@link True@} if the testing predicates in this module all run successfully.
+ */
+/* @test */
+testModule :: Boolean;
+public testModule =    
+    assert compareStringsExamples
+    && assert dropWhileExamples
+    && assert endsWithExamples
+    && assert filterExamples
+    && assert findExamples
+    && assert findIndexExamples    
+    && assert foldLeftStrictExamples     
+    && assert linesExamples
+    && assert mapExamples
+    && assert normalizeWhitespaceExamples
+    && assert replicateExamples
+    && assert reverseExamples  
+    && assert startsWithExamples
+    && assert takeWhileExamples
+    && assert toLowerCaseExamples
+    && assert toUpperCaseExamples
+    && assert unlinesExamples
+    && assert unwordsExamples
+    && assert wordsExamples
+    ;
+//please leave testModule last! Also sort the tests. It makes it easy to see what tests are hooked up.

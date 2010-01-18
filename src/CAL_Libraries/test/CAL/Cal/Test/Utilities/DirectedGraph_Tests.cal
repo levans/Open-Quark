@@ -1,0 +1,512 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * DirectedGraph_Tests.cal
+ * Creation date: June 7, 2007.
+ * By: Andrew Casey
+ */
+
+/**
+ * Tests for the DirectedGraph module.
+ * 
+ * @author Andrew Casey
+ */
+
+module Cal.Test.Utilities.DirectedGraph_Tests;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Ord;
+    typeConstructor = Boolean, Int, Maybe, String;
+    function =
+        concat, deepSeq, error, flip, fromJust, fromMaybe, fst, isJust, mod, 
+        not, remainder, seq, snd, upFrom, upFromThenTo, upFromTo;
+    dataConstructor = False, True, Nothing, Just;
+    ;
+
+import Cal.Collections.List using
+    function =
+        cycle, foldLeft, foldRight, length, repeat, reverse, tail, take, unzip, 
+        zip;
+    ;
+
+import Cal.Collections.IntMap using
+    typeConstructor = IntMap;
+    ;
+
+import Cal.Collections.Set using
+    typeConstructor = Set;
+    ;
+
+import Cal.Core.Debug using
+    function = compareEvalTimes;
+    ;
+
+import Cal.Utilities.DirectedGraph using
+    function =
+        addEdge, addVertex, containsEdge, containsVertex, edgelessGraph, 
+        emptyGraph, filter, findCycle, findReachableCycle, findPath, 
+        flattenComponents, foldDFS, getNeighbours, getEdgeCount, getVertexCount, 
+        getVertices, makeGraph, makePredicateGraph, mergeVertices, removeEdge, 
+        removeVertex, stableTopologicalSort, stronglyConnectedComponents, 
+        topologicalSort;
+    typeConstructor = DirectedGraph;
+    ;
+
+// ASSERTION FUNCTIONS /////////////////////////////////////////////////////////
+
+assertTrue failureMessage condition =
+    if condition then
+        True
+    else
+        error failureMessage;
+
+assertEqual failuremessage obj1 obj2 = assertTrue failuremessage (obj1 == obj2);
+assertNotEqual failuremessage obj1 obj2 = assertTrue failuremessage (obj1 != obj2);
+
+assertContainsVertex graph vertex =
+    assertTrue ("Unable to find vertex " ++ Debug.show vertex ++ " in graph " ++ Debug.show graph) (containsVertex graph vertex);
+
+assertNotContainsVertex graph vertex =
+    assertTrue ("Unexpectedly found vertex " ++ Debug.show vertex ++ " in graph " ++ Debug.show graph) (not $ containsVertex graph vertex);
+
+assertContainsEdge graph edge =
+    assertTrue ("Unable to find edge " ++ Debug.show edge ++ " in graph " ++ Debug.show graph) (containsEdge graph edge);
+
+assertNotContainsEdge graph edge =
+    assertTrue ("Unexpectedly found edge " ++ Debug.show edge ++ " in graph " ++ Debug.show graph) (not $ containsEdge graph edge);
+
+
+// GRAPH CONSTRUCTION FUNCTIONS ////////////////////////////////////////////////
+
+//create a graph with vertices (1,...,size) and edges for the divisibility relation
+makeFactorGraph :: Boolean -> Int -> DirectedGraph Int;
+makeFactorGraph reverseInsertionOrder size = 
+    let
+        vertices = (if reverseInsertionOrder then List.reverse else Prelude.id) $ upFromTo 1 size;
+        existsEdge start end = (start != end) && (end `remainder` start == 0);
+    in
+        makePredicateGraph vertices existsEdge;
+
+//create a complete graph with vertices (1,...,size)
+makeCompleteGraph :: Boolean -> Int -> DirectedGraph Int;
+makeCompleteGraph reverseInsertionOrder size = 
+    let
+        vertices = (if reverseInsertionOrder then List.reverse else Prelude.id) $ upFromTo 1 size;
+        existsEdge start end = start != end;
+    in
+        makePredicateGraph vertices existsEdge;
+
+//create a graph with vertices (1,...,size) and edges (n, n+1).
+makeFlatGraph :: Eq a => Boolean -> [a] -> DirectedGraph a;
+makeFlatGraph reverseInsertionOrder vertices =
+    makeGraph ((if reverseInsertionOrder then List.reverse else Prelude.id) $ vertices) $ zip vertices $ tail vertices;
+
+// UNIT TESTS //////////////////////////////////////////////////////////////////
+
+equalityTests =
+    let
+        graph = makeGraph ['a', 'b', 'c', 'd'] [('a', 'b'), ('a', 'c'), ('b', 'c')];
+        graph_verticesReordered = makeGraph ['c', 'a', 'd', 'b'] [('a', 'b'), ('a', 'c'), ('b', 'c')];
+        graph_edgesReordered = makeGraph ['a', 'b', 'c', 'd'] [('a', 'c'), ('b', 'c'), ('a', 'b')];
+        graph_newEdge = makeGraph ['c', 'a', 'd', 'b'] [('a', 'c'), ('b', 'c'), ('a', 'b'), ('a', 'd')];
+        graph_newVertex = makeGraph ['a', 'b', 'c', 'd', 'e'] [('a', 'b'), ('a', 'c'), ('b', 'c')];
+    in
+        assertEqual "Equality is not reflexive - graph" graph graph &&
+        assertEqual "Equality is not reflexive - graph_reordered" graph_edgesReordered graph_edgesReordered &&
+        assertEqual "Equality is not reflexive - graph_newEdge" graph_newEdge graph_newEdge &&
+        
+        assertEqual "Reordering vertices made equality check fail." graph graph_verticesReordered &&
+        assertEqual "Reordering vertices made equality check fail." graph_verticesReordered graph &&
+        
+        assertEqual "Reordering edges made equality check fail." graph graph_edgesReordered &&
+        assertEqual "Reordering edges made equality check fail." graph_edgesReordered graph &&
+        
+        assertNotEqual "Graphs equal despite extra edge." graph graph_newEdge &&
+        assertNotEqual "Graphs equal despite missing edge." graph_newEdge graph &&
+        assertNotEqual "Graphs equal despite extra vertex." graph graph_newVertex &&
+        assertNotEqual "Graphs equal despite missing vertex." graph_newVertex graph &&
+        
+        True;
+
+addVertexTests =
+    let
+        testNewVertex :: DirectedGraph Int -> Int -> DirectedGraph Int;
+        testNewVertex graph vertex = 
+            let
+                newGraph :: DirectedGraph Int;
+                newGraph = addVertex graph vertex;
+            in
+                (assertContainsVertex newGraph vertex &&
+                 assertEqual ("Unexpected number of vertices after adding " ++ Debug.show vertex ++ ".") (getVertexCount newGraph) vertex)
+                `seq`
+                newGraph;
+    in
+        foldLeft testNewVertex emptyGraph (upFromTo 1 5) `seq` True;
+
+duplicateVerticesTests =
+    assertEqual "Re-adding vertex failed." (getVertexCount $ foldLeft addVertex emptyGraph $ take 5 $ repeat (1 :: Int)) 1 &&
+    True;
+
+addEdgeTests =
+    let
+        emptyGraph_oneEdge = addEdge emptyGraph ('a', 'b');
+        emptyGraph_duplicateEdge = addEdge emptyGraph_oneEdge ('a', 'b');
+        
+        oneGraph = addVertex emptyGraph 'a';
+        oneGraph_oneEdge = addEdge oneGraph ('a', 'b');
+        oneGraph_duplicateEdge = addEdge oneGraph_oneEdge ('a', 'b');
+        
+        twoGraph = addVertex oneGraph 'b';
+        twoGraph_oneEdge = addEdge twoGraph ('a', 'b');
+        twoGraph_duplicateEdge = addEdge twoGraph_oneEdge ('a', 'b');
+    in
+        assertNotContainsVertex emptyGraph 'a' &&
+        assertNotContainsVertex emptyGraph 'b' &&
+        assertNotContainsEdge emptyGraph ('a', 'b') &&
+        assertNotContainsEdge emptyGraph ('b', 'a') &&
+        
+        assertContainsVertex emptyGraph_oneEdge 'a' &&
+        assertContainsVertex emptyGraph_oneEdge 'b' &&
+        assertContainsEdge emptyGraph_oneEdge ('a', 'b') &&
+        assertNotContainsEdge emptyGraph_oneEdge ('b', 'a') &&
+        
+        assertContainsVertex emptyGraph_duplicateEdge 'a' &&
+        assertContainsVertex emptyGraph_duplicateEdge 'b' &&
+        assertContainsEdge emptyGraph_duplicateEdge ('a', 'b') &&
+        assertNotContainsEdge emptyGraph_duplicateEdge ('b', 'a') &&
+        
+        assertContainsVertex oneGraph 'a' &&
+        assertNotContainsVertex oneGraph 'b' &&
+        assertNotContainsEdge oneGraph ('a', 'b') &&
+        assertNotContainsEdge oneGraph ('b', 'a') &&
+        
+        assertContainsVertex oneGraph_oneEdge 'a' &&
+        assertContainsVertex oneGraph_oneEdge 'b' &&
+        assertContainsEdge oneGraph_oneEdge ('a', 'b') &&
+        assertNotContainsEdge oneGraph_oneEdge ('b', 'a') &&
+        
+        assertContainsVertex oneGraph_duplicateEdge 'a' &&
+        assertContainsVertex oneGraph_duplicateEdge 'b' &&
+        assertContainsEdge oneGraph_duplicateEdge ('a', 'b') &&
+        assertNotContainsEdge oneGraph_duplicateEdge ('b', 'a') &&
+        
+        assertContainsVertex twoGraph 'a' &&
+        assertContainsVertex twoGraph 'b' &&
+        assertNotContainsEdge twoGraph ('a', 'b') &&
+        assertNotContainsEdge twoGraph ('b', 'a') &&
+        
+        assertContainsVertex twoGraph_oneEdge 'a' &&
+        assertContainsVertex twoGraph_oneEdge 'b' &&
+        assertContainsEdge twoGraph_oneEdge ('a', 'b') &&
+        assertNotContainsEdge twoGraph_oneEdge ('b', 'a') &&
+        
+        assertContainsVertex twoGraph_duplicateEdge 'a' &&
+        assertContainsVertex twoGraph_duplicateEdge 'b' &&
+        assertContainsEdge twoGraph_duplicateEdge ('a', 'b') &&
+        assertNotContainsEdge twoGraph_duplicateEdge ('b', 'a') &&
+        
+        True;
+
+pathTests =
+    let
+        trivialGraph = edgelessGraph ['z'];
+        selfLoopGraph = addEdge emptyGraph ('y', 'y');
+        linearGraph = makeGraph [] [('a', 'b'), ('b', 'c'), ('c', 'd')];
+    in
+        assertEqual "Failed to find trivial path." (findPath trivialGraph 'z' 'z') (Just ['z']) &&
+        assertEqual "Failed to find trivial path with self-loop present." (findPath selfLoopGraph 'y' 'y') (Just ['y']) &&
+        assertEqual "Failed to find path in linear graph." (findPath linearGraph 'a' 'd') (Just ['a', 'b', 'c', 'd']) &&
+        assertEqual "Unexpectedly found reverse path in linear graph." (findPath linearGraph 'd' 'a') Nothing &&
+        assertEqual "Unexpectedly found path to non-existent destination." (findPath trivialGraph 'z' 'q') Nothing &&
+        assertEqual "Unexpectedly found path from non-existent source."  (findPath trivialGraph 'q' 'z') Nothing &&
+        True;
+
+mergeTests =
+    let
+        graph = makeGraph ['a', 'b', 'c', 'd'] [('a', 'b'), ('a', 'c'), ('b', 'c')];
+        
+        graph_mergeABZ_loop = makeGraph ['Z', 'c', 'd'] [('Z', 'Z'), ('Z', 'c'), ('Z', 'c')];
+        graph_mergeABZ_noloop = makeGraph ['Z', 'c', 'd'] [('Z', 'c'), ('Z', 'c')];
+        graph_mergeADZ_loop = makeGraph ['Z', 'b', 'c'] [('Z', 'b'), ('Z', 'c'), ('b', 'c')];
+        graph_mergeADZ_noloop = makeGraph ['Z', 'b', 'c'] [('Z', 'b'), ('Z', 'c'), ('b', 'c')];
+        
+        graph_mergeABA_loop = makeGraph ['a', 'c', 'd'] [('a', 'a'), ('a', 'c')];
+        graph_mergeABA_noloop = makeGraph ['a', 'c', 'd'] [('a', 'c')];
+        graph_mergeADA_loop = makeGraph ['a', 'b', 'c'] [('a', 'b'), ('a', 'c'), ('b', 'c')];
+        graph_mergeADA_noloop = makeGraph ['a', 'b', 'c'] [('a', 'b'), ('a', 'c'), ('b', 'c')];
+    in
+        assertEqual "Failed to merge A and B (to Z) with loops." (mergeVertices graph True 'a' 'b' 'Z') graph_mergeABZ_loop &&
+        assertEqual "Failed to merge A and B (to Z) without loops." (mergeVertices graph False 'a' 'b' 'Z') graph_mergeABZ_noloop &&
+        assertEqual "Failed to merge A and D (to Z) with loops." (mergeVertices graph True 'a' 'd' 'Z') graph_mergeADZ_loop &&
+        assertEqual "Failed to merge A and D (to Z) without loops." (mergeVertices graph False 'a' 'd' 'Z') graph_mergeADZ_noloop &&
+        
+        assertEqual "Failed to merge A and B (to A) with loops." (mergeVertices graph True 'a' 'b' 'a') graph_mergeABA_loop &&
+        assertEqual "Failed to merge A and B (to A) without loops." (mergeVertices graph False 'a' 'b' 'a') graph_mergeABA_noloop &&
+        assertEqual "Failed to merge A and D (to A) with loops." (mergeVertices graph True 'a' 'd' 'a') graph_mergeADA_loop &&
+        assertEqual "Failed to merge A and D (to A) without loops." (mergeVertices graph False 'a' 'd' 'a') graph_mergeADA_noloop &&
+        True;
+
+partitionTests =
+    let
+        isEven num = (num `remainder` 2) == 0;
+        allEdges x y = True;
+        
+        wholeGraph :: DirectedGraph Int;
+        wholeGraph = makePredicateGraph (upFromTo 1 10) allEdges;
+        
+        evenSubgraph :: DirectedGraph Int;
+        evenSubgraph = makePredicateGraph (upFromThenTo 2 4 10) allEdges;
+        
+        oddSubgraph :: DirectedGraph Int;
+        oddSubgraph = makePredicateGraph (upFromThenTo 1 3 9) allEdges;
+    in
+        assertEqual "Failed to partition complete graph." (evenSubgraph, oddSubgraph) (DirectedGraph.partition isEven wholeGraph) &&
+        assertEqual "Failed to partition complete graph." (oddSubgraph, evenSubgraph) (DirectedGraph.partition (not # isEven) wholeGraph) &&
+        True;
+
+filterTests =
+    let
+        isEven num = (num `remainder` 2) == 0;
+        allEdges x y = True;
+        
+        wholeGraph :: DirectedGraph Int;
+        wholeGraph = makePredicateGraph (upFromTo 1 10) allEdges;
+        
+        evenSubgraph :: DirectedGraph Int;
+        evenSubgraph = makePredicateGraph (upFromThenTo 2 4 10) allEdges;
+        
+        oddSubgraph :: DirectedGraph Int;
+        oddSubgraph = makePredicateGraph (upFromThenTo 1 3 9) allEdges;
+    in
+        assertEqual "Failed to filter even vertices." evenSubgraph (DirectedGraph.filter isEven wholeGraph) &&
+        assertEqual "Failed to filter odd vertices." oddSubgraph (filter (not # isEven) wholeGraph) &&
+        True;
+
+reverseTests =
+    let
+        forwardGraph = makeGraph ['a', 'b', 'c', 'd'] [('a', 'b'), ('a', 'c'), ('b', 'c')];
+        reverseGraph = makeGraph ['a', 'b', 'c', 'd'] [('b', 'a'), ('c', 'a'), ('c', 'b')];
+        
+        noEdges = edgelessGraph ["a", "b", "c"];
+    in
+        assertEqual "Failed to reverse graph." (DirectedGraph.reverse forwardGraph) reverseGraph &&
+        assertEqual "Failed to reverse edgeless graph." (DirectedGraph.reverse noEdges) noEdges &&
+        True;
+
+removeVertexTests =
+    let
+        oneVertex = addVertex emptyGraph 'a';
+        oneEdge = addEdge emptyGraph ("m", "q");
+    in
+        assertEqual "Removing a non-existant vertex destroyed equality." (removeVertex oneVertex 'b') oneVertex &&
+        
+        assertNotContainsVertex (removeVertex oneVertex 'a') 'a' &&
+        
+        assertNotContainsVertex (removeVertex oneEdge "m") "m" &&
+        assertNotContainsEdge (removeVertex oneEdge "m") ("m", "q") &&
+        assertNotContainsVertex (removeVertex oneEdge "q") "q" &&
+        assertNotContainsEdge (removeVertex oneEdge "q") ("m", "q") &&
+        
+        True;
+
+removeEdgeTests = 
+    let
+        oneEdge = makeGraph ["m", "p", "q"] [("m", "p")] ;
+        twoEdges = makeGraph ["m", "p", "q"] [("m", "p"), ("p", "q")] ;
+    in
+        assertEqual "Removing a non-existant edge (with fake vertices) destroyed equality." (removeEdge oneEdge ("z", "z")) oneEdge &&
+        assertEqual "Removing a non-existant edge (with real vertices) destroyed equality." (removeEdge twoEdges ("m", "q")) twoEdges &&
+        
+        assertContainsVertex (removeEdge oneEdge ("m", "p")) "m" &&
+        assertContainsVertex (removeEdge oneEdge ("m", "p")) "p" &&
+        assertNotContainsEdge (removeEdge oneEdge ("m", "p")) ("m", "p") &&
+        
+        assertContainsVertex (removeEdge twoEdges ("m", "p")) "m" &&
+        assertContainsVertex (removeEdge twoEdges ("m", "p")) "p" &&
+        assertNotContainsEdge (removeEdge twoEdges ("m", "p")) ("m", "p") &&
+        assertContainsEdge (removeEdge twoEdges ("m", "p")) ("p", "q") &&
+        
+        True;
+
+cycleTests = 
+    let
+        noCycle = makeGraph [] [(1.0, 2.0), (2.0, 3.0), (1.0, 3.0)];
+        
+        oneCycle = makeGraph [] [(1.0, 1.0)];
+        twoCycle = makeGraph [] [(1.0, 2.0), (2.0, 1.0)];
+        
+        reachableCycle = makeGraph [] [(1.0, 2.0), (2.0, 3.0), (3.0, 2.0)];
+        unreachableCycle = makeGraph [1.0] [(2.0, 3.0), (3.0, 2.0)];
+    in
+        assertEqual "Unexpectedly found cycle." (findCycle noCycle) Nothing &&
+        assertEqual "Failed to find trivial cycle." (findCycle oneCycle) (Just [1.0]) &&
+        assertEqual "Failed to find non-trivial cycle." (findCycle twoCycle) (Just [1.0, 2.0]) &&
+        
+        assertEqual "Failed to find reachable cycle." (findReachableCycle reachableCycle 1.0) (Just [2.0, 3.0]) &&
+        assertEqual "Unexpectedly found unreachable cycle." (findReachableCycle unreachableCycle 1.0) Nothing &&
+        True;
+
+sccTests =
+    let
+        //sneaky way to get unordered comparisons of nested lists
+        makeUnorderedComparable :: Ord a => [[a]] -> [Set a];
+        makeUnorderedComparable = List.map Set.fromList;
+        
+        getSCCs = makeUnorderedComparable # stronglyConnectedComponents;
+        
+        //order of last two components doesn't matter
+        triangleComponents1 = makeUnorderedComparable [['d'], ['e', 'f', 'g'], ['a', 'b', 'c']];
+        
+        triangleGraph1 = makeGraph [] [('a', 'b'), ('b', 'c'), ('c', 'a'), 
+                                       ('d', 'a'), ('d', 'e'), 
+                                       ('e', 'f'), ('f', 'g'), ('g', 'e')];
+        
+        //same graph, different order (to check topological sort)
+        triangleGraph1_differentOrder = makeGraph [] [('a', 'b'), ('b', 'c'), ('c', 'a'), 
+                                                      ('e', 'f'), ('f', 'g'), ('g', 'e'),
+                                                      ('d', 'a'), ('d', 'e')];
+        
+        //edges into 'd' instead of out
+        //order of first two components doesn't matter
+        triangleComponents2 = makeUnorderedComparable [['e', 'f', 'g'], ['a', 'b', 'c'], ['d']];
+        
+        triangleGraph2 = makeGraph [] [('a', 'b'), ('b', 'c'), ('c', 'a'), 
+                                       ('a', 'd'), ('e', 'd'), 
+                                       ('e', 'f'), ('f', 'g'), ('g', 'e')];
+        
+        //same graph, different order (to check topological sort)
+        triangleGraph2_differentOrder = makeGraph [] [('a', 'b'), ('b', 'c'), ('c', 'a'),
+                                                      ('e', 'f'), ('f', 'g'), ('g', 'e'),
+                                                      ('a', 'd'), ('e', 'd')];
+        
+        //order matters
+        acyclicComponents = makeUnorderedComparable [['a'], ['b'], ['c']];
+        acyclicGraph = makeGraph [] [('a', 'b'), ('b', 'c')];
+    in
+        assertEqual "Failed to find non-trivial SCCs (graph 1)." (getSCCs triangleGraph1) triangleComponents1 &&
+        assertEqual "SCCs not in topological order (graph 1)." (getSCCs triangleGraph1_differentOrder) triangleComponents1 &&
+        assertEqual "Failed to find non-trivial SCCs (graph 2)." (getSCCs triangleGraph2) triangleComponents2 &&
+        assertEqual "SCCs not in topological order (graph 2)." (getSCCs triangleGraph2_differentOrder) triangleComponents2 &&
+        assertEqual "Failed to find trivial SCCs." (getSCCs acyclicGraph) acyclicComponents &&
+        True;
+
+flattenTests =
+    let
+        factorGraph = makeFactorGraph False 20;
+        completeGraph = makeCompleteGraph False 20;
+        flatGraph = makeFlatGraph False (upFromTo 1 20);
+    in
+        //flattening an acyclic graph should have no effect
+        assertEqual "Modified acyclic graph." (flattenComponents factorGraph) factorGraph &&
+        //flattening a complete graph should make it into a "list"
+        assertEqual "Failed to flatten complete graph." (flattenComponents completeGraph) flatGraph &&
+        True;
+
+complexVertexTests =
+    let
+        triangle = makeGraph [] [('a', 'b'), ('b', 'c'), ('c', 'a')];
+        square = makeGraph [] [('m', 'n'), ('n', 'o'), ('o', 'p'), ('p', 'm')];
+        
+        meta1 = makeGraph [triangle, square] [(square, triangle), (triangle, square)];
+        meta2 = makeGraph [triangle, square] [(triangle, square), (square, triangle)];
+    in
+        assertEqual "Meta-graphs are not equal." meta1 meta2 &&
+        True;
+
+stableSortTests =
+    let
+        //a very simple graph in which ties must be broken by insertion order
+        simpleGraph = makeGraph ['a', 'd', 'c', 'b'] [('a', 'b'), ('b', 'c'), ('a', 'd')];
+        //a complete binary tree (three levels) with vertices inserted in reverse-BFS order
+        binaryTree = makeGraph ['a', 'b', 'c', 'd', 'e', 'f', 'g'] [('g', 'e'), ('e', 'a'), ('e', 'b'), ('g', 'f'), ('f', 'c'), ('f', 'd')];
+        //a diamond pattern with levels of 1,2,3,2,1 
+        nonTreeGraph = 
+            makeGraph 
+                ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
+                [('i', 'h'), ('i', 'g'), ('h', 'f'), ('h', 'e'), ('g', 'e'), ('g', 'd'), ('f', 'c'), ('e', 'c'), ('e', 'b'), ('d', 'b'), ('c', 'a'), ('b', 'a')];
+                       
+    in
+        assertEqual "Failed to maintain insertion order in stable sort in simple graph." (stableTopologicalSort simpleGraph) ['a', 'd', 'b', 'c'] &&
+        assertEqual "Failed to maintain insertion order in stable sort in binary tree." (stableTopologicalSort binaryTree) ['g', 'e', 'a', 'b', 'f', 'c', 'd'] &&
+        assertEqual "Failed to maintain insertion order in stable sort in non-tree graph." (stableTopologicalSort nonTreeGraph) ['i', 'g', 'd', 'h', 'e', 'b', 'f', 'c', 'a'] &&
+        True;
+
+//TODO: fold tests?  already implicitly tested by other tests
+
+
+// TOP-LEVEL CALL //////////////////////////////////////////////////////////////
+
+public testModule = 
+    equalityTests &&
+    addVertexTests &&
+    duplicateVerticesTests &&
+    addEdgeTests &&
+    pathTests &&
+    mergeTests &&
+    partitionTests &&
+    filterTests &&
+    reverseTests &&
+    removeVertexTests &&
+    removeEdgeTests && 
+    cycleTests &&
+    sccTests &&
+    flattenTests &&
+    complexVertexTests &&
+    stableSortTests &&
+    True;
+        
+
+// OTHER ///////////////////////////////////////////////////////////////////////
+
+//Test the behaviour of large graphs (esp watch for stack overflows)
+//NB: not in unitTests - too slow
+scalingTests =
+    let
+        factorGraph = makeFactorGraph True 5000;
+        completeGraph = makeCompleteGraph True 500;
+    in
+        Debug.trace "Graph\n" factorGraph `deepSeq`
+        Debug.traceShowable "Num Edges = " (getEdgeCount factorGraph) `deepSeq`
+        Debug.traceShowable "Sort Comparison: " (compareEvalTimes (stableTopologicalSort factorGraph) (topologicalSort factorGraph)) `deepSeq`
+        Debug.trace "Topological Sort\n" topologicalSort factorGraph `deepSeq`
+        Debug.trace "Stable Topological Sort\n" stableTopologicalSort factorGraph `deepSeq`
+        Debug.trace "Map\n" DirectedGraph.map Prelude.negate factorGraph `deepSeq`
+        Debug.trace "Cycle\n" findCycle factorGraph `deepSeq`
+        Debug.trace "Strongly Connected Components - factor graph\n" stronglyConnectedComponents factorGraph `deepSeq`
+        Debug.trace "Strongly Connected Components - complete graph\n" stronglyConnectedComponents completeGraph `deepSeq`
+        Debug.trace "Flatten Components - factor graph\n" flattenComponents factorGraph `deepSeq`
+        Debug.trace "Flatten Components - complete graph\n" flattenComponents completeGraph `deepSeq`
+        True;
+
+//informal benchmarking - not part of unit testing
+timeCheck :: Prelude.Int -> Prelude.Long;
+timeCheck numVertices = Debug.traceShowable "Time = " $ Debug.evalTime $ Debug.traceShowable "Num Edges = " $ getEdgeCount $ makePredicateGraph (upFromTo 1 numVertices) (\start end -> (start != end) && (end `remainder` start == 0));

@@ -1,0 +1,780 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Parser.cal
+ * Created: June 2005
+ * By: Greg McClement. 
+ */
+
+module Cal.Test.Utilities.Parser_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, Boolean, Maybe, Either;
+    dataConstructor = True, False, Left, Right, Just, Nothing;
+    function =
+        assert, const, equals, seq, undefined, add, subtract, multiply, divide,
+        stringToInt;
+    ;
+
+import Cal.Core.String using
+    function = fromList, length, replicate, toList;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+    
+import Cal.Utilities.Parser using
+    typeConstructor = GenParser, Message, ParseError, SourcePos, State;
+    dataConstructor = Expect, Message, SysUnExpect, UnExpect;
+    function =
+        addErrorMessage, alphaNum, anyChar, anyToken, between, caseChar, caseString, caseStringU, chainLeft, chainLeft1,
+        chainRight, chainRight1, char, choice, choiceT, count, digit, endBy, endBy1, eof, errorIsUnknown, errorMessages,
+        errorPos, exactString, getInput, getParserState, getPosition, getState, hexDigit, incSourceColumn,
+        incSourceLine, initialPos, label, letter, lookAhead, lower, many, many1, manyTill, manyUntil, mergeError,
+        messageCompare, messageEq, messageString, newErrorMessage, newErrorUnknown, newline, newPos, noneOf,
+        notFollowedBy, octDigit, oneOf, option, optional, pAppend, parse, parseTest, pBind, pFail, pOr, pOrT, pOrT3,
+        pOrT4, pOrT5, pOrT6, pOrT7, pReturn, pSeq, pZero, runParser, satisfy, sepBy, sepBy1, sepEndBy, sepEndBy1, sequence,
+        setErrorMessage, setErrorPos, setInput, setParserState, setPosition, setSourceColumn, setSourceLine, setSourceName,
+        setState, showErrorMessages, showParseError, showSourcePos, skipMany, skipMany1, sourceColumn, sourceLine,
+        sourceName, space, spaces, spaces1, tab, token, tokenPrim, tokenPrimEx, tokens, tokenSatisfy,
+        tokensCompare, try, unexpected, updatePosChar, updatePosString, updateState, upper,
+        makeTSList, makeTSString, tokenSequenceToList, runParserSeq, tokenPrimSeq, tokenSatisfySeq;
+    ;
+import Cal.Collections.List using
+    ;
+    
+import Cal.Test.Data.SqlParser_Tests;
+
+testParser parser input expected = testParser2 parser () input expected;
+
+testParser2 parser state input expected =
+    case runParser parser state "" input of
+    Right result -> result == expected;
+    Left {} -> False;
+    ;
+
+testParserSeq parser input expected =
+    case runParserSeq parser () "" input of
+    Right result -> result == expected;
+    Left {} -> False;
+    ;
+
+testError parser input expectedErrorLine expectedErrorColumn =
+    case parse parser "" input of
+    Right {} -> False;
+    Left err -> errorPos err /*(Debug.trace ((showParseError err) ++ "\n") err)*/ == newPos "" expectedErrorLine expectedErrorColumn;
+    ;
+
+testErrorSeq parser input expectedErrorLine expectedErrorColumn =
+    case parse parser "" input of
+    Right {} -> False;
+    Left err -> errorPos err == newPos "" expectedErrorLine expectedErrorColumn;
+    ;
+
+/// the monad: pReturn, pFail, pZero, pBind
+//
+
+test_pReturn = testParser (pReturn "foo") [] "foo";
+
+test_pFail = testError (pFail "foo") [] 1 1;
+
+test_pZero = testError pZero [] 1 1;
+
+test_pBind = testParser (pReturn "bar" `pBind` (\x -> pReturn x)) [] "bar";
+
+/// pOr
+//
+
+/** Tests the case where the first parser succeeds. */
+test_pOr1 = testParser (pReturn "foo" `pOr` pReturn "bar") [] "foo";
+
+/** Tests the case where the first parser fails without consuming any tokens. */
+test_pOr2 = testParser (pFail "foo" `pOr` pReturn "bar") [] "bar";
+
+/** Tests the case where the first parser fails after having consumed some tokens. */
+test_pOr3 = testError (((anyToken show) `pSeq` pFail "foo") `pOr` pReturn "bar") ["tok1"] 1 1;
+
+/// pOrT
+//
+
+/** Tests the case where the first parser succeeds. */
+test_pOrT1 = testParser (pReturn "foo" `pOrT` pReturn "bar") [] "foo";
+
+/** Tests the case where the first parser fails without consuming any tokens. */
+test_pOrT2 = testParser (pFail "foo" `pOrT` pReturn "bar") [] "bar";
+
+/** Tests the case where the first parser fails after having consumed some tokens. */
+test_pOrT3 = testParser (((anyToken show) `pSeq` pFail "foo") `pOrT` pReturn "bar") ["tok1"] "bar";
+
+/** Tests for the absence of a bug in an old version of pOrT. The old version would incorrectly
+ * apply the second parser as if it had been wrapped in a try.
+ */
+test_pOrT4 = testError ((pFail "fail" `pOrT` exactString ['f','o','o']) `pOr` exactString ['f','o','b','a','r']) (toList "fobar") 1 1;
+
+/// try
+//
+
+/** Tests the case where the parser succeeds. */
+test_try1 =
+    let
+        parser = try (anyToken show);
+    in
+        testParser parser ['a', 'b'] 'a';
+
+/** Tests the case where the parser fails after having consumed some tokens. */
+test_try2 =
+    let
+        parser =
+            getInput `pBind` (\input1 ->
+            (try (char 'a' `pSeq` char 'a') `pOr` pReturn 'x') `pSeq`
+            getInput `pBind` (\input2 ->
+            pReturn (input1 == input2)
+            ));
+    in
+        testParser parser ['a', 'b'] True;
+
+/// token/tokenPrim/tokenSatisfy
+//
+
+test_token =
+    testParser (token show (const $ initialPos "") (\x -> if x == 'c' then Just "fine" else Nothing)) ['c'] "fine";
+
+test_tokenPrim =
+    testParser (tokenPrim show (\pos t toks -> initialPos "") (\x -> if x == 'c' then Just "fine" else Nothing)) ['c'] "fine";
+
+test_tokenSatisfy =
+    testParser (tokenSatisfy show (\pos t toks -> initialPos "") (equals 'c')) ['c'] 'c';
+
+/// get/set/updateState
+//
+
+test_getState =
+    let
+        state = Just "great";
+    in
+        testParser2 getState state [] state;
+        
+test_setState =
+    let
+        state = Just "great";
+    in
+        testParser2 (setState state `pSeq` getState) undefined [] state;
+
+test_updateState =
+    testParser2 (updateState (add 1.0) `pSeq` getState) 3.0 [] 4.0;
+
+/// get/setPosition
+//
+
+test_getPosition =
+    let
+        thePos = newPos "foo" 3 7;
+    in
+        testParser (tokenSatisfy show (\pos t toks -> thePos) (equals 'c') `pSeq` getPosition) ['c'] thePos;
+
+test_setPosition =
+    let
+        thePos = newPos "foo" 3 7;
+    in
+        testParser (setPosition thePos `pSeq` getPosition) ['c'] thePos;
+
+/// get/setInput
+//
+
+test_getInput =
+    let
+        theInput = ["foo", "bar", "baz"];
+    in
+        testParser getInput theInput theInput;
+
+test_setInput =
+    let
+        theInput = ["foo", "bar", "baz"];
+    in
+        testParser (setInput theInput `pSeq` getInput) [] theInput;
+
+/// many
+//
+
+test_many_empty =
+    testParser (many $ char 'c') [] [];
+
+test_many_some =
+    testParser (many $ char 'c') ['c', 'c'] ['c', 'c'];
+
+test_many_some_and =
+    testParser (many $ char 'c') ['c', 'c', 'd'] ['c', 'c'];
+    
+/// many1
+//
+
+test_many1_empty =
+    testError (many1 $ char 'c') [] 1 1;
+
+test_many1_some =
+    testParser (many1 $ char 'c') ['c', 'c'] ['c', 'c'];
+
+test_many1_some_and =
+    testParser (many1 $ char 'c') ['c', 'c', 'd'] ['c', 'c'];
+    
+/// skipMany
+//
+
+test_skipMany_empty =
+    testParser (skipMany $ char 'c') [] ();
+
+test_skipMany_some =
+    testParser (skipMany $ char 'c') ['c', 'c'] ();
+
+test_skipMany_some_and =
+    testParser (skipMany $ char 'c') ['c', 'c', 'd'] ();
+    
+/// skipMany1
+//
+
+test_skipMany1_empty =
+    testError (skipMany1 $ char 'c') [] 1 1;
+
+test_skipMany1_some =
+    testParser (skipMany1 $ char 'c') ['c', 'c'] ();
+
+test_skipMany1_some_and =
+    testParser (skipMany1 $ char 'c') ['c', 'c', 'd'] ();
+
+/// sepBy
+//
+
+test_sepBy_empty =
+    testParser (char 'c' `sepBy` char ',') (toList "") [];
+
+test_sepBy_one =
+    testParser (char 'c' `sepBy` char ',') (toList "c") (toList "c");
+
+test_sepBy_some =
+    testParser (char 'c' `sepBy` char ',') (toList "c,c,c") (toList "ccc");
+
+test_sepBy_some_sep =
+    testError (char 'c' `sepBy` char ',') (toList "c,c,") 1 5;
+
+/// sepBy1
+//
+
+test_sepBy1_empty =
+    testError (char 'c' `sepBy1` char ',') (toList "") 1 1;
+
+test_sepBy1_one =
+    testParser (char 'c' `sepBy1` char ',') (toList "c") (toList "c");
+
+test_sepBy1_some =
+    testParser (char 'c' `sepBy1` char ',') (toList "c,c,c") (toList "ccc");
+
+test_sepBy1_some_sep =
+    testError (char 'c' `sepBy1` char ',') (toList "c,c,") 1 5;
+
+/// endBy
+//
+
+test_endBy_empty =
+    testParser (char 'c' `endBy` char ';') (toList "") [];
+
+test_endBy_one =
+    testParser (char 'c' `endBy` char ';') (toList "c;") (toList "c");
+
+test_endBy_some =
+    testParser (char 'c' `endBy` char ';') (toList "c;c;c;") (toList "ccc");
+
+test_endBy_some_noEnd =
+    testError (char 'c' `endBy` char ';') (toList "c;c;c") 1 6;
+
+/// endBy1
+//
+
+test_endBy1_empty =
+    testError (char 'c' `endBy1` char ';') (toList "") 1 1;
+
+test_endBy1_one =
+    testParser (char 'c' `endBy1` char ';') (toList "c;") (toList "c");
+
+test_endBy1_some =
+    testParser (char 'c' `endBy1` char ';') (toList "c;c;c;") (toList "ccc");
+
+test_endBy1_some_noEnd =
+    testError (char 'c' `endBy1` char ';') (toList "c;c;c") 1 6;
+
+/// sepEndBy
+//
+
+test_sepEndBy_empty =
+    testParser (char 'c' `sepEndBy` char ';') (toList "") [];
+
+test_sepEndBy_one =
+    testParser (char 'c' `sepEndBy` char ';') (toList "c;") (toList "c");
+
+test_sepEndBy_one_noEnd =
+    testParser (char 'c' `sepEndBy` char ';') (toList "c") (toList "c");
+
+test_sepEndBy_some =
+    testParser (char 'c' `sepEndBy` char ';') (toList "c;c;c;") (toList "ccc");
+
+test_sepEndBy_some_noEnd =
+    testParser (char 'c' `sepEndBy` char ';') (toList "c;c;c") (toList "ccc");
+
+test_sepEndBy_leading_sep =
+    testError ((char 'c' `sepEndBy` char ';') `pSeq` eof) (toList ";c;") 1 1;
+
+test_sepEndBy_trailing_partial_content =
+    testError (((char 'h' `pSeq` char 'w') `sepEndBy` char ';') `pSeq` eof)
+        (toList "hw;hw;h") 1 8;
+
+test_sepEndBy_no_separator =
+    testError ((char 'c' `sepEndBy` char ';') `pSeq` eof) (toList "cc") 1 2;
+
+test_sepEndBy_separator_only =
+    testError ((char 'c' `sepEndBy` char ';') `pSeq` eof) (toList ";") 1 1;
+
+/// sepEndBy1
+//
+
+test_sepEndBy1_empty =
+    testError (char 'c' `sepEndBy1` char ';') (toList "") 1 1;
+
+test_sepEndBy1_one =
+    testParser (char 'c' `sepEndBy1` char ';') (toList "c;") (toList "c");
+
+test_sepEndBy1_one_noEnd =
+    testParser (char 'c' `sepEndBy1` char ';') (toList "c") (toList "c");
+
+test_sepEndBy1_some =
+    testParser (char 'c' `sepEndBy1` char ';') (toList "c;c;c;") (toList "ccc");
+
+test_sepEndBy1_some_noEnd =
+    testParser (char 'c' `sepEndBy1` char ';') (toList "c;c;c") (toList "ccc");
+
+/// count
+//
+
+test_count_0_empty =
+    testParser (count 0 (char 'c')) [] [];
+
+test_count_0_some =
+    testParser (count 0 (char 'c')) ['c'] [];
+
+test_count_3_enough =
+    testParser (count 3 (char 'c')) (toList "ccc") (toList "ccc");
+
+test_count_3_notEnough =
+    testError (count 3 (char 'c')) (toList "cc") 1 3;
+
+/// between
+//
+
+test_between_ok =
+    testParser (between (char '(') (char ')') (char 'c')) (toList "(c)") 'c';
+
+test_between_noOpen =
+    testError (between (char '(') (char ')') (char 'c')) (toList "c)") 1 1;
+
+test_between_noClose =
+    testError (between (char '(') (char ')') (char 'c')) (toList "(c") 1 3;
+
+/// option/optional
+//
+
+test_option_yes =
+    testParser (option 'x' (char 'c')) ['c'] 'c'; 
+
+test_option_no =
+    testParser (option 'x' (char 'c')) [] 'x';
+
+test_optional_yes =
+    testParser (optional (char 'c')) ['c'] (Just 'c'); 
+
+test_optional_no =
+    testParser (optional (char 'c')) [] Nothing;
+
+/// manyTill
+//
+
+test_manyTill1 =
+    let
+        xmlComment =
+            exactString (toList "<!--") `pSeq`
+            manyTill anyChar (try (exactString (toList "-->")));
+            
+        comment = "Hello World--";
+    in
+        testParser xmlComment (toList ("<!--" ++ comment ++ "-->stuff")) (toList comment);
+
+/**
+ * Ensure {@code manyTill@} has correct basic behaviour.
+ */
+test_manyTill2 =
+    let
+        p = manyTill (exactString (toList "foo")) (exactString (toList "bar"));
+        input = toList "foofoofoobar";
+        foo = toList "foo";
+    in
+        testParser p input (List.replicate 3 foo);
+
+/**
+ * Ensure {@code manyTill@} correctly consumes input.
+ */
+test_manyTill3 =
+    let
+        p = manyTill (exactString (toList "foo")) (exactString (toList "bar")) `pSeq` eof;
+        input = toList "foofoofoobar";
+    in
+        testParser p input ();
+
+/**
+ * Ensure {@code manyTill@} counts partial consumption of end as a failure when it could succeed after.
+ */
+test_manyTill4 =
+    let
+        p = manyTill (exactString (toList "foo")) (exactString (toList "bar")) `pSeq` eof;
+        input = toList "foofoofoobafoobar";
+    in
+        testError p input 1 10;
+
+/**
+ * Ensure {@code manyTill@} counts partial consumption of end as a failure when it could ignore that consumption.
+ */
+test_manyTill5 =
+    let
+        p = manyTill anyChar (exactString (toList "bar"));
+        input = toList "aaaabaaabar";
+    in
+        testError p input 1 5;
+
+/**
+ * Ensure {@code manyTill@} correctly indicates no consumption on failure.
+ */
+test_manyTill6 =
+    let
+        p = manyTill (char 'a') (char 'b') `pOr` pReturn [];
+        input = toList "ccc";
+    in
+        testParser p input [];
+
+/**
+ * Ensure {@code manyTill@} correctly indicates it consumed input when end partially fails at the start.
+ */
+test_manyTill7 =
+    let
+        p = manyTill (char 'a') (exactString (toList "bc")) `pOr` pReturn [];
+        input = toList "bb";
+    in
+        testError p input 1 1;
+
+/**
+ * Ensure {@code manyTill@} correctly indicates it consumed input when it has.
+ */
+test_manyTill8 =
+    let
+        p = manyTill (char 'a') (char 'b') `pOr` pReturn [];
+        input = toList "aaaac";
+    in
+        testError p input 1 5;
+
+/// chainLeft1
+//
+
+test_chainLeft1 =
+    let
+        expr   = term   `chainLeft1` mulop;
+        term   = factor `chainLeft1` addop;
+        factor = (between (char '(') (char ')') expr) `pOr`
+                 (many1 digit `pBind` (\digits ->
+                  pReturn $ stringToInt $ fromList digits));
+         
+        mulop  = (char '*' `pSeq` pReturn multiply) `pOr`
+                 (char '/' `pSeq` pReturn divide);
+        addop  = (char '+' `pSeq` pReturn add) `pOr`
+                 (char '-' `pSeq` pReturn subtract);
+    in
+        testParser expr (toList "(4-2-1)*4/2") (2 :: Int);
+
+/// eof
+//
+
+test_eof_empty =
+    testParser eof [] ();
+
+test_eof_some =
+    testError eof ['c'] 1 1;
+
+/// notFollowedBy
+//
+
+test_notFollowedBy_yes =
+    testParser (notFollowedBy (char 'c')) ['x'] ();
+
+test_notFollowedBy_no =
+    testError (notFollowedBy (char 'c')) ['c'] 1 1;
+
+/// tokenSequenceToList
+//
+
+test_tokenSequenceToList_List =
+    let
+        xs = [1,2,3,4] :: [Int];
+    in
+        xs == tokenSequenceToList (makeTSList xs);
+
+test_tokenSequenceToList_String =
+    ['1','2','3','4'] == tokenSequenceToList (makeTSString "1234");
+
+/// tokenPrimSeq/tokenSatisfySeq
+//
+
+test_tokenPrimSeq =
+    let
+        nextPos pos t toks = initialPos "";
+        testTok x = if x == 'c' then Just "fine" else Nothing;
+    in
+        testParserSeq (tokenPrimSeq show nextPos testTok) (makeTSString "c") "fine";
+
+test_tokenSatisfySeq =
+    let
+        nextPos pos t toks = initialPos "";
+        testTok = equals 'c';
+    in
+        testParserSeq (tokenSatisfySeq show nextPos testTok) (makeTSString "c") 'c';
+
+unitTests =
+    assert test_pReturn &&
+    assert test_pZero &&
+    assert test_pFail &&
+    assert test_pBind &&
+    
+    assert test_pOr1 &&
+    assert test_pOr2 &&
+    assert test_pOr3 &&
+    
+    assert test_pOrT1 &&
+    assert test_pOrT2 &&
+    assert test_pOrT3 &&
+    assert test_pOrT4 &&
+    
+    assert test_try1 &&
+    assert test_try2 &&
+    
+    assert test_token &&
+    assert test_tokenPrim &&
+    assert test_tokenSatisfy &&
+    
+    assert test_getState &&
+    assert test_setState &&
+    assert test_updateState &&
+    
+    assert test_getPosition &&
+    assert test_setPosition &&
+    
+    assert test_getInput &&
+    assert test_setInput &&
+    
+    assert test_many_empty &&
+    assert test_many_some &&
+    assert test_many_some_and &&
+    
+    assert test_many1_empty &&
+    assert test_many1_some &&
+    assert test_many1_some_and &&
+    
+    assert test_skipMany_empty &&
+    assert test_skipMany_some &&
+    assert test_skipMany_some_and &&
+    
+    assert test_skipMany1_empty &&
+    assert test_skipMany1_some &&
+    assert test_skipMany1_some_and &&
+    
+    assert test_sepBy_empty &&
+    assert test_sepBy_one &&
+    assert test_sepBy_some &&
+    assert test_sepBy_some_sep &&
+    
+    assert test_sepBy1_empty &&
+    assert test_sepBy1_one &&
+    assert test_sepBy1_some &&
+    assert test_sepBy1_some_sep &&
+    
+    assert test_endBy_empty &&
+    assert test_endBy_one &&
+    assert test_endBy_some &&
+    assert test_endBy_some_noEnd &&
+    
+    assert test_endBy1_empty &&
+    assert test_endBy1_one &&
+    assert test_endBy1_some &&
+    assert test_endBy1_some_noEnd &&
+    
+    assert test_sepEndBy_empty &&
+    assert test_sepEndBy_one &&
+    assert test_sepEndBy_one_noEnd &&
+    assert test_sepEndBy_some &&
+    assert test_sepEndBy_some_noEnd &&
+    assert test_sepEndBy_leading_sep &&
+    assert test_sepEndBy_trailing_partial_content &&
+    assert test_sepEndBy_no_separator &&
+    assert test_sepEndBy_separator_only &&
+
+    assert test_sepEndBy1_empty &&
+    assert test_sepEndBy1_one &&
+    assert test_sepEndBy1_one_noEnd &&
+    assert test_sepEndBy1_some &&
+    assert test_sepEndBy1_some_noEnd &&
+    
+    assert test_count_0_empty &&
+    assert test_count_0_some &&
+    assert test_count_3_enough &&
+    assert test_count_3_notEnough &&
+    
+    assert test_between_ok &&
+    assert test_between_noOpen &&
+    assert test_between_noClose &&
+    
+    assert test_option_yes &&
+    assert test_option_no &&
+    assert test_optional_yes &&
+    assert test_optional_no &&
+    
+    assert test_manyTill1 &&
+    assert test_manyTill2 &&
+    assert test_manyTill3 &&
+    assert test_manyTill4 &&
+    assert test_manyTill5 &&
+    assert test_manyTill6 &&
+    assert test_manyTill7 &&
+    assert test_manyTill8 &&
+    
+    assert test_chainLeft1 &&
+    
+    assert test_eof_empty &&
+    assert test_eof_some &&
+    
+    assert test_notFollowedBy_yes &&
+    assert test_notFollowedBy_no &&
+    
+    assert test_tokenSequenceToList_List &&
+    assert test_tokenSequenceToList_String &&
+    
+    assert test_tokenPrimSeq &&
+    assert test_tokenSatisfySeq
+    ;
+
+public testAll = 
+    assert unitTests &&
+    
+    assert SqlParser_Tests.unitTests;
+
+/// Space behaviour tests.
+// As of Sep 19, 2007, these fail due to an erroneous compiler optimization.
+
+/**
+ * Ensure that the space behaviour of {@link runParserSeq@} is correct.
+ * Using a 256M heap in Everything ICE, this should crash if {@link runParserSeq@}
+ * leaks space and return {@code ()@} if it does not.
+ */
+testSpaceSeq :: () -> ();
+testSpaceSeq unused =
+    (case runParserSeq (many space) () "" (makeTSList (List.replicate 2000000 ' ')) of
+    Right x -> List.length x;)
+    `seq`
+    ();
+
+/**
+ * Ensure that the space behaviour of {@link runParser@} is correct.
+ * Using a 256M heap in Everything ICE, this should crash if {@link runParser@}
+ * leaks space and return {@code ()@} if it does not.
+ */
+testSpace :: () -> ();
+testSpace unused =
+    (case runParser (many space) () "" (List.replicate 2000000 ' ') of
+    Right x -> List.length x;)
+    `seq`
+    ();
+
+/// Benchmarks.
+// I recommend using ICE's :pt command to run these.
+
+/**
+ * Run {@link many@} on large input.
+ */
+benchmarkMany :: () -> ();
+benchmarkMany =
+    let
+        input = String.replicate 2000000 'z';
+    in
+        (\ignored -> runParserSeq (many (char 'z')) () "" (makeTSString input) `seq` ());
+
+/**
+ * Run {@link manyTill@} on large input.
+ */
+benchmarkManyTill :: () -> ();
+benchmarkManyTill =
+    let
+        input = String.replicate 2000000 'z' ++ "$";
+    in
+        (\ignored -> runParserSeq (manyTill (char 'z') (char '$')) () "" (makeTSString input) `seq` ());
+
+/**
+ * Run {@link manyUntil@} on large input.
+ */
+benchmarkManyUntil :: () -> ();
+benchmarkManyUntil =
+    let
+        input = String.replicate 2000000 'z';
+    in
+        (\ignored -> runParserSeq (manyUntil (char 'z') (char '$')) () "" (makeTSString input) `seq` ());
+
+/**
+ * Run {@link sepEndBy@} on large input.
+ */
+benchmarkSepEndBy :: () -> ();
+benchmarkSepEndBy =
+    let
+        input = String.replicate 500000 'z';
+    in
+        (\ignored -> runParserSeq (sepEndBy (char 'z') (char 'z')) () "" (makeTSString input) `seq` ());
+
+/**
+ * Run {@link pOrT@} on large input.
+ */
+benchmarkPOrT :: () -> ();
+benchmarkPOrT =
+    let
+        input = String.replicate 500000 'z';
+    in
+        (\ignored -> runParserSeq (many (char 'a' `pOrT` char 'z')) () "" (makeTSString input) `seq` ());

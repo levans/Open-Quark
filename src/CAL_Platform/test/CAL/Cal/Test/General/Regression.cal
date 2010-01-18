@@ -1,0 +1,91 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Regression.cal
+ * Creation date: April 17, 2003.
+ * By: Raymond Cypher
+ */
+
+/*
+ * This module contains the set of regression gems used to ensure that CAL is behaving
+ * correctly.
+ * The regression functions should be the only public things in this module.
+ * All regression functions should be added to the corresponding regression script 'regression.txt'.
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Test.General.Regression;
+import Cal.Core.Prelude;
+import Cal.Collections.List;
+import Cal.Test.General.M2;
+
+// The original regression suite contains a variety of boolean tests of general functionality
+// and behaviour.  Including, but not limited to, list manipulation, regression, overloading, 
+// lambda lifting, foreign functions, etc.
+public oldRegressionSuite = M2.mainM2;
+
+data public Foo a = 
+    public Bar 
+        baz     :: (Baz a) 
+        cuz     :: (Cuz a) 
+        qux     :: a
+    deriving Prelude.Outputable;
+data public Baz a = 
+    public Baz 
+        baz     :: a
+    deriving Prelude.Outputable;
+data public Cuz a = 
+    public Coo
+    deriving Prelude.Outputable;
+
+boolCAF :: Prelude.Boolean;
+boolCAF = Prelude.False;
+
+// This gem test for a previously encountered bug found when a node (CAF result) appears
+// multiple times in the unwind tree.  Previous to being fixed this gem caused an internal
+// runtime error.
+public duplicateNodeUnwindTest = Bar (Baz (boolCAF)) Coo (boolCAF);
+
+let1 = (let a = List.map; in a) Prelude.isEmpty;
+public letTest1 = (let1 [['a'], [], ['b']]) == ([Prelude.False, Prelude.True, Prelude.False]);
+
+// These functions should all run to completion with the default JVM heap size
+// of 64M.
+spaceTest = Prelude.seq (Prelude.seq spaceTest1 spaceTest2) spaceTest3;
+spaceTest1 = List.sum (Prelude.upFromTo 1.0 10000000.0);
+spaceTest2 = List.last (List.take 60000000 (List.repeat 'a'));
+spaceTest3 =
+    let
+        list = Prelude.upFromTo 1.0 10000000.0;
+    in
+       List.last list;

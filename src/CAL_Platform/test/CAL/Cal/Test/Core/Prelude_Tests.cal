@@ -1,0 +1,4128 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Prelude_Tests.cal
+ * Creation date: Oct 20, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for the {@link module = Prelude@} module.
+ * 
+ * It is a friend module to the Prelude, and so can also test private functions in the Prelude.
+ * 
+ * Note that *examples functions can and should still go into the Prelude module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Prelude_Tests;
+import Cal.Core.Prelude using
+    typeClass = Enum, Eq, Inputable, IntEnum, Num, Ord, Outputable, Typeable;
+    typeConstructor =
+        Boolean, Byte, CalFunction, CalValue, Char, Decimal, Double, Either, 
+        Float, Int, Integer, JEquivalenceRelation, JList, JObject, Long, Maybe, 
+        Ordering, Short, String, Unit;
+    dataConstructor = False, True, Left, Right, Nothing, Just, LT, EQ, GT;
+    function =
+        abs, add, asTypeOf, assert, compare, eager, equals, error, 
+        evaluateCalFunction, fromByte, fromDecimal, fromDouble, fromFloat, 
+        fromInt, fromInteger, fromLong, fromShort, fst, input, integerToString, 
+        isForeignReferenceType, makeCalFunction, makeEquivalenceRelation, max, 
+        min, negate, not, notANumber, output, powerInteger, seq, signum, 
+        stringToDecimal, stringToInteger, toByte, toDouble, toFloat, toInt, 
+        toLong, toShort, typeOf, undefined, unsafeCoerce, upFromTo;
+    ;
+import Cal.Utilities.Math using
+    function = cos, sin;
+    ;
+import Cal.Core.Char;    
+import Cal.Core.String;
+import Cal.Collections.List using
+    function = inputList, map, outputList, partition, take;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Collections.Array;
+import Cal.Utilities.Decimal; 
+import Cal.Core.Exception using
+    typeClass = Exception;
+    function = catch, isError, try;
+    ;
+    
+/**
+ * test of some basic operations on the Prelude.Byte type.
+ */     
+testByte :: Boolean;
+private testByte =
+    let
+        a :: Byte;
+        a = 120;
+
+        b :: Byte;
+        b = -31;
+    in
+        assert( a == 120 ) &&
+        assert( b == -31 ) &&
+        assert( a + b == 89 ) &&
+        assert( a - 20 == 100 ) &&
+        assert( a / 10 == 12 ) &&
+        assert( 12 * 10 == a ) &&
+        assert( a != b ) &&
+        assert( a >= a ) &&
+        assert( a > b ) &&
+        assert( b <= b ) &&
+        assert( b < a ) &&
+        assert( toDouble a == 120.0 ) &&
+        assert( fromInt (-31) == b ) &&
+        assert( signum a == 1 ) &&
+        assert( -b == 31 ) &&
+        assert( toByte (30 :: Int) == (30 :: Byte) ) &&
+        assert( (30 :: Byte) == 30 ) &&
+        assert( (30 :: Byte) + 30 == (60 :: Byte) );   
+ 
+/**
+ * test of some basic operations on the Prelude.Short type.
+ */     
+testShort :: Boolean;
+private testShort =
+    let
+        a :: Short;
+        a = 100;
+        
+        b :: Short;
+        b = 2000;
+        
+        c :: Short;
+        c = 2;
+    in
+        assert( a == 100 ) &&
+        assert( a != b ) &&
+        assert( a <= a ) &&
+        assert( a < b ) &&
+        assert( b >= b ) &&
+        assert( b > a ) &&
+        assert( signum (-a) == -1 ) &&
+        assert( abs (-b) == b ) &&
+        assert( a - b == -1900 ) &&
+        assert( a + b == 2100 ) &&
+        assert( b / a == 20 ) &&
+        assert( b * c == 4000 ) &&
+        assert( toDouble b == 2000.0 ) &&
+        assert( fromInteger 100 == a ) &&
+        assert( toShort (30 :: Int) == (30 :: Short) ) &&
+        assert( (30 :: Short) == 30 ) &&
+        assert( (30 :: Short) + 30 == (60 :: Short) );    
+  
+/**
+ * test of some basic operations on the Prelude.Integer type.
+ */    
+testInteger :: Boolean;
+private testInteger =
+    assert( (integerToString (powerInteger (stringToInteger "2") 1000)) == "10715086071862673209484250490600018105614048117055336074437503883703510511249361224931983788156958581275946729175531468251871452856923140435984577574698574803934567774824230985421074605062371141877954182153046474983581941267398767559165543946077062914571196477686542167660429831652624386837205668069376" )
+    && assert( (integerToString ((1 :: Integer) + 1)) == "2" )
+    && assert( ((\s -> let x = Prelude.stringToInteger s; in Prelude.integerToString (Prelude.multiply x x)) "7") == "49" )
+    && assert( (10 :: Integer) < 20 ) 
+    && assert( (20 :: Integer) > 10 )
+    ;
+
+/**
+ * test of some basic operations on the Prelude.Long type.
+ */
+testLong :: Boolean;
+private testLong =
+    let
+        a :: Prelude.Long;
+        a = 5;
+        b :: Prelude.Long;
+        b = 6;
+        intA :: Prelude.Int;
+        intA = 5;
+        doubleB :: Prelude.Double;
+        doubleB = 6.0;
+    in
+        assert (a == 5) && assert (b != a) && assert (a <= a) && assert (b > 3) &&
+        assert (b >= 6) && assert (a < b) &&
+        assert (a + 1 == b) && assert ( (b - 1) * a / 5 == a) &&
+        assert ((a + b - a*2) == (b-a*a/a)) && assert (-a == -5) &&
+        assert (Prelude.fromInt intA == a) && assert (Prelude.toDouble b == doubleB);    
+ 
+/**
+ * test of some basic operations on the Prelude.Float type.
+ */    
+testFloat :: Boolean;
+private testFloat =
+    let
+        a :: Float;
+        a = 45;
+        
+        b :: Float;
+        b = -30;
+        
+        c :: Float;
+        c = toFloat 1.5;
+        
+        d :: Float;
+        d = toFloat (-1350.0);
+    
+        doubleC :: Double;
+        doubleC = 1.5;
+    in
+        assert( a == 45 ) &&
+        assert( b == -30 ) &&
+        assert( a != b ) &&
+        assert( c == (toFloat 1.5) )&&
+        assert( a + b == 15 ) &&
+        assert( a - b == 75 ) &&
+        assert( a / b == -c ) &&
+        assert( a * b == d ) &&
+        assert( -a == -45 ) &&
+        assert( -b == 30 ) &&
+        assert( a >= a ) &&
+        assert( a > b ) &&
+        assert( b <= b ) &&
+        assert( b < a ) &&
+        assert( signum a == 1 ) &&
+        assert( signum b == -1 ) &&
+        assert( signum (0 :: Float) == 0 ) &&
+        assert( max a b == a ) &&
+        assert( min a b == b ) &&
+        assert( toDouble a == 45.0 ) &&
+        assert( (30 :: Float) == 30 ) &&
+        assert( fromInt (30 :: Int) == (30 :: Float) );    
+    
+/** 
+ * Import the BigDecimal version of equals so that we can check that the scale
+ * on test results. 
+ */ 
+foreign unsafe import jvm "method equals" 
+    private jBigDecimal_equals :: Decimal -> JObject -> Boolean;
+decimal_jEquals :: Decimal -> Decimal -> Boolean;
+decimal_jEquals !x !y = jBigDecimal_equals x (unsafeCoerce y);
+
+/**
+ * Test some basic operations on the Decimal type
+ */
+private testDecimal =
+    let
+        a :: Decimal;
+        a = Decimal.fromString "2.0000";
+        
+        b :: Decimal;
+        b = Decimal.fromString "2";
+        
+        c :: Decimal;
+        c = Decimal.fromString "-10.1";
+        
+        d :: Decimal;
+        d = Decimal.fromString "16.54";
+    in
+        assert (a == b) &&
+        assert (a != c) &&
+        assert (decimal_jEquals (c + 5) (Decimal.fromString "-5.1")) &&
+        assert (decimal_jEquals (c - a) (Decimal.fromString "-12.1000")) &&
+        assert (decimal_jEquals (c * a) (Decimal.fromString "-20.20000")) &&
+        assert (decimal_jEquals (a / b) (Decimal.fromString "1.0000")) &&
+        assert (decimal_jEquals (b / a) (Decimal.fromString "1")) &&
+        assert (a < d) &&
+        assert (a <= d) &&
+        assert (a <= a) &&
+        assert (d > a) &&
+        assert (d >= a) &&
+        assert (d >= d) &&
+        assert (min a b == a) &&
+        assert (min a b == b) &&
+        assert (min a c == c) &&
+        assert (min c a == c) &&
+        assert (max c d == d) &&
+        assert (max d c == d);
+        
+        
+        
+
+//output 'value' to a Java value, and then input the Java value using 'typeOfValue' to determine the CAL
+//type to use to figure out how to do the input.
+outputThenInput1 :: (Outputable a, Inputable b) => a -> b -> b;
+private outputThenInput1 value typeOfValue = asTypeOf (input (output value)) typeOfValue;
+
+//for most types, this is operationally the identity function!
+outputThenInput2 :: (Outputable a, Inputable a) => a -> a;
+private outputThenInput2 value = outputThenInput1 value value;
+
+testOutputThenInput :: (Eq a, Outputable a, Inputable a) => a -> Boolean;
+private testOutputThenInput value = outputThenInput2 value == value; 
+
+/**
+ * Test roundtripping a CAL value using the Input/Output mechanism. First the value is
+ * output using Prelude.output, then it is input using Prelude.input, then compared to itself for
+ * equality.
+ */
+private testOutputThenInputRoundtrip =     
+    assert (testOutputThenInput "this is a string.") &&
+    assert (testOutputThenInput 2.0) &&
+    assert (testOutputThenInput [10 :: Int, 20, 30, 40, 50]) &&
+    assert (testOutputThenInput (Decimal.fromString "1.201")) &&
+    assert (testOutputThenInput ("red", Just 2.0)) &&
+    assert (testOutputThenInput [Left "red", Right "blue", Right "green"]) &&
+    assert (testOutputThenInput ([Nothing, Just ()], ['a', 'b', 'c'], [[], ["blue"]]))
+    ;
+    
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//Experiments with intertwining Java and CAL types.   
+    
+/** There is no efficiency reason to do reversing externally. This is more of a test of the lazyness potential of external operations. */
+reverseExternal :: [a] -> [a];
+reverseExternal list =
+    let
+        externalList :: JList;
+        externalList = outputList ((unsafeCoerce list) :: [CalValue]);
+                       
+        reversedExternalList = seq (jReverse externalList) externalList;
+        
+        inputtedList :: [CalValue];
+        inputtedList = inputList reversedExternalList;
+     in
+        unsafeCoerce (inputtedList);
+     
+foreign unsafe import jvm "static method java.util.Collections.reverse" private jReverse :: JList -> ();     
+ 
+reverseExternalExamples =
+    assert (reverseExternal [Just "Fred", Just "Roger", Nothing, Just "Harry"]
+       == [Just "Harry", Nothing, Just "Roger", Just "Fred"])
+    && assert (take 2 (reverseExternal [Just (error "don't call this"), Just "Roger", Nothing, Just "Harry"])    
+       == [Just "Harry", Nothing])
+    && assert (take 2 (reverseExternal [error "don't call this", Just "Roger", Nothing, Just "Anton"])
+       == [Just "Anton", Nothing])
+    ;
+ 
+/**
+ * groupAllByExternal is equivalent to groupAllBy.
+ * groupAllByExternal can be O(n^2) in the the length of the input list.
+ * groupAllBy and groupAllByExternal should probably not be defined publically in the Prelude module due to their inherent inefficiency.
+ * 
+ * @see groupAllBy
+ */
+groupAllByExternal :: (a -> a -> Boolean) -> [a] -> [[a]];
+private groupAllByExternal eq !list =  
+    let
+        externalList :: JList;
+        externalList = outputList ((unsafeCoerce list) :: [CalValue]);
+        
+        eqRelation = makeEquivalenceRelation eq;
+        
+        groupedExternalList = jGroupAllBy externalList eqRelation;
+        
+        inputtedList :: [[CalValue]];
+        inputtedList = inputList groupedExternalList;
+     in
+        unsafeCoerce (inputtedList);
+     
+private groupAllByExternalExamples =
+    assert (groupAllByExternal equals [3 :: Int, 1, 2, 2, 3, 1, 5, 5, 2] == [[3, 3], [1, 1], [2, 2, 2], [5, 5]])
+    && assert (groupAllByExternal (\p q -> fst p == fst q) [('a', 1.0), ('a', 2.0), ('b', 3.0), ('c', 4.0), ('a', 5.0), ('b', 6.0)]
+           == [[('a', 1.0), ('a', 2.0), ('a', 5.0)], [('b', 3.0), ('b', 6.0)], [('c', 4.0)]]) 
+    && assert (groupAllByExternal equals [1 :: Int, 2, 3, 4, 5] == [[1], [2], [3], [4], [5]])
+    ;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$GroupAllBy.groupAllBy"
+    private jGroupAllBy :: JList -> JEquivalenceRelation -> JList;
+
+/**
+ * groupAllBy is equivalent to groupAllByExternal except it is defined in pure CAL.
+ * groupAllBy can be O(n^2) in the the length of the input list.
+ * groupAllBy and groupAllByExternal should probably not be defined publically in the Prelude module due to their inherent inefficiency.
+ * 
+ * @see groupAllByExternal
+ */
+groupAllBy :: (a -> a -> Boolean) -> [a] -> [[a]];
+private groupAllBy eq list =
+    case list of
+    [] -> [];
+    headList : tailList ->    
+        case partition (eq headList) tailList of
+        (fstEquivClass, restOfList) ->
+            (headList : fstEquivClass) : groupAllBy eq restOfList;
+        ;
+    ;
+    
+private groupAllByExamples =
+    assert (groupAllBy equals [3 :: Int, 1, 2, 2, 3, 1, 5, 5, 2] == [[3, 3], [1, 1], [2, 2, 2], [5, 5]])
+    && assert (groupAllBy (\p q -> fst p == fst q) [('a', 1.0), ('a', 2.0), ('b', 3.0), ('c', 4.0), ('a', 5.0), ('b', 6.0)]
+           == [[('a', 1.0), ('a', 2.0), ('a', 5.0)], [('b', 3.0), ('b', 6.0)], [('c', 4.0)]]) 
+    && assert (groupAllBy equals [1 :: Int, 2, 3, 4, 5] == [[1], [2], [3], [4], [5]])
+    ;
+
+//end- Experiments with intertwining Java and CAL types.   
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin - experiments with Strict and Lazy data constructors and optimization involving them...
+//unless otherwise noted, these experiments were on or around Nov 9, 2005.
+
+data TestStrictnessType a =
+    MakeTestStrictnessType
+
+        lazyChar :: Char 
+        strictChar :: !Char 
+    
+        lazyBoolean :: Boolean 
+        strictBoolean :: !Boolean         
+    
+        lazyByte :: Byte     
+        strictByte :: !Byte 
+        
+        lazyShort :: Short 
+        strictShort :: !Short 
+                
+        lazyInt :: Int 
+        strictInt :: !Int 
+        
+        lazyLong :: Long 
+        strictLong :: !Long 
+        
+        lazyFloat :: Float 
+        strictFloat :: !Float 
+        
+        lazyDouble :: Double 
+        strictDouble :: !Double 
+        
+        lazyString :: String 
+        strictString :: !String 
+        
+        lazyJObject :: JObject 
+        strictJObject :: !JObject 
+        
+        lazyJList :: JList 
+        strictJList :: !JList 
+        
+        lazyMaybeInt :: (Maybe Int) 
+        strictMaybeInt :: !(Maybe Int) 
+        
+        lazyA :: a 
+        strictA :: !a
+        ;
+
+/** extract the lazyChar field using field-name based syntax */
+getLazyChar v = 
+    case v of
+    MakeTestStrictnessType {lazyChar} -> lazyChar;
+    ;
+ 
+/** 
+ * extract the lazyChar field using positional based syntax. This should generated identical code as getLazyChar
+ * modulo the function name.
+ */    
+getLazyCharPositional v = 
+    case v of
+    MakeTestStrictnessType
+        lazyChar strictChar lazyBoolean strictBoolean lazyByte strictByte lazyShort strictShort lazyInt strictInt
+        lazyLong strictLong lazyFloat strictFloat lazyDouble strictDouble lazyString strictString 
+        lazyJObject strictJObject lazyJList strictJList lazyMaybeInt strictMaybeInt lazyA strictA  
+        -> lazyChar;
+    ;
+
+/** extract the strictChar field using field-name based syntax */    
+getStrictChar v = 
+    case v of
+    MakeTestStrictnessType {strictChar} -> strictChar;
+    ; 
+ 
+/** 
+ * extract the strictChar field using positional based syntax. This should generated identical code as getStrictChar
+ * modulo the function name.
+ */      
+getStrictCharPositional v = 
+    case v of
+    MakeTestStrictnessType
+        lazyChar strictChar lazyBoolean strictBoolean lazyByte strictByte lazyShort strictShort lazyInt strictInt
+        lazyLong strictLong lazyFloat strictFloat lazyDouble strictDouble lazyString strictString 
+        lazyJObject strictJObject lazyJList strictJList lazyMaybeInt strictMaybeInt lazyA strictA  
+        -> strictChar; 
+    ;
+
+/**
+ * Constrast with useStrictChar which is able to dispense with evaluating and then unboxing the field.   
+ *      RTValue useLazyChar$lazyChar$2 = $dcCaseVar1.get_lazyChar();
+ *      return RTData.CAL_Char.make(Character.toUpperCase(useLazyChar$lazyChar$2.evaluate($ec).getCharValue()));
+ */    
+useLazyChar v =
+    case v of
+    MakeTestStrictnessType {lazyChar} -> Char.toUpperCase lazyChar;
+    ;
+
+/**
+ * useStrictChar will extract 'strictChar' as a char field not a RTValue for
+ * the application of the foreign function Prelude.toUpperCase.
+ *
+ *     char useStrictChar$strictChar$2$u = $dcCaseVar1.get_strictChar_As_Character();
+ *     return RTData.CAL_Char.make(Character.toUpperCase(useStrictChar$strictChar$2$u));    
+ */  
+useStrictChar v =
+    case v of
+    MakeTestStrictnessType {strictChar} -> Char.toUpperCase strictChar;
+    ;
+    
+//foreign unsafe import jvm "method toString" private objectToString :: JObject -> String;    
+
+/**
+ * Notice that List needs to be evaluated and then extracted and then cast to the right type.    
+        RTValue useLazyJList$lazyJList$2 = $dcCaseVar1.get_lazyJList();
+        return new Show_J_List.RTAppS(i_Show_J_List_0, (List)useLazyJList$lazyJList$2.evaluate($ec).getOpaqueValue());
+*/    
+useLazyJList v =
+    case v of
+    MakeTestStrictnessType {lazyJList} -> Debug.show lazyJList;
+    ; 
+   
+/**
+ * Notice that List is used directly without evaluation.    
+    List useStrictJList$strictJList$2$u = $dcCaseVar1.get_strictJList_As_java_util_List();
+    return new Show_J_List.RTAppS(i_Show_J_List_0, useStrictJList$strictJList$2$u);
+*/    
+useStrictJList v =
+    case v of
+    MakeTestStrictnessType {strictJList} -> Debug.show strictJList;
+    ;
+ 
+/**  
+ * Notice that there is a call to evaluate the Maybe Int value.  
+     RTValue useLazyMaybeInt$lazyMaybeInt$2 = $dcCaseVar1.get_lazyMaybeInt();
+     return RTData.CAL_Int.make(Math.abs(i_From_Just_0.f1S(useLazyMaybeInt$lazyMaybeInt$2.evaluate($ec), $ec).evaluate($ec).getIntValue()));   
+*/
+useLazyMaybeInt v =
+    case v of
+    MakeTestStrictnessType {lazyMaybeInt} -> Prelude.abs (Prelude.fromJust lazyMaybeInt);
+    ;
+ 
+/**  
+ * Notice that we do not need to evaluate the Maybe Int value but just directly get its value.   
+     RTValue useStrictMaybeInt$strictMaybeInt$2 = $dcCaseVar1.get_strictMaybeInt();
+     return RTData.CAL_Int.make(Math.abs(i_From_Just_0.f1S(useStrictMaybeInt$strictMaybeInt$2.getValue(), $ec).evaluate($ec).getIntValue()));
+*/
+useStrictMaybeInt v =
+    case v of
+    MakeTestStrictnessType {strictMaybeInt} -> Prelude.abs (Prelude.fromJust strictMaybeInt);
+    ;
+
+/**
+ * testLiftedStrictness should generate the same code (including for the lift) as
+ * 
+ * testLiftedStrictness_explicit
+ * testLiftedStrictnessPositional
+ * testLiftedStrictnessPositional_explicit
+ * 
+ * In particular, because we know strictChar is evaluated, it should be added as a plinged hidden argument
+ * to the lift of f.
+ */    
+testLiftedStrictness v =
+    case v of
+    MakeTestStrictnessType
+       {lazyChar, strictChar, lazyBoolean, strictBoolean, lazyByte, strictByte, lazyShort, strictShort, lazyInt, strictInt,
+        lazyLong, strictLong, lazyFloat, strictFloat, lazyDouble, strictDouble, lazyString, strictString, 
+        lazyJObject, strictJObject, lazyJList, strictJList, lazyMaybeInt, strictMaybeInt, lazyA, strictA}
+        ->
+            let
+                f x = 
+                    (x, 
+                     lazyChar, strictChar, lazyBoolean, strictBoolean, lazyByte, strictByte, lazyShort, strictShort, lazyInt, strictInt,
+                     lazyLong, strictLong, lazyFloat, strictFloat, lazyDouble, strictDouble, lazyString, strictString, 
+                     lazyJObject, strictJObject, lazyJList, strictJList, lazyMaybeInt, strictMaybeInt, lazyA, strictA);
+            in
+                f 2.0;
+    ; 
+
+/**
+ * The function f has had arguments explicitly added so no extra arguments needed during lifting. It has also been
+ * typed according to the type it would recieve above (since its defining expression without type annotations gives it
+ * a more general type).
+ */    
+testLiftedStrictness_explict v =
+    case v of
+    MakeTestStrictnessType
+       {lazyChar, strictChar, lazyBoolean, strictBoolean, lazyByte, strictByte, lazyShort, strictShort, lazyInt, strictInt,
+        lazyLong, strictLong, lazyFloat, strictFloat, lazyDouble, strictDouble, lazyString, strictString, 
+        lazyJObject, strictJObject, lazyJList, strictJList, lazyMaybeInt, strictMaybeInt, lazyA, strictA}
+        ->
+            let
+                f lazyChar !strictChar lazyBoolean !strictBoolean lazyByte !strictByte lazyShort !strictShort lazyInt !strictInt
+                  lazyLong !strictLong lazyFloat !strictFloat lazyDouble !strictDouble lazyString !strictString
+                  lazyJObject !strictJObject lazyJList !strictJList lazyMaybeInt !strictMaybeInt lazyA !strictA  
+                  x
+                = 
+                    (x, 
+                     lazyChar :: Char, strictChar :: Char, lazyBoolean :: Boolean, strictBoolean :: Boolean, lazyByte :: Byte, strictByte :: Byte, lazyShort :: Short, strictShort :: Short, lazyInt :: Int, strictInt :: Int,
+                     lazyLong :: Long, strictLong :: Long, lazyFloat :: Float, strictFloat :: Float, lazyDouble :: Double, strictDouble :: Double, lazyString :: String, strictString :: String, 
+                     lazyJObject :: JObject, strictJObject :: JObject, lazyJList :: JList, strictJList :: JList, lazyMaybeInt :: Maybe Int, strictMaybeInt :: Maybe Int, lazyA, strictA);
+            in
+                f lazyChar strictChar lazyBoolean strictBoolean lazyByte strictByte lazyShort strictShort lazyInt strictInt
+                  lazyLong strictLong lazyFloat strictFloat lazyDouble strictDouble lazyString strictString 
+                  lazyJObject strictJObject lazyJList strictJList lazyMaybeInt strictMaybeInt lazyA strictA
+                  2.0;
+    ;        
+    
+testLiftedStrictnessPositional v =
+    case v of
+    MakeTestStrictnessType
+        lazyChar strictChar lazyBoolean strictBoolean lazyByte strictByte lazyShort strictShort lazyInt strictInt
+        lazyLong strictLong lazyFloat strictFloat lazyDouble strictDouble lazyString strictString 
+        lazyJObject strictJObject lazyJList strictJList lazyMaybeInt strictMaybeInt lazyA strictA  
+        ->
+            let
+                f x = 
+                    (x, 
+                     lazyChar, strictChar, lazyBoolean, strictBoolean, lazyByte, strictByte, lazyShort, strictShort, lazyInt, strictInt,
+                     lazyLong, strictLong, lazyFloat, strictFloat, lazyDouble, strictDouble, lazyString, strictString, 
+                     lazyJObject, strictJObject, lazyJList, strictJList, lazyMaybeInt, strictMaybeInt, lazyA, strictA);
+            in
+                f 2.0;
+    ;
+    
+testLiftedStrictnessPositional_explicit v =
+    case v of
+    MakeTestStrictnessType
+        lazyChar strictChar lazyBoolean strictBoolean lazyByte strictByte lazyShort strictShort lazyInt strictInt
+        lazyLong strictLong lazyFloat strictFloat lazyDouble strictDouble lazyString strictString 
+        lazyJObject strictJObject lazyJList strictJList lazyMaybeInt strictMaybeInt lazyA strictA  
+        ->
+            let
+                f lazyChar !strictChar lazyBoolean !strictBoolean lazyByte !strictByte lazyShort !strictShort lazyInt !strictInt
+                  lazyLong !strictLong lazyFloat !strictFloat lazyDouble !strictDouble lazyString !strictString
+                  lazyJObject !strictJObject lazyJList !strictJList lazyMaybeInt !strictMaybeInt lazyA !strictA  
+                  x
+                = 
+                    (x, 
+                     lazyChar :: Char, strictChar :: Char, lazyBoolean :: Boolean, strictBoolean :: Boolean, lazyByte :: Byte, strictByte :: Byte, lazyShort :: Short, strictShort :: Short, lazyInt :: Int, strictInt :: Int,
+                     lazyLong :: Long, strictLong :: Long, lazyFloat :: Float, strictFloat :: Float, lazyDouble :: Double, strictDouble :: Double, lazyString :: String, strictString :: String, 
+                     lazyJObject :: JObject, strictJObject :: JObject, lazyJList :: JList, strictJList :: JList, lazyMaybeInt :: Maybe Int, strictMaybeInt :: Maybe Int, lazyA, strictA);
+            in
+                f lazyChar strictChar lazyBoolean strictBoolean lazyByte strictByte lazyShort strictShort lazyInt strictInt
+                  lazyLong strictLong lazyFloat strictFloat lazyDouble strictDouble lazyString strictString 
+                  lazyJObject strictJObject lazyJList strictJList lazyMaybeInt strictMaybeInt lazyA strictA
+                  2.0;
+    ; 
+    
+data TestStrictnessClashes =
+    MakeClash1
+       strictFloat :: !Float
+       lazyFloat :: Float
+       mixedFloat :: Float
+    |       
+    MakeClash2
+       strictFloat :: !Float
+       lazyFloat :: Float
+       mixedFloat :: !Float //strict in 2, lazy in 1 and 3.
+    |
+    MakeClash3
+       lazyFloat :: Float
+       mixedFloat :: Float
+       strictFloat :: !Float
+    ;
+
+/**
+ * testStrictnessClashes_strictFloat should generate the same code as testStrictnessClashes_strictFloat_positional
+ */
+testStrictnessClashes_strictFloat v =
+    case v of
+    (MakeClash1 | MakeClash2) {strictFloat} -> show strictFloat;
+    ;
+
+testStrictnessClashes_strictFloat_positional v =
+    case v of
+    (MakeClash1 | MakeClash2) strictFloat lazyFloat mixedFloat -> show strictFloat;
+    ;
+
+/**
+ * testStrictnessClashes_lazyFloat should generate the same code as
+ * testStrictnessClashes_lazyFloat_positional 
+ */    
+testStrictnessClashes_lazyFloat v =
+    case v of
+    (MakeClash1 | MakeClash2) {lazyFloat} -> show lazyFloat;
+    ;
+
+testStrictnessClashes_lazyFloat_positional v =
+    case v of
+    (MakeClash1 | MakeClash2) strictFloat lazyFloat mixedFloat -> show lazyFloat;
+    ;
+    
+/**  
+ * testStrictnessClashes_mixedFloat should generate the same code as
+ * testStrictnessClashes_mixedFloat_positional
+ */    
+testStrictnessClashes_mixedFloat v =
+    case v of
+    (MakeClash1 | MakeClash2) {mixedFloat} -> show mixedFloat;
+    ;
+
+testStrictnessClashes_mixedFloat_positional v =
+    case v of
+    (MakeClash1 | MakeClash2) strictFloat lazyFloat mixedFloat -> show mixedFloat;
+    ;    
+
+/**
+ * Should all generate the same code. Currently, explict is different because lifted arg from
+ * case unpackings are not marked as strict.
+ * testLiftedStrictness2
+ * testLiftedStrictness2_positional
+ * testLiftedStrictness2_explicit
+ */    
+testLiftedStrictness2 v =
+    case v of
+    (MakeClash1 | MakeClash2) {lazyFloat, strictFloat, mixedFloat} -> 
+        let
+            f x =
+                (x, strictFloat, lazyFloat, mixedFloat);
+        in
+            f 5.0;
+    ;
+    
+testLiftedStrictness2_positional v =
+    case v of
+    (MakeClash1 | MakeClash2) strictFloat lazyFloat mixedFloat -> 
+        let
+            f x =
+                (x, strictFloat, lazyFloat, mixedFloat);
+        in
+            f 5.0;
+    ; 
+    
+testLiftedStrictness2_explicit v =
+    case v of
+    (MakeClash1 | MakeClash2) {lazyFloat, strictFloat, mixedFloat} -> 
+        let
+            f !strictFloat lazyFloat mixedFloat x =
+                (x, strictFloat :: Float, lazyFloat :: Float, mixedFloat :: Float);
+        in
+            f strictFloat lazyFloat mixedFloat 5.0;
+    ; 
+
+/**
+ * Local let variables e1, e2, and e3 are eager. These should be lifted as strict arguments to f. Thus
+ * testLiftedEagerArgs1 and testLiftedEagerArgs1_explicit should generate identical lecc java code.
+ * 
+ * List.tail was chosen so that primitive optimizations are not invoked (List.tail stays within the realm of
+ * CAL types).
+ */    
+testLiftedEagerArgs1 v =
+    let
+        e1 = eager (List.tail v);
+        e2 = eager $ (List.tail v);
+        e3 = (eager $ (List.tail v));
+        ne1 = List.tail v; //not eager
+        f x !y =
+            (e1, e2, e3, ne1, x, y);
+    in
+        f v v;
+    
+testLiftedEagerArgs1_explicit v =
+    let
+        e1 = eager (List.tail v);
+        e2 = eager $ (List.tail v);
+        e3 = (eager $ (List.tail v));
+        ne1 = List.tail v; //not eager
+        f !e1 !e2 !e3 ne1 x !y =
+            (e1, e2, e3, ne1, x, y);
+    in
+        f e1 e2 e3 ne1 v v;    
+    
+    
+/**
+ * Local let variables e1, e2, and e3 are eager. These should be lifted as strict arguments to f. Thus
+ * testLiftedEagerArgs2 and testLiftedEagerArgs2_explicit should generate identical lecc java code.
+ * 
+ * localCos was chosen so that primitive optimizations are invoked. Math.cos was not used since
+ * it is one of the primitive functions explicitly treated eagerly (as long as its argument is evaluated)
+ * by SourceGenerationConfiguration.java) and we want to avoid coupling with that optimization here.
+ */    
+testLiftedEagerArgs2 v =
+    let
+        e1 = eager (localCos v);
+        e2 = eager $ (localCos v);
+        e3 = (eager $ (localCos v));
+        ne1 = localCos v;
+        f :: Double -> Double -> (Double, Double, Double, Double, Double, Double);
+        f x !y =
+            (e1, e2, e3, ne1, x, y);
+    in
+        f v v;
+    
+testLiftedEagerArgs2_explicit v =
+    let
+        e1 = eager (localCos v);
+        e2 = eager $ (localCos v);
+        e3 = (eager $ (localCos v));
+        ne1 = localCos v;
+        f :: Double -> Double -> Double -> Double -> Double -> Double -> (Double, Double, Double, Double, Double, Double);
+        f !e1 !e2 !e3 ne1 x !y =
+            (e1, e2, e3, ne1, x, y);
+    in
+        f e1 e2 e3 ne1 v v;        
+    
+foreign unsafe import jvm "static method java.lang.Math.cos" localCos :: Double -> Double;
+
+/**
+ * Local let variables e1, e2, and e3 are eager. These should be lifted as strict arguments to f. Thus
+ * testLiftedEagerArgs2 and testLiftedEagerArgs2_explicit should generate identical lecc java code.
+ * 
+ * cos was chosen so that primitive optimizations are invoked. Math.cos was used since
+ * it is one of the primitive functions explicitly treated eagerly (as long as its argument is evaluated)
+ * by SourceGenerationConfiguration.java) and we want to test coupling with that optimization here.
+ */    
+testLiftedEagerArgs3 v =
+    let
+        e1 = eager (Math.cos v);
+        e2 = eager $ (Math.cos v);
+        e3 = (eager $ (Math.cos v));
+        ne1 = Math.cos v;
+        f :: Double -> Double -> (Double, Double, Double, Double, Double, Double);
+        f x !y =
+            (e1, e2, e3, ne1, x, y);
+    in
+        f v v;
+    
+testLiftedEagerArgs3_explicit v =
+    let
+        e1 = eager (Math.cos v);
+        e2 = eager $ (Math.cos v);
+        e3 = (eager $ (Math.cos v));
+        ne1 = Math.cos v;
+        f :: Double -> Double -> Double -> Double -> Double -> Double -> (Double, Double, Double, Double, Double, Double);
+        f !e1 !e2 !e3 ne1 x !y =
+            (e1, e2, e3, ne1, x, y);
+    in
+        f e1 e2 e3 ne1 v v;   
+ 
+/**
+ * The "e" local variables should be plinged in the lift, and the "ne" should not be plinged.
+ */    
+testLiftedEvaluatedArgs1 v !w =
+    let
+        //literals are evaluated to weak head normal form
+        e1 = "abc"; 
+        e2 = 1000 :: Integer;
+        e3 = [10, 20, 30.0];
+        e4 = 'a';
+        e5 = [10, 20, 40] :: [Int];
+        e6 = 'a' : [];
+        e7 = {foo = "abc", bar = v};
+        e8 = (v, "zaphod");
+        
+        e9 = e4; //alias of an evaluated let variable is evaluated
+        e10 = w; //alias of an evaluated function argument is evaluated
+        e11 = Math.sin;
+        e12 = (((Prelude.eager))) v;
+        e13 = w.MakeClash1.strictFloat; //evaluated, since w will be evaluated.
+        e14 = Prelude.LT;
+            
+        ne1 = v; //alias of an unevaluated var
+        ne2 = {Prelude.undefined | #4 = 2.5}; //a record extension, not a record literal
+        ne3 = ne1;
+        ne4 = w.MakeClash1.lazyFloat; //lazyFloat is not a strict field.
+        ne5 = v.MakeClash1.strictFloat; //v is not evaluated.
+                
+        f v w =
+            (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e12, e13, e14, ne1, ne2, ne3, ne4, ne5, v, w);
+    in
+        f v w;    
+    
+ 
+///**
+// * Too many error messages are reported here for what is effectively the same problem. Note that
+// * part of the problem here is the use of punning: there is both repeated field names as well as pattern
+// * variables since this really means {strictFloat = strictFloat, strictFloat = strictFloat}    
+//CAL: Compilation unsuccessful because of errors:
+//  Error: Cal.Test.Core.Prelude_Tests: (line 750 column 30): Repeated field name strictFloat in field binding pattern.
+//  Error: Cal.Test.Core.Prelude_Tests: (line 750 column 30): Repeated pattern variable strictFloat in field binding pattern. 
+//  Error: Cal.Test.Core.Prelude_Tests: (line 750 column 30): Repeated variable strictFloat used in binding.
+//*/
+//testRepeatedExtraction1 v =
+//    case v of
+//    MakeClash1 {strictFloat, strictFloat} -> strictFloat;
+//    ;
+    
+//testMatchingUnknownDataConstructorArgument arg = case arg of SomeLazyStuff {unknownDataConsArg = patternVar} -> patternVar;;  
+//
+//testNonExistentVarWithPatternGroup var =
+//    case var of
+//        (MakeClash1 | MakeClash2) {bar} -> bar;
+//        ;    
+   
+data SomeStrictStuff =
+    SomeStrictStuff
+       longValue :: !Long
+       integerValue :: !Integer
+       listValue :: ![Int]
+    deriving Eq, Show;
+
+data SomeLazyStuff =
+    SomeLazyStuff
+       longValue :: Long
+       integerValue :: Integer
+       listValue :: [Int]
+    deriving Eq, Show; 
+
+       
+//end - experiments with Strict and Lazy data constructors and optimization involving them...
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin - experiments with optimizing the TypeRep type as well as adding some form of type class support for the Dynamic type. 
+//Unless otherwise noted
+
+data Alg1 a = MakeAlg1 f1::a;
+data Alg2 a b = MakeAlg2 f1::a f2::b;
+data Alg3 a b c = MakeAlg3 f1::a f2::b f3::c;
+
+//benchmark use of Alg1 (a 1 parameter algebraic type) instantiated on a simple type.
+trTest1 !n =
+    let
+        t1 = eager $ typeOf (undefined :: Alg1 Int);
+    
+        helper :: Int -> Boolean;
+        helper !index = 
+            if index == 0 then
+                True
+            else
+                (t1 == t1)
+                `seq`
+                helper (index - 1);
+    in
+        helper n;
+
+//benchmark use of Alg2 (a 2 parameter algebraic type) instantiated on a simple type.
+trTest2 !n =
+    let
+        t1 = eager $ typeOf (undefined :: Alg2 Int Char);
+    
+        helper :: Int -> Boolean;
+        helper !index = 
+            if index == 0 then
+                True
+            else
+                (t1 == t1)
+                `seq`
+                helper (index - 1);
+    in
+        helper n; 
+ 
+//benchmark use of Alg3 (a 3 parameter algebraic type) instantiated on a simple type    
+trTest3 !n =
+    let
+        t1 = eager $ typeOf (undefined :: Alg3 Int Char String);
+    
+        helper :: Int -> Boolean;
+        helper !index = 
+            if index == 0 then
+                True
+            else
+                (t1 == t1)
+                `seq`
+                helper (index - 1);
+    in
+        helper n;     
+
+//benchmark use of Alg3 (a 3 parameter algebraic type) instantiated on more complex type arguments.
+trTest4 !n =
+    let
+        t1 = eager $ typeOf (undefined :: Alg3 (Alg1 Int) (Alg2 Int Char) (Alg3 Int Char String));
+    
+        helper :: Int -> Boolean;
+        helper !index = 
+            if index == 0 then
+                True
+            else
+                (t1 == t1)
+                `seq`
+                helper (index - 1);
+    in
+        helper n;     
+
+/*
+step 0: Results with the original definition of TypeRep.
+
+data public TypeRep =  
+    protected TypeRep 
+        typeConsName :: !String 
+        argTypes :: [TypeRep] |      
+    protected FunctionTypeRep 
+        domainType :: TypeRep 
+        codomainType :: TypeRep |   
+    protected ListTypeRep 
+        elementType :: TypeRep |       
+    protected UnitTypeRep |    
+    protected ForeignTypeRep
+        typeConsName :: !String |              
+    protected Algebraic0TypeRep 
+        typeConsName :: !String |   
+    protected Algebraic1TypeRep 
+        typeConsName :: !String 
+        argType :: TypeRep |      
+    protected Algebraic2TypeRep
+        typeConsName :: !String 
+        arg1Type :: TypeRep
+        arg2Type :: TypeRep |    
+    protected BooleanTypeRep |     
+    protected IntTypeRep |       
+    protected ByteTypeRep |  
+    protected ShortTypeRep |      
+    protected LongTypeRep |   
+    protected FloatTypeRep |  
+    protected DoubleTypeRep |   
+    protected CharTypeRep |       
+    protected StringTypeRep |      
+    protected RecordTypeRep dictionary :: !RecordType    
+    deriving Eq;
+    
+As expected, the times increase with each benchmark since trTest1 can make use of the optimized TypeRep data constructor    
+Algebraic1TypeRep and trTest2 uses Algebraic2TypeRep while trTest3 and trTest4 need to use the general TypeRep data constructor.
+
+running: trTest1 5000000
+Summary:    time = 1,276
+Standard deviation of runs = 8.66ms or 0.67% of average
+
+running: trTest2 5000000
+Summary:    time = 2,312
+Standard deviation of runs = 26.85ms or 1.16% of average
+        
+running: trTest3 5000000
+Summary:    time = 9,525
+Standard deviation of runs = 8.94ms or 0.09% of average
+
+running: trTest4 5000000
+Summary:    time = 22,707
+*/
+
+/* 
+step 1: Modify the dataconstructors in TypeRep to pling TypeRep (and [TypeRep]) valued fields.
+This results in a nice speedup for the optimized Algebraic1/2TypeRep cases.
+
+running: trTest1 5000000
+Summary:    time = 755
+Standard deviation of runs = 8.66ms or 1.14% of average
+
+running: trTest2 5000000
+Summary:    time = 1,213
+Standard deviation of runs = 8.66ms or 0.71% of average
+
+running: trTest3 5000000
+Summary:    time = 9,536
+Standard deviation of runs = 8.66ms or 0.09% of average
+
+running: trTest4 5000000
+Summary:    time = 21,566
+Standard deviation of runs = 9.21ms or 0.04% of average
+*/
+    
+//end - experiments with optimizing the TypeRep type as well as adding some form of type class support for the Dynamic type. 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin- tests of foreign types corresponding to Java primitive types    
+
+data foreign unsafe import jvm "char" MyChar deriving Eq, Debug.Show;
+data foreign unsafe import jvm "boolean" MyBoolean deriving Eq, Debug.Show;
+data foreign unsafe import jvm "byte" MyByte deriving Eq, Debug.Show;
+data foreign unsafe import jvm "short" MyShort deriving Eq, Debug.Show;
+data foreign unsafe import jvm "int" MyInt deriving Eq, Debug.Show;
+data foreign unsafe import jvm "long" MyLong deriving Eq, Debug.Show;
+data foreign unsafe import jvm "float" MyFloat deriving Eq, Debug.Show;
+data foreign unsafe import jvm "double" MyDouble deriving Eq, Debug.Show;
+
+data PreludeVersusCustomPrimitives =
+    PreludePrimitives
+        charValue :: !Char
+        booleanValue :: !Boolean
+        byteValue :: !Byte
+        shortValue :: !Short
+        intValue :: !Int
+        longValue :: !Long
+        floatValue :: !Float
+        doubleValue :: !Double
+    |
+    CustomPrimitives
+        charValue :: !MyChar
+        booleanValue :: !MyBoolean
+        byteValue :: !MyByte
+        shortValue :: !MyShort
+        intValue :: !MyInt
+        longValue :: !MyLong
+        floatValue :: !MyFloat
+        doubleValue :: !MyDouble 
+   deriving Eq, Debug.Show;
+
+//the following failed in lecc code generation and was fixed 11/30/2005 in "Bug fix for DC field selection in lecc."
+testPreludeVersusCustomPrimitives1 =
+    let
+        v1 = PreludePrimitives 'c' True (10 :: Byte) (20 :: Short) (30 :: Int) (40 :: Long) (50 :: Float) (60 :: Double);
+        v2 = CustomPrimitives (unsafeCoerce 'c') (unsafeCoerce True) (unsafeCoerce (10 :: Byte)) (unsafeCoerce (20 :: Short))
+                              (unsafeCoerce (30 :: Int)) (unsafeCoerce (40 :: Long)) (unsafeCoerce (50 :: Float)) (unsafeCoerce (60 :: Double));
+    in
+        assert (v1.PreludePrimitives.charValue == unsafeCoerce v2.CustomPrimitives.charValue)
+        && assert (v1.PreludePrimitives.booleanValue == unsafeCoerce v2.CustomPrimitives.booleanValue)
+        && assert (v1.PreludePrimitives.byteValue == unsafeCoerce v2.CustomPrimitives.byteValue)
+        && assert (v1.PreludePrimitives.shortValue == unsafeCoerce v2.CustomPrimitives.shortValue)
+        && assert (v1.PreludePrimitives.intValue == unsafeCoerce v2.CustomPrimitives.intValue)
+        && assert (v1.PreludePrimitives.longValue == unsafeCoerce v2.CustomPrimitives.longValue)
+        && assert (v1.PreludePrimitives.floatValue == unsafeCoerce v2.CustomPrimitives.floatValue)
+        && assert (v1.PreludePrimitives.doubleValue == unsafeCoerce v2.CustomPrimitives.doubleValue)
+        ;
+   
+    
+    
+data foreign unsafe import jvm "java.lang.String" MyString deriving Eq;
+data MyStringHolder = MyStringHolder myString::!MyString;
+equalsMyStringHolder x y = x.MyStringHolder.myString == y.MyStringHolder.myString;
+//the following failed in lecc code generation and was fixed 11/30/2005 "Bug fix for DC field selection on strict String fields."
+testMyStringHolder = assert (equalsMyStringHolder (MyStringHolder (unsafeCoerce "abc")) (MyStringHolder (unsafeCoerce "abc")));
+
+
+//the following failed in lecc code generation are were fixed 12/1/2005 in "Bug fix for marshalling unboxed values as arguments to foreign functions."
+
+testInOutDouble :: Double;
+testInOutDouble = input (output 2.0);
+
+data foreign unsafe import jvm "double" MyDouble2 deriving Eq, Inputable, Outputable;
+testInOutMyDouble :: MyDouble2;
+testInOutMyDouble = input (output ((unsafeCoerce 2.0) :: MyDouble2));
+
+testInOutDouble2 :: Double -> Double;
+testInOutDouble2 x = input (output x);
+
+testInOutDouble3 ::Double;
+testInOutDouble3 = input (output (2.0 + 2.0));
+
+data StrictDoubleHolder = StrictDoubleHolder dblField :: !Double;
+testInOutDouble4 :: Double;
+testInOutDouble4 = input (output ((StrictDoubleHolder 10.0).StrictDoubleHolder.dblField));
+
+testInOutDouble5 :: Double;
+testInOutDouble5 = 
+let 
+x = 2.0 + 2.0;
+in
+seq (x + x) (input (output x));
+
+testInOutBoolean :: Boolean;
+testInOutBoolean = input (output Prelude.False);
+
+testInOutChar :: Char;
+testInOutChar = input (output 'c');
+
+testInOutByte :: Byte;
+testInOutByte = input (output (20 :: Byte));
+
+testInOutShort :: Short;
+testInOutShort = input (output (30:: Short));
+
+testInOutInt :: Int;
+testInOutInt = input (output (40 :: Int));
+
+testInOutLong :: Long;
+testInOutLong = input (output (50 :: Long));
+
+testInOutFloat :: Float;
+testInOutFloat = input (output (60 :: Float));
+
+testInOutString :: String;
+testInOutString = input (output "abcd");
+
+testMarshallingPrimitives =
+    assert (testInOutDouble == 2.0)
+    && assert (testInOutMyDouble == unsafeCoerce 2.0)
+    && assert (testInOutDouble2 5.0 == 5.0)
+    && assert (testInOutDouble3 == 4.0)
+    && assert (testInOutDouble4 == 10.0)
+    && assert (testInOutDouble5 == 4.0)
+    && assert (testInOutBoolean == False)
+    && assert (testInOutChar == 'c')
+    && assert (testInOutByte == 20)
+    && assert (testInOutShort == 30)
+    && assert (testInOutInt == 40)
+    && assert (testInOutLong == 50)
+    && assert (testInOutFloat == 60)   
+    && assert (testInOutString == "abcd")    
+    ;
+
+testShowPreludeVersusCustomPrimitives =
+    assert (show (PreludePrimitives 'J' False 28 2000 976111 90007654321 1 99.9) == "(Cal.Test.Core.Prelude_Tests.PreludePrimitives 'J' Cal.Core.Prelude.False 28 2000 976111 90007654321 1.0 99.9)") &&
+    assert (show (CustomPrimitives (unsafeCoerce 'j') (unsafeCoerce True) (unsafeCoerce (82 :: Byte)) (unsafeCoerce (200 :: Short)) (unsafeCoerce (111976 :: Int)) (unsafeCoerce (10006789 :: Long)) (unsafeCoerce (11 :: Float)) (unsafeCoerce 9.99)) == "(Cal.Test.Core.Prelude_Tests.CustomPrimitives j true 82 200 111976 10006789 11.0 9.99)");
+
+
+//end- tests of foreign types corresponding to Java primitive types        
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin - test of a parallel type to Prelude.List
+
+data MyList a =     
+    MyNil | 
+    MyCons 
+        head :: a
+        tail :: (MyList a) 
+    deriving Eq, Ord;
+
+myLength :: MyList a -> Int;
+myLength !list =
+    let
+        lengthHelper :: Int -> MyList a -> Int;
+        lengthHelper !acc !list =
+            case list of
+            MyNil -> acc;
+            MyCons listHead listTail -> lengthHelper (acc + 1) listTail;
+            ;
+    in  
+        lengthHelper 0 list;
+    
+testMyList1 = myLength (MyCons 'a' MyNil);    
+    
+//end - test of a parallel type to Prelude.List    
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//A class method's type signature must involve the class type variable. For example, for the class          
+//class Foo a where
+//    method1 :: method1Type;
+//    method2 :: method2Type;
+//    ;
+//method1Type and method2Type must each involve the type variable 'a'.
+//
+//This static check was not being done, resulting in a "please contact Business Objects error" later in compilation.
+
+//class SomeClass a where
+//    methodA :: () -> ();
+//    ;
+//
+//instance SomeClass () where
+//    methodA = methodAUnit;
+//    ;
+//
+//methodAUnit dummy = ();
+//
+//Error: Cal.Test.Core.Prelude_Tests: (line 1,185 column 5): The class method methodA must use the type class type variable a in its type signature.
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+//a demo of how to write a function that depends on the runtime type of an argument
+weirdNumToDouble :: (Num a, Typeable a) => a -> Double;
+private weirdNumToDouble x =
+    if (typeOf x == (typeOf (0 :: Int))) then
+        toDouble x + 5            
+    else
+        toDouble x;
+
+//shows that typeOf doesn't reduce its argument whatsoever for a variety of instances    
+testProperLazynessOfTypeof =
+    assert (typeOf (asTypeOf (error "don't call this") ("abc", 2.0)) == typeOf ("def", 5.0)) &&
+    assert (typeOf (asTypeOf (error "don't call this") ['a', 'b']) == typeOf ['c', 'd']) &&
+    assert (typeOf (asTypeOf (error "don't call this") 100.0) == typeOf 200.0) &&
+    assert (typeOf (asTypeOf (error "don't call this") {x=5.0, y=5.0, #3='v'}) == typeOf {x=1.0, y=7.0, #3='q'}) 
+    ;
+        
+testTypeRep =
+    assert (weirdNumToDouble (2.0) == 2.0) &&
+    assert (weirdNumToDouble (5 :: Int) == 10.0) &&
+    assert (typeOf ([2 :: Double, 3], (True, LT), sin, sin 2.0) == typeOf ([2.0 + 4.0], (False, GT), cos, add 2.0 3.0))
+    ;
+
+
+f :: Int -> Int -> Int -> Int;
+f x y w =
+    let
+        z = 2*x + 3*y + 5*w;
+    in
+        z + z;
+  
+//attempt to create an infinite type    
+//te1 x = te1 x x;
+    
+//type signature has too few arguments    
+//te2 :: Int -> Int;    
+//te2 x y = x + y; 
+
+//type signature has too many arguments
+//te3 :: Int -> Int -> Int -> Int;    
+//te3 x y = x + y; 
+    
+    
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin- experiments with the AdjunctAugmenter
+/*
+Dec. 9, 2005
+CAL has the ability to generate Inputable/Outputable instances for types on the fly when running adjuncts.
+However, there are some problems with this functionality.
+
+1. We now have derived Inputable/Outputable/Show instances, so it is easy for people to make quick experiments
+with this sort of functionality in a more predictable and well-defined way.
+
+2. The code to generate these instances overlaps with what is done in the DerivedInstanceFunctionGenerator. We
+should really be using the code in the DerivedInstanceFunctionGenerator rather than duplicating this functionality.
+
+3. We can generate code to output the type Foo below (for example, sameFoo can be run), but not the types [Foo] or Maybe Foo 
+(listOfFoo, justFoo give errors when run). 
+
+4. In the case when an Outputable instance cannot be constructed, the errors are quite confusing (since they refer to
+hidden generated code).
+
+5. It is possible to cause name collisions. For example, outputFooToJObject = Foo ["abc", "def", "ghi"]; cannot be run
+because of a name collision. (Note however you can run someFoo even if outputFooToJObject is in scope, since the adjunct's
+outputFooToJObject will mask the main module's outputFooToJObject.
+
+*/    
+    
+    
+data Foo = Foo foo::[String];
+
+someFoo = Foo ["abc", "def", "ghi"];
+
+//it is weird that Foo can be output but not [Foo]. In fact it is downright odd.
+listOfFoo = [someFoo, someFoo];
+/*
+Cal.Test.Core.Prelude_Tests>listOfFoo
+
+
+Augmented Adjunct:
+iceruntarget = 
+listOfFoo
+;
+private io_iceruntarget_0_0 = Prelude.output Cal.Test.Core.Prelude_Tests.iceruntarget;
+
+
+
+CAL: Compilation unsuccessful because of errors:
+  Error: (line 4 column 59): Type Error during an application. Caused by: Type clash: type Cal.Test.Core.Prelude_Tests.Foo is not a member of type class Prelude.Outputable.
+  Error: (line 4 column 38): Ambiguous type signature in inferred type Prelude.Outputable a => a.
+  Fatal Error: Not able to recover from previous compilation error(s).
+*/
+
+justFoo = Prelude.Just someFoo;
+/*
+Cal.Test.Core.Prelude_Tests>justFoo
+
+
+Augmented Adjunct:
+iceruntarget = 
+justFoo
+;
+private io_iceruntarget_0_0 = Prelude.output Cal.Test.Core.Prelude_Tests.iceruntarget;
+
+
+
+CAL: Compilation unsuccessful because of errors:
+  Error: (line 4 column 59): Type Error during an application. Caused by: Type clash: type Cal.Test.Core.Prelude_Tests.Foo is not a member of type class Prelude.Outputable.
+  Error: (line 4 column 38): Ambiguous type signature in inferred type Prelude.Outputable a => a.
+  Fatal Error: Not able to recover from previous compilation error(s).
+*/  
+
+
+//running this in ICE causes the following problem
+outputFooToJObject = Foo ["abc", "def", "ghi"];
+/*
+Cal.Test.Core.Prelude_Tests>outputFooToJObject
+
+
+Augmented Adjunct:
+instance Prelude.Outputable Cal.Test.Core.Prelude_Tests.Foo where
+    output = outputFooToJObject;
+    ;
+outputFooToJObject :: Cal.Test.Core.Prelude_Tests.Foo -> Prelude.JObject;
+private outputFooToJObject foo = Prelude.output (outputfoo foo);
+outputfoo :: Cal.Test.Core.Prelude_Tests.Foo -> Prelude.AlgebraicValue;
+private outputfoo foo = 
+    case foo of
+    Cal.Test.Core.Prelude_Tests.Foo arg0 -> Prelude.algebraicValue_new1 "Cal.Test.Core.Prelude_Tests.Foo" (0 :: Prelude.Int) (Prelude.output arg0);
+    ;
+iceruntarget = 
+outputFooToJObject
+;
+private io_iceruntarget_0_0 = Prelude.output Cal.Test.Core.Prelude_Tests.iceruntarget;
+
+
+
+CAL: Compilation unsuccessful because of errors:
+  Error: (line 14 column 59): Type Error during an application. Caused by: Type clash: type Cal.Test.Core.Prelude_Tests.Foo -> Prelude.JObject is not a member of type class Prelude.Outputable.
+  Error: (line 14 column 38): Ambiguous type signature in inferred type Prelude.Outputable a => a.
+  Fatal Error: Not able to recover from previous compilation error(s).
+*/
+
+
+data Foo2 a = Foo2 foo2::a;
+
+someFoo2 = Foo2 ["abc", "def", "ghi"];
+
+//this works.
+someMoreFoo2 = Foo2 someFoo;
+
+
+data Foo3 = Foo3 myFunc::(Double -> Double);
+
+someFoo3 = Foo3 Math.sin;
+/*
+Cal.Test.Core.Prelude_Tests>someFoo3
+CAL: Compilation unsuccessful because of errors:
+  Error: Unable to make type Prelude.Function an instance of Prelude.Outputable: there are no data constructors.
+*/
+
+data Foo4 = Foo4 foo4::MyString;
+someFoo4 = Foo4 (unsafeCoerce "abc");
+/*
+Cal.Test.Core.Prelude_Tests>someFoo4
+CAL: Compilation unsuccessful because of errors:
+  Error: Unable to make type Cal.Test.Core.Prelude_Tests.MyString an instance of Prelude.Outputable: there are no data constructors.
+*/ 
+
+//end- experiments with the AdjunctAugmenter
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin- tests if IO support for non-random access lists
+//date: Dec 12, 2005. LinkedLists should perform well when used as the Inputable source for CAL lists or CAL records.
+
+data foreign unsafe import jvm "java.util.LinkedList"
+    private JLinkedList deriving Inputable, Outputable;
+
+foreign unsafe import jvm "constructor"
+    private linkedList_new :: JLinkedList;
+
+foreign unsafe import jvm "method add"
+    private linkedList_add :: JLinkedList -> JObject -> Boolean;
+
+makeLinkedList :: Outputable a => [a] -> JLinkedList;
+makeLinkedList !list =
+    let
+        makeHelper !list !linkedList =            
+            case list of
+            [] -> linkedList;
+            listHead : listTail ->
+                if (linkedList_add linkedList (output listHead)) then
+                    makeHelper listTail linkedList
+                else
+                    error "could not add element to linked list.";
+            ;
+    in
+        makeHelper list (linkedList_new);
+    
+testLinkedListInput =
+    assert (inputTest1_randomAccess 1)
+    && assert (inputTest1_nonRandomAccess 1)
+    && assert (inputTest2_randomAccess 1)
+    && assert (inputTest2_nonRandomAccess 1)
+    && assert ((input (output (makeLinkedList [3.0, 1.0, 4.0])) :: [Double]) == [3.0, 1.0, 4.0])
+    && assert ((input (output (makeLinkedList (upFromTo 1.0 10.0))) :: [Double]) == (upFromTo 1.0 10.0))
+    && assert ((input (output (makeLinkedList (upFromTo 1.0 10.0))) :: (Double, Double, Double, Double, Double, Double, Double, Double, Double, Double)) ==
+               (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0))
+    ;
+    
+/*
+version of Prelude.inputListWith used for experimentation. Can modify to test
+a) use of eager in the random access version (the use of eager in the iterable version is required).
+b) performance of the random access or iterable versions on java.util.ArrayList and java.util.LinkedList and vice versa.
+*/    
+/*    
+inputListWith :: JList -> (JObject -> a) -> [a];
+protected inputListWith !javaList elementMappingFunction =
+    let
+        //inputRandomAccessListHelper :: Int -> Int -> [a];
+        inputRandomAccessListHelper !i !len =
+            if i < len then
+                elementMappingFunction (eager (jList_get javaList i)) : inputRandomAccessListHelper (i + 1) len
+            else
+                [];
+        
+        //inputIterableListHelper :: JIterator -> [a];
+        inputIterableListHelper !iterator =
+            if iterator_hasNext iterator then
+                elementMappingFunction (eager (iterator_next iterator)) : inputIterableListHelper iterator
+            else
+                [];
+    in
+        if list_isRandomAccess javaList then
+            inputRandomAccessListHelper 0 (jList_size javaList)
+        else
+            inputIterableListHelper (list_iterator javaList);   
+*/             
+
+/**
+ * Repeatedly inputs a single java.util.ArrayList of 10,000 int values n times.
+ * The elements of the list are not examined (except the last one).
+ * @arg n number of times to input the java.util.ArrayList
+ * @return True
+ */    
+inputTest1_randomAccess !n =
+    let
+        myList = output (upFromTo 1 (10000 :: Int));
+
+        inputTestHelper :: Int -> Boolean;
+        inputTestHelper !i =
+            if i > (0 :: Int) then
+                List.last (input myList :: [Int])
+                `seq`
+                inputTestHelper (i - 1)
+            else
+                True;
+    in
+        inputTestHelper n;
+        
+/**
+ * Repeatedly inputs a single java.util.LinkedList of 10,000 int values n times.
+ * The elements of the list are not examined (except the last one).
+ * @arg n number of times to input the java.util.LinkedList
+ * @return True
+ */
+inputTest1_nonRandomAccess !n =
+    let
+        myList = output (makeLinkedList (upFromTo 1 (10000 :: Int)));
+
+        inputTestHelper :: Int -> Boolean;
+        inputTestHelper !i =
+            if i > (0 :: Int) then
+                List.last (input myList :: [Int])
+                `seq`
+                inputTestHelper (i - 1)
+            else
+                True;
+    in
+        inputTestHelper n;
+    
+    
+/**
+ * Repeatedly inputs a single java.util.ArrayList of 10,000 int values n times.
+ * The elements of the list are examined (by summing them up).
+ * @arg n number of times to input the java.util.ArrayList
+ * @return True
+ */    
+inputTest2_randomAccess !n =
+    let
+        myList = output (upFromTo 1 (10000 :: Int));
+
+        inputTestHelper :: Int -> Boolean;
+        inputTestHelper !i =
+            if i > (0 :: Int) then
+                List.sum (input myList :: [Int])
+                `seq`
+                inputTestHelper (i - 1)
+            else
+                True;
+    in
+        inputTestHelper n;
+        
+/**
+ * Repeatedly inputs a single java.util.LinkedList of 10,000 int values n times.
+ * The elements of the list are not examined (by summing them up).
+ * @arg n number of times to input the java.util.LinkedList
+ * @return True
+ */
+inputTest2_nonRandomAccess !n =
+    let
+        myList = output (makeLinkedList (upFromTo 1 (10000 :: Int)));
+
+        inputTestHelper :: Int -> Boolean;
+        inputTestHelper !i =
+            if i > (0 :: Int) then
+                List.sum (input myList :: [Int])
+                `seq`
+                inputTestHelper (i - 1)
+            else
+                True;
+    in
+        inputTestHelper n;  
+    
+/*
+Conclusions based on benchmarks:
+-it is necessary to handle inputting of linked lists using iterators
+-can use the iterator version for both linked lists as well as array lists- it is always as good and sometimes much better.
+    -the iterator versions for java.util.ArrayList were at least as good as the get versions- there is no reason for special cases
+     for the get versions. Also, the iterator version was better than the eager get version for java.util.ArrayList in the case
+     that the test function did not examine the inputted list's elements (inputTest1). This is a bit surprising. However, 
+     looking at the generated code, it says that creating the iterator
+     object is less expensive than having 2 extra arguments in the RTAppS object, along with the extra function calls.
+    -in the case where the test examined the elements (inputTest2), the eager version for java.util.ArrayList was 8% faster than the
+     non-eager version. The eager version was the same as the iterator version.
+
+ 
+//inputListBy: eager version using iterators
+    public final RTValue f2S(RTValue inputListWith$elementMappingFunction$2, Iterator inputListWith$iterator$7, RTExecutionContext $ec) throws CALExecutor.CALExecutorException {
+        // Top level supercombinator logic
+        if (inputListWith$iterator$7.hasNext()) {
+            return
+             new TYPE_List.CAL_Cons(
+                inputListWith$elementMappingFunction$2.apply(
+                            RTData.CAL_Opaque.make(inputListWith$iterator$7.next())),
+                  new RTAppS(
+                            Input_List_With__input_Iterable_List_Helper__4.$instance,
+                        inputListWith$elementMappingFunction$2,
+                            inputListWith$iterator$7));
+        } else {
+            return i_Nil;
+        }
+    }
+
+//inputListBy: eager version for random-access lists
+    public final RTValue f4S(RTValue inputListWith$elementMappingFunction$2, List inputListWith$javaList$1, int inputListWith$i$5, int inputListWith$len$6, RTExecutionContext $ec) throws CALExecutor.CALExecutorException {
+        // Top level supercombinator logic
+        if (inputListWith$i$5 < inputListWith$len$6) {
+            return
+                  new TYPE_List.CAL_Cons(
+                       inputListWith$elementMappingFunction$2.apply(
+                    RTData.CAL_Opaque.make(inputListWith$javaList$1.get(inputListWith$i$5))),
+                 new RTAppS(
+                    Input_List_With__input_Random_Access_List_Helper__3.$instance, 
+                    inputListWith$elementMappingFunction$2,
+                      inputListWith$javaList$1,
+                      inputListWith$i$5 + 1,
+                              inputListWith$len$6));
+        } else {
+            return i_Nil;
+        }
+    }
+
+//inputListBy: non-eager version for random-access lists
+    public final RTValue f4S(RTValue inputListWith$elementMappingFunction$2, List inputListWith$javaList$1, int inputListWith$i$5, int inputListWith$len$6, RTExecutionContext $ec) throws CALExecutor.CALExecutorException {
+        // Top level supercombinator logic
+        if (inputListWith$i$5 < inputListWith$len$6) {
+            return
+             new TYPE_List.CAL_Cons(
+                inputListWith$elementMappingFunction$2.apply(
+                    new J_List__get.RTAppS(i_J_List__get, inputListWith$javaList$1, inputListWith$i$5)),
+             new RTAppS(
+                Input_List_With__input_Random_Access_List_Helper__3.$instance,
+                inputListWith$elementMappingFunction$2,
+                  inputListWith$javaList$1, 
+                        inputListWith$i$5 + 1, 
+                        inputListWith$len$6));
+        } else {
+            return i_Nil;
+        }
+    }  
+
+ */    
+        
+
+//end- tests if IO support for not-random access lists
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin -test IO for Maybe, Either, Ordering, Unit using new efficient Java representations. Dec 15, 2005
+    
+ioOrdering :: Ordering -> Ordering;    
+ioOrdering x = input $ output x;   
+
+ioMaybe :: (Inputable a, Outputable a) => Maybe a -> Maybe a;    
+ioMaybe x = input $ output x; 
+
+ioEither :: (Inputable a, Inputable b, Outputable a, Outputable b) => Either a b -> Either a b;    
+ioEither x = input $ output x; 
+
+ioUnit :: Unit -> Unit;    
+ioUnit x = input $ output x; 
+    
+testInputOutputPreludeAlgebraicTypes =
+    assert (map ioOrdering [GT, LT, EQ, LT, GT] == [GT, LT, EQ, LT, GT])
+    && assert (map ioUnit [(), (), ()] == [(), (), ()])
+    && assert (map ioMaybe [Just "bob", Nothing, Just "", Nothing] == [Just "bob", Nothing, Just "", Nothing])
+    && assert (map ioEither [Left "fred", Right (2.0, 'a'), Left "smith", Right (100.0, 'c')] == [Left "fred", Right (2.0, 'a'), Left "smith", Right (100.0, 'c')])
+    && assert 
+           //a test of the toString method on the corresponding foreign values
+           ((Debug.show $ output (LT, EQ, GT, Nothing :: Maybe String, Just 'a', (), Left "fred" :: Either String Int, Right 2 :: Either String Int))
+             == "[Cal.Core.Prelude.LT, Cal.Core.Prelude.EQ, Cal.Core.Prelude.GT, Cal.Core.Prelude.Nothing, (Cal.Core.Prelude.Just a), (), (Cal.Core.Prelude.Left fred), (Cal.Core.Prelude.Right 2)]")
+    ;
+
+//here are some tests of derived Inputable/Outputable instances that use the AlgebraicValue java class for IO.
+
+data MyOrdering =
+    MyLT |
+    MyEQ |
+    MyGT
+    deriving Eq, Inputable, Outputable; //will use AlgebraicValue for input/output
+
+data MyMaybe a =
+    MyNothing |
+    MyJust value::a
+    deriving Eq, Inputable, Outputable;
+
+data MyPair a b =
+    MyPair_straight value1::a value2::b |
+    MyPair_flippped value1::b value2::a
+    deriving Eq, Inputable, Outputable;
+
+ioMyOrdering :: MyOrdering -> MyOrdering;    
+ioMyOrdering x = input $ output x;   
+
+ioMyMaybe :: (Inputable a, Outputable a) => MyMaybe a -> MyMaybe a;    
+ioMyMaybe x = input $ output x; 
+
+ioMyPair :: (Inputable a, Inputable b, Outputable a, Outputable b) => MyPair a b -> MyPair a b;    
+ioMyPair x = input $ output x; 
+
+testInputOutputCustomAlgebraicTypes =
+    assert (map ioMyOrdering [MyGT, MyLT, MyEQ, MyLT, MyGT] == [MyGT, MyLT, MyEQ, MyLT, MyGT])    
+    && assert (map ioMyMaybe [MyJust "bob", MyNothing, MyJust "", MyNothing] == [MyJust "bob", MyNothing, MyJust "", MyNothing])
+    && assert (map ioMyPair [MyPair_straight "fred" 2.0, MyPair_flippped 100.0 "zaphod"] ==
+        [MyPair_straight "fred" 2.0, MyPair_flippped 100.0 "zaphod"])
+    //a test of the toString method on the AlgebraicValue java type    
+    && assert ((Debug.show $ output (MyLT, MyEQ, MyGT, MyNothing :: MyMaybe String, MyJust 'a', MyPair_straight "fred" 2.0, MyPair_flippped 100.0 "zaphod"))
+        == "[Cal.Test.Core.Prelude_Tests.MyLT, Cal.Test.Core.Prelude_Tests.MyEQ, Cal.Test.Core.Prelude_Tests.MyGT, Cal.Test.Core.Prelude_Tests.MyNothing, (Cal.Test.Core.Prelude_Tests.MyJust a), (Cal.Test.Core.Prelude_Tests.MyPair_straight fred 2.0), (Cal.Test.Core.Prelude_Tests.MyPair_flippped 100.0 zaphod)]")
+    ;
+
+//some tests for the adjunct augmenter. Note that MyOrdering2, MyMaybe2, MyPair2 differ from the types above in that they
+//do not define instances of Inputable and Outputable.
+
+data MyOrdering2 =
+    MyLT2 |
+    MyEQ2 |
+    MyGT2
+    deriving Eq;
+
+data MyMaybe2 a =
+    MyNothing2 |
+    MyJust2 value::a
+    deriving Eq;
+
+data MyPair2 a b =
+    MyPair2_straight value1::a value2::b |
+    MyPair2_flipped value1::b value2::a
+    deriving Eq;
+
+//these should be runnable and produce a value in ICE, since the adjunct augmenter will
+//derive instances.
+adj1 = MyGT2;
+adj2 = MyJust2 "Fred";
+adj3 = MyNothing2 :: MyMaybe2 String;
+adj4 = MyPair2_flipped 2.0 "hello";
+  
+
+//end -test IO for Maybe, Either, Ordering, Unit using new efficient Java representations. Dec 15, 2005    
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+data MyAlgebraicType =
+    FirstDataCons |
+    SecondDataCons argument :: Int
+    deriving Eq, Inputable, Outputable;
+
+// Typecons and dataconses need to be public so that we can be guaranteed 
+// that AdjunctAugmenter will generate an Inputable instance for us.
+data public NoInputableInstance =
+    public NiiCons0 argument :: Int |
+    public NiiCons1;
+
+testSuccessfulAlgebraicValueInput = 
+    assert (input (unsafeCoerce (Prelude.internal_algebraicValue_new0 "Cal.Test.Core.Prelude_Tests.FirstDataCons" 0)) == FirstDataCons) &&
+    assert (input (unsafeCoerce (Prelude.internal_algebraicValue_new1 "Cal.Test.Core.Prelude_Tests.SecondDataCons" 1 (output (55 :: Int)))) == SecondDataCons 55);
+
+// This function will raise an error if evaluated
+testOutOfRangeAlgebraicValueInput =
+    input (unsafeCoerce (Prelude.internal_algebraicValue_new0 "Cal.Test.Core.Prelude_Tests.FirstDataCons" 50)) :: MyAlgebraicType;
+    
+// This function will raise an error if evaluated
+public testMismatchedNameAlgebraicValueInput =
+    input (unsafeCoerce (Prelude.internal_algebraicValue_new0 "Cal.Test.Core.Prelude_Tests.FirstDataCons" 1)) :: MyAlgebraicType;
+    
+// This function will raise an error if evaluated
+public testTooFewArgumentsAlgebraicValueInput =
+    input (unsafeCoerce (Prelude.internal_algebraicValue_new0 "Cal.Test.Core.Prelude_Tests.SecondDataCons" 1)) :: MyAlgebraicType;
+    
+// This function will raise an error if evaluated
+public testTooManyArgumentsAlgebraicValueInput =
+    input (unsafeCoerce (Prelude.internal_algebraicValue_new1 "Cal.Test.Core.Prelude_Tests.FirstDataCons" 0 (output (5 :: Int)))) :: MyAlgebraicType;   
+
+// Used for testing input policies automatically generated by the AdjunctAugmenter
+niiToInt :: NoInputableInstance -> Int;
+public niiToInt !x =
+    case x of
+    NiiCons0 argument -> argument;
+    NiiCons1 -> 0;
+    ;
+    
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+//begin- optimize outputListWith
+    
+//experiments performed around March 6, 2006    
+    
+/*
+outputListWith has already been optimized to create special purpose lists if the list length is <= 7. This is an optimization
+for lists of length > 7, to not just use ArrayList.add, but to actually create an array of the correct length, and populate.
+This should save some internal ArrayList resizing and copying during creation, as well as provide for a slightly more efficient
+representation.
+ */
+    
+/**
+ * Converts a CAL list to a Java list using the element mapping function {@code f@} of type {@code a -> {@link JObject@}@} 
+ * to convert elements of the CAL list.
+ * 
+ * @arg list the CAL list.
+ * @arg f the mapping function converting elements of the list to {@link JObject@} values.
+ * @return the corresponding {@code JList@}.
+ */
+//implementation note: for lists of length > 7, the resulting list is in fact a java.util.ArrayList. For lists of
+//shorter length, more efficient fixed length Java lists are used. These are more efficient in both space and time
+//requirements.
+//this is the old version that outputs to an ArrayList using ArrayList.add.   
+outputListWith_ArrayList :: [a] -> (a -> JObject) -> JList;
+outputListWith_ArrayList !list f =
+    
+    case list of
+    [] -> jList0;
+    x0 : list0 ->  
+    
+    case list0 of
+    [] -> jList1 (f x0);
+    x1 : list1 ->
+    
+    case list1 of           
+    [] -> jList2 (f x0) (f x1);
+    x2 : list2 ->
+    
+    case list2 of
+    [] -> jList3 (f x0) (f x1) (f x2);
+    x3 : list3 ->
+    
+    case list3 of
+    [] -> jList4 (f x0) (f x1) (f x2) (f x3);
+    x4 : list4 ->
+    
+    case list4 of
+    [] -> jList5 (f x0) (f x1) (f x2) (f x3) (f x4);
+    x5 : list5 ->
+    
+    case list5 of
+    [] -> jList6 (f x0) (f x1) (f x2) (f x3) (f x4) (f x5);
+    x6 : list6 ->
+    
+    case list6 of
+    [] -> jList7 (f x0) (f x1) (f x2) (f x3) (f x4) (f x5) (f x6);
+    x7 : list7 ->
+    
+        let  
+            javaList = jArrayList_new;
+    
+            firstEightList =
+                seq ((jList_add javaList (f x0))
+                && (jList_add javaList (f x1))
+                && (jList_add javaList (f x2))
+                && (jList_add javaList (f x3))
+                && (jList_add javaList (f x4))
+                && (jList_add javaList (f x5))
+                && (jList_add javaList (f x6))
+                && (jList_add javaList (f x7)))
+                javaList;
+                                    
+            outputListWithHelper :: [a] -> (a -> JObject) -> JList -> JList;    
+            outputListWithHelper !list elementMappingFunction !javaList =
+                case list of
+                [] -> javaList;
+                x : xs -> 
+                    if (jList_add javaList (elementMappingFunction x)) then
+                        outputListWithHelper xs elementMappingFunction javaList
+                    else
+                        error "Adding an element to a Java list failed.";                     
+                ;
+        in  
+            outputListWithHelper list7 f firstEightList;;;;;;;;;
+                                       
+foreign unsafe import jvm "static field java.util.Collections.EMPTY_LIST"
+    private jList0 :: JList;
+foreign unsafe import jvm "static method org.openquark.cal.util.FixedSizeList.make"
+    private jList1 :: JObject -> JList;
+foreign unsafe import jvm "static method org.openquark.cal.util.FixedSizeList.make"
+    private jList2 :: JObject -> JObject -> JList;
+foreign unsafe import jvm "static method org.openquark.cal.util.FixedSizeList.make"
+    private jList3 :: JObject -> JObject -> JObject -> JList;
+foreign unsafe import jvm "static method org.openquark.cal.util.FixedSizeList.make"
+    private jList4 :: JObject -> JObject -> JObject -> JObject -> JList;
+foreign unsafe import jvm "static method org.openquark.cal.util.FixedSizeList.make"
+    private jList5 :: JObject -> JObject -> JObject -> JObject -> JObject -> JList;
+foreign unsafe import jvm "static method org.openquark.cal.util.FixedSizeList.make"
+    private jList6 :: JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JList;
+foreign unsafe import jvm "static method org.openquark.cal.util.FixedSizeList.make"
+    private jList7 :: JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JObject -> JList;
+                             
+foreign unsafe import jvm "constructor java.util.ArrayList" private jArrayList_new :: JList;
+foreign unsafe import jvm "method add" private jList_add :: JList -> JObject -> Boolean;  
+
+
+
+/**
+ * Converts a CAL list to a Java list using the element mapping function {@code f@} of type {@code a -> {@link JObject@}@} 
+ * to convert elements of the CAL list.
+ * 
+ * @arg list the CAL list.
+ * @arg f the mapping function converting elements of the list to {@link JObject@} values.
+ * @return the corresponding {@code JList@}.
+ */
+/*
+ * @implementation for lists of length <= 7, special purpose fixed sized list classes are used that are more space efficient.
+ * For lists of length > 7, an Java Object array is created of the correct length, then each element is initialized with the
+ * corresponding list element.
+ */
+outputListWith_ObjectArray :: [a] -> (a -> JObject) -> JList;
+protected outputListWith_ObjectArray !list f =
+    
+    case list of
+    [] -> jList0;
+    x0 : list0 ->  
+    
+    case list0 of
+    [] -> jList1 (f x0);
+    x1 : list1 ->
+    
+    case list1 of           
+    [] -> jList2 (f x0) (f x1);
+    x2 : list2 ->
+    
+    case list2 of
+    [] -> jList3 (f x0) (f x1) (f x2);
+    x3 : list3 ->
+    
+    case list3 of
+    [] -> jList4 (f x0) (f x1) (f x2) (f x3);
+    x4 : list4 ->
+    
+    case list4 of
+    [] -> jList5 (f x0) (f x1) (f x2) (f x3) (f x4);
+    x5 : list5 ->
+    
+    case list5 of
+    [] -> jList6 (f x0) (f x1) (f x2) (f x3) (f x4) (f x5);
+    x6 : list6 ->
+    
+    case list6 of
+    [] -> jList7 (f x0) (f x1) (f x2) (f x3) (f x4) (f x5) (f x6);
+    x7 : list7 ->
+    
+        let 
+            array :: JObjectArray;
+            array = eager (objectArray_makeDefault (List.length list7 + 8));
+                         
+            //outputListWithHelper :: [a] -> Int -> JList;    
+            outputListWithHelper !list !index =
+                case list of
+                [] -> objectArray_arrayToList array;
+                x : xs -> 
+                    objectArray_update array index (f x)
+                    `seq`
+                    outputListWithHelper xs (index + 1);
+                ;                    
+        in             
+            objectArray_update array 0 (f x0)
+            `seq`
+            objectArray_update array 1 (f x1)
+            `seq`
+            objectArray_update array 2 (f x2)
+            `seq`
+            objectArray_update array 3 (f x3)
+            `seq`
+            objectArray_update array 4 (f x4)
+            `seq`
+            objectArray_update array 5 (f x5)
+            `seq`
+            objectArray_update array 6 (f x6)
+            `seq`
+            objectArray_update array 7 (f x7)
+            `seq`                       
+            outputListWithHelper list7 8;;;;;;;;;                            
+            
+data foreign unsafe import jvm "java.lang.Object[]" 
+    private JObjectArray deriving Inputable, Outputable;  
+foreign unsafe import jvm "newArray" 
+    private objectArray_makeDefault :: Int -> JObjectArray;
+foreign unsafe import jvm "updateArray" 
+    private objectArray_update :: JObjectArray -> Int -> JObject -> JObject;      
+foreign unsafe import jvm "static method java.util.Arrays.asList" 
+    private objectArray_arrayToList :: JObjectArray -> JList;    
+
+testOutputList_ObjectArray :: Int -> Int -> Boolean;
+testOutputList_ObjectArray !listSize !nOutputs =
+    let
+        list :: [Int];
+        list = eager $ upFromTo 1 listSize;
+        
+        outputLoop !index =
+            if index == nOutputs then
+                True
+            else
+                Cal.Test.Core.Prelude_Tests.outputListWith_ObjectArray list output
+                `seq`
+                outputLoop (index + 1);        
+    in
+        outputLoop 0;
+    
+testOutputList_ArrayList :: Int -> Int -> Boolean;
+testOutputList_ArrayList !listSize !nOutputs =
+    let
+        list :: [Int];
+        list = eager $ upFromTo 1 listSize;
+        
+        outputLoop !index =
+            if index == nOutputs then
+                True
+            else
+                Cal.Test.Core.Prelude_Tests.outputListWith_ArrayList list output
+                `seq`
+                outputLoop (index + 1);        
+    in
+        outputLoop 0;
+    
+//attempt to quantify the overhead of the length call.    
+testLength :: Int -> Int -> Boolean;
+testLength !listSize !nOutputs =
+    let
+        list :: [Int];
+        list = eager $ upFromTo 1 listSize;
+        
+        lengthLoop !index =
+            if index == nOutputs then
+                True
+            else
+                List.length list
+                `seq`
+                lengthLoop (index + 1);        
+    in
+        lengthLoop 0;   
+    
+/*
+To investigate the efficiency of CAL's reductions scheme to calculate List.length I created a singly 
+linked List type in Java, and implemented the length function on it. This foreign CAL type is called SimulatedList.
+ */   
+    
+data foreign unsafe import jvm "org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$List" 
+    private SimulatedList deriving Inputable, Outputable, Show;  
+foreign unsafe import jvm "constructor org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$List$Cons" 
+    private slist_cons :: JObject -> SimulatedList -> SimulatedList;
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$List$Nil.NIL" 
+    private slist_nil :: SimulatedList;  
+
+foreign unsafe import jvm "method length" 
+    private slist_length :: SimulatedList -> Int;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$List.upTo" 
+    private slist_upTo :: Int -> SimulatedList; 
+    
+testSListLength :: Int -> Int -> Boolean;
+testSListLength !listSize !nOutputs =
+    let
+        list :: SimulatedList;
+        list = eager $ slist_upTo listSize;
+        
+        lengthLoop !index =
+            if index == nOutputs then
+                True
+            else
+                slist_length list
+                `seq`
+                lengthLoop (index + 1);        
+    in
+        lengthLoop 0;        
+      
+    
+    
+/*
+Discussion for the March 7, 2006 runtime: 
+
+somewhat suprisingingly, the ArrayList verison is more efficient than the Object_Array version:
+listSize = 1000, nOutputs = 2000
+    testOutputList_ArrayList = 0.958, 0.963 (repeated :pt timings with the rep count set to 5)
+    testOutputList_ObjectArray = 1.114, 1.062
+    testLength = 0.193, 0.182 
+    testSListLength = 0.041, 0.025, 0.015
+
+listSize = 10000, nOutputs = 200
+   testOutputList_ArrayList = 1.552, 1.041, 1.031 (the 1.552 appears to be a sporadic anomaly)
+   testOutputList_ObjectArray = 1.124, 1.109, 1.120
+   testLength = 0.177, 0.188
+   testSListLength = 0.031, 0.020
+
+listSize = 100000, nOutputs = 20
+    testOutputList_ArrayList = 1.369, 1.349
+    testOutputList_ObjectArray = 1.411, 1.411
+    testLength = 0.250, 0.249
+    testSListLength = 0.068, 0.063
+
+In other words, the cost of taking the length of the list exceeds the benefit of doing fewer array resizings in the 
+ArrayList when elements are added that exceed the capacity of the ArrayList.
+
+It turns out that the problem is that the list local variable in the test functions above, when it is evaluated, consists of a lecc Cons node
+whose tail field holds onto a UpFromByUpToInt$RTAppS node, whose result pointer is set to the next lecc Cons node, and so on.
+There are 2 problems here:
+a) the list is effectively twice as long as the Java singly linked list due to the evaluated application node still being linked in.
+b) the UpFromByUpToInt$RTAppS node is actually pretty bulky: it holds onto 3 int fields for example.
+
+This is a general problem on the space usage of data structures with non-plinged fields whose fields are populated by a computation. 
+
+A proposed solution is to change it so that data constructor (and record) field accessors (in lecc) have a side effect of updating
+their held values to the indirected value. Thus if a constructed data structure is actually used it has the opportunity to free memory.
+
+For example, in the List.Cons type, instead of
+    public final RTValue get_tail() {
+        return _tail;
+    }
+        
+we can generate:
+    
+    public final RTValue get_tail() {
+        if (_tail.isResultFunction()) {
+            RTValue actualReturn = _tail.getValue();
+            if (actualReturn != _tail) {
+                _tail = actualReturn;
+            }
+            return actualReturn;
+        }
+        
+        return _tail;
+    }
+note that plinged fields do not need this treatment, since they will be evaluated prior to assignment.
+
+This will let the garbage collector reclaim memory during the first traversal of the list (after it has been generated) and will make
+3rd and subsequent traversals faster. 
+
+*/ 
+    
+            
+//end- optimize outputListWith
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    
+testRemainder =  
+    assert (5 % 3 == (2 :: Byte))
+    && assert (5 % (-3) == (2 :: Byte))
+    && assert (-5 % 3 == (-2 :: Byte))
+    && assert (-5 % (-3) == (-2 :: Byte))
+    && assert (3 % 5 == (3 :: Byte))
+    && assert (3 % (-5) == (3 :: Byte))
+    && assert (-3 % 5 == (-3 :: Byte))
+    && assert (-3 % (-5) == (-3 :: Byte))    
+    
+    && assert (5 % 3 == (2 :: Short))
+    && assert (5 % (-3) == (2 :: Short))
+    && assert (-5 % 3 == (-2 :: Short))
+    && assert (-5 % (-3) == (-2 :: Short))
+    && assert (3 % 5 == (3 :: Short))
+    && assert (3 % (-5) == (3 :: Short))
+    && assert (-3 % 5 == (-3 :: Short))
+    && assert (-3 % (-5) == (-3 :: Short))     
+    
+    && assert (5 % 3 == (2 :: Int))
+    && assert (5 % (-3) == (2 :: Int))
+    && assert (-5 % 3 == (-2 :: Int))
+    && assert (-5 % (-3) == (-2 :: Int))
+    && assert (3 % 5 == (3 :: Int))
+    && assert (3 % (-5) == (3 :: Int))
+    && assert (-3 % 5 == (-3 :: Int))
+    && assert (-3 % (-5) == (-3 :: Int))     
+            
+    && assert (5 % 3 == (2 :: Long))
+    && assert (5 % (-3) == (2 :: Long))
+    && assert (-5 % 3 == (-2 :: Long))
+    && assert (-5 % (-3) == (-2 :: Long))
+    && assert (3 % 5 == (3 :: Long))
+    && assert (3 % (-5) == (3 :: Long))
+    && assert (-3 % 5 == (-3 :: Long))
+    && assert (-3 % (-5) == (-3 :: Long))     
+    
+    && assert (5 % 3 == (2 :: Float))
+    && assert (5 % (-3) == (2 :: Float))
+    && assert (-5 % 3 == (-2 :: Float))
+    && assert (-5 % (-3) == (-2 :: Float))
+    && assert (3 % 5 == (3 :: Float))
+    && assert (3 % (-5) == (3 :: Float))
+    && assert (-3 % 5 == (-3 :: Float))
+    && assert (-3 % (-5) == (-3 :: Float))     
+    
+    && assert (5 % 3 == (2 :: Double))
+    && assert (5 % (-3) == (2 :: Double))
+    && assert (-5 % 3 == (-2 :: Double))
+    && assert (-5 % (-3) == (-2 :: Double)) 
+    && assert (3 % 5 == (3 :: Double))
+    && assert (3 % (-5) == (3 :: Double))
+    && assert (-3 % 5 == (-3 :: Double))
+    && assert (-3 % (-5) == (-3 :: Double))     
+        
+    && assert (5 % 3 == (2 :: Integer))
+    && assert (5 % (-3) == (2 :: Integer))
+    && assert (-5 % 3 == (-2 :: Integer))
+    && assert (-5 % (-3) == (-2 :: Integer)) 
+    && assert (3 % 5 == (3 :: Integer))
+    && assert (3 % (-5) == (3 :: Integer))
+    && assert (-3 % 5 == (-3 :: Integer))
+    && assert (-3 % (-5) == (-3 :: Integer))     
+    
+    && assert (5 % 3 == (2 :: Decimal))
+    && assert (5 % (-3) == (2 :: Decimal))
+    && assert (-5 % 3 == (-2 :: Decimal))
+    && assert (-5 % (-3) == (-2 :: Decimal))  
+    && assert (3 % 5 == (3 :: Decimal))
+    && assert (3 % (-5) == (3 :: Decimal))
+    && assert (-3 % 5 == (-3 :: Decimal))
+    && assert (-3 % (-5) == (-3 :: Decimal))     
+    
+    && assert (10.5 % 1.0 == 0.5)
+    && assert (toFloat 10.5 % toFloat 1.0 == toFloat 0.5)
+    && assert (stringToDecimal "10.5" % stringToDecimal "1.0" == stringToDecimal "0.5")
+    ;
+        
+
+// Test the direct unboxed return lecc optimizatio for equalsRecord, notEqualsRecord, 
+// and compareRecord.
+// This tests/exercises direct unboxed returns in built-in record primitives.
+testUnboxedPrimitiveReturns1 = if((1.0, 2.0) == (1.0, 2.0)) then True else False;
+testUnboxedPrimitiveReturns2 = if((1.0, 2.0) != (1.0, 3.0)) then True else False;
+testUnboxedPrimitiveReturns3 = if ((1.0, "ab") < (2.0, "abc")) then True else False;
+
+
+
+
+////////////////////////////////////////////////////////////////////
+
+/**
+ * test of a foreign type with implementation type "int" where the Eq, Ord and Num instances are not given by defaults
+ * on the underlying Java primitive type.
+ * We want to verify that array operations work correctly for this type.
+ */
+data foreign unsafe import jvm "int" public IntMod7 deriving Debug.Show, Outputable, Inputable;
+
+instance Eq IntMod7 where
+    equals = equalsIntMod7;
+    notEquals = notEqualsIntMod7;
+    ;
+
+equalsIntMod7 :: IntMod7 -> IntMod7 -> Boolean;
+private equalsIntMod7 !x1 !x2 =
+    //an interesting point here is that we want "-3 == 4 mod 7" but -3 % 7 == -3 for Int values, so we 
+    //can't just say (unsafeCoerce x1 :: Int) % 7 == (unsafeCoerce x2) % 7
+    ((unsafeCoerce x1 :: Int) - unsafeCoerce x2) % 7 == 0;
+
+notEqualsIntMod7 :: IntMod7 -> IntMod7 -> Boolean;
+private notEqualsIntMod7 !x1 !x2 =    
+    ((unsafeCoerce x1 :: Int) - unsafeCoerce x2) % 7 != 0;
+
+instance Ord IntMod7 where
+    lessThan = lessThanIntMod7;
+    lessThanEquals = lessThanEqualsIntMod7;
+    greaterThanEquals = greaterThanEqualsIntMod7;
+    greaterThan = greaterThanIntMod7;
+    compare = compareIntMod7;
+    max = maxIntMod7;
+    min = minIntMod7;
+    ;
+
+lessThanIntMod7 :: IntMod7 -> IntMod7 -> Boolean;
+private lessThanIntMod7 !x1 !x2 = canonicalInt x1 < canonicalInt x2;
+
+lessThanEqualsIntMod7 :: IntMod7 -> IntMod7 -> Boolean;
+private lessThanEqualsIntMod7 !x1 !x2 = canonicalInt x1 <= canonicalInt x2;
+
+greaterThanEqualsIntMod7 :: IntMod7 -> IntMod7 -> Boolean;
+private greaterThanEqualsIntMod7 !x1 !x2 = canonicalInt x1 >= canonicalInt x2;
+
+greaterThanIntMod7 :: IntMod7 -> IntMod7 -> Boolean;
+private greaterThanIntMod7 !x1 !x2 = canonicalInt x1 > canonicalInt x2;
+
+maxIntMod7 :: IntMod7 -> IntMod7 -> IntMod7;
+private maxIntMod7 !x !y =
+    if x <= y then y else x;
+
+minIntMod7 :: IntMod7 -> IntMod7 -> IntMod7;
+private minIntMod7 !x !y = 
+    if x <= y then x else y;    
+
+compareIntMod7 :: IntMod7 -> IntMod7 -> Ordering;
+private compareIntMod7 !x !y =  
+    compare (canonicalInt x) (canonicalInt y);
+
+/**
+ * Returns the canonical coset representative for the IntMod7 value 
+ * i.e. the unique value from 0, ..., 6 that is equal to value mod 7.
+ * 
+ * @arg x
+ * @return Int value from 0 to 6 inclusive.
+ */
+canonicalInt :: IntMod7 -> Int;
+public canonicalInt !x =
+    //-3 % 7 == -3 so the first mod gets things in the range -6, -5, ..., 6, while the second gets things in the range
+    //0, ... 6
+    (((unsafeCoerce x :: Int) % 7) + 7) % 7;
+
+toIntMod7 :: Int -> IntMod7;
+public toIntMod7 !x = unsafeCoerce x;
+
+fromIntMod7 :: IntMod7 -> Int;
+public fromIntMod7 !x = unsafeCoerce x;
+
+toIntMod7List :: [Int] -> [IntMod7];
+public toIntMod7List !list = List.map toIntMod7 list;
+
+fromIntMod7List :: [IntMod7] -> [Int];
+public fromIntMod7List !list = List.map fromIntMod7 list;
+
+canonicalIntList :: [IntMod7] -> [Int];
+public canonicalIntList !list = List.map canonicalInt list;
+    
+instance Num IntMod7 where    
+    negate = negateIntMod7;    
+    add = addIntMod7;
+    subtract = subtractIntMod7;
+    multiply = multiplyIntMod7;
+    divide = divideIntMod7;
+    remainder = remainderIntMod7;
+    abs = absIntMod7;
+    signum = signumIntMod7;   
+    fromByte = byteToIntMod7;
+    fromShort = shortToIntMod7;
+    fromInt = toIntMod7;
+    fromLong = longToIntMod7;
+    fromFloat = floatToIntMod7;
+    fromDouble = doubleToIntMod7;
+    fromInteger = integerToIntMod7; 
+    fromDecimal = decimalToIntMod7;
+    toByte = intMod7ToByte;
+    toShort = intMod7ToShort;
+    toInt = fromIntMod7;
+    toLong = intMod7ToLong;
+    toFloat = intMod7ToFloat;
+    toDouble = intMod7ToDouble;
+    toInteger = intMod7ToInteger;
+    toDecimal = intMod7ToDecimal;            
+    ; 
+
+byteToIntMod7 :: Byte -> IntMod7;
+private byteToIntMod7 !x = fromInt (fromByte x);
+
+shortToIntMod7 :: Short -> IntMod7;
+private shortToIntMod7 !x = fromInt (fromShort x);
+
+longToIntMod7 :: Long -> IntMod7;
+private longToIntMod7 !x = fromInt (fromLong x);
+
+floatToIntMod7 :: Float -> IntMod7;
+private floatToIntMod7 !x = fromInt (fromFloat x);
+
+doubleToIntMod7 :: Double -> IntMod7;
+private doubleToIntMod7 !x = fromInt (fromDouble x);
+
+integerToIntMod7 :: Integer -> IntMod7;
+private integerToIntMod7 !x = unsafeCoerce ((fromInteger x) :: Int);
+
+decimalToIntMod7 :: Decimal -> IntMod7;
+private decimalToIntMod7 !x = fromInt (fromDecimal x);
+
+intMod7ToByte :: IntMod7 -> Byte;
+private intMod7ToByte !x = toByte (canonicalInt x);
+
+intMod7ToShort :: IntMod7 -> Short;
+private intMod7ToShort !x = toShort (canonicalInt x);
+
+intMod7ToLong :: IntMod7 -> Long;
+private intMod7ToLong !x = toLong (canonicalInt x);
+
+intMod7ToFloat :: IntMod7 -> Float;
+private intMod7ToFloat !x = toFloat (canonicalInt x);
+
+intMod7ToDouble :: IntMod7 -> Double;
+private intMod7ToDouble !x = toDouble (canonicalInt x);
+
+intMod7ToInteger :: IntMod7 -> Integer;
+private intMod7ToInteger !x = Prelude.toInteger (canonicalInt x);
+
+intMod7ToDecimal :: IntMod7 -> Decimal;
+private intMod7ToDecimal !x = Prelude.toDecimal (canonicalInt x);
+
+
+
+negateIntMod7 :: IntMod7 -> IntMod7;
+private negateIntMod7 !x = unsafeCoerce (negate (unsafeCoerce x :: Int));
+
+absIntMod7 :: IntMod7 -> IntMod7;
+private absIntMod7 !x = x;
+
+signumIntMod7 :: IntMod7 -> IntMod7;
+private signumIntMod7 !x = x;
+
+addIntMod7 :: IntMod7 -> IntMod7 -> IntMod7;
+private addIntMod7 !x !y = toIntMod7 (fromIntMod7 x + fromIntMod7 y);
+
+subtractIntMod7 :: IntMod7 -> IntMod7 -> IntMod7;
+private subtractIntMod7 !x !y = toIntMod7 (fromIntMod7 x - fromIntMod7 y);
+
+multiplyIntMod7 :: IntMod7 -> IntMod7 -> IntMod7;
+private multiplyIntMod7 !x !y = toIntMod7 (fromIntMod7 x * fromIntMod7 y);
+
+divideIntMod7 :: IntMod7 -> IntMod7 -> IntMod7;
+private divideIntMod7 !x !y = toIntMod7 (fromIntMod7 x / fromIntMod7 y);
+
+remainderIntMod7 :: IntMod7 -> IntMod7 -> IntMod7;
+private remainderIntMod7 !x !y = toIntMod7 (fromIntMod7 x % fromIntMod7 y);
+
+
+/**
+ * tests of the IntMod7 type. This is an interesting type since its underlying implementation type is
+ * the Java primitive type "int" however the Eq, Ord and Num type classes do not delegate to the
+ * corresponding primitive operations.
+ */
+testIntMod7 =
+    let
+        fourMod7 = toIntMod7List [-3, -10, 4, 11, 18, 4];
+    in
+        assert ((List.sort fourMod7) == fourMod7)
+        && assert (fromIntMod7List (List.sort fourMod7) == [-3, -10, 4, 11, 18, 4])
+        && assert (canonicalIntList fourMod7 == [4, 4, 4, 4, 4, 4])
+        && assert
+            ((fromIntMod7List (List.filter (\!x -> x < (toIntMod7 3)) (toIntMod7List (Prelude.upFromTo (-10) 10))))
+             == [-7, -6, -5, 0, 1, 2, 7, 8, 9])
+        && assert (toIntMod7 (-10) * toIntMod7 9 == toIntMod7 1)   
+        && assert (toIntMod7 20 * toIntMod7 3 == toIntMod7 (-3))
+        ;
+
+
+////////////////////////////////////////////////////////////////////
+//various test cases of foreign declarations for Java entities which are not public in scope.
+
+//should get a compile time error declaring a foreign type which is a package scope Java type
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,401 column 5): The Java type 'class org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass' is not accessible. It does not have public scope.
+//data foreign unsafe import jvm 
+//    "org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass"
+//    PackageJavaScopeType;
+
+data foreign unsafe import jvm 
+    "org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PublicScopeInnerClass"
+    PublicJavaScopeType;
+
+//should get a compile time error declaring a foreign function which is a package scope Java method (in this case a public method in a package scope class, so package scope
+//from the point of view of apis)
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,414 column 27): The Java type 'class org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass' is not accessible. It does not have public scope.
+//foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass.publicScopeAddOne" 
+//    private packageJavaScopeType_publicScopeAddOne :: Int -> Int;
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,418 column 27): The Java type 'class org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass' is not accessible. It does not have public scope.
+//foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass.publicScopeIntField" 
+//    private packageJavaScopeType_publicScopeOne :: Int;
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,422 column 27): The Java type 'class org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass' is not accessible. It does not have public scope.
+//foreign unsafe import jvm "constructor org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PackageScopeInnerClass" 
+//    private packageJavaScopeType_make :: Prelude.JObject;
+
+//the error is not as nice for a package scope method in a public class. But it does the job!
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,426 column 27): Could not find the method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PublicScopeInnerClass.packageScopeAddOne with given argument types [int].
+//foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PublicScopeInnerClass.packageScopeAddOne" 
+//    private publicJavaScopeType_packageScopeAddOne :: Int -> Int;
+
+//foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PublicScopeInnerClass.protectedScopeAddOne" 
+//    private publicJavaScopeType_protectedScopeAddOne :: Int -> Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PublicScopeInnerClass.publicScopeAddOne" 
+    private publicJavaScopeType_publicScopeAddOne :: Int -> Int;
+
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PublicScopeExtendsPackageScopeInnerClass.publicScopeIntField" 
+    private publicExtendsPackageJavaScopeType_publicScopeOne :: Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$PublicScopeExtendsPackageScopeInnerClass.publicScopeAddOne" 
+    private publicExtendsPackageJavaScopeType_publicScopeAddOne :: Int -> Int;
+
+testJavaScoping = 
+    assert (publicJavaScopeType_publicScopeAddOne 10 == 11)
+    && assert (publicExtendsPackageJavaScopeType_publicScopeOne == 1)
+    && assert (publicExtendsPackageJavaScopeType_publicScopeAddOne 14 == 15)
+    && assert (eager (publicJavaScopeType_publicScopeAddOne 10 == 11))
+    && assert (eager (publicExtendsPackageJavaScopeType_publicScopeOne == 1))
+    && assert (eager (publicExtendsPackageJavaScopeType_publicScopeAddOne 14 == 15))
+    ;
+
+////////////////////////////////////////////////////////////////////
+
+//test case for the new (July 2006) feature of allowing type class constraints within a class method's type signature
+
+class Sequence c where
+    length :: c a -> Int;
+    subscript :: c a -> Int -> a; 
+    //head :: c a -> a;
+    //tail :: c a -> c a;
+    //insert :: Ord a => a -> c a -> c a;
+    //union :: Ord a => c a -> c a -> c a;
+    sort :: Ord a => c a -> c a;
+    //sortBy :: (a -> a -> Ordering) -> c a -> c a;
+    concat :: Prelude.Appendable a => c a -> a;
+    ;
+    
+instance Sequence Prelude.List where
+    length = List.length;
+    subscript = List.subscript;
+    sort = List.sort;
+    concat = concatList;
+    ;
+
+concatList :: Prelude.Appendable a => [a] -> a;
+concatList listOfAppendables = Prelude.concat listOfAppendables;
+
+instance Sequence Array.Array where
+    length = Array.length;
+    subscript = Array.subscript;
+    sort = Array.sort;
+    concat = Array.concat;
+    ;
+
+concatSort :: (Prelude_Tests.Sequence a, Prelude.Appendable b, Prelude.Ord b) => a b -> b;
+concatSort x = concat (sort x);
+
+concatSort2 :: (Prelude_Tests.Sequence a) => a String -> String;
+concatSort2 = concatSort;
+
+testConstrainedClassMethods =
+    assert (concat ["apple", "pear", "banana"] == "applepearbanana")
+    && assert (concat (Array.array3 "fig" "orange" "cherry") == "figorangecherry")
+    
+    && assert (concat [Array.array2 3 1, Array.array3 4 1 5, Array.array1 9] == Array.array6 (3::Int) 1 4 1 5 9)    
+    && assert (concat (Array.array3 [3, 1] [4, 1, 5] [9]) == [(3::Int), 1, 4, 1, 5, 9])    
+    
+    && assert (sort ["apple", "pear", "banana"] == ["apple", "banana", "pear"])
+    && assert (sort (Array.array3 "fig" "orange" "cherry") == Array.array3 "cherry" "fig" "orange")
+    
+    && assert (length ["apple", "pear", "banana"] == 3)
+    && assert (length (Array.array4 "fig" "orange" "cherry" "blueberry") == 4)
+    
+    && assert (subscript ["apple", "pear", "banana"] 1 == "pear")
+    && assert (subscript (Array.array3 "fig" "orange" "cherry") 2 == "cherry")
+    
+    && assert (concatSort ["apple", "pear", "banana"] == "applebananapear")
+    && assert (concatSort (Array.array3 "fig" "orange" "cherry") == "cherryfigorange")    
+    
+    && assert (concatSort2 ["apple2", "pear", "banana"] == "apple2bananapear")
+    && assert (concatSort2 (Array.array3 "fig2" "orange" "cherry") == "cherryfig2orange")        
+    ;
+   
+   
+//The following declaration causes an error since the type class type variable is a *type* variable and
+//not a *record* variable.
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,489 column 20): The record variable r is already used as a type variable.
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,489 column 27): The record variable r is already used as a type variable.
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,489 column 5): The class method testRecord must use the type class type variable r in its type signature.
+//class RecordTester r where
+//    testRecord :: {r} -> {r};
+//    ;
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,492 column 28): The record variable r is already used as a type variable.
+//foo = undefined :: [r] -> {r};
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,494 column 31): The type variable r is already used as a record variable.
+//fooBar = undefined :: {r} -> [r];
+
+class Num a => Fractional a where    
+    truncate :: Integral b => a -> b;
+    //round :: Integral b => a -> b;
+    //ceiling :: Integral b => a -> b;
+    //floor :: Integral b => a -> b;
+    toDecimal :: a -> Decimal;
+    ;
+
+class Num a => Integral a where
+    toInteger :: a -> Integer;
+    ;
+
+//instance Fractional Double where
+//    truncate = truncateDouble;
+//    //round = roundDouble;
+//    //ceiling = ceilingDouble;
+//    //floor = floorDouble;
+//    toDecimal = toDecimalDouble;
+//    ;
+//
+//truncateDouble :: Integral a => Double -> a;
+//truncateDouble !value = Prelude.fromInt (Prelude.truncate value);
+
+
+class Seq c where
+    seq_fromList :: [a] -> c a;
+    seq_toList :: c a -> [a]; 
+    seq_fromArray :: Array.Array a -> c a;
+    seq_toArray :: c a -> Array.Array a;
+    seq_convert :: Seq d => c a -> d a;
+    ;
+
+instance Seq Prelude.List where
+    seq_fromList = Prelude.id;
+    seq_toList = Prelude.id;
+    seq_fromArray = Array.toList;
+    seq_toArray = Prelude.undefined; //can't define this because of the current Typeable constraint on making lists.
+    seq_convert = seq_convert_list;
+    ;
+
+seq_convert_list :: Seq c => [a] -> c a;
+seq_convert_list list = seq_fromList list;
+
+instance Seq Array.Array where
+    seq_fromList = Prelude.undefined; //can't define this because of the current Typeable constraint on making lists.
+    seq_toList = Array.toList;
+    seq_fromArray = Prelude.id;
+    seq_toArray = Prelude.id; 
+    seq_convert = seq_convert_array;
+    ;
+
+seq_convert_array :: Seq c => Array.Array a -> c a;
+seq_convert_array list = seq_fromArray list;
+
+//testSeqConvert =
+//    assert ((seq_convert [1.0, 2.0, 3.0]) == [1.0, 2.0, 3.0])
+//    && assert (seq_convert [3.0, 1, 4, 1] == Array.array4 3.0 1 4 1)
+//    ;
+
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,595 column 5): Kind error in the type declaration for the class method toA. Caused by: Kinding clash
+//class A a where
+//    toB :: B b => a -> b;
+//    ;
+//
+//class B b where
+//    toA :: A a => b c -> a c; 
+//    ;
+
+
+class MyFunctor f where
+    myFunctorMap :: f a -> f b;
+    ;
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,603 column 21): The kinds of all classes constraining the type variable 'a' must be the same. Class Prelude.Eq has kind * while class Cal.Test.Core.Prelude_Tests.MyFunctor has kind * -> *.
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,603 column 47): The kinds of all classes constraining the type variable 'b' must be the same. Class Cal.Test.Core.Prelude_Tests.MyFunctor has kind * -> * while class Prelude.Ord has kind *.
+//testClash :: (Eq a, MyFunctor a, MyFunctor b, Ord b) => (a, b);
+//testClash = (undefined, undefined);
+
+////////////////////////////////////////////////////////////////////////////
+//The following test is a test of overload resolution where multiple dictionaries are needed.
+//It is intentional that ClassA < ClassB < ClassC lexicographically since the classB methods test the various orderings.
+
+class ClassA a where
+    aToString :: a -> a -> String;
+    aToInt :: a -> a -> Int;    
+    ;
+
+class ClassB b where
+    //b1 is interesting because the type class type variable b occurs at index 1 (in the overloaded polymorphic vars) in the
+    //type expression. In particular, the class method function for b1 is
+    //b1 dA dB = dB 0 dA, where 0 is the index of the class method b1.
+    //there is a similar issue for b3 where the class method function is
+    //b3 dC dB = dB 2 dC
+    b1 :: ClassA a => a -> b -> b;
+    b2 :: ClassA a => b -> a -> b;
+    b3 :: ClassC c => c -> b -> b;
+    b4 :: ClassC c => b -> c -> b;
+    ;
+
+class ClassC c where
+    cToInt :: c -> Int;
+    cToString :: c -> String;
+    ;
+
+instance ClassA Int where
+    aToInt = aToInt_Int;
+    aToString = aToString_Int;
+    ;
+
+aToInt_Int :: Int -> Int -> Int;
+aToInt_Int x ignored = 10 * x;
+
+aToString_Int :: Int -> Int -> String;
+aToString_Int x ignored = "<classA=" ++ Debug.show x ++ ">"; 
+  
+             
+instance ClassB String where
+    b1 = b1_String;
+    b2 = b2_String;
+    b3 = b3_String;
+    b4 = b4_String;
+    ;
+
+b1_String :: ClassA a => a -> String -> String;
+b1_String a stringValue = (aToString a undefined) ++ stringValue;
+
+b2_String :: ClassA a => String -> a -> String;
+b2_String stringValue a = (aToString a undefined) ++ stringValue;
+
+b3_String :: ClassC c => c -> String -> String;
+b3_String c stringValue = (cToString c) ++ stringValue;
+
+b4_String :: ClassC c => String -> c -> String;
+b4_String stringValue c = (cToString c) ++ stringValue;
+    
+
+instance ClassC Int where
+    cToInt = cToInt_Int;
+    cToString = cToString_Int;
+    ;
+
+cToInt_Int :: Int -> Int;
+cToInt_Int x = 7 * x;
+
+cToString_Int :: Int ->String;
+cToString_Int x = "<classC=" ++ Debug.show x ++ ">"; 
+
+
+testMultipleDictionaryClassMethodOverloading =
+    assert (b2 "fig" (40::Int) == "<classA=40>fig")
+    && assert (b4 "frog" (50 :: Int) == "<classC=50>frog")    
+    && assert (b1 (30 :: Int) "apple" == "<classA=30>apple")
+    && assert (b3 (20 :: Int) "pear" == "<classC=20>pear")
+    ;
+
+////////////////////////////////////////////////////////////////////
+//test the support of classes with no class methods
+//this can be useful to group a set of class constraints under one umbrella
+
+class (Ord a, Prelude.Bounded a) => OrdBounded a where;
+
+instance OrdBounded Int where;
+instance OrdBounded Prelude.Ordering where;
+
+boundedConsistency :: OrdBounded a => a -> Boolean;
+boundedConsistency x =
+    x >= Prelude.minBound && x <= Prelude.maxBound;
+
+testBoundedConsistency = 
+    assert (boundedConsistency Prelude.LT)
+    && assert (boundedConsistency Prelude.EQ)
+    && assert (boundedConsistency Prelude.GT)
+    && assert (boundedConsistency (0 :: Int))
+    ;
+
+////////////////////////////////////////////////////////////////////
+//tests of the use of default class methods
+
+data Coin = Penny | Nickel | Dime | Quarter deriving Enum, IntEnum;
+
+instance Eq Coin where
+    equals = equalsCoin;
+    //use default for notEquals
+    ;
+
+instance Ord Coin where
+    compare = compareCoin;
+    //use default for lessThan, max etc
+    ;
+
+instance Show Coin where;
+    //use default for show. This is an interesting test case in that Show is a single class method root type class
+    //which is handled specially by compiler.
+
+equalsCoin :: Coin -> Coin -> Boolean;
+equalsCoin !x !y = Prelude.enumToInt x == Prelude.enumToInt y;
+
+compareCoin :: Coin -> Coin -> Ordering;
+compareCoin !x !y = Prelude.compare (Prelude.enumToInt x) (Prelude.enumToInt y);
+
+testCoinInstances =
+    assert (Penny != Nickel)
+    && assert (Dime != Quarter)
+    && assert (List.sort [Dime, Nickel, Penny, Quarter] == [Penny, Nickel, Dime, Quarter])
+    && assert (Penny < Quarter)
+    && assert (Prelude.max Dime Nickel == Dime)
+    && assert (eager (Penny != Nickel))
+    && assert (eager (Dime != Quarter))
+    && assert (eager (List.sort [Dime, Nickel, Penny, Quarter] == [Penny, Nickel, Dime, Quarter]))
+    && assert (eager (Penny < Quarter))
+    && assert (eager (Prelude.max Dime Nickel == Dime))
+    && assert (show [Dime, Quarter, Penny, Nickel] == "[2, 3, 0, 1]")    
+    && assert (eager (show Quarter) == "3")
+    && assert (myShow Nickel == "1")
+    && assert (myShow Quarter == "3")
+    ;
+
+//test constrained instances that make use of class method defaults.
+data StrictTuple2 a b =
+    StrictTuple2
+        f1 :: !a
+        f2 :: !b
+    ;
+
+instance (Eq a, Eq b) => Eq (StrictTuple2 a b) where
+    equals = equalsStrictTuple2;
+    ;
+
+instance (Ord a, Ord b) => Ord (StrictTuple2 a b) where
+    compare = compareStrictTuple2;
+    ;
+
+instance Show (StrictTuple2 a b) where;
+
+//another class similar to Show. We want to create an instance for StrictTuple2 a that constrains a.
+class MyShow a where
+    myShow :: a -> String
+        default myShowDefault;
+    ;
+
+myShowDefault :: MyShow a => a -> String;
+myShowDefault x = Debug.showInternal x;
+
+instance MyShow Coin where;
+
+//Make the instance a constained instance
+instance MyShow b => MyShow (StrictTuple2 a b) where;
+
+
+//instance MyShow b => MyShow (StrictTuple2 a b) where
+//    myShow = myShowStrictTuple2;
+//    ;
+//myShowStrictTuple2 :: MyShow b => StrictTuple2 a b -> String;
+//myShowStrictTuple2 x = Debug.showInternal x;
+
+//record instances are yet another special case.
+instance MyShow {r} where;
+
+strictTuple2ToPair x = (x.StrictTuple2.f1, x.StrictTuple2.f2);
+
+equalsStrictTuple2 x y = strictTuple2ToPair x == strictTuple2ToPair y;
+
+compareStrictTuple2 x y = compare (strictTuple2ToPair x) (strictTuple2ToPair y);
+
+testStrictTuple2Instances =
+    assert (sort [StrictTuple2 Quarter Nickel, StrictTuple2 Quarter Penny, StrictTuple2 Penny Dime, StrictTuple2 Penny Penny, StrictTuple2 Quarter Dime]
+            == [StrictTuple2 Penny Penny, StrictTuple2 Penny Dime, StrictTuple2 Quarter Penny, StrictTuple2 Quarter Nickel, StrictTuple2 Quarter Dime])
+    && assert (List.sortBy (\x y -> if x < y then LT else if x > y then GT else EQ) [StrictTuple2 Quarter Nickel, StrictTuple2 Quarter Penny, StrictTuple2 Penny Dime, StrictTuple2 Penny Penny, StrictTuple2 Quarter Dime]
+            == [StrictTuple2 Penny Penny, StrictTuple2 Penny Dime, StrictTuple2 Quarter Penny, StrictTuple2 Quarter Nickel, StrictTuple2 Quarter Dime])    
+    && assert (StrictTuple2 Quarter Nickel != StrictTuple2 Quarter Dime)
+    && assert (eager (StrictTuple2 Quarter Nickel != StrictTuple2 Quarter Dime))
+    && assert (max (StrictTuple2 Quarter Nickel) (StrictTuple2 Quarter Dime) == StrictTuple2 Quarter Dime)
+    && assert (min (StrictTuple2 Quarter Nickel) (StrictTuple2 Quarter Dime) != StrictTuple2 Quarter Dime)
+    && assert (not strictTuple2_test1)
+    && assert (strictTuple2_test2)
+    && assert (strictTuple2_test3)
+    && assert (strictTuple2_test4)
+    && assert (show (StrictTuple2 Quarter Nickel)
+               == "(Cal.Test.Core.Prelude_Tests.StrictTuple2 3 1)")
+    && assert (myShow (StrictTuple2 Quarter Nickel)
+               == "(Cal.Test.Core.Prelude_Tests.StrictTuple2 3 1)")
+    && assert (myShow (StrictTuple2 Dime (StrictTuple2 Quarter Nickel))
+               == "(Cal.Test.Core.Prelude_Tests.StrictTuple2 2 (Cal.Test.Core.Prelude_Tests.StrictTuple2 3 1))")
+    && assert (myShow (Nickel, Dime) == "(1, 2)")    
+    ;
+
+notEquals2 :: Eq a => a -> a -> Boolean;
+notEquals2 !x !y = not (equals x y);
+
+strictTuple2_test1 = StrictTuple2 Quarter Nickel == StrictTuple2 Quarter Dime;
+strictTuple2_test2 = StrictTuple2 Quarter Nickel != StrictTuple2 Quarter Dime;
+strictTuple2_test3 = notEquals2 (StrictTuple2 Quarter Nickel) (StrictTuple2 Quarter Dime);
+strictTuple2_test4 = (StrictTuple2 Quarter Nickel) `notEquals2` (StrictTuple2 Quarter Dime);
+
+myShow_test1 = myShow (StrictTuple2 Quarter Nickel);
+
+/////////////////////////////////////////////////////////////
+
+//Aug 9, 2006: previously, this didn't give a line and column number
+//Error: Cal.Test.Core.Prelude_Tests: (line 2,831 column 5): The data constructor Prelude.Just must have exactly 1 pattern argument(s) in its case alternative.
+//foo x =
+//    case x of
+//    Just -> True;  // Should read 'Just {} -> True'
+//    Nothing -> False;
+//    ;
+
+
+//pattern matching, leave EQ, GT unhandled
+patternMatch1 x =
+    case x of
+    LT -> "LT data cons";   
+    ;
+
+//pattern matching, handle all cases
+patternMatch2 x =
+    case x of
+    LT -> "LT data cons";
+    EQ -> "EQ data cons";
+    GT -> "GT data cons";
+    ;
+
+//pattern matching, involve a default case
+patternMatch3 x =
+    case x of
+    LT -> "LT data cons";
+    _ -> "default case";
+    ;
+
+//pattern matching using data constructor field selection
+patternMatch4 x = x.Just.value;
+
+//pattern matching using data constructor field selection
+patternMatch5 x = x.Left.value;
+
+//leave Just unhandled
+patternMatch6 x =
+    case x of
+    Nothing -> "Nothing data cons";    
+    ;
+
+patternMatch7 :: Int -> String;
+patternMatch7 x =
+    case x of
+    1 -> "one";
+    2 -> "two";
+    ;
+
+patternMatch8 :: Char -> String;
+patternMatch8 x =
+    case x of
+    'a' -> "char a";
+    'b' -> "char b";
+    ;
+
+
+//Expressions which should produce pattern matching failures at runtime
+ 
+patternMatchFailure1 = (\x -> case x of Nothing -> "abc";) (Just 'a');
+
+patternMatchFailure2 = (\x -> case x of 1 -> "abc";) (2 :: Int);
+
+patternMatchFailure3 = (\x -> case x of 'a' -> "abc";) ('b' :: Char);
+
+patternMatchFailure4 = (Nothing :: Maybe Int).Just.value;
+
+patternMatchFailure5 = (Left 'a' :: Either Char Char).Right.value;
+
+
+////////////////////////////////////////////////////////////////////
+
+//todoBI this is a bug. Uncomment the first level of comments to get an unexpected compilation failure. 
+//uncomment the record instance and all is OK.
+
+//public class TestClass a where
+//    something :: a;
+//    ; 
+//
+////instance TestClass r => TestClass {r} where
+////    something = somethingRecord;
+////    ;
+////
+////somethingRecord :: TestClass r => {r};
+////somethingRecord = undefined;
+//
+//test1 :: TestClass r => r ;
+//test1 = undefined;
+//
+//test2 :: TestClass r => {r} ;
+//test2 = undefined;
+//
+//foo2 = test2;
+//
+//test3 :: TestClass r => [r];
+//test3 = undefined;
+//
+//foo3 = test3;
+
+
+////////////////////////////////////////////////////////////////////
+//tests of the CalFunction type
+
+/**
+ * An alternative implementation of {@link List.sortByExternal@}.
+ */
+sortExternal_Alt :: Ord a => [a] -> [a];
+sortExternal_Alt !list = sortByExternal_Alt compare list;
+
+/* @example */
+sortExternal_AltExamples :: Boolean;
+private sortExternal_AltExamples =    
+    assert (sortExternal_Alt ['z','e','b','r','a'] == ['a','b','e','r','z'])
+    && assert (sortExternal_Alt [20, 70, 10, 49.5] == [10, 20, 49.5, 70])
+    && assert (sortExternal_Alt [-20 :: Int, 70, 10, 40, 30, 1] == [-20, 1, 10, 30, 40, 70])
+    && assert (sortExternal_Alt ([] :: [Char]) == [])
+    && assert (sortExternal_Alt ([10 :: Int]) == [10])
+    && assert (sortExternal_Alt [20, 10] == [10 :: Int, 20])                                      
+    && assert (sortExternal_Alt [30, 20, 10] == [10 :: Int, 20, 30])                                        
+    && assert (sortExternal_Alt [40, 30, 20, 10] == [10 :: Int, 20, 30, 40])                                      
+    && assert (sortExternal_Alt [50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50])                                      
+    && assert (sortExternal_Alt [60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60])                                       
+    && assert (sortExternal_Alt [70, 60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60, 70]) 
+    && assert (sortExternal_Alt [80, 70, 60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60, 70, 80])                               
+    && assert (sortExternal_Alt [90, 80, 70, 60, 50, 40, 30, 20, 10] == [10 :: Int, 20, 30, 40, 50, 60, 70, 80, 90]) 
+    ;
+
+data foreign unsafe import jvm "java.util.Comparator" Comparator;
+
+foreign unsafe import jvm "static method java.util.Collections.sort"
+    jSortBy :: JList -> Comparator -> (); 
+
+foreign unsafe import jvm "constructor org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$CalComparator"
+    makeCalComparator :: CalFunction -> Comparator; 
+
+/**
+ * An alternative implementation of {@link List.sortByExternal@}.
+ * 
+ * This shows how to use the {@link CalFunction@} type to enable Java functions 
+ * (in this case java.util.Collections.sort) to call back into CAL for evaluations.
+ */
+sortByExternal_Alt :: (a -> a -> Ordering) -> [a] -> [a];
+sortByExternal_Alt cmp !list =  
+    let
+        externalList :: JList;
+        externalList = outputList ((unsafeCoerce list) :: [CalValue]);
+        
+        //package up 'cmp :: a -> a -> Ordering' so that it can be viewed as a function from 'JObject -> JObject'.
+        wrappedCmp :: JObject -> JObject;
+        wrappedCmp !pairAsObject =            
+            (\!pairInternals -> 
+                 case pairInternals of
+                 (internal1, internal2) ->
+                     output (cmp (unsafeCoerce internal1) (unsafeCoerce internal2));
+            )
+            # (input :: JObject -> (CalValue, CalValue)) 
+            $ pairAsObject
+            ;
+        
+        comparator :: Comparator;
+        comparator = makeCalComparator (makeCalFunction wrappedCmp);
+        
+        sortedExternalList :: JList;
+        sortedExternalList = seq (jSortBy externalList comparator) externalList;
+        
+        inputtedList :: [CalValue];
+        inputtedList = inputList sortedExternalList;
+     in
+        unsafeCoerce (inputtedList);
+
+/* @example */
+sortByExternal_AltExamples :: Boolean;   
+private sortByExternal_AltExamples =
+    assert (sortByExternal_Alt compare [3.0, 1, 5, 1, 4, 9, 2, 7] == [1, 1, 2, 3, 4, 5, 7, 9])
+                                                  
+    //sortByExternal is a stable sort i.e. equal elements do not change their order                                                  
+    && assert (sortByExternal_Alt (\x y -> compare (fst x) (fst y)) ([(1, 'a'), (3, 'd'), (1, 'b'), (1, 'c'), (3, 'b'), (3, 'c')] :: [(Int, Char)])
+          == [(1, 'a'), (1, 'b'), (1, 'c'), (3, 'd'), (3, 'b'), (3, 'c')])
+              
+    && assert (sortByExternal_Alt compare ["Apple", "apple", "Pear", "pear", "banana", "Banana"]
+          == ["Apple", "Banana", "Pear", "apple", "banana", "pear"])
+       
+    && assert (sortByExternal_Alt (\x y -> compare (String.toLowerCase x) (String.toLowerCase y)) ["Apple", "apple", "Pear", "pear", "banana", "Banana"]
+          == ["Apple", "apple", "banana", "Banana", "Pear", "pear"])             
+    ;
+
+allPrimes :: [Prelude.Int];
+allPrimes = 
+    let
+        nonMultiple :: Prelude.Int -> Prelude.Int -> Prelude.Boolean;
+        nonMultiple !p !n = (Prelude.remainder n p) != 0;
+
+        //the sieve of Eratosthenes
+        sieve :: [Prelude.Int] -> [Prelude.Int];
+        sieve !xs = 
+            case xs of 
+            [] -> [];
+            p : ps -> 
+                p : sieve (List.filter (nonMultiple p) ps);
+            ;
+    in        
+        sieve (Prelude.upFrom 2);
+
+/**
+ * A variant of {@link makeCalFunction@} that handles the case where the function {@code JObject -> JObject@} is
+ * produced by composition with {@link input@} and {@link output@}.
+ */
+//todoBI would this be useful in the Prelude?
+makeCalFunctionEx :: (Inputable a, Outputable b) => (a -> b) -> CalFunction;
+makeCalFunctionEx f = makeCalFunction (output # f # input);
+
+/**
+ * A variant of {@link evaluateCalFunction@} that handles the case where evaluation proceeds via composition
+ * with {@link input@} and {@link output@}.
+ */
+//todoBI would this be useful in the Prelude?
+evaluateCalFunctionEx :: (Outputable a, Inputable b) => CalFunction -> a -> b;
+evaluateCalFunctionEx func arg =
+    input (evaluateCalFunction func (output arg));
+
+getNthPrime_Alt :: Int -> Int;
+getNthPrime_Alt !n =
+    let
+        calFunction =
+            makeCalFunctionEx (\!n -> List.subscript allPrimes (n - 1));
+    
+    in
+        evaluateCalFunctionEx calFunction n;   
+
+testGetNthPrime_Alt =
+    assert
+    (
+        List.map getNthPrime_Alt (upFromTo 1 10)
+        == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+    )
+    &&
+    assert
+    (
+        List.map getNthPrime_Alt (upFromTo 5 20)
+        == [11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71]
+    )
+    ;
+
+////////////////////////////////////////////////////////////////////
+
+//tests of CAL's "cast" foreign function descriptor
+
+testWideningPrimitiveConversions =
+    assert (toDouble (5 :: Byte) == 5)
+    &&
+    assert (toDouble (-10 :: Short) == -10)
+    &&
+    assert (charToDouble ' ' == 32)
+    &&
+    assert (toDouble (123 :: Int) == 123)
+    &&
+    assert (toDouble (100000000000000000 :: Long) == 100000000000000000)
+    &&
+    assert (toDouble (10 :: Float) == 10)
+    ;    
+
+foreign unsafe import jvm "cast" private charToDouble :: Char -> Double;
+                        
+
+testNarrowingPrimitiveConversions =
+    //(short)0x12345678 == 0x5678
+    assert (toShort (305419896 :: Int) == 22136) 
+    && 
+    //(byte)255 == -1
+    assert (toByte (255 :: Int) == -1)
+    &&
+    //(int)1e20f == 2147483647
+    assert (toInt (100000000000000000000 :: Float) == 2147483647)
+    &&
+    //(int)NaN == 0
+    assert (toInt notANumber == 0)
+    &&
+    //(float)-1e100 == -Infinity
+    assert
+    (
+        toFloat (-10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0)
+        == floatNegativeInfinity
+    )
+    &&
+    //(float)1e-50 == 0.0
+    assert (toFloat 0.00000000000000000000000000000000000000000000000001 == 0)
+    ;
+    
+foreign unsafe import jvm "static field java.lang.Float.NEGATIVE_INFINITY" floatNegativeInfinity :: Float; 
+
+
+data foreign unsafe import jvm "java.util.Collection" JCollection;
+data foreign unsafe import jvm "java.util.Set" JSet;
+data foreign unsafe import jvm "java.util.AbstractList" JAbstractList;
+data foreign unsafe import jvm "java.util.Vector" JVector;
+data foreign unsafe import jvm "java.util.ArrayList" JArrayList;
+data foreign unsafe import jvm "java.util.HashSet" JHashSet;
+data foreign unsafe import jvm "java.util.LinkedHashSet" JLinkedHashSet;
+
+foreign unsafe import jvm "cast" castObjectToList :: JObject -> JList;
+foreign unsafe import jvm "cast" castListToObject :: JList -> JObject;
+
+foreign unsafe import jvm "cast" castObjectToArrayList :: JObject -> JArrayList;
+foreign unsafe import jvm "cast" castArrayListToObject :: JArrayList -> JObject;
+
+foreign unsafe import jvm "cast" castListToArrayList :: JList -> JArrayList;
+foreign unsafe import jvm "cast" castArrayListToList :: JArrayList -> JList;
+
+foreign unsafe import jvm "cast" castListToVector :: JList -> JVector;
+foreign unsafe import jvm "cast" castVectorToList :: JVector -> JList;
+
+foreign unsafe import jvm "cast" castListToSet :: JList -> JSet;
+foreign unsafe import jvm "cast" castSetToList :: JSet -> JList;
+
+foreign unsafe import jvm "cast" castAbstractListToArrayList :: JAbstractList -> JArrayList;
+foreign unsafe import jvm "cast" castArrayListToAbstractList :: JArrayList -> JAbstractList;
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 3,075 column 27): Cannot cast the Java type 'java.util.ArrayList' to the Java type 'java.util.Vector'.
+//foreign unsafe import jvm "cast" castArrayListToVector :: JArrayList -> JVector;
+
+//even through java.util.ArrayList does not implement java.util.Set, some subtype might
+foreign unsafe import jvm "cast" castArrayListToSet :: JArrayList -> JSet;
+
+
+data foreign unsafe import jvm "java.lang.Cloneable" JCloneable;
+data foreign unsafe import jvm "int[]" JIntArray deriving Inputable, Outputable;
+data foreign unsafe import jvm "java.lang.String[]" JStringArray deriving Inputable, Outputable;
+data foreign unsafe import jvm "java.util.List[]" JListArray;
+data foreign unsafe import jvm "java.util.ArrayList[]" JArrayListArray;
+
+foreign unsafe import jvm "cast" castStringArrayToCloneable :: JStringArray -> JCloneable;
+foreign unsafe import jvm "cast" castCloneableToStringArray :: JCloneable -> JStringArray;
+
+foreign unsafe import jvm "cast" castStringArrayToObject :: JStringArray -> JObject;
+foreign unsafe import jvm "cast" castObjectToStringArray :: JObject -> JStringArray;
+
+foreign unsafe import jvm "cast" castObjectArrayToStringArray :: JObjectArray -> JStringArray;
+foreign unsafe import jvm "cast" castStringArrayToObjectArray :: JStringArray -> JObjectArray;
+
+foreign unsafe import jvm "cast" castObjectArrayToListArray :: JObjectArray -> JListArray;
+foreign unsafe import jvm "cast" castListArrayToObjectArray :: JListArray -> JObjectArray;
+
+foreign unsafe import jvm "cast" castListArrayToObject :: JListArray -> JObject;
+
+foreign unsafe import jvm "cast" castArrayListArrayToListArray :: JArrayListArray -> JListArray;
+foreign unsafe import jvm "cast" castListArrayToArrayListArray :: JListArray -> JArrayListArray;
+
+data foreign unsafe import jvm "java.lang.ClassCastException" JClassCastException deriving Show;
+instance Exception JClassCastException where;
+
+throwsClassCastException :: a -> Boolean;
+throwsClassCastException value =
+    let
+        caseType :: Either JClassCastException a;
+        caseType = undefined;
+    in       
+        case (try value) `asTypeOf` caseType of
+        Left exception -> True;
+        Right value -> False;
+        ;
+    
+
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.nuttyVector"
+    nuttyVector :: JList;
+
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.fruityArrayList"
+    fruityArrayList :: JList;
+
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.nutsAndFruits"
+    nutsAndFruits :: JObjectArray;
+
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.cityStrings"
+    cityStrings :: JObjectArray;
+
+
+testCastingFunctions =
+    assert 
+    (
+        inputList (castVectorToList (castListToVector nuttyVector))
+        == ["pecan", "almond", "peanut", "walnut"]
+    )
+    &&
+    assert 
+    (
+        inputList (castArrayListToList (castListToArrayList fruityArrayList))
+        == ["apple", "orange", "pear"]
+    )  
+    &&
+    assert (throwsClassCastException (castListToArrayList nuttyVector))   
+    &&
+    assert (throwsClassCastException (castListToVector fruityArrayList)) 
+    &&
+    assert (not (throwsClassCastException (castListToArrayList fruityArrayList)))
+    &&
+    assert (not (throwsClassCastException (castListToVector nuttyVector)))  
+    &&
+    assert (not (throwsClassCastException (castObjectArrayToStringArray cityStrings)))
+    &&
+    assert (throwsClassCastException (castObjectArrayToStringArray nutsAndFruits))
+    &&
+    assert (not (throwsClassCastException (castObjectArrayToListArray nutsAndFruits)))
+    &&
+    assert (not (throwsClassCastException (castListArrayToObjectArray (castObjectArrayToListArray nutsAndFruits))))
+    &&
+    assert (not (throwsClassCastException (castListArrayToObject (castObjectArrayToListArray nutsAndFruits))))    
+    ;
+
+    
+data foreign unsafe import jvm "boolean" JBoolean deriving Eq, Outputable, Show;
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.TRUE"
+    true :: JBoolean; 
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.FALSE"
+    false :: JBoolean; 
+
+data foreign unsafe import jvm "boolean" JBoolean2 deriving Eq, Outputable, Show;
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.TRUE"
+    true2 :: JBoolean2; 
+foreign unsafe import jvm "static field org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.FALSE"
+    false2 :: JBoolean2; 
+
+foreign unsafe import jvm "cast" castBooleanToBoolean :: Boolean -> Boolean;
+
+foreign unsafe import jvm "cast" castBooleanToJBoolean :: Boolean -> JBoolean;
+foreign unsafe import jvm "cast" castJBooleanToBoolean :: JBoolean -> Boolean;
+
+foreign unsafe import jvm "cast" castJBooleanToJBoolean2 :: JBoolean -> JBoolean2;
+
+testCastBooleans =
+    assert (castBooleanToBoolean True == True)
+    &&
+    assert (castBooleanToBoolean False == False)
+    &&
+    assert (castBooleanToJBoolean True == true)
+    &&
+    assert (castBooleanToJBoolean False == false) 
+    &&
+    assert (castJBooleanToBoolean true == True) 
+    &&
+    assert (castJBooleanToBoolean false == False)
+    &&
+    assert (castJBooleanToJBoolean2 true == true2) 
+    &&
+    assert (castJBooleanToJBoolean2 false == false2)         
+    ;
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 3,260 column 27): Cannot cast the Java type 'boolean' to the Java type 'int'.
+//foreign unsafe import jvm "cast" castBooleanToInt :: Boolean -> Int;
+
+
+foreign unsafe import jvm "instanceof java.util.Vector" isList_Vector :: JList -> Boolean;
+foreign unsafe import jvm "instanceof java.util.ArrayList" isList_ArrayList :: JList -> Boolean;
+foreign unsafe import jvm "instanceof java.util.List" isList_List :: JList -> Boolean;
+foreign unsafe import jvm "instanceof java.lang.Object" isList_Object :: JList -> Boolean;
+
+//Error: Cal.Test.Core.Prelude_Tests: (line 3,269 column 27): If 'expr' has Java type 'java.util.List', then 'expr instanceof java.lang.String' is an invalid Java expression.
+//foreign unsafe import jvm "instanceof java.lang.String" isList_String :: JList -> Boolean;
+
+testInstanceOf =
+    assert (isList_Vector nuttyVector) 
+    &&
+    assert (not (isList_ArrayList nuttyVector))
+    &&
+    assert (isList_List nuttyVector)
+    &&
+    assert (isList_Object nuttyVector)
+    &&
+    assert (not (isList_Vector fruityArrayList))
+    &&
+    assert (isList_ArrayList fruityArrayList)
+    ;
+
+
+////////////////////////////////////////////////////////////////////
+//tests of handling of integral literals
+
+
+//the integer literal 1001 is compiled to Prelude.fromInt 1001
+addSome :: Num a => a -> a;
+addSome x = x + 1001; 
+
+//the integer literal 21474836470 (which is 10 * (maxBound :: Int)) is compiled to Prelude.fromLong 21474836470
+addLots :: Num a => a -> a;
+addLots x = x + 21474836470; 
+
+//the integer literal 92233720368547758070 (which is 10 * (maxBound :: Long) is compiled to Prelude.fromInteger 92233720368547758070
+addEvenMore :: Num a => a -> a;
+addEvenMore x = x + 92233720368547758070;
+
+subtractSome x = x - 1001;
+subtractLots x = x - 21474836480;
+subtractEvenMore x = x - 92233720368547758080;
+
+testIntegerLiterals =
+    assert (addSome (1::Integer) == 1002)
+    &&
+    assert (addLots (1::Integer) == 21474836471)
+    &&
+    assert (addEvenMore (1::Integer) == 92233720368547758071) 
+    &&
+    assert (subtractSome (1::Integer) == -1000)
+    &&
+    assert (subtractLots (1::Integer) == -21474836479)
+    &&
+    assert (subtractEvenMore (1::Integer) == -92233720368547758079) 
+    &&
+    assert (toInt (toLong (Prelude.maxBound :: Int) + 1) ==  fromLong (2147483648))
+    ;
+
+
+////////////////////////////////////////////////////////////////////
+//tests of null, isNull and isNotNull foreign function declarations
+
+
+foreign unsafe import jvm "null" nullString :: String; 
+foreign unsafe import jvm "isNull" isNullString :: String -> Boolean;
+foreign unsafe import jvm "isNotNull" isNotNullString :: String -> Boolean;
+
+foreign unsafe import jvm "null" nullObject :: JObject; 
+foreign unsafe import jvm "isNull" isNullObject :: JObject -> Boolean;
+foreign unsafe import jvm "isNotNull" isNotNullObject :: JObject -> Boolean;
+
+foreign unsafe import jvm "null" nullList :: JList; 
+foreign unsafe import jvm "isNull" isNullList :: JList -> Boolean;
+foreign unsafe import jvm "isNotNull" isNotNullList :: JList -> Boolean;
+
+
+testNullForeignFunctions =
+    assert (isNullString nullString)
+    &&
+    assert (not (isNotNullString nullString))
+    &&
+    assert (not (isNullString "abc"))
+    &&
+    assert (isNotNullString "abc")
+    &&
+    assert (isNullObject nullObject)
+    &&
+    assert (not (isNotNullObject nullObject))
+    &&
+    assert (isNullList nullList)
+    &&
+    assert (not (isNotNullList nullList))
+    &&
+    assert (isNotNullObject (output ["abc", "def"]))
+    &&
+    assert (isNotNullList (outputList [2.0, 3.0]))
+    ;
+
+////////////////////////////////////////////////////////////////////
+//tests of foreign functions with external form "newArray", "lengthArray", "subscriptArray", "updateArray";
+
+/**
+ * Similar to String.valueOf, except arrays (at the outermost level) are handled by displaying
+ * their components. For example, an int[][] could display as: [[1, 2], [2, 3, 4], [3]].   
+ * This is a useful method for debug code involving arrays, as the default implementation of toString on
+ * arrays is just Object.toString i.e. shows the class name followed by a reference id.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.toStringHandlingArrays" 
+    showHandlingArrays :: JObject -> String;
+
+data foreign unsafe import jvm "int[][]"
+    JInt2Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "int[][][]"
+    JInt3Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "int[][][][]"
+    JInt4Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "java.lang.String[][]"
+    JString2Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "java.lang.String[][][]"
+    JString3Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "java.lang.String[][][][]"
+    JString4Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "java.lang.Object[][]"
+    JObject2Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "java.lang.Object[][][]"
+    JObject3Array deriving Inputable, Outputable;
+
+data foreign unsafe import jvm "java.lang.Object[][][][]"
+    JObject4Array deriving Inputable, Outputable;
+
+foreign unsafe import jvm "newArray" 
+    newIntArray :: Int -> JIntArray;
+
+foreign unsafe import jvm "updateArray"
+    updateIntArray :: JIntArray -> Int -> Int -> Int;
+
+foreign unsafe import jvm "lengthArray"
+    lengthIntArray :: JIntArray -> Int;
+
+foreign unsafe import jvm "subscriptArray"
+    subscriptIntArray :: JIntArray -> Int -> Int;
+
+upFromToIntArray :: Int -> Int -> JIntArray;
+upFromToIntArray !start !end =
+    if start > end then
+        newIntArray 0
+    else
+        let
+            size = eager (end - start + 1);
+            array = eager (newIntArray size);
+            
+            initializeArray !currentIndex =
+                if currentIndex < size then                
+                    updateIntArray array currentIndex (currentIndex + start)
+                    `seq`
+                    initializeArray (currentIndex + 1) 
+                else
+                    array;
+        in
+            initializeArray 0;
+
+foreign unsafe import jvm "newArray" 
+    newInt2Array :: Int -> JInt2Array;
+
+foreign unsafe import jvm "newArray"
+    newInt2Array2 :: Int -> Int -> JInt2Array;
+
+foreign unsafe import jvm "updateArray" 
+    updateInt2Array :: JInt2Array -> Int -> JIntArray -> JIntArray;
+
+foreign unsafe import jvm "updateArray" 
+    updateInt2Array2 :: JInt2Array -> Int -> Int -> Int -> Int;
+
+foreign unsafe import jvm "subscriptArray" 
+    subscriptInt2Array :: JInt2Array -> Int -> Int -> Int;
+
+foreign unsafe import jvm "subscriptArray" 
+    subscriptInt2ArrayToIntArray :: JInt2Array -> Int -> JIntArray;
+
+pascalsTriangle :: Int -> JInt2Array;
+pascalsTriangle !size =
+    if size < 1 then
+        error "size must be >= 1"
+    else 
+        let
+            triangle :: JInt2Array;
+            triangle = eager (newInt2Array size);
+            
+            initTriangle :: Int -> JInt2Array;
+            initTriangle !currentLevel =
+                if currentLevel == size then
+                    triangle
+                else
+                    let 
+                        levelArray = eager (newIntArray (currentLevel + 1));
+                        
+                        //currentIndex is the index within the currentLevel. 
+                        //For example, for currentLevel == 3, the triangle is [1, 3, 3, 1], and the currentIndices are [0, 1, 2, 3] 
+                        initLevel :: Int -> JIntArray;
+                        initLevel !currentIndex =                               
+                            if currentIndex > currentLevel then
+                                levelArray
+                            else if currentIndex == 0 then
+                                updateIntArray levelArray 0 1
+                                `seq`
+                                initLevel (currentIndex + 1)                           
+                            else if currentIndex == currentLevel then                                                                                                 
+                                 updateIntArray levelArray currentIndex 1
+                                 `seq`
+                                 levelArray
+                            else
+                                let
+                                    previousLevel = eager (subscriptInt2ArrayToIntArray triangle (currentLevel - 1));
+                                    newValue = eager (subscriptIntArray previousLevel (currentIndex - 1) + subscriptIntArray previousLevel currentIndex);
+                                in
+                                    updateIntArray levelArray currentIndex newValue
+                                    `seq`
+                                    initLevel (currentIndex + 1);                                        
+                    in                
+                        updateInt2Array triangle currentLevel (initLevel 0)
+                        `seq`
+                        initTriangle (currentLevel + 1)
+                        ;
+        in
+            initTriangle 0;
+
+//transpose :: JIntIntArray -> JIntIntArray;
+
+
+foreign unsafe import jvm "newArray" 
+    newString2Array :: Int -> Int -> JString2Array;
+
+foreign unsafe import jvm "updateArray"
+    updateString2Array :: JString2Array -> Int -> Int -> String -> String;
+
+foreign unsafe import jvm "subscriptArray"
+    subscriptString2Array :: JString2Array -> Int -> Int -> String;
+
+sampleString2Array :: JString2Array;
+sampleString2Array =
+    let
+        array = eager (newString2Array 2 3);
+    in
+        updateString2Array array 0 0 "apple"
+        `seq`
+        updateString2Array array 0 1 "pear"
+        `seq`
+        updateString2Array array 0 2 "orange"
+        `seq`
+        updateString2Array array 1 0 "salmon"
+        `seq`
+        updateString2Array array 1 1 "cod"
+        `seq`
+        updateString2Array array 1 2 "trout"
+        `seq`        
+        array
+        ;
+       
+                
+testArrayPrimitives =
+    assert 
+    (
+        showHandlingArrays (output (upFromToIntArray 2 10)) 
+        == "[2, 3, 4, 5, 6, 7, 8, 9, 10]"
+    )
+    && 
+    assert (lengthIntArray (upFromToIntArray 4 9) == 6)
+    &&
+    assert (subscriptIntArray (upFromToIntArray 1 10) 3 == 4)
+    &&
+    (
+        showHandlingArrays (output (pascalsTriangle 6))
+        == "[[1], [1, 1], [1, 2, 1], [1, 3, 3, 1], [1, 4, 6, 4, 1], [1, 5, 10, 10, 5, 1]]"  
+    )
+    &&
+    assert
+    (
+        showHandlingArrays (output sampleString2Array)
+        == "[[apple, pear, orange], [salmon, cod, trout]]"
+    )
+    &&
+    assert
+    (
+        subscriptString2Array sampleString2Array 1 0 == "salmon"
+    )
+    ;
+
+
+//this is a little test function that shows that the argument name "f2" can be the same as the function
+//name "f2" without causing difficulties
+f2 f2 = f2 + 2.0;
+
+//these weird function names are intended to test that the default argument names for these special foreign functions can overlap with
+//the function name itself. In this case the args are "array" and "index"
+foreign unsafe import jvm "subscriptArray" 
+    index :: JIntArray -> Int -> Int;
+foreign unsafe import jvm "subscriptArray" 
+    array :: JIntArray -> Int -> Int;
+
+testFunctionAndArgNameOverlaps =
+    assert (f2 10 == 12)
+    &&
+    assert (index (upFromToIntArray 1 10) 6 == 7)
+    &&
+    assert (array (upFromToIntArray 1 10) 2 == 3)
+    ;
+
+//foreign unsafe import jvm "method [[I.clone" cloneIntArray :: Prelude.JObject -> Prelude.JObject;
+
+//foreign unsafe import jvm "method clone" cloneIntArray :: Prelude.JObject -> Prelude.JObject;
+
+////////////////////////////////////////////////////////////////////
+
+//tests of various ways of inputing CAL values of type [Char] 
+
+//returns Java type char[]
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.charPrimArray" 
+    charPrimArray :: JObject;
+
+//returns Java type java.lang.Character[]
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.charReferenceArray" 
+    charReferenceArray :: JObject;
+
+//returns Java type java.util.Set
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.charSet" 
+    charSet :: JObject;
+
+//returns Java type java.lang.Iterator
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.charIterator" 
+    charIterator :: JObject;
+
+//returns Java type java.lang.Enumeration
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport.charEnumeration" 
+    charEnumeration :: JObject;
+
+testInputListInstances =
+    assert (input charPrimArray == ['p', 'r', 'i', 'm'])
+    &&
+    assert (input charReferenceArray == ['r', 'e', 'f'])
+    &&
+    assert (input charSet == ['s', 'e', 't'])
+    &&
+    assert (input charIterator == ['i', 't'])
+    &&
+    assert (input charEnumeration == ['e', 'n', 'u', 'm'])
+    ;
+
+////////////////////////////////////////////////////////////////////
+
+//tests of inputting and outputting CAL values
+
+testCalValueIO =
+    //a little diversion to get the next test to be compiled lazily
+    assert (1 + 1 == (2 :: Int))
+    &&
+    //output on CalValues does not evaluate its argument to WHNF so the error function
+    //should not be called
+    assert (output (unsafeCoerce (error "abc" :: Double) :: CalValue) `seq` 2.0 == 2.0)
+    
+    &&       
+    
+    assert 
+    (        
+        //will return True only if the call to error is evaluated. Otherwise returns False, which
+        //is then trapped by. Since Prelude.outputCalValueStrict is strict, it should call the error "abc".
+       
+        ((Prelude.outputCalValueStrict (unsafeCoerce (error "abc" :: Double) :: CalValue)) `seq` False)
+        `catch`    
+        (
+            \throwable -> isError throwable         
+        )
+    )
+    
+    && 
+    
+    assert 
+    (        
+        //will return True only if the call to error is evaluated. Otherwise returns False, which
+        //is then trapped by. Since Prelude.input evaluated the CAL value to WHNF, the
+        //error "abc" will be called.
+       
+        ((input (output (unsafeCoerce (error "abc" :: Double) :: CalValue)) :: CalValue) `seq` False)
+        `catch`    
+        (
+            \throwable -> isError throwable           
+        )
+    )
+    
+    &&
+    //output on CalValues does not evaluate its argument to WHNF so the error function
+    //should not be called
+    assert (eager (output (unsafeCoerce (error "abc" :: Double) :: CalValue) `seq` 2.0 == 2.0))
+                  
+    &&
+    
+    assert 
+    (
+        eager         
+        (        
+            //will return True only if the call to error is evaluated. Otherwise returns False, which
+            //is then trapped by 
+           
+            ((Prelude.outputCalValueStrict (unsafeCoerce (error "abc" :: Double) :: CalValue)) `seq` False)
+            `catch`    
+            (
+                \throwable -> isError throwable         
+            )
+        )
+    )
+    
+    && 
+    
+    assert 
+    (   
+        eager 
+        (
+            //will return True only if the call to error is evaluated. Otherwise returns False, which
+            //is then trapped by 
+           
+            ((input (output (unsafeCoerce (error "abc" :: Double) :: CalValue)) :: CalValue) `seq` False)
+            `catch`    
+            (
+                \throwable -> isError throwable           
+            )
+        )
+    )    
+    ;
+
+
+///////////////////////////////////////////////////////////////////////
+// Simple tests of derived input and output methods
+data private AlgebraicType = 
+    AlgebraicType0 |
+    AlgebraicType1 arg1 :: Int |
+    AlgebraicType2 arg1 :: Int  arg2 :: String
+    deriving Eq, Inputable, Outputable;
+
+public testDerivedAlgebraicInputOutput =
+    let
+        val1 = AlgebraicType0;
+        val2 = AlgebraicType1 10;
+        val3 = AlgebraicType2 55 "fifty-five";
+        
+        obj1 = Prelude.output val1;
+        obj2 = Prelude.output val2;
+        obj3 = Prelude.output val3;
+        
+        av1 :: Prelude.AlgebraicValue;
+        av1 = Prelude.input obj1;
+        
+        av2 :: Prelude.AlgebraicValue;
+        av2 = Prelude.input obj2;
+            
+        av3 :: Prelude.AlgebraicValue;
+        av3 = Prelude.input obj3;
+    in
+        Prelude.internal_algebraicValue_getNArguments av1 == 0 &&
+        Prelude.internal_algebraicValue_getNArguments av2 == 1 &&
+        Prelude.internal_algebraicValue_getNArguments av3 == 2 &&
+        
+        Prelude.input (Prelude.internal_algebraicValue_getNthArgument av2 0) == (10 :: Int) &&
+        
+        Prelude.input (Prelude.internal_algebraicValue_getNthArgument av3 0) == (55 :: Int) &&
+        Prelude.input (Prelude.internal_algebraicValue_getNthArgument av3 1) == "fifty-five" &&
+        
+        Prelude.internal_algebraicValue_getDataConstructorName av1 == "Cal.Test.Core.Prelude_Tests.AlgebraicType0" &&
+        Prelude.internal_algebraicValue_getDataConstructorOrdinal av1 == 0 &&
+        
+        Prelude.internal_algebraicValue_getDataConstructorName av2 == "Cal.Test.Core.Prelude_Tests.AlgebraicType1" &&
+        Prelude.internal_algebraicValue_getDataConstructorOrdinal av2 == 1 &&
+        
+        Prelude.internal_algebraicValue_getDataConstructorName av3 == "Cal.Test.Core.Prelude_Tests.AlgebraicType2" &&
+        Prelude.internal_algebraicValue_getDataConstructorOrdinal av3 == 2 &&
+        
+        (Prelude.input obj1 :: AlgebraicType) == val1 &&
+        (Prelude.input obj2 :: AlgebraicType) == val2 &&
+        (Prelude.input obj3 :: AlgebraicType) == val3;
+
+
+
+////////////////////////////////////////////////////////////////////
+
+//feature requested by Tom: defining a class method in a superclass in terms of class methods in the subclass
+//For example, if for types that are instances of Ord, then there is an "automatic" instance definition for Eq.
+//This is doable currently as shown, but a little awkward. It would be nicer to allow the equalsMethod to be defined
+//directly via its implementation involving subclass methods (equalsViaCompare in the example below). This is currently
+//not allowed, but is a feasible enhancement
+
+data foreign unsafe import jvm "java.lang.String" AnotherString;
+
+foreign unsafe import jvm "cast" toAnotherString :: String -> AnotherString;
+foreign unsafe import jvm "cast" fromAnotherString :: AnotherString -> String;
+
+instance Eq AnotherString where
+    equals = equalsAnotherString;
+    //Ideally we would like to not have to explicitly specialize the equalsViaCompare function to equalsAnotherString
+    //    The resolving function Cal.Test.Core.Prelude_Tests.equalsViaCompare for the instance method equals must have type
+    //    Cal.Test.Core.Prelude_Tests.AnotherString -> Cal.Test.Core.Prelude_Tests.AnotherString -> Cal.Core.Prelude.Boolean. 
+    //    Instead it has type Cal.Core.Prelude.Ord a => a -> a -> Cal.Core.Prelude.Boolean.    
+    //equals = equalsViaCompare;
+    ;
+
+equalsAnotherString :: AnotherString -> AnotherString -> Boolean;
+equalsAnotherString = equalsViaCompare;
+
+//a version of equals, that is defined in terms of compare
+equalsViaCompare :: Ord a => a -> a -> Boolean;
+equalsViaCompare !x !y = compare x y == EQ;
+
+instance Ord AnotherString where
+    compare = compareAnotherString;
+    ;
+
+compareAnotherString !x !y = compare (fromAnotherString x) (fromAnotherString y);
+
+
+testAnotherString =
+    assert (toAnotherString "abc" == toAnotherString "abc")
+    && assert (toAnotherString "apple" != toAnotherString "pear")
+    ;
+
+
+
+////////////////////////////////////////////////////////////////////
+
+//bug found by Tom. The problem was that the Bar List instance is constrained in *Foo*, so that there is a "no-op" dictionary
+//switching needed. 
+
+public class Foo a where
+    public foo :: a -> String;    
+    ;
+
+public class Foo a => Bar a where
+    public bar :: a -> Int;
+    ;
+
+instance Foo a => Bar [a] where
+    bar = barList;
+    ;
+
+instance Foo a => Foo [a] where
+    foo = fooList;    
+    ;
+
+fooList :: Foo a => [a] -> String;
+fooList list = 
+    "fooList = " ++ List.join " " (map foo list);
+
+barList :: Foo a => [a] -> Int;
+barList list = 
+    List.sum (map (String.length # foo) list);
+
+instance Foo String where
+    foo = Prelude.id;
+    ;
+
+testNoOpDictionarySwitching =
+    assert (foo ["apple", "pear", "banana"] == "fooList = apple pear banana")
+    &&
+    assert (bar ["apple", "pear", "banana"] == 15)
+    ;
+
+////////////////////////////////////////////////////////////////////
+
+// testing ForeignTypeRep and isForeignReferenceType
+
+data foreign unsafe import jvm "int[]" MyIntArray deriving Debug.Show;
+data foreign unsafe import jvm "int[][]" MyIntArrayArray deriving Debug.Show;
+
+/**
+ * Tests {@link isForeignReferenceType@} with user-defined foreign types based on:
+ * {@unorderedList
+ *   {@item Java primitive types@}
+ *   {@item primitive array types@}
+ *   {@item {@code java.lang.String@}@}
+ * @}
+ */
+testForeignReferenceType :: Boolean;
+testForeignReferenceType =
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyChar)) &&
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyBoolean)) &&
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyByte)) &&
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyShort)) &&
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyInt)) &&
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyLong)) &&
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyFloat)) &&
+    assert (not $ isForeignReferenceType $ typeOf (undefined :: MyDouble)) &&
+    assert (isForeignReferenceType $ typeOf (undefined :: MyString)) &&
+    assert (isForeignReferenceType $ typeOf (undefined :: MyIntArray)) &&
+    assert (isForeignReferenceType $ typeOf (undefined :: MyIntArrayArray))
+    ;
+
+////////////////////////////////////////////////////////////////////
+//tests of CAFs
+
+//the standard infinite list of ones
+ones :: [Double];
+ones = 1.0 : ones;
+
+//a strongly connected component of CAFs of size 2
+oneTwos = 1.0 : twoOnes;
+twoOnes = 2.0 : oneTwos;
+
+//a strongly connected component of CAFs of size 3
+oneTwoThrees = 1.0 : twoThreeOnes;
+twoThreeOnes = 2.0 : threeOneTwos;
+threeOneTwos = 3.0 : oneTwoThrees;
+
+//a strongly connected component of size 2, containing 1 CAF and 1 non-CAF.
+oneFives = 1.0 : oneFivesHelper 5.0;
+oneFivesHelper n = n : oneFives;
+
+//a strongly connected component of size 3, containing 2 CAFs and 1 non-CAF.
+oneTwoFives = 1.0 : twoFiveOnes;
+twoFiveOnes = 2.0 : oneTwoFivesHelper 5.0;
+oneTwoFivesHelper n = n : oneTwoFives;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$Counter.increment"
+    counter_increment :: Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Prelude_Tests.PreludeTestsSupport$Counter.reset"
+    counter_reset :: ();
+
+first3Counts =
+    counter_reset
+    `seq`
+    [counter_increment, counter_increment, counter_increment];
+
+
+testCAFs =
+    assert (take 5 ones == [1, 1, 1, 1, 1])
+    && assert (take 5 oneTwos == [1, 2, 1, 2, 1])
+    && assert (take 5 twoOnes == [2, 1, 2, 1, 2])
+    && assert (take 7 oneTwoThrees == [1, 2, 3, 1, 2, 3, 1])
+    && assert (take 7 threeOneTwos == [3, 1, 2, 3, 1, 2, 3])
+    && assert (take 5 oneFives == [1, 5, 1, 5, 1])
+    && assert (take 5 (oneFivesHelper 7) == [7, 1, 5, 1, 5])
+    && assert (take 8 oneTwoFives == [1, 2, 5, 1, 2, 5, 1, 2])
+    && assert (take 8 (oneTwoFivesHelper 7) == [7, 1, 2, 5, 1, 2, 5, 1])
+    && assert (first3Counts == [1, 2, 3])
+    ;
+                  
+
+////////////////////////////////////////////////////////////////////
+//Quark discussion forum post July 12, 2007: constructor classes
+
+data Vector2 a = 
+    V2 x::a y::a
+    deriving Eq, Ord, Outputable; 
+
+class Vector v where
+    dot :: Num a => v a -> v a -> a;
+    ;
+
+instance Vector Vector2 where
+    dot = dotVector2;
+    ;
+   
+dotVector2 :: Num a => Vector2 a -> Vector2 a -> a;   
+dotVector2 a b = a.V2.x * b.V2.x + a.V2.y * b.V2.y; 
+
+v2 :: Num a => a -> a -> Vector2 a;
+v2 = V2;
+
+
+////////////////////////////////////////////////////////////////////
+//Memory behaviour caused by references existing on the Java stack
+
+// All memory tests are intended to be run in EverythingICE with
+// the -Xmx256M flag passed to the JVM. The space leaks are demonstrated
+// by crashing with an java.lang.OutOfMemoryError error.
+//
+// The purpose of these tests is to demonstrate how logically equivalent
+// code can have suprisingly different space behaviour, which could be
+// changed by changing the code output of the compiler. These tests are
+// intended to be as simple as possible; however, since the compiler
+// sometimes performs inlining (and other optimizations) in simple cases,
+// it is often necessary to make the tests slightly more complicated in
+// order to have the compiler not recognize that an optimization is
+// possible. The proposed nulling-out optimization would be robust in
+// all cases.
+//
+// For each leaking* test case, a nonLeakingWithout* test case is provided
+// that does not leak because it does not use the leaking construct. These
+// tests generate code that is quite different from the leaking* versions,
+// so they are intended to be used to determine whether the ICE environment
+// has enough heap available to perform any operations.
+
+outOfMemoryListSize = 20000000;
+
+
+// Demonstrates that naming a variable in a 'let' causes a reference to
+// it to exist on the stack during the execution of a called function.
+//
+// leakingLet() runs out of memory since it names 'xs'.
+// nonLeakingWithoutLet() completes successfully since it does not name 'xs'.
+//
+// A compiler fix for this is to null out the local variable 'xs' before
+// executing the call to 'length xs'.
+leakingLet :: () -> ();
+leakingLet unit =
+    let
+        xs = List.replicate outOfMemoryListSize 'z';
+    in
+        // The 'case' tricks the compiler into not inlining 'xs'.
+        // However, the basic issue being demonstrated is not changed.
+        case xs of
+        y:ys -> length xs `seq`
+                ();
+    ;
+
+nonLeakingWithoutLet :: () -> ();
+nonLeakingWithoutLet unit =
+    length (List.replicate outOfMemoryListSize 'z') `seq` ();
+
+
+// Demonstrates that naming a variable as an argument causes a reference
+// to it to exist on the stack during the execution of a called function.
+//
+// leakingArgument() runs out of memory since it names 'xs'.
+// nonLeakingWithoutArgument() completes successfully since it does not name 'xs'.
+//
+// A compiler fix for this is to null out the argument 'xs' before executing the
+// cal to 'length xs'.
+leakingArgumentHelper :: [a] -> ();
+leakingArgumentHelper xs =
+    length xs `seq` ();
+
+leakingArgument :: () -> ();
+leakingArgument unit =
+    leakingArgumentHelper (List.replicate outOfMemoryListSize 'z');
+
+nonLeakingWithoutArgumentHelper :: [a] -> ();
+nonLeakingWithoutArgumentHelper =
+    Prelude.flip seq () # length;
+
+nonLeakingWithoutArgument :: () -> ();
+nonLeakingWithoutArgument unit =
+    nonLeakingWithoutArgumentHelper (List.replicate outOfMemoryListSize 'z');
+
+
+// Demonstrates that RTPartialApp can retain references on the stack
+// when we'd rather that it didn't.
+//
+// The intention here is for the partial application of List.zip to hold
+// onto a reference to (List.replicate outOfMemoryListSize 'z'). Unfortunately,
+// the contortions required to create this test case are complex enough that
+// there may be some other references being held as well, or it may be the case
+// that RTPartialApp is not being called in the expected way.
+//
+// In any case, this does run out of memory at the moment, and ideally should not.
+// 
+// leakingPartialApp() runs out of memory since the head of a list is retained by RTPartialApp.
+// nonLeakingWithoutPartialApp() completes successfully since it does not use RTPartialApp.
+//
+// A compiler fix for this is to null out both:
+// - function variables before executing a call to them, whenever possible, so that
+//   a RTPartialApp instance is not retained on the stack.
+// - 'this' and 'arg2' in RTPartialApp._2._1.f and RTPartialApp._2._1.f1L before executing the
+//   call to function.f2L.
+leakingPartialAppHelper :: ([Int] -> [b]) -> Int;
+leakingPartialAppHelper =
+    length # Prelude.flip Prelude.apply (List.replicate outOfMemoryListSize 0);
+
+leakingPartialApp :: () -> Int;
+leakingPartialApp unit =
+    leakingPartialAppHelper (List.zip (List.replicate outOfMemoryListSize 'z'));
+
+nonLeakingWithoutPartialApp :: () -> Int;
+nonLeakingWithoutPartialApp unit =
+    length (List.zip (List.replicate outOfMemoryListSize 'z') (List.replicate outOfMemoryListSize (0 :: Int)));
+
+
+////////////////////////////////////////////////////////////////////
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =    
+    assert groupAllByExamples
+    && assert groupAllByExternalExamples
+    && assert reverseExternalExamples
+    && assert testBoundedConsistency
+    && assert testByte   
+    && assert testCoinInstances
+    && assert testConstrainedClassMethods
+    && assert testDecimal
+    && assert testFloat
+    && assert testInputOutputPreludeAlgebraicTypes
+    && assert testInputOutputCustomAlgebraicTypes
+    && assert testInteger 
+    && assert testIntMod7
+    && assert testJavaScoping
+    && assert testLinkedListInput
+    && assert testLong
+    && assert testMarshallingPrimitives
+    && assert testMultipleDictionaryClassMethodOverloading
+    && assert testMyStringHolder
+    && assert testOutputThenInputRoundtrip
+    && assert testPreludeVersusCustomPrimitives1
+    && assert testProperLazynessOfTypeof
+    && assert testRemainder
+    && assert testShort
+    && assert testShowPreludeVersusCustomPrimitives
+    && assert testStrictTuple2Instances
+    && assert testSuccessfulAlgebraicValueInput
+    && assert testTypeRep
+    && assert testUnboxedPrimitiveReturns1
+    && assert testUnboxedPrimitiveReturns2
+    && assert testUnboxedPrimitiveReturns3
+    && assert sortExternal_AltExamples
+    && assert sortByExternal_AltExamples
+    && assert testGetNthPrime_Alt
+    && assert testWideningPrimitiveConversions
+    && assert testNarrowingPrimitiveConversions
+    && assert testCastingFunctions
+    && assert testCastBooleans
+    && assert testInstanceOf
+    && assert testIntegerLiterals
+    && assert testNullForeignFunctions
+    && assert testArrayPrimitives
+    && assert testFunctionAndArgNameOverlaps
+    && assert testInputListInstances
+    && assert testCalValueIO
+    && assert testAnotherString
+    && assert testNoOpDictionarySwitching
+    && assert testDerivedAlgebraicInputOutput
+    && assert testForeignReferenceType
+    && assert testCAFs
+    ;   
+//please leave testModule last!
+
+

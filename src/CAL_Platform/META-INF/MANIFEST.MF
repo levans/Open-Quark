@@ -1,0 +1,29 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: %pluginName
+Bundle-SymbolicName: org.openquark.cal.platform
+Bundle-Version: 1.2.0.131v20060927
+Bundle-Localization: plugin
+Bundle-Vendor: %providerName
+Require-Bundle: 
+ org.openquark.import,
+ org.openquark.util,
+ org.openquark.cal.runtime
+Eclipse-BuddyPolicy: registered
+Eclipse-RegisterBuddy: 
+ org.openquark.import,
+ org.openquark.util
+Export-Package: 
+ org.openquark.cal,
+ org.openquark.cal.caldoc,
+ org.openquark.cal.compiler,
+ org.openquark.cal.compiler.io,
+ org.openquark.cal.filter,
+ org.openquark.cal.machine,
+ org.openquark.cal.metadata,
+ org.openquark.cal.module,
+ org.openquark.cal.module.Cal.Collections,
+ org.openquark.cal.module.Cal.Core,
+ org.openquark.cal.module.Cal.Utilities,
+ org.openquark.cal.services,
+ org.openquark.cal.valuenode

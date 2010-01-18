@@ -1,0 +1,1215 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Optimizer.cal
+ * Created: August 12, 2005
+ * By: Greg McClement
+ */
+
+/**
+ * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WAR 
+ * 
+ * This file is part of the compiler and not to be modified. 
+ * 
+ * ING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+ *  
+ * This file contains the definition for the Type abstract data type. Also included are supporting functions 
+ * including all the code for type unification.
+ *           
+ * @author Greg McClement
+ * 
+*/
+
+module Cal.Internal.Optimizer_Type;
+
+import Cal.Core.Prelude using
+    typeConstructor = String, Boolean, Int, JObject, Maybe;
+    dataConstructor = True, False, Just, Nothing;
+    typeClass = Eq, Inputable, Outputable;
+    function = undefined, upFromTo, not, uncurry, isNothing, isEmpty, output, input, assert, snd, compare, error, append;
+    ;
+
+import Cal.Collections.List using
+    function = map, andList, orList, zip, find, filter, head, reverse, sortBy, tail;
+    ;
+    
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = trace, show;
+    ;
+
+friend Cal.Internal.Optimizer;
+friend Cal.Internal.Optimizer_Expression;
+friend Cal.Internal.Optimizer_State;
+friend Cal.Internal.Optimizer_Transformations;
+friend Cal.Internal.Optimizer_Traversers;
+friend Cal.Test.Internal.Optimizer_Test;
+
+/**
+ * Represents a TypeExpr in CAL.
+ */
+
+data protected Type =
+    /**
+     * Represents CAL types suchs as Boolean or Int.
+     * 
+     * @arg type The java object that corresponds to the type.
+     * @arg args The types of the arguments.
+     * @arg strict Flag on the strictness of the argument.
+     * @arg name A nice name for the type object.
+     */
+    protected TypeConst 
+        type::JTypeExpr 
+        args::[Type]
+        strict::!Boolean 
+        name::!String |
+          
+    /**
+     * This is used for writing examples.
+     * 
+     * @arg name The name of the pretend type.
+     */
+    protected TypeConstTest 
+        name::!String |
+          
+    /**
+     * Represents a Java TypeVar object.
+     */
+    protected TypeVar 
+        typeId::JTypeVar strict::!Boolean |
+        
+    /**
+     * Used to keep track of the type associated with an arguments when making a fusion function. 
+     * typeId of one is the first arguement, two is the second argument etc.
+     * 
+     *  @arg typeId The ordinal of the argument.
+     *  @arg strict The strictness of the argument.
+     */
+    protected TypeId 
+        typeId::!Int 
+        strict::!Boolean |
+        
+    protected FunctionType 
+        domain::Type  
+        codomain::Type 
+        strict::!Boolean |
+        
+    protected ListType 
+        domain::Type 
+        strict::!Boolean |
+        
+    protected AppType 
+        e1::Type 
+        e2::Type |
+        
+    /**
+     * Used to indicate that the type is the unification of t1 and t2. This arises currently in the fusion code
+     * where deep in the type calculation the two different types are known to apply to a varable. Doing the 
+     * unification at that point is not possible because that must be done at the top level of the type expression.
+     * 
+     * For example, AndType (TypeConst ... "Cal.Core.Prelude.Int") (TypeVar ...) is the type Cal.Core.Prelude.Int.
+     */
+             
+    protected AndType
+        t1::Type
+        t2::Type
+        
+    deriving Eq;
+
+type_isVar :: Type -> Boolean;
+type_isVar !type =
+    case type of
+    TypeVar {} -> True;
+    _ -> False;
+    ;
+
+type_isFunctionType :: Type -> Boolean;    
+protected type_isFunctionType !type =
+    case type of
+    FunctionType {} -> True;
+    _ -> False;
+    ;
+    
+data foreign unsafe import jvm protected "org.openquark.cal.compiler.TypeExpr" 
+protected JTypeExpr deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.TypeVar.makeFunType"
+typeVar_makeFunType :: JTypeExpr -> JTypeExpr -> JTypeExpr;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.makeListType"
+optimizerHelper_makeListType :: JTypeExpr -> JTypeExpr;
+typeVar_makeListType :: JTypeExpr -> JTypeExpr;
+typeVar_makeListType elementType = optimizerHelper_makeListType elementType;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.objectAsTypeExpr"
+optimizerHelper_objectAsTypeExpr :: JTypeVar -> JTypeExpr;
+
+/*
+ * The code for converting between java and CAL data types for Literals
+ */
+
+instance Outputable Type where
+     output = typeToJObject;
+;
+
+instance Inputable Type where
+    input = jobjectToType;
+;
+
+typeToJObject :: Type -> JObject;
+typeToJObject qn = 
+    output (outputType qn);
+
+jobjectToType :: JObject -> Type;
+jobjectToType jobj = 
+    inputType (input jobj);
+
+outputType :: Type -> JTypeExpr;
+protected outputType !type = 
+    case type of
+        TypeConst {type} -> type;              
+        TypeConstTest {} -> undefined;              
+        TypeVar {typeId} -> optimizerHelper_objectAsTypeExpr typeId;            
+        TypeId {} -> error ("Type: " ++ show type);            
+        FunctionType {domain, codomain} -> typeVar_makeFunType (outputType domain) (outputType codomain);            
+        ListType {domain} -> typeVar_makeListType (outputType domain);            
+        AppType {} -> undefined;
+        ;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getTypeType"
+optimizerHelper_getTypeType :: JTypeExpr -> Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.typeExprAsJTypeVar"
+optimizerHelper_typeExprAsJTypeVar :: JTypeExpr -> JTypeVar;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.typeExprAsJObject"
+optimizerHelper_typeExprAsJObject :: JTypeExpr -> JObject;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.typeExpr_getName"
+protected optimizerHelper_typeExpr_getName :: JTypeExpr -> String;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.typeExpr_asTypeConstructor"
+optimizerHelper_typeExpr_asTypeConstructor :: JTypeExpr -> JTypeConsApp;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.TypeConsApp"
+JTypeConsApp deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getTypeConstructorType"
+optimizerHelper_getTypeConstructorType :: JTypeConsApp -> Int;
+
+foreign unsafe import jvm "method getArg"
+typeConsApp_getArg :: JTypeConsApp -> Int -> JTypeExpr;
+
+foreign unsafe import jvm "method getNArgs"
+typeConsApp_getNArgs :: JTypeConsApp -> Int;
+
+inputType :: JTypeExpr -> Type;
+protected inputType !jType =
+     let
+         type :: Int;
+         type = optimizerHelper_getTypeType jType;        
+     in
+         case type of
+         1 -> // TypeConstructor         
+             let
+                 tc :: JTypeConsApp;
+                 tc = optimizerHelper_typeExpr_asTypeConstructor jType;
+
+                 nTypes :: Int;
+                 nTypes = typeConsApp_getNArgs tc;
+                 
+                 listOfTypes :: [Type];                         
+                 listOfTypes = map (\!index -> inputType (typeConsApp_getArg tc index)) (upFromTo 0 (nTypes-1));
+                 
+             in
+                 case optimizerHelper_getTypeConstructorType tc of
+                 1 -> // Function
+                     unflattenFunctionTypes listOfTypes;
+                 2 -> // List
+                     ListType (inputType (typeConsApp_getArg tc 0)) False; 
+                 3 -> // Other
+                     TypeConst jType listOfTypes False (optimizerHelper_typeExpr_getName jType);
+                 ;
+         2 -> // TypeVar
+             TypeVar (optimizerHelper_typeExprAsJTypeVar jType) False;
+         3 -> // Other
+             TypeConst jType [] False (optimizerHelper_typeExpr_getName jType);
+         ;
+         
+         
+/**
+ * Takes a list of types and converts then into a single type expression using FunctionType. This
+ * is right associative.
+ * 
+ * Example: unflattenTypes [ Int, Char, Boolean ] == (FunctionType Int (FunctionType Char Boolean))
+ * 
+ * @arg types The list of types to unflatten.
+ * @return The type resulting from combining the input types using FunctionType.  
+ */
+
+unflattenFunctionTypes :: [Type] -> Type;
+protected unflattenFunctionTypes !types =
+    case types of
+    [] -> undefined;
+    head : tail ->
+        if isEmpty tail then
+            head
+        else
+            FunctionType head (unflattenFunctionTypes tail) False;
+    ;                
+     
+/**
+ * Takes type value and returns a list of top level types.
+ * 
+ * Example: flattenTypes (FunctionType (FunctionType Int Char) Boolean) == [ Int, Char, Boolean ] 
+ * 
+ * @arg type The type to flatten.
+ * @return The type resulting from flattening the input type using AppType 
+ */
+
+flattenType :: Type -> [Type];
+protected flattenType !type =
+    let
+        flatten :: Type -> [Type];
+        flatten !type =
+            case type of
+            FunctionType t1 t2 _ -> t1 : flatten t2;
+            _ -> [type];
+            ;                
+    in            
+        flatten type;    
+
+/**
+ * Takes type value and returns a list of top level types.
+ * 
+ * Example: flattenTypes (AppType (AppType Int Char) Boolean) == [ Int, Char, Boolean ] 
+ * 
+ * @arg type The type to flatten.
+ * @return The type resulting from flattening the input type using AppType 
+ */
+
+flattenAppType :: Type -> [Type];
+protected flattenAppType !type =
+    let
+        flatten :: Type -> [Type] -> [Type];
+        flatten !type acc =
+            case type of
+            AppType t1 t2 -> flatten t1 (t2:acc);
+            _ -> type : acc;
+            ;                
+    in            
+        flatten type [];    
+
+showType :: Type -> String;
+showType !type =
+    case type of
+    TypeConst type args strict name -> 
+        (if strict then "!" else "") ++ 
+        name ++
+        (
+            if isEmpty args then
+                ""
+            else
+                " " ++ show args
+        );
+    TypeConstTest name -> name;
+    TypeVar typeVar strict -> (if strict then "!" else "") ++ "JTypeVar(" ++ show (typeVar_hashCode typeVar) ++ ")";
+    TypeId typeId strict -> (if strict then "!" else "") ++ "var" ++ show typeId;
+    FunctionType domain codomain strict -> (if strict then "!" else "") ++ "(" ++ show domain ++ " -> " ++ show codomain ++ ")";
+    ListType domain strict -> (if strict then "!" else "") ++ "[" ++ show domain ++ "]";
+    AppType e1 e2 -> "(AppType " ++ "(" ++ show e1 ++ ") (" ++ show e2 ++ ") )";
+    AndType t1 t2 -> "(AndType " ++ show t1 ++ " " ++ show t2 ++ ")";
+     ; 
+
+/**
+ * Takes a list of types and converts then into a single type expression using AppType. This
+ * is left associative.
+ * 
+ * Example: unflattenTypes [ Int, Char, Boolean ] == (AppType (AppType Int Char) Boolean)
+ * 
+ * @arg types The list of types to unflatten.
+ * @return The type resulting from combining the input types using AppType.  
+ */
+
+unflattenAppTypes :: [Type] -> Type;
+protected unflattenAppTypes !types =
+    let
+        unflattenR :: [Type] -> Type;
+        unflattenR !types =
+            case types of
+            head : tail ->
+                if isEmpty tail then
+                    head
+                else
+                    AppType (unflattenR tail) head;
+            ;                
+    in
+        unflattenR (reverse types);    
+
+tTest :: String;
+tTest = 
+    show (type_unify [
+                (
+                TypeId 1 False,
+                AppType 
+                    (FunctionType (ListType (TypeConstTest "Boolean") True) (TypeConstTest "Boolean") False) 
+                    ( AppType (AppType (FunctionType (FunctionType (TypeId 1 False) (TypeId 2 False) False) (FunctionType (ListType (TypeId 1 False) False) (ListType (TypeId 2 False) False) False) False) (TypeId 3 False)) (TypeId 4 False) )
+                 )
+                 ]) ++ "\n";
+
+/**
+ * There is a compound type of the form (AppType typeFunc typeArg). This is a type expression that
+ * means the type resulting from applying the function typeFunc to the argument typeArg. Reduce 
+ * takes a type expression of this form and generates a list of pairs of type expression that must 
+ * unify as a result of applying typeFunc to typeArg. For example, AppType (Int -> Int) a, results in
+ * the new pair (Int, a) with a resulting type of Int.
+ * 
+ * @arg acc The list of type expressions that must unify.
+ * @arg typeE The type expression to reduce in order to generate the new unification pairs and output type.
+ * @return A pair that is the accumulator of type expression to be unified and the actual output type of the input type expression. 
+ */
+
+reduceTypeOnce :: [(Type, Type)] -> Type -> ([(Type, Type)], Type);
+reduceTypeOnce acc !typeE =    
+    case typeE of
+    AppType f a ->
+        case f of
+        FunctionType domain codomain _ -> ((domain, a):acc, codomain);
+        _ -> (acc, typeE);
+        ;
+    _ -> (acc, typeE);
+    ;
+
+/* @example */
+reduceTypeOnceExamples :: Boolean;
+reduceTypeOnceExamples =
+    let
+    
+        intType :: Type;
+        intType = TypeConstTest "Int";
+        
+        booleanType :: Type;
+        booleanType = TypeConstTest "Boolean";
+        
+        intListType :: Type;
+        intListType = ListType intType False;
+        
+        var1 :: Type;
+        var1 = TypeId 1 False;
+        
+    in
+     
+        // Apply ( (Boolean->Boolean) -> Int -> Int ) to var1
+        assert (show (reduceTypeOnce
+            []
+            (AppType 
+                (FunctionType 
+                    (FunctionType booleanType booleanType False) 
+                    (FunctionType intListType intListType False)
+                    False
+                ) 
+                var1
+                    // type of var1 is (Boolean -> Bool
+            )) == "([((Boolean -> Boolean), var1)], ([Int] -> [Int]))"); 
+/**    
+ * Make one pass over the given equivalence relation (eqRel) and add equivelent values to 
+ * the given equivalence class.
+ * 
+ * @arg eqClass The equivalence class to augment.
+ * @arg eqRelToDo The equivalence relation to use to get equivalent values.
+ * @arg eqRelUnused The tuples of the equivalence relation that were not used.
+ * @arg wasChanged A flag indicating if the equilvalence class was changed (eqClass).
+ * @return A triple, the augmented equivalence class, the unused tuples of the equivalence relation, 
+ * and a flag indicating whether or not the equivalence class was changed.
+ */
+    
+augmentEqClass :: Eq a => [a] -> [(a,a)] -> [(a,a)] -> Boolean -> ([a], [(a,a)], Boolean);
+augmentEqClass eqClass !eqRelToDo eqRelUnused wasChanged =
+    case eqRelToDo of
+    [] -> (eqClass, eqRelUnused, wasChanged);
+    r:rs ->
+        if not (isNothing (find (\element -> r.#1 == element) eqClass)) then
+            augmentEqClass (r.#2:eqClass) rs eqRelUnused True
+        else if not (isNothing (find (\element -> r.#2 == element) eqClass)) then
+            augmentEqClass (r.#1:eqClass) rs eqRelUnused True
+        else
+            augmentEqClass eqClass rs (r:eqRelUnused) wasChanged;
+    ;
+
+/**    
+ * Take the given eqClass set and augment it with values using the given eqRelation.
+ * 
+ * @arg eqClass The eqClass to augment.
+ * @arg eqRel The equivalence relation to use to augment the given eqClass.
+ * @return eqClass with all the values from eqRel that are equal.
+ */
+makeEqClass :: Eq a => [a] -> [(a,a)] -> ([a], [(a,a)]);
+makeEqClass eqClass eqRel =
+    let
+        onePass = augmentEqClass eqClass eqRel [] False;
+    in
+        if onePass.#3 then
+            makeEqClass onePass.#1 onePass.#2
+        else
+            (onePass.#1, onePass.#2);
+     
+/**
+ * The input is an equivalence relation. The output is a set of equivance classes.  The 
+ * equivalence relation does not have to be the transitive closure.
+ * 
+ * TODO Look up the right algorithm, like one that uses sorting!
+ * 
+ *  @arg eqRel The equivalence relation.
+ *  @return The equilvalence classes for the given equivalence relation.
+ */
+
+equivalenceClasses :: Eq a => [(a, a)] -> [[a]];
+equivalenceClasses eqRel =
+    if isEmpty eqRel then
+        []
+    else
+        let
+//                 eqStart :: Eq a => [a];
+            eqStart = (\pair -> [pair.#1,pair.#2]) (head eqRel);
+//                 eqClassAndLeftOver :: ([a], (a,a));
+            eqClassAndLeftOver = makeEqClass eqStart (tail eqRel);
+
+//                 eqClass :: [a];
+            eqClass = eqClassAndLeftOver.#1;
+             
+//                 leftOver :: [(a,a)];
+            leftOver = eqClassAndLeftOver.#2;
+        in
+            eqClass : equivalenceClasses leftOver;
+                
+/**    
+ * @arg generalTypes The type that is to be specialized.
+ * @arg argumentTypesIn
+ *  The type of the argument that is present.
+ * @return The specialization of the given getneral type using the given arguements.
+ */
+type_specializeArguments :: [Type] -> [Maybe Type] -> [Type];
+protected type_specializeArguments generalTypes argumentTypesIn =
+    let
+        argumentTypes :: [Maybe Type];
+        argumentTypes = 
+            map 
+                (\maybeType -> 
+                    case maybeType of
+                    Nothing -> Nothing;
+                    Just type -> Just (copyVars type);)
+                argumentTypesIn;
+        
+        getArgType :: Maybe Type -> Type;
+        getArgType !at =
+            case at of
+                Nothing -> TypeVar optimizerHelper_newTypeVar False;
+                Just type -> type;
+                ;
+
+        getArgTypes :: [Maybe Type] -> [Type];
+        getArgTypes !argTypes =
+            case argTypes of
+            [] -> [];
+            at:ats -> getArgType at : getArgTypes ats;
+            ;
+             
+        
+        typeExpression :: Type;
+        typeExpression = unflattenAppTypes ((unflattenFunctionTypes generalTypes) : getArgTypes argumentTypes); 
+         
+        unifiedType :: [(Type, Type)]; 
+        unifiedType = type_unify [(TypeVar optimizerHelper_newTypeVar False, typeExpression)];        
+        
+        reducedType :: [(Type, Type)];
+        reducedType = type_applyBindings unifiedType unifiedType;
+
+        typeEqClasses :: [[Type]];
+        typeEqClasses = equivalenceClasses unifiedType;
+
+        /**
+         * Look for the definition of the given var. If present return the definition otherwise
+         * return the original var.
+         * 
+         * @arg var The var to get the binding for.
+         * @return The most specific binding for the given var.
+         */
+         
+        findDef :: Type -> Type;
+        findDef !var =            
+            let
+                jVar :: JTypeVar;
+                jVar = var.TypeVar.typeId;
+
+                /**
+                 * The type matches the eqClass if it is a member.
+                 * 
+                 * @arg eqClass The equivalence class to check if the var is a member of
+                 * @return True iff the var is a member of this equivalence class.
+                 */
+                matches :: [Type] -> Boolean;
+                matches eqClass =
+                    not (isNothing (find (\element -> var == element) eqClass));
+                
+                maybeDef :: Maybe [Type];
+                maybeDef = find matches typeEqClasses;
+
+            in
+                case maybeDef of
+                Nothing -> var;
+                Just maybeDef_Just_value ->
+                    type_applyStrictness (type_selectMostSpecificType maybeDef_Just_value) (type_isStrict var);
+                ;    
+             
+        /**
+         * Using the unified variable bindings specialized the given type object.
+         * 
+         * @arg type The type object to specialized.
+         * @return The type argument with the variabled replace with the most specific bindings.
+         */
+             
+        specializeType :: Type -> Type;
+        specializeType !type =
+            case type of
+            TypeConst {} -> type; 
+            TypeConstTest {} -> type; 
+            TypeVar {} -> findDef type; 
+            TypeId {} -> undefined;                
+            FunctionType domain codomain strictness ->
+                FunctionType (specializeType domain) (specializeType codomain) strictness;                
+            ListType domain strict -> 
+                ListType (specializeType domain) strict;                  
+            AppType e1 e2 -> 
+                AppType (specializeType e1) (specializeType e2);
+            ;
+                
+        specializeTypes :: [Type] -> [Type];
+        specializeTypes types = map specializeType types;
+            
+    in
+        specializeTypes generalTypes;
+
+/**
+ * Select the most specific type from the given non-empty list. Variables are less specific than
+ * any other type. Variables with no constraints are less specific that variables with constraints. 
+ */
+type_selectMostSpecificType :: [Type] -> Type;
+protected type_selectMostSpecificType types =
+    let
+        typeConst :: [Type];
+        typeConst = filter (\type -> not (type_isVar type)) types;
+        
+        strictness :: Boolean;
+        strictness = orList (map type_isStrict types);
+    in
+        if isEmpty typeConst then
+            let
+                hasClassConstraints :: Type -> Boolean;
+                hasClassConstraints type =
+                    optimizerHelper_typeVar_hasClassConstraints type.TypeVar.typeId;
+
+                withConstraints :: [Type];
+                withConstraints = filter hasClassConstraints types;
+            in
+                if isEmpty withConstraints then
+                    type_applyStrictness (head types) strictness
+                else
+                    type_applyStrictness (head withConstraints) strictness        
+        else
+            type_applyStrictness (head typeConst) strictness;
+    
+    
+/**
+ * Takes the given type expression and reduces it to an irreducable type expression. During the process
+ * pairs of types that must be unified are calculated. These are kept in an accumulator.
+ *
+ * @arg current A pair, the first element is an accumulator of type expression that are to be unifed and
+ * the second is the current type of the expression.
+ * @return A pair consisting of an accumulator of type expression pairs that must unify and the irreducable type expression corresponding to the input type expression.
+ */
+     
+reduceType :: ([(Type, Type)], Type) -> ([(Type, Type)], Type);
+reduceType !current =
+    case current of
+    (acc, type) -> 
+        case type of
+        AppType e1 e2 ->
+            let
+                // determine the final type of e1
+                re1 :: ([(Type, Type)], Type);
+                re1 = reduceType (acc, e1);
+                // determine the final type of e2
+                re2 :: ([(Type, Type)], Type);
+                re2 = reduceType (re1.#1, e2);
+                // determine the final type of the given type expression.
+                ra :: ([(Type, Type)], Type);
+                ra = reduceTypeOnce re2.#1 (AppType re1.#2 re2.#2);
+            in
+                ra;
+        _ -> (uncurry reduceTypeOnce) current;
+        ;
+    ;    
+
+/* @example */
+reduceTypeExamples :: Boolean;
+reduceTypeExamples =
+    let
+    
+    intType :: Type;
+    intType = TypeConstTest "Int";
+    
+    booleanType :: Type;
+    booleanType = TypeConstTest "Boolean";
+    
+    intListType :: Type;
+    intListType = ListType intType False;
+    
+    var1 :: Type;
+    var1 = TypeId 1 False;
+    
+    var2 :: Type;
+    var2 = TypeId 2 False;
+    
+    in
+        assert (show (reduceType
+            (
+                [],
+                //(AppType (AppType ((booleanType -> booleanType) -> intListType -> intListType) var1) var2)
+                (AppType (AppType (FunctionType (FunctionType booleanType booleanType False) (FunctionType intListType intListType False) False) var1) var2)
+            ))
+            // var2 is type [Int]
+            // var1 is type (Boolean -> Boolean)
+            // type of application is [Int]
+            == "([([Int], var2), ((Boolean -> Boolean), var1)], [Int])");
+         
+/**
+ * The bindings is a list that maps variables to values. The values may contain more variables. This function
+ * replaces the variables in the values side with their values. 
+ *
+ * @arg bindings The list of bindings that associate a variable with a type value.
+ * @arg defs Each binding in def will have the variable replaced using the bindings from the binding list
+ * @return The defs list with all of the variables replaced by their values from the bindings list.
+ */        
+type_applyBindings :: [(Type, Type)] -> [(Type, Type)] -> [(Type, Type)];
+protected type_applyBindings !bindings defs =
+    let
+        applyBindingToDef :: Type -> Type -> Type -> Type;
+        applyBindingToDef !var varDef !typeE =
+            case typeE of  
+            TypeConst type args strict name ->
+//                case type_applyStrictness typeE strict of
+                TypeConst type (map (applyBindingToDef var varDef) args) strict name; 
+            TypeConstTest {} -> typeE;
+            TypeVar varNoE strict1 ->
+                case var of
+                TypeVar varId strict2 -> 
+                    if varNoE == varId then 
+                        type_applyStrictness varDef (strict1 || strict2) 
+                    else
+                        typeE;
+//                        type_applyStrictness typeE (strict1 || strict2);
+//                _ -> typeE;
+                _ -> type_applyStrictness typeE strict1;
+                ;
+            TypeId varNoE strict -> type_applyStrictness typeE strict; // These never appear on the right hand side.
+            FunctionType domain codomain strictness ->
+                FunctionType (applyBindingToDef var varDef domain) (applyBindingToDef var varDef codomain) strictness; 
+            ListType domain strict ->
+                ListType (applyBindingToDef var varDef domain) strict;
+            AppType e1 e2 ->
+                AppType (applyBindingToDef var varDef e1) (applyBindingToDef var varDef e2);
+            ;
+            
+        applyBindingToDefs :: (Type, Type) -> [(Type, Type)] -> [(Type, Type)];
+        applyBindingToDefs !b !defs =
+            case defs of
+            [] -> [];
+            d:ds -> (d.#1, (applyBindingToDef b.#1 b.#2 d.#2)) : applyBindingToDefs b ds;
+            ;
+            
+    in
+        case bindings of
+        [] -> defs;
+        // TODO Write this better
+        b:bs -> type_applyBindings bs (applyBindingToDefs b defs);
+        ;
+    
+test_type_applyBindings :: Boolean;        
+test_type_applyBindings =
+    let    
+        // [(var3, [var2]), (var2, Prelude.Int)]
+        input :: [(Type, Type)];
+        input = [(TypeId 3 False, (ListType (TypeId 2 False) False)), (TypeId 2 False, TypeConstTest "Cal.Core.Prelude.Int")];
+    in
+        assert (show (type_applyBindings input input) == "[(var3, [var2]), (var2, Cal.Core.Prelude.Int)]"); 
+ /**
+ * Takes a list of bindings and returns a list of the top level types in order of arguments. The arguments
+ * are denoted by (TypeId typeId::Int) objects. The first argument has typeId of one and so on.
+ * 
+ *   @arg list The list of type and type value pairs to construct the type argument from.
+ *   @return The list of types that correspond to arguments in the argument order.
+ */    
+    
+type_listToType :: [(Type, Type)] -> [Type];
+protected type_listToType !list =
+    let
+        /**
+         * Takes a list of type bindings and select only those type that correspond to arguments. The return
+         * list constain a pair - argument number and the associated type.
+         * 
+         * @arg list The list of type bindings to select the argument types from.
+         * @return A list of pair - argument number and associated type.
+         */
+        ordinalToType :: [(Type, Type)] -> [(Int, Type)];
+        ordinalToType !list =
+            case list of
+            [] -> [];
+            tuple : tuples ->
+                case tuple.#1 of
+                TypeId typeId strict ->
+                    // Is this the return value type, if so ignore it.
+                    if typeId == 0 then
+                        ordinalToType tuples
+                    else
+                        (typeId, tuple.#2) : ordinalToType tuples;
+                _ -> 
+                    case tuple.#2 of
+                    TypeId typeId strict -> (typeId, tuple.#1) : ordinalToType tuples;
+                    _ -> ordinalToType tuples;  // skip this one since it does not correspond to a parameter
+                    ;
+                ;
+            ;
+            
+        compareOrdinal :: (Int, Type) -> (Int, Type) -> Prelude.Ordering;
+        compareOrdinal !t1 !t2 = compare t1.#1 t2.#1;
+        
+        orderedTypes :: [(Int, Type)];
+        orderedTypes = sortBy compareOrdinal (ordinalToType list);
+        
+        /**
+         * The list of ordered type can have the same variable multiple times. This function
+         * will group them and then select the most specific type as the type of the variable.
+         * 
+         * @arg orderedTypes The list of type id to known type pairs
+         * @return A list of the most specific arg types in the correct order.
+         */
+         
+        selectType :: [(Int, Type)] -> [Type];
+        selectType orderedTypes =
+            case orderedTypes of
+            [] -> [];
+            ot : ots ->
+                case ot of
+                (ordinal, type) ->
+                    case selectTypeHelper ordinal [type] ots of
+                    (types, remaining) ->
+                        type_selectMostSpecificType types : selectType remaining;
+                    ;
+                ;
+            ;
+            
+        selectTypeHelper :: Int -> [Type] -> [(Int, Type)] -> ([Type], [(Int, Type)]);
+        selectTypeHelper expectedOrdinal types orderedTypes =
+            case orderedTypes of
+            [] -> (types, orderedTypes);
+            ot:ots ->
+                case ot of
+                (ordinal, type) ->
+                    if ordinal == expectedOrdinal then
+                        selectTypeHelper expectedOrdinal (type:types) ots
+                    else
+                        (types, orderedTypes);
+                ;
+            ;
+    in
+        selectType orderedTypes;
+    
+/* @example */
+ type_listToTypeExamples :: Boolean;
+ type_listToTypeExamples =
+    let
+    
+        booleanType :: Type;
+        booleanType = TypeConstTest "Boolean";
+        
+        intType :: Type;
+        intType = TypeConstTest "Int";
+        
+        intListType :: Type;
+        intListType = ListType intType False;
+        
+        var0 :: Type;
+        var0 = TypeId 0 False;    // The return type is number zero.
+        
+        var1 :: Type;
+        var1 = TypeId 1 False;    // The first arg
+        
+        var2 :: Type;
+        var2 = TypeId 2 False;    // The second arg
+        
+        input1 :: [(Type, Type)];
+        input1 = [(var0, booleanType), (intListType, var2), (var1, (FunctionType intType booleanType False))];
+        
+    in
+        // Type are listed in the same order as the arguments. All non-arg types are removed.
+        assert (show (type_listToType input1) == "[(Int -> Boolean), [Int]]"); // == output1;
+
+/**
+ * This takes a list of type unification pairs and unifies the types that comprise the type expression. The
+ * input expression are decompose and their parts unified until this process can no longer be performed. The 
+ * resulting list will contain tuples where the first value is a type variable and the second is its value.
+ *
+ * @arg todo A list of unification pairs.  
+ */    
+
+type_unify :: [(Type, Type)] -> [(Type, Type)];    
+protected type_unify !todo =
+    let
+        splitAndTypes :: [(Type, Type)] -> [(Type, Type)] -> [(Type, Type)];
+        splitAndTypes defs more  =
+            case defs of
+            [] -> more;
+            d:ds ->
+                case d of
+                (t1, t2) ->
+                    case 
+                        transformType
+                            more
+                            t2                        
+                            (\acc andType ->
+                                case andType of
+                                AndType andT1 andT2 -> ((andT1, andT2):acc, andT1);
+                                _ -> (acc, andType); 
+                            ) of
+                    (morePrime, t2Prime) ->
+                        (t1, t2Prime) : splitAndTypes ds morePrime;
+                    ; 
+                ;
+            ;
+        
+        tidyUp :: (Type, Type) -> (Type, Type);
+        tidyUp pair =
+            case pair of
+            (t1, t2) -> 
+                case t2 of                
+                TypeId {} -> (t2, t1);
+                _ -> pair;
+                ;
+            ;
+                
+    in
+        map tidyUp (type_unifyHelper (splitAndTypes todo []));
+           
+type_unifyHelper :: [(Type, Type)] -> [(Type, Type)];    
+protected type_unifyHelper !todo =
+    case todo of
+    [] -> [];
+    unify : remaining ->
+        let
+            te1 :: Type;
+            te1 = unify.#1;
+            te2 :: Type;
+            te2 = unify.#2;
+        
+            def :: Type -> Type -> [(Type, Type)];
+            def !r1 !r2 = 
+                case r1 of
+                TypeConst {name = name1, args = args1} ->
+                    case r2 of
+                    TypeConst {name = name2, args = args2} ->
+                        type_unifyHelper (zip args1 args2);
+//                        [];
+                    _ -> def r2 r1;
+                    ;
+                TypeConstTest name1 -> 
+                    case r2 of
+                    TypeConstTest name2 -> [];
+                    _ -> def r2 r1;
+                    ;
+                AndType t1 t2 ->
+                    append (def t1 r2) (def t2 r2);                    
+                TypeVar {} -> [(r1, r2)];
+                TypeId {} -> [(r1, r2)];
+                ListType listType1 strict1 ->
+                    case r2 of
+                    ListType listType2 strict2 ->
+                        type_unifyHelper [(type_applyStrictness listType1 strict1, type_applyStrictness listType2 strict2)];
+                    TypeVar {} -> [(r2, r1)];
+                    TypeId {} -> [(r2, r1)];
+                    AndType {} -> def r2 r1;
+                    _ ->
+                        error ("typeUnifyHelper.def: Unhandled case for " ++ show r2);
+                    ;
+                FunctionType domain1 codomain1 _ ->
+                    case r2 of
+                    FunctionType domain2 codomain2 _ ->
+                        type_unifyHelper [(domain1, domain2), (codomain1, codomain2)];
+                    TypeVar {} -> [(r2, r1)];
+                    TypeId {} -> [(r2, r1)];
+                    AndType {} -> def r2 r1;
+                    TypeConst {name} ->
+                        if name == "null" then
+                            []
+                        else
+                            error (" r1: " ++ show r1 ++ " r2: " ++ show name);
+                    _ -> 
+                        error (
+                            "r1: " ++ show r1 ++ "\n" ++
+                            "r2: " ++ show r2 ++ "\n"
+                            );
+                    ;
+                AppType {} ->
+                    undefined;
+                _ ->
+                    case r2 of
+                    TypeVar {} -> def r2 r1;
+                    TypeId {} -> def r2 r1;
+                    ListType {} -> def r2 r1;
+                    FunctionType {} -> def r2 r1;
+                    TypeConst {} -> def r2 r1;
+                    TypeConstTest {} -> def r2 r1;
+                    AndType {} -> def r2 r1;
+                    AppType {} -> undefined;
+                    ;
+                ;
+                
+        in
+            case reduceType (remaining, te1) of
+            (bindings1, type1) ->
+                case reduceType (bindings1, te2) of
+                (bindings2, type2) ->
+                    append (def type1 type2) (type_unifyHelper bindings2);
+                ;
+            ;        
+    ;
+
+/* @example */
+type_unifyExamples :: Boolean;
+type_unifyExamples = 
+//         todo: [(var0, (App (![Prelude.Boolean] -> Prelude.Boolean) (App (App ((var<JObject> -> var<JObject>) -> ([var<JObject>] -> [var<JObject>])) var1) var2)))]
+//                r: [(var0, Prelude.Boolean), (var<JObject>, !Prelude.Boolean), (var2, [var<JObject>]), (var1, (var<JObject> -> var<JObject>))]
+    let
+               
+        intType :: Type;
+        intType = TypeConstTest "Int";
+        
+        booleanType :: Type;
+        booleanType = TypeConstTest "Boolean";
+        
+        booleanListType :: Type;
+        booleanListType = ListType booleanType True;
+        
+        intListType :: Type;
+        intListType = ListType intType False;
+        
+        var0 :: Type;
+        var0 = TypeId 0 False;
+        
+        var1 :: Type;
+        var1 = TypeId 1 False;
+        
+        var2 :: Type;
+        var2 = TypeId 2 False;               
+        
+        input :: [(Type, Type)];
+        input =
+            // [(var0, ((![Prelude.Boolean] -> Prelude.Boolean) ((((var<JObject> -> var<JObject>) -> ([var<JObject>] -> [var<JObject>])) var1) var2)))]
+            [(
+                var0, 
+                (AppType (FunctionType booleanListType booleanType False) (AppType (AppType (FunctionType (FunctionType intType intType False) (FunctionType intListType booleanListType False) False) var1) var2))
+            )];
+            
+        result :: String;
+        result = "[(var0, Boolean), (var2, [Int]), (var1, (Int -> Int))]";
+    in
+    
+        assert (show (type_unify input) == result); 
+     
+type_applyStrictness :: Type -> Boolean -> Type;
+protected type_applyStrictness !type moreStrict =
+    case type of
+    TypeConst type args strict name -> TypeConst type args (moreStrict || strict) name;      
+    TypeVar typeId strict -> TypeVar typeId (moreStrict || strict);  
+    TypeId typeId strict -> TypeId typeId (moreStrict || strict);
+    FunctionType codomain domain strict -> FunctionType codomain domain (moreStrict || strict);
+    ListType domain strict -> ListType domain (moreStrict || strict); 
+    _ -> type;
+    ;
+     
+type_setStrictness :: Type -> Boolean -> Type;
+protected type_setStrictness type value = 
+    case type of
+    TypeConst type args strict name -> TypeConst type args value name;      
+    TypeVar typeId strict -> TypeVar typeId value;  
+    TypeId typeId strict -> TypeId typeId value;
+    FunctionType codomain domain strict -> FunctionType codomain domain value;
+    ListType domain strict -> ListType domain value;
+    ;
+    
+type_atLeastAsStrict :: Type -> Type -> Boolean;
+protected type_atLeastAsStrict lessStrict atLeastAsStrict =
+    type_isStrict atLeastAsStrict || not (type_isStrict lessStrict);    
+
+types_atLeastAsStrict :: [Type] -> [Type] -> Boolean;
+types_atLeastAsStrict lessStrict atLeastAsStrict =
+    andList (map (uncurry type_atLeastAsStrict) (zip lessStrict atLeastAsStrict));
+
+type_hasStrictArguments :: Type -> Boolean;
+protected type_hasStrictArguments !type =
+    case type of
+    TypeConst {strict} -> strict;      
+    TypeConstTest {} -> False;
+    TypeVar {strict} -> strict;
+    TypeId {strict} -> strict;    
+    FunctionType {domain, codomain} -> type_hasStrictArguments domain || type_hasStrictArguments codomain;    
+    ListType {strict} -> strict;    
+    AppType {} -> False;
+    ;
+
+type_isStrict :: Type -> Boolean;
+protected type_isStrict !type =
+    case type of
+    TypeConst {strict} -> strict;      
+    TypeConstTest {} -> False;
+    TypeVar {strict} -> strict;
+    TypeId {strict} -> strict;    
+    FunctionType {strict} -> strict;    
+    ListType {strict} -> strict;    
+    AppType {} -> False;
+    ;
+     
+types_hasStrictArguments :: Maybe [Type] -> Boolean;
+protected types_hasStrictArguments !types =
+    case types of
+    Nothing -> False;
+    Just types_Just_value -> orList (map type_isStrict types_Just_value);
+    ;
+         
+instance Show Type where
+    show = showType;
+    ;
+
+         
+//       data foreign unsafe import jvm "java.lang.Object" JTypeVar deriving Inputable, Outputable, Eq, Show;    
+data foreign unsafe import jvm "org.openquark.cal.compiler.TypeVar"
+JTypeVar deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.newTypeVar"
+protected optimizerHelper_newTypeVar :: JTypeVar;
+
+foreign unsafe import jvm "method hashCode"
+typeVar_hashCode :: JTypeVar -> Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.typeVar_hasClassConstraints"
+optimizerHelper_typeVar_hasClassConstraints :: JTypeVar -> Boolean;
+
+/**
+ * Makes a new copy of the type expression where the variables are all 'renamed'
+ * @arg type The type to make a copy of
+ * @return The original type with all the variables replaced with new variables keeping track of corresponces between variables. 
+ */
+copyVars :: Type -> Type;
+copyVars type =
+    let
+        transformer :: [(Type, Type)] -> Type -> ([(Type, Type)], Type);
+        transformer oldVarToNewVarMap type =
+            case type of
+            TypeVar {} -> 
+                case find (\ovnv -> ovnv.#1 == type) oldVarToNewVarMap of
+                Nothing ->
+                    let
+                        newTypeVar :: Type;
+                        newTypeVar = TypeVar optimizerHelper_newTypeVar False;
+                    in
+                        ((type, newTypeVar):oldVarToNewVarMap, newTypeVar);
+                Just ovnv -> (oldVarToNewVarMap, ovnv.#2);
+                ;
+            _ -> (oldVarToNewVarMap, type);
+            ;
+    in
+        (transformType [] type transformer).#2;
+
+/**
+ * Traverse the given type and apply the given transformer. The transformation is done bottom up.
+ * @arg acc Accumulator maintained through the traversal.
+ * @arg type The type to traverse
+ * @arg transformer The transformation function to apply.
+ * @return The result of applying the transformer to the given type expression.
+ */
+ 
+transformType :: acc -> Type -> (acc -> Type -> (acc, Type)) -> (acc, Type); 
+transformType acc type transformer =
+    case type of
+    TypeConst {} -> transformer acc type;
+    TypeConstTest {} -> transformer acc type; 
+    TypeVar {} -> transformer acc type; 
+    TypeId {} -> transformer acc type; 
+    FunctionType domain codomain strict ->
+        case (transformType acc domain transformer) of
+        (acc1, domainPrime) ->
+            case (transformType acc1 codomain transformer) of
+            (acc2, codomainPrime) ->
+                transformer acc2 (FunctionType domainPrime codomainPrime strict);
+            ;
+        ;
+    ListType domain strict ->
+        case (transformType acc domain transformer) of
+        (acc1, domainPrime) ->        
+            transformer acc1 (ListType domainPrime strict);
+        ; 
+    AppType t1 t2 ->
+        case (transformType acc t1 transformer) of
+        (acc1, t1Prime) ->
+            case (transformType acc1 t2 transformer) of
+            (acc2, t2Prime) ->
+                transformer acc2 (AppType t1Prime t2Prime);
+            ;
+        ; 
+    AndType t1 t2 ->
+        case (transformType acc t1 transformer) of
+        (acc1, t1Prime) ->
+            case (transformType acc1 t2 transformer) of
+            (acc2, t2Prime) ->
+                transformer acc2 (AndType t1Prime t2Prime);
+            ;
+        ;
+    ;
+
+/* @test */
+unitTests :: Boolean;
+protected unitTests =
+       assert reduceTypeOnceExamples
+    && assert type_listToTypeExamples
+    && assert reduceTypeExamples
+    && assert type_unifyExamples;
+

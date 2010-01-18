@@ -1,0 +1,270 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Resource.cal
+ * Creation date: May 31, 2006.
+ * By: Joseph Wong
+ */
+
+/**
+ * Provides access to user resources in the CAL environment.
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Core.Resource;
+
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable;
+    typeConstructor = Boolean, Byte, ExecutionContext, Maybe, String;
+    dataConstructor = True, Nothing, Just;
+    function = eager, error, executionContext, output;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Utilities.Locale using
+    typeConstructor = Locale;
+    function = fallback, invariantLocale;
+    ;
+import Cal.Core.String using
+    function = indexOfString;
+    ;
+
+/**
+ * A foreign type representing the interface through which user resources can be accessed.
+ */
+data foreign unsafe import jvm private "org.openquark.cal.runtime.ResourceAccess"
+    private JResourceAccess;
+
+/**
+ * Returns the interface for resource access from an execution context.
+ * 
+ * @arg executionContext the execution context.
+ * @return the interface for resource access.
+ */
+foreign unsafe import jvm "method getResourceAccess"
+    private getResourceAccess :: ExecutionContext -> JResourceAccess;
+
+/**
+ * A foreign type representing the Java type {@code java.io.InputStream@}.
+ */
+data foreign unsafe import jvm public "java.io.InputStream"
+    public InputStream deriving Inputable, Outputable;
+
+/**
+ * A foreign type for Java's {@code byte[]@} array tupe.
+ */
+data foreign unsafe import jvm private "byte[]"
+    private JByteArray deriving Outputable;
+
+/**
+ * Returns an {@link InputStream@} for the named user resource in the specified locale. Note that this
+ * method does not implement any locale-fallback mechanism - it is up to the caller to do so.
+ * 
+ * @arg resourceAccess the interface for resource access.
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg extension the file extension for the user resource.
+ * @arg locale the locale for which the resource is to be fetched.
+ * @return an InputStream for the user resource, or null if the resource cannot be found.
+ */
+foreign unsafe import jvm "method getUserResource"
+    private getUserResource :: JResourceAccess -> String -> String -> String -> Locale -> InputStream;
+
+/**
+ * Reads the specified {@link InputStream@} into a new byte array, and close the stream afterwards.
+ * If any IOExceptions are thrown during the reading process, a null byte array will be returned.
+ * 
+ * @arg inputStream the {@code InputStream@} to be read.
+ * @return an array of the bytes read, or null if there was a problem reading the stream.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Resource.IOHelper.readIntoByteArray"
+    private readIntoByteArray :: InputStream -> JByteArray;
+
+/**
+ * @arg array the byte array to test.
+ * @return {@link True@} iff the argument is null.
+ */
+foreign unsafe import jvm "isNull"
+    private isNullByteArray :: JByteArray -> Boolean;
+
+/**
+ * Returns an ordered list of {@code (Locale, InputStream)@} pairs which represents a user resource and its associated fallbacks.
+ * The head of the list corresponds to the most-locale-specific resource available (with the actual locale of that particular
+ * resource made available in the pair), and the remaining entries correspond to available fallbacks.
+ * 
+ * The streams returned in the list should all be non-null.
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg extension the file extension for the user resource.
+ * @arg locale the locale for which the resource is to be fetched.
+ * @return an ordered list of {@code (Locale, InputStream)@} pairs which represents a user resource and its associated fallbacks.
+ */
+getResourceInputStreamFallbackList :: String -> String -> String -> Locale -> [(Locale, InputStream)];
+public getResourceInputStreamFallbackList !moduleName !name !extension !locale =
+    let
+        resourceAccess :: JResourceAccess;
+        resourceAccess = eager $ getResourceAccess executionContext;
+        
+        helper :: Locale -> [(Locale, InputStream)];
+        helper !locale =
+            let
+                inputStream :: InputStream;
+                inputStream = eager $ getUserResource resourceAccess moduleName name extension locale;
+                
+                remainder :: [(Locale, InputStream)];
+                remainder =
+                    if locale == invariantLocale then
+                        []
+                    else
+                        helper $ fallback locale;
+            in
+                if isNullInputStream inputStream then
+                    remainder
+                else
+                    (locale, inputStream) : remainder;
+    in
+        if indexOfString "_" name == -1 then
+            helper locale
+        else
+            error "The locale identifier prefix '_' cannot appear in the name of a user resource.";
+
+/**
+ * Returns a binary user resource as a byte array.
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg extension the file extension for the user resource.
+ * @arg locale the locale for which the resource is to be fetched.
+ * @return {@code {@link Just@} byteArray@}, if the resource could be read, or {@link Nothing@} if the resource (or its fallbacks)
+ *         cannot be read.
+ */
+getBinaryResource :: String -> String -> String -> Locale -> Maybe (Array Byte);
+public getBinaryResource !moduleName !name !extension !locale =
+    case getResourceInputStreamFallbackList moduleName name extension locale of
+    entry:_ -> 
+        let
+            byteArray :: JByteArray;
+            byteArray = eager $ readIntoByteArray entry.#2;
+        in
+            if isNullByteArray byteArray then
+                Nothing
+            else
+                Just ((Array.inputPrimitive $ output $ byteArray) :: Array Byte);
+            
+    _ -> Nothing;
+    ;
+
+/**
+ * @arg is the {@link InputStream@} to test.
+ * @return {@link True@} iff the argument is null.
+ */
+foreign unsafe import jvm "isNull"
+    private isNullInputStream :: InputStream -> Boolean;
+
+/**
+ * Returns a binary user resource as an {@link InputStream@}.
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg extension the file extension for the user resource.
+ * @arg locale the locale for which the resource is to be fetched.
+ * @return {@code {@link Just@} inputStream@}, if the resource could be read, or {@link Nothing@} if the resource (or its fallbacks)
+ *         cannot be read.
+ */
+getResourceInputStream :: String -> String -> String -> Locale -> Maybe InputStream;
+public getResourceInputStream !moduleName !name !extension !locale =
+    case getResourceInputStreamFallbackList moduleName name extension locale of
+    entry:_ -> Just entry.#2;
+    _ -> Nothing;
+    ;
+
+/**
+ * Reads the specified {@link InputStream@} into a string using the given character set.
+ * If any IOExceptions are thrown during the reading process, a null byte array will be returned.
+ * 
+ * @arg charsetName the character set to be used for translating bytes into characters.
+ * @arg is the {@code InputStream@} to be read.
+ * 
+ * @return a string for the text read from the stream, or null if there was a problem reading the stream.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Resource.IOHelper.readIntoString"
+    private readIntoString :: String -> InputStream -> String;
+
+/**
+ * @arg string the string to test.
+ * @return {@link True@} iff the argument is null.
+ */
+foreign unsafe import jvm "isNull"
+    private isNullString :: String -> Boolean;
+
+/**
+ * Returns a text user resource as a string, using the ISO-8859-1 (Latin 1) character set.
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg extension the file extension for the user resource.
+ * @arg locale the locale for which the resource is to be fetched.
+ * @return {@code {@link Just@} text@}, if the resource could be read, or {@link Nothing@} if the resource (or its fallbacks)
+ *         cannot be read.
+ */
+getTextResource :: String -> String -> String -> Locale -> Maybe String;
+public getTextResource !moduleName !name !extension !locale =
+    getTextResourceInCharset moduleName name extension locale "ISO-8859-1";
+
+/**
+ * Returns a text user resource as a string, using the specified character set.
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg extension the file extension for the user resource.
+ * @arg locale the locale for which the resource is to be fetched.
+ * @return {@code {@link Just@} text@}, if the resource could be read, or {@link Nothing@} if the resource (or its fallbacks)
+ *         cannot be read.
+ */
+getTextResourceInCharset :: String -> String -> String -> Locale -> String -> Maybe String;
+public getTextResourceInCharset !moduleName !name !extension !locale !charset =
+    case getResourceInputStreamFallbackList moduleName name extension locale of
+    entry:_ -> 
+        let
+            string :: String;
+            string = eager $ readIntoString charset entry.#2;
+        in
+            if isNullString string then
+                Nothing
+            else
+                Just string;
+            
+    _ -> Nothing;
+    ;

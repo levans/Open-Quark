@@ -1,0 +1,425 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/** 
+ * Fasta benchmark implementation for the internet bechmark shootouts
+ * see: {@url http://shootout.alioth.debian.org/gp4/benchmark.php?test=fasta&lang=all@}
+ * 
+ * This code is based on and inspired by the entries in the 
+ * The Great Computer Language Shootout  {@url http://shootout.alioth.debian.org/@}
+ * @author Magnus Byne
+ */
+module Cal.Benchmarks.Shootout.Fasta;
+
+import Cal.Core.Prelude using
+    typeClass = Inputable, Outputable;
+    typeConstructor = Byte, Char, Double, Int, String;
+    function = eager, fromInt, fst, min, seq, snd, stringToInt, toByte;
+    ;
+
+import Cal.Core.Char;
+
+import Cal.Collections.List using
+    function = foldLeftStrict, head, length;
+    ;
+
+import Cal.Collections.Array;
+
+
+data foreign unsafe import jvm "java.io.PrintStream" private JPrintStream;
+
+data foreign unsafe import jvm "byte[]"
+    JByteArray deriving Inputable, Outputable;
+
+foreign unsafe import jvm "lengthArray" byteArray_length :: JByteArray -> Int;
+
+foreign unsafe import jvm "newArray" byteArray_new :: Int -> JByteArray;
+
+foreign unsafe import jvm "subscriptArray"
+    byteArray_subscript :: JByteArray -> Int -> Byte;
+
+foreign unsafe import jvm "updateArray"
+    byteArray_update :: JByteArray -> Int -> Byte -> Byte;
+
+foreign unsafe import jvm "static field java.lang.System.out"
+    private stdout :: JOutputStream;
+
+data foreign unsafe import jvm "java.io.OutputStream" private JOutputStream;
+
+foreign unsafe import jvm "method write"
+    private writeBytes :: JOutputStream -> JByteArray -> ();
+
+foreign unsafe import jvm "method write"
+    private writeBytesFromTo :: JOutputStream -> JByteArray -> Int -> Int -> ();
+
+foreign unsafe import jvm "method write"
+    private writeByte :: JOutputStream -> Int -> ();
+
+foreign unsafe import jvm "method getBytes"
+    private toBytes :: String -> JByteArray;
+
+data foreign unsafe import jvm "double[]" JDoubleArray;
+
+foreign unsafe import jvm "newArray" doubleArray_new :: Int -> JDoubleArray;
+
+foreign unsafe import jvm "subscriptArray"
+    doubleArray_subscript :: JDoubleArray -> Int -> Double;
+
+foreign unsafe import jvm "updateArray"
+    doubleArray_update :: JDoubleArray -> Int -> Double -> Double;
+
+alu :: JByteArray;
+alu = 
+    toBytes
+        (
+            "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG"
+            ++ "GAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGA"
+            ++ "CCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAAT"
+            ++ "ACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCA"
+            ++ "GCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGG"
+            ++ "AGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCC"
+            ++ "AGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+        )
+    ;
+
+charToByte :: Char -> Byte;
+charToByte !c = toByte (Char.toInt c);
+
+/** create array of iub codes*/
+iubCodes :: JByteArray;
+iubCodes =
+    let
+        codes =
+            [
+                'a','c','g','t','B','D','H',
+                'K','M','N','R','S','V','W','Y'
+            ]
+            ;
+    in
+        fst
+            (foldLeftStrict
+                (
+                    \!array !value ->
+                        (
+                            byteArray_update
+                                (fst array)
+                                (snd array)
+                                (charToByte value)
+                            `seq`
+                            fst array,
+                            snd array + 1
+                        )
+                )
+                (byteArray_new (length codes), 0)
+                codes
+            )
+    ;
+
+/** create array of cumulative frequencies*/
+iubFreq :: JDoubleArray;
+iubFreq =
+    let
+        freq =
+            [
+                0.27,0.12,0.12,0.27,0.02,0.02,0.02,
+                0.02,0.02,0.02,0.02,0.02,0.02,0.02,0.02
+            ]
+            ;
+    in
+        (foldLeftStrict
+            (
+                \!accum !value ->
+                    (
+                        doubleArray_update
+                            accum.#1
+                            accum.#2
+                            (accum.#3 + value)
+                        `seq`
+                        accum.#1,
+                        accum.#2 + 1,
+                        accum.#3 + value
+                    )
+            )
+            (doubleArray_new (length freq), 0, 0.0)
+            freq
+        ).#1
+    ;
+
+/** array of human gene codes*/
+humanCodes :: JByteArray;
+humanCodes =
+    let
+        codes = ['a', 'c', 'g', 't'];
+    in
+        fst
+            (foldLeftStrict
+                (
+                    \!array !value ->
+                        (
+                            byteArray_update
+                                (fst array)
+                                (snd array)
+                                (charToByte value)
+                            `seq`
+                            fst array,
+                            snd array + 1
+                        )
+                )
+                (byteArray_new (length codes), 0)
+                codes
+            )
+    ;
+
+/** create native array of cumulative frequencies for human genes*/
+humanFreq :: JDoubleArray;
+humanFreq =
+    let
+        freq =
+            [
+                0.302954942668,
+                0.1979883004921,
+                0.1975473066391,
+                0.3015094502008
+            ]
+            ;
+    in
+        (foldLeftStrict
+            (
+                \!accum !value ->
+                    (
+                        doubleArray_update
+                            accum.#1
+                            accum.#2
+                            (accum.#3 + value)
+                        `seq`
+                        accum.#1,
+                        accum.#2 + 1,
+                        accum.#3 + value
+                    )
+            )
+            (doubleArray_new (length freq), 0, 0.0)
+            freq
+        ).#1
+    ;
+
+/** naively pick a random gene from frequency table*/
+selectGene :: JDoubleArray -> JByteArray -> Int -> Double -> Byte;
+selectGene !freqTable !codeTable !i !rnd =
+    if doubleArray_subscript freqTable i > rnd then
+        byteArray_subscript codeTable i
+    else
+        selectGene freqTable codeTable (i + 1) rnd
+    ;
+
+/** output file line length*/
+lineLength :: Int;
+lineLength = 60 :: Int;
+
+/** random number generator consts*/
+im :: Int;
+im = 139968;
+
+ia :: Int;
+ia = 3877;
+
+ic :: Int;
+ic = 29573;
+
+makeRandomFasta ::
+    String -> String -> JDoubleArray
+    -> JByteArray -> Int -> JOutputStream -> Int -> Int;
+makeRandomFasta !id !desc !freqTable !codeTable !n !stream !seed =
+    let
+        eol :: Byte;
+        eol = eager $ fromInt (Char.toInt '\n');
+
+        buffer :: JByteArray;
+        buffer = byteArray_new 10240;
+
+        bufferLength :: Int;
+        bufferLength = 10240;
+
+        generate :: JByteArray -> Int -> Int -> Int -> Int -> Int;
+        generate !buffer !n !bytesToEol !bytesInBuffer !seed =
+            if bytesToEol > 0 then
+                let
+                    newseed :: Int;
+                    newseed = eager $ (seed * ia + ic) % im;
+
+                    rnd :: Double;
+                    rnd = 1.0 * fromInt newseed / fromInt im;
+                in
+                    byteArray_update
+                        buffer
+                        bytesInBuffer
+                        (selectGene freqTable codeTable 0 rnd)
+                    `seq`
+                    generate
+                        buffer
+                        n
+                        (bytesToEol - 1)
+                        (bytesInBuffer + 1)
+                        newseed
+            else
+                //end of line add the eol byte
+                byteArray_update buffer bytesInBuffer eol
+                `seq`
+                (
+                    if n > 0 then
+                        let
+                            bytesInNextLine :: Int;
+                            bytesInNextLine = eager $ min n lineLength;
+                        in
+                            if
+                                bytesInNextLine
+                                > bufferLength - (bytesInBuffer + 1)
+                            then
+                                writeBytesFromTo
+                                    stream
+                                    buffer
+                                    0
+                                    (bytesInBuffer + 1)
+                                `seq`
+                                generate
+                                    buffer
+                                    (n - lineLength)
+                                    bytesInNextLine
+                                    0
+                                    seed
+                            else
+                                generate
+                                    buffer
+                                    (n - lineLength)
+                                    bytesInNextLine
+                                    (bytesInBuffer + 1)
+                                    seed
+                    else
+                        //finished, flush buffer
+                        writeBytesFromTo stream buffer 0 (bytesInBuffer + 1)
+                        `seq`
+                        seed
+                )
+            ;
+    in
+        writeBytes stream (toBytes (">" ++ id ++ " " ++ desc ++ "\n"))
+        `seq`
+        generate buffer (n - lineLength) (min n lineLength) 0 seed
+    ;
+
+makeRepeatFasta ::
+    String -> String -> JByteArray -> Int -> JOutputStream -> ();
+makeRepeatFasta !id !desc !alu !n !stream =
+    let
+        seqLength :: Int;
+        seqLength = eager $ byteArray_length alu;
+
+        eol :: Int;
+        eol = eager $ Char.toInt '\n';
+
+        generate :: Int -> Int -> ();
+        generate !n !k =
+            if n > 0 then
+                let
+                    bytesToWriteThisLine :: Int;
+                    bytesToWriteThisLine = eager $ min n lineLength;
+                in
+                    if bytesToWriteThisLine < seqLength - k then
+                        writeBytesFromTo stream alu k bytesToWriteThisLine
+                        `seq`
+                        writeByte stream eol
+                        `seq`
+                        generate
+                            (n - bytesToWriteThisLine)
+                            (k + bytesToWriteThisLine)
+                    else
+                        writeBytesFromTo stream alu k (seqLength - k)
+                        `seq`
+                        writeBytesFromTo
+                            stream
+                            alu
+                            0
+                            (bytesToWriteThisLine - (seqLength - k))
+                        `seq`
+                        writeByte stream eol
+                        `seq`
+                        generate
+                            (n - bytesToWriteThisLine)
+                            (bytesToWriteThisLine - (seqLength - k))
+            else
+                ()
+            ;
+    in
+        writeBytes stream (toBytes (">" ++ id ++ " " ++ desc ++ "\n"))
+        `seq`
+        generate n 0
+    ;
+
+main :: [String] -> ();
+public main args =
+    let
+        n = eager $ stringToInt (head args);
+
+        intialSeed :: Int;
+        intialSeed = 42;
+
+        seed1 :: Int;
+        seed1 =
+            makeRandomFasta
+                "TWO"
+                "IUB ambiguity codes"
+                iubFreq
+                iubCodes
+                (n * 3)
+                stdout
+                intialSeed
+            ;
+
+        seed2 :: Int;
+        seed2 =
+            makeRandomFasta
+                "THREE"
+                "Homo sapiens frequency"
+                humanFreq
+                humanCodes
+                (n * 5)
+                stdout
+                seed1
+            ;
+    in
+        makeRepeatFasta "ONE" "Homo sapiens alu" alu (n * 2) stdout
+        `seq`
+        seed1
+        `seq`
+        seed2
+        `seq`
+        ()
+    ;
+

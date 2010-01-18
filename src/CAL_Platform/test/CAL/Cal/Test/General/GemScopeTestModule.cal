@@ -1,0 +1,176 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * GemScopeTestModule.cal
+ * Creation date: Feb 28, 2003.
+ * By: Edward Lam
+ */
+
+/*
+ * This is a temporary module for use with the Gem Scope.
+ */
+
+/////////////////////////////////////////////////////////////////////////
+module Cal.Test.General.GemScopeTestModule;
+import Cal.Core.Prelude;
+import Cal.Collections.List;
+
+public div2 x = Prelude.divide x 2.0;
+
+halveData :: [Prelude.Double] -> [Prelude.Double];
+public halveData inputData = List.map div2 inputData;
+
+scale :: Prelude.Double -> Prelude.Double -> Prelude.Double;
+public scale factor x = Prelude.multiply x factor;
+
+scaleData :: [Prelude.Double] -> Prelude.Double -> [Prelude.Double];
+public scaleData inputData scaleFactor = List.map (scale scaleFactor) inputData;
+
+bottom10 :: [Prelude.Double] -> [Prelude.Double];
+public bottom10 inputData = List.take 10 (List.sort inputData);
+
+top10 :: [Prelude.Double] -> [Prelude.Double];
+public top10 inputData = List.take 10 (List.reverse (List.sort inputData));
+
+sortDouble :: [Prelude.Double] -> [Prelude.Double];
+public sortDouble = List.sort;
+
+positive :: [Prelude.Double] -> [Prelude.Double];
+public positive inputData = List.filter (\element -> element >= 0 ) inputData; 
+
+exceeds :: [Prelude.Double] -> Prelude.Double -> [Prelude.Double];
+public exceeds inputData datum = List.filter (\element -> element >= datum ) inputData; 
+
+between :: [Prelude.Double] -> Prelude.Double -> Prelude.Double -> [Prelude.Double];
+public between inputData low high= List.filter (\element -> element >= low  && element <= high) inputData; 
+
+topN :: [Prelude.Double] -> Prelude.Int -> [Prelude.Double];
+public topN inputData datum = List.take datum (List.reverse (List.sort inputData));
+
+bottomN :: [Prelude.Double] -> Prelude.Int -> [Prelude.Double];
+public bottomN inputData datum = List.take datum (List.sort inputData);
+
+percentageOfMax :: [Prelude.Double] -> Prelude.Double -> Prelude.Double;
+public percentageOfMax inputData n = Prelude.divide (Prelude.multiply (List.maximum inputData) n) 100.0;
+
+simpleRegression :: [Prelude.Double] -> (Prelude.Double, Prelude.Double);
+public simpleRegression input = Prelude.pair (Prelude.divide (Prelude.subtract (List.last (input)) (List.head (input))) (Prelude.toDouble (List.length (input)))) (List.head (input));
+
+predictAt :: (Prelude.Double, Prelude.Double) -> Prelude.Double -> Prelude.Double;
+public predictAt inputPair input = Prelude.add (Prelude.multiply (Prelude.fst (inputPair)) input) (Prelude.snd (inputPair));
+
+listToIndices:: [Prelude.Double] -> [Prelude.Double];
+public listToIndices x = List.take (List.length x) (Prelude.upFrom (0.0));
+
+gradient:: [Prelude.Double] -> Prelude.Double;
+public gradient y = Prelude.divide (Prelude.subtract (Prelude.multiply (List.sum (List.map ( (\t -> Prelude.fst(t) * Prelude.snd(t)
+)) (List.zip (listToIndices y) y))) (Prelude.toDouble (List.length y))) (Prelude.multiply (List.sum (listToIndices y)) (List.sum y))) 
+(Prelude.subtract (Prelude.multiply (List.sum (List.map ( (\t -> Prelude.fst(t) * Prelude.snd(t))) (List.zip (listToIndices y) (listToIndices y)))) (Prelude.toDouble (List.length y))) 
+(Prelude.multiply (List.sum (listToIndices y)) (List.sum (listToIndices y))));
+
+offset:: [Prelude.Double] -> Prelude.Double; 
+public offset y = Prelude.divide (Prelude.subtract (List.sum y) (Prelude.multiply (gradient y) (List.sum (listToIndices y)))) (Prelude.toDouble (List.length y));
+
+oldRegression:: [Prelude.Double] -> (Prelude.Double, Prelude.Double);
+public oldRegression y = Prelude.pair (gradient y) (offset y);
+
+regression:: [Prelude.Double] -> (Prelude.Double, Prelude.Double);
+public regression y = linearRegression (List.zip (listToIndices y) y);
+
+linearRegression :: [(Prelude.Double, Prelude.Double)] -> (Prelude.Double, Prelude.Double);
+public linearRegression inputData =   
+  let
+    offset = yMean - (gradient * xMean);
+    gradient = ((List.sum (List.zipWith Prelude.multiply xs ys)) - ((sumXs * (List.sum ys)) / dataLength)) / ((List.sum (List.zipWith Prelude.multiply xs xs)) - ((sumXs * sumXs) / dataLength));
+    xMean = sumXs / dataLength;
+    dataLength = Prelude.toDouble (List.length inputData);
+    xs = List.map Prelude.field1 inputData;
+    sumXs = List.sum xs;
+    ys = List.map Prelude.field2 inputData;
+    yMean = (List.sum ys) / dataLength;
+  in
+    (gradient, offset)
+;
+
+extrapolate :: Prelude.Double -> [(Prelude.Double, Prelude.Double)] -> [(Prelude.Double, Prelude.Double)];
+public extrapolate x inputData =   
+  let
+    gradientAndOffset = linearRegression inputData;
+    gradient = Prelude.field1 gradientAndOffset;
+    offset = Prelude.field2 gradientAndOffset;
+  in
+    inputData ++ (List.list1 (x, (offset + (gradient * x))))
+;
+
+
+average :: Prelude.Num a => [a] -> Prelude.Double;
+average !xs =
+    let
+        averageHelper :: Prelude.Num a => [a] -> Prelude.Double -> Prelude.Int -> Prelude.Double;
+        averageHelper !xs !partialSum !partialLength =
+            case xs of
+            [] ->
+                if (partialLength == 0) then
+                    Prelude.notANumber
+                else
+                    partialSum / Prelude.toDouble partialLength;
+            xsHead : xsTail ->
+                averageHelper xsTail (partialSum + Prelude.toDouble xsHead) (partialLength + 1);
+            ;
+    in
+        averageHelper xs 0 0;
+  
+  
+covariance :: [Prelude.Double] -> [Prelude.Double] -> Prelude.Double;
+public covariance inputX inputY = 
+	let
+        diffX = List.map (Prelude.subtract (average inputX)) inputX;
+       	diffY = List.map (Prelude.subtract (average inputY)) inputY;
+		nValuesX = List.length inputX;
+		nValuesY = List.length inputY;
+	in
+  	let	
+		pairs = List.zip diffX diffY;
+	in
+	let
+		products = List.map (\t -> Prelude.fst(t) * Prelude.snd(t)) pairs;
+	in
+      	if nValuesX != nValuesY then 
+			0.0
+		else    		
+			Prelude.divide (List.sum products) ((Prelude.toDouble) nValuesX);
+			
+
+regressionLine :: Prelude.Int -> [Prelude.Double];
+public regressionLine n = List.take n (Prelude.upFrom 0.0);
+

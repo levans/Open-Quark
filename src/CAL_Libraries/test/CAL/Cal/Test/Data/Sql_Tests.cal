@@ -1,0 +1,643 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Sql_Tests.cal
+ * Creation date: May 7, 2004.
+ * By: Richard Webster
+ */
+
+/*
+ * Test gems for the database query gems and SQL builder gems.
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Test.Data.Sql_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    ;      
+import Cal.Core.String using  
+    function = toList;
+    ;        
+import Cal.Utilities.Range using
+    typeConstructor = Range;
+    function = makeBetweenIncludingLeftEndpointRange, leftEndpoint, rightEndpoint, includesLeftEndpoint, includesRightEndpoint, hasLeftEndpoint, hasRightEndpoint;
+    ;
+    
+import Cal.Data.Sql using
+    typeConstructor = Query, SqlBuilder, TypedExpr;
+    dataConstructor = Distinct, InnerJoin;
+    function = doubleField, intField, stringField, timeField;
+    function = stringConstant, timeConstant, trueConstant;
+    function = andExpr, eqExpr, gtEqExpr, gtExpr, ltEqExpr, ltExpr, subQueryExpr, sumExpr;
+    function = addOption, group, join, order, project, projectColumn, projectWithAliases, restrict;
+    function = makeJoinInfo, makeQueryTable, makeQueryTableWithAlias, makeSubQueryTable, newQuery, queryText, toUntypedExpr, unionQuery;
+    ;
+import Cal.Utilities.Time using 
+    typeConstructor = Time;
+    ;
+import Cal.Data.SqlBuilder;
+import Cal.Data.DataGems;
+import Cal.Test.Data.DataGems_Tests;
+import Cal.Data.SqlType;
+import Cal.Data.DatabaseMetadata using
+    dataConstructor = PrimaryKeyConstraint;
+    function = makeTableReference, makeTableDescription, makeFieldDescription;
+    ;
+
+
+//////////////////////////////////////////////////////////////////
+// Sql Query Test gems
+//////////////////////////////////////////////////////////////////
+
+test1 :: Query;
+public test1 = 
+    let
+        // Add a couple tables to the query.
+        custTable   = makeQueryTable "Customer";
+        ordersTable = makeQueryTable "Orders";
+
+        // Get expressions for a few database fields.
+        countryField = stringField custTable "Country";
+        orderDateField = timeField ordersTable "Order Date";
+        orderAmountField = doubleField ordersTable "Order Amount";
+
+        // Get expressions for some constant values.
+        constField = stringConstant "Canada";
+        constField2 = timeConstant Time.now;
+
+        // Build some compound expressions.
+        exprField = eqExpr countryField constField;
+        exprField2 = ltEqExpr orderDateField constField2;
+
+        // Create a new, empty query.
+        qry0 = newQuery;
+
+        // Set the return columns for the query.
+//        qry3 = project qry0 [toUntypedExpr countryField, toUntypedExpr orderDateField, toUntypedExpr constField, toUntypedExpr exprField];
+        qry3 = projectWithAliases qry0 [(toUntypedExpr countryField, "MyCountry"), (toUntypedExpr orderDateField, ""), (toUntypedExpr constField, "someConst"), (toUntypedExpr exprField, "myExpr")];
+
+        // Apply a couple restrictions to the query.
+        qry4 = restrict qry3 exprField;
+        qry5 = restrict qry4 exprField2;
+
+        // Add some sorting the query.
+        qry6 = order qry5 orderDateField True;
+        qry7 = order qry6 orderAmountField False;
+
+        // Add a join between the 2 tables.
+        joinInfo = makeJoinInfo (intField custTable "Customer ID") (intField ordersTable "Customer ID") InnerJoin;
+        qry8 = join qry7 joinInfo;
+
+        // Add the 'distinct' option.
+        qry9 = addOption qry8 Distinct;
+    in
+        qry9;
+
+test2 :: Query;
+public test2 = 
+    let
+        // Add some tables to the query.
+        custTable         = makeQueryTable "Customer";
+        productTable      = makeQueryTable "Product";
+        ordersDetailTable = makeQueryTable "Orders Detail";
+        ordersTable       = makeQueryTable "Orders";
+
+        // Get expressions for a few database fields.
+        countryField = stringField custTable "Country";
+        orderDateField = timeField ordersTable "Order Date";
+        orderAmountField = doubleField ordersTable "Order Amount";
+
+        // Get expressions for some constant values.
+        constField = stringConstant "Canada";
+        constField2 = timeConstant Time.now;
+
+        // Build some compound expressions.
+        exprField = eqExpr countryField constField;
+        exprField2 = ltEqExpr orderDateField constField2;
+
+        // Create a new, empty query.
+        qry0 = newQuery;
+
+        // Set the return columns for the query.
+        qry5 = project qry0 [toUntypedExpr countryField, toUntypedExpr orderDateField, toUntypedExpr constField, toUntypedExpr exprField];
+
+        // Apply a couple restrictions to the query.
+        qry6 = restrict qry5 exprField;
+        qry7 = restrict qry6 exprField2;
+
+        // Add some sorting the query.
+        qry8 = order qry7 orderDateField True;
+        qry9 = order qry8 orderAmountField False;
+
+        // Add joins between the tables.
+        joinInfo  = makeJoinInfo (intField custTable "Customer ID") (intField ordersTable "Customer ID") InnerJoin;
+        joinInfo2 = makeJoinInfo (intField ordersDetailTable "Product ID") (intField productTable "Product ID") InnerJoin;
+        joinInfo3 = makeJoinInfo (intField ordersTable "Order ID") (intField ordersDetailTable "Order ID") InnerJoin;
+
+        // Add a join between tables that are already joined.
+        joinInfo4 = makeJoinInfo (intField ordersDetailTable "Customer ID") (intField custTable "Customer ID") InnerJoin;
+
+        qry10 = join qry9 joinInfo;
+        qry11 = join qry10 joinInfo2;
+        qry12 = join qry11 joinInfo3;
+        qry13 = join qry12 joinInfo4;
+
+    in
+        qry13;
+
+
+test3 :: Query;
+public test3 = 
+    let
+        // Add a table to the query.
+        custTable = makeQueryTable "Customer";
+
+        // Get expressions for a few database fields.
+        countryField = stringField custTable "Country";
+        regionField = stringField custTable "Region";
+        salesField = doubleField custTable "Last Year's Sales";
+
+        // Get some aggregation expressions.
+        sumSalesExpr = sumExpr salesField;
+
+        // Get expressions for some constant values.
+        constField = stringConstant "Canada";
+
+        // Create a new, empty query.
+        qry0 = newQuery;
+
+        // Set the return columns for the query.
+        qry1 = project qry0 [toUntypedExpr countryField, toUntypedExpr sumSalesExpr, toUntypedExpr constField];
+
+        // Add grouping on some fields.
+        qry2 = group qry1 countryField;
+    in
+        qry2;
+
+test4 :: Query;
+public test4 = 
+    let
+        // Add the same table a couple times.
+        custTable1 = makeQueryTable "Customer";
+        custTable2 = makeQueryTableWithAlias "Customer" "Cust2";
+
+        // Get expressions for a few database fields.
+        countryField1 = stringField custTable1 "Country";
+        countryField2 = stringField custTable2 "Country";
+
+        // Create a new, empty query.
+        qry0 = newQuery;
+
+        // Set the return columns for the query.
+        qry1 = project qry0 [toUntypedExpr countryField1, toUntypedExpr countryField2];
+
+        // Add ordering on some fields.
+        qry2 = order qry1 countryField2 False;
+    in
+        qry2;
+
+
+unionQueryTest1 :: Query;
+public unionQueryTest1 = 
+    let
+        // Add a couple tables to the query.
+        custTable   = makeQueryTable "Customer";
+        ordersTable = makeQueryTable "Orders";
+
+        // Get expressions for a few database fields.
+        countryField = stringField custTable "Country";
+        orderDateField = timeField ordersTable "Order Date";
+        orderAmountField = doubleField ordersTable "Order Amount";
+
+        // Create a new, empty query.
+        qry0 = newQuery;
+
+        // Set the return columns for the query.
+        qry3 = projectWithAliases qry0 [(toUntypedExpr countryField, "MyCountry"), (toUntypedExpr orderDateField, "")];
+
+        // Add a join between the 2 tables.
+        joinInfo = makeJoinInfo (intField custTable "Customer ID") (intField ordersTable "Customer ID") InnerJoin;
+        qry4 = join qry3 joinInfo;
+
+        // Add the 'distinct' option.
+        qry5 = addOption qry4 Distinct;
+
+        query1 = restrict qry5 (eqExpr countryField (stringConstant "Canada"));
+        query2 = restrict qry5 (eqExpr countryField (stringConstant "France"));
+    in
+        unionQuery query1 query2 True;
+
+
+// Create a query containing a simple subquery (which does not refer to anything in the outer query).
+subQueryTest1 :: Query;
+public subQueryTest1 = 
+    let
+        // Get a couple query tables.
+        ordersTable = makeQueryTable "Orders";
+        custTable   = makeQueryTable "Customer";
+
+        // Get expressions for a few database fields.
+        orderAmountField = doubleField ordersTable "Order Amount";
+        sumOrderAmountExpr = sumExpr orderAmountField;
+
+        countryField = stringField custTable "Country";
+        regionField = stringField custTable "Region";
+        salesField = doubleField custTable "Last Year's Sales";
+
+        // Set the return columns for the sub query.
+        subQuery = projectColumn newQuery sumOrderAmountExpr;
+
+        // Create an expression for the subquery.
+        subQryField = subQueryExpr subQuery;
+
+        subQuery2 = projectColumn newQuery (Sql.avgExpr orderAmountField);
+
+        subQryField2 = subQueryExpr subQuery2;
+
+        // Set the return columns for the query.
+        mainQuery = project newQuery [toUntypedExpr countryField, toUntypedExpr regionField, toUntypedExpr salesField, subQryField, subQryField2];
+    in
+        mainQuery;
+
+
+// Create a query containing a subquery that is restricted based on fields from the the outer query.
+subQueryTest2 :: Query;
+public subQueryTest2 = 
+    let
+        // Get a couple query tables.
+        ordersTable = makeQueryTable "Orders";
+        custTable   = makeQueryTable "Customer";
+
+        // Get expressions for a few database fields.
+        orderAmountField = doubleField ordersTable "Order Amount";
+        ordCustomerIDField = intField ordersTable "Customer ID";
+        sumOrderAmountExpr = sumExpr orderAmountField;
+
+        // Create the subquery.
+        // Set the return columns for the sub query.
+        subQry0 = projectColumn newQuery sumOrderAmountExpr;
+
+        // Apply a restriction to the subquery.
+        restrictionExpr = eqExpr ordCustomerIDField custCustomerIDField;
+        subQuery = restrict subQry0 restrictionExpr;
+
+        // Get expressions for a few database fields.
+        countryField = stringField custTable "Country";
+        regionField = stringField custTable "Region";
+        salesField = doubleField custTable "Last Year's Sales";
+        custCustomerIDField = intField custTable "Customer ID";
+
+        // Create an expression for the subquery.
+        subQryField = subQueryExpr subQuery;
+
+        // Set the return columns for the query.
+        mainQuery = project newQuery [toUntypedExpr countryField, toUntypedExpr regionField, toUntypedExpr salesField, subQryField];
+    in
+        mainQuery;
+
+
+// Create a query which uses a subquery as a source table.
+//
+//  SELECT T2.Country, T2.Region, T1.[Order Amount], T1.[Order ID]
+//  FROM (SELECT T1.[Order ID], T1.[Order Amount], T1.[Order Date] FROM Orders T1) T1, Customer T2
+//
+public subQueryTest3 = 
+    let
+        // Get a base table.
+        ordersTable = makeQueryTable "Orders";
+
+        // Create a simple subquery.
+        subOrderIDField = intField ordersTable "Order ID";
+        subOrderAmountField = doubleField ordersTable "Order Amount";
+        subOrderDateField = timeField ordersTable "Order Date";
+
+        subQuery = project newQuery [toUntypedExpr subOrderIDField, toUntypedExpr subOrderAmountField, toUntypedExpr subOrderDateField];
+
+        // Create a query table to wrap the subquery.
+        subQryTable = makeSubQueryTable subQuery "";
+
+        mainOrderIDField = intField subQryTable "Order ID";
+        mainOrderAmountField = doubleField subQryTable "Order Amount";
+
+        // Get a base table as well.
+        custTable = makeQueryTable "Customer";
+
+        countryField = stringField custTable "Country";
+        regionField = stringField custTable "Region";
+
+        // Set the return columns for the query.
+        mainQuery = project newQuery [toUntypedExpr countryField, toUntypedExpr regionField, toUntypedExpr mainOrderAmountField, toUntypedExpr mainOrderIDField];
+    in
+        mainQuery;
+
+
+// Create a query which uses a subquery as a source table and is linked to a base table.
+//
+//  SELECT T2.Country, T2.Region, T3.[Order Amount], T3.[Order ID]
+//  FROM (SELECT T1.[Order ID], T1.[Order Amount], T1.[Order Date], T1.[Customer ID] FROM Orders T1) T3 INNER JOIN Customer T2 
+//      ON T3.[Customer ID] = T2.[Customer ID]
+//
+public subQueryTest4 = 
+    let
+        // Get a base table.
+        ordersTable = makeQueryTable "Orders";
+
+        // Create a simple subquery.
+        subOrderIDField = intField ordersTable "Order ID";
+        subOrderAmountField = doubleField ordersTable "Order Amount";
+        subOrderDateField = timeField ordersTable "Order Date";
+        subOrderCustIDField = intField ordersTable "Customer ID";
+
+        subQuery = project newQuery [toUntypedExpr subOrderIDField, toUntypedExpr subOrderAmountField, toUntypedExpr subOrderDateField, toUntypedExpr subOrderCustIDField];
+
+        // Create a query table to wrap the subquery.
+        subQryTable = makeSubQueryTable subQuery "";
+
+        mainOrderIDField = intField subQryTable "Order ID";
+        mainOrderAmountField = doubleField subQryTable "Order Amount";
+
+        // Get a base table as well.
+        custTable = makeQueryTable "Customer";
+
+        countryField = stringField custTable "Country";
+        regionField = stringField custTable "Region";
+
+        // Set the return columns for the query.
+        mainQuery0 = project newQuery [toUntypedExpr countryField, toUntypedExpr regionField, toUntypedExpr mainOrderAmountField, toUntypedExpr mainOrderIDField];
+
+        // Add a join between the subquery table and the base table.
+        joinInfo = makeJoinInfo (intField custTable "Customer ID") (intField subQryTable "Customer ID") InnerJoin;
+        mainQuery1 = join mainQuery0 joinInfo;
+    in
+        mainQuery1;
+
+
+//////////////////////////////////////////////////////////////////////////////////
+// Look up Date Ranges in a database
+//////////////////////////////////////////////////////////////////////////////////
+
+// Connect to the Date Ranges database.
+public connectToDataRanges = DataGems.jdbcConnectionWithDriverCheck "com.inzoom.jdbcado.Driver" "jdbc:izmado:Provider=MSDASQL;Data Source=DateRanges" "" "";
+
+
+// Returns a range of times corresponding to the specified time range name.
+// An error will be thrown if the time range name cannot be found.
+timeRangeFromName :: String -> (Range Time);
+public timeRangeFromName timeRangeName = 
+    let
+        // Build a query to fetch the start and end times for the specified range name.
+        dateRangeTable = makeQueryTable "DateRanges";
+
+        rangeNameField = stringField dateRangeTable "Name";
+        startDateField = timeField dateRangeTable "Start";
+        endDateField   = timeField dateRangeTable "End";
+
+        qry1 = project newQuery [toUntypedExpr startDateField, toUntypedExpr endDateField];
+
+        restrictNameExpr = eqExpr rangeNameField (stringConstant timeRangeName);
+        qry2 = restrict qry1 restrictNameExpr;
+
+        // Generate the SQL text for the database query.
+        builder = SqlBuilder.defaultSqlBuilder;
+        sql = queryText builder True qry2;
+
+        // Execute the SQL query and extract the resulting Time values.
+        rs = DataGems.jdbcQueryToResultSet connectToDataRanges sql;
+
+        rows :: [(Time, Time)];
+        rows = DataGems.dataFromResultSet rs (DataGems.extractTuple2 (DataGems.extractTime 1) (DataGems.extractTime 2));
+
+        firstRow = head rows;
+    in
+        // Extract the range start and end values.
+        if (isEmpty rows) then error ("timeRangeFromName : the time range '" ++ timeRangeName ++ "' was not found in the DateRanges database.")
+        else makeBetweenIncludingLeftEndpointRange (fst firstRow) (snd firstRow);
+
+
+// Returns a Boolean expression to restrict the specified expression using the
+// date range associated with the specified time range name.
+timeRangeRestriction :: TypedExpr Time -> String -> TypedExpr Boolean;
+private timeRangeRestriction dateField timeRangeName =
+    let
+        timeRange :: Range Time;
+        timeRange = timeRangeFromName timeRangeName;
+    in
+        Sql.rangeToRestrictionExpr Sql.timeConstant dateField timeRange;
+
+// Fetches some data from the Orders table in Xtreme based on the time range specified.
+testTimeRanges :: String -> DataGems.ResultSet;
+public testTimeRanges timeRangeName = 
+    let
+        ordersTable = makeQueryTable "Orders";
+
+        orderIDField     = intField ordersTable "Order ID";
+        orderAmountField = doubleField ordersTable "Order Amount";
+        shipViaField     = stringField ordersTable "Ship Via";
+        orderDateField   = timeField ordersTable "Order Date";
+
+        qry1 = project newQuery [toUntypedExpr orderIDField, toUntypedExpr orderAmountField, toUntypedExpr shipViaField, toUntypedExpr orderDateField];
+
+        // Restrict the query to the dates specified by the time range name.
+        restrictDateExpr :: TypedExpr Boolean;
+        restrictDateExpr = timeRangeRestriction orderDateField timeRangeName;
+
+        qry2 = restrict qry1 restrictDateExpr;
+
+        // Sort on the order date.
+        qry3 = order qry2 orderDateField True;
+
+        // Generate the SQL text for the database query.
+        builder = SqlBuilder.defaultSqlBuilder;
+        sql = queryText builder True qry3;
+
+        // Execute the SQL query and extract the resulting Time values.
+        rs = DataGems.jdbcQueryToResultSet DataGems_Tests.lukesXtreme sql;
+    in
+        rs;
+
+
+
+// Create a query which uses an opaque subquery as a source table.
+//
+//  SELECT T2.Country, T2.Region, T1.[Order Amount], T1.[Order ID]
+//  FROM (SELECT [Order ID] AS COL1, [Order Amount] AS COL2, [Order Date] AS COL3 FROM Orders) Q, Customer T2
+//
+public opaqueSubQueryTest = 
+    let
+        // Get a base table.
+        subqueryText = "SELECT \n    [Order ID] AS COL1, \n    [Order Date] AS COL2, \n    [Order Amount] AS COL3, \n    [Customer ID] AS COL4 \nFROM \n    Orders";
+
+        // Create a query table to wrap the subquery.
+        subQryTable = Sql.makeOpaqueSubQueryTable subqueryText "";
+
+        mainOrderIDField = intField subQryTable "COL1";
+        mainOrderAmountField = doubleField subQryTable "COL3";
+        mainOrderCustomerIDField = intField subQryTable "COL4";
+
+        // Get a base table as well.
+        custTable = makeQueryTable "Customer";
+
+        countryField = stringField custTable "Country";
+        regionField = stringField custTable "Region";
+
+        // Set the return columns for the query.
+        mainQuery = project newQuery [toUntypedExpr countryField, toUntypedExpr regionField, toUntypedExpr mainOrderAmountField, toUntypedExpr mainOrderIDField];
+
+        // Add a join between tables that are already joined.
+        joinInfo1 = makeJoinInfo (intField custTable "Customer ID") mainOrderCustomerIDField InnerJoin;
+    in
+        join mainQuery joinInfo1;
+
+topNTest :: Query;
+public topNTest = 
+    let
+        // Add a table to the query.
+        employeeTable = makeQueryTable "SCOTT.EMP";
+
+        // Get expressions for a few database fields.
+        empNameField = stringField employeeTable "ENAME";
+        salaryField = doubleField employeeTable "SAL";
+
+        sumOfSalaryExpr = sumExpr salaryField;
+
+        // Set the return columns for the query.
+        qry1 = projectWithAliases newQuery [(toUntypedExpr empNameField, "EMP_NAME"), 
+                                            (toUntypedExpr sumOfSalaryExpr, "EMP_SALARY")];
+        // Add grouping to the query.
+        qry2 = group qry1 empNameField;
+
+        // Add some sorting the query.
+        qry3 = order qry2 sumOfSalaryExpr False;
+
+        // Add the TopN option.
+        qry4 = addOption qry3 (Sql.TopN 40 True True);
+    in
+        qry4;
+
+countAllTest :: Query;
+public countAllTest = 
+    let
+        // Add a tables to the query.
+        custTable = makeQueryTable "Customer";
+
+        // Build an expression for COUNT(1).
+//        count1Expr = Sql.countExpr $ Sql.numericConstant (1 :: Int);
+        countAllExpr = Sql.countAllExpr;
+
+        qry1 = projectColumn newQuery countAllExpr;
+
+        qry2 = Sql.addUnjoinedTable qry1 custTable;
+    in
+        qry2;
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SQL Statement Tests
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+public testCreateTable = 
+    let
+        fd1 = makeFieldDescription "test1" (SqlType.SqlType_VarChar 100) False;
+        fd2 = makeFieldDescription "test2" SqlType.SqlType_Integer       False;
+        fd3 = makeFieldDescription "test3" SqlType.SqlType_TimeStamp     True;
+        fieldDescriptions = [fd1, fd2, fd3];
+
+        constraints = [PrimaryKeyConstraint ["test1"]];
+        
+        table = makeTableDescription (makeTableReference "TEST_TABLE") fieldDescriptions constraints;
+    in
+        Sql.makeCreateTableStatement table False;
+
+public testDropTable = 
+    let
+        table = makeTableReference "TEST_TABLE";
+    in
+        Sql.makeDropTableStatement table True;
+
+public testInsertValues = 
+    let
+        table = makeTableReference "TEST_TABLE";
+        rowValues = [toUntypedExpr (Sql.stringConstant "testing"), 
+                     toUntypedExpr (Sql.numericConstant (12 :: Int)), 
+                     toUntypedExpr (Sql.timeConstant Time.now)];
+    in
+        Sql.makeInsertValuesStatement table rowValues;
+
+public testUpdateValues = 
+    let
+        table = makeTableReference "TEST_TABLE";
+        destColumns = ["col1", "col2", "col3"];
+        newValues = [toUntypedExpr (Sql.stringConstant "testing"), 
+                     toUntypedExpr (Sql.numericConstant (12 :: Int)), 
+                     toUntypedExpr (Sql.timeConstant Time.now)];
+        condition = 
+            Sql.eqExpr (Sql.stringField (Sql.makeQueryTableWithAlias "TEST_TABLE" "TEST_TABLE") "fld") (Sql.stringConstant "value");
+    in
+        Sql.makeUpdateValuesStatement table destColumns newValues condition;
+
+public testCompoundStatement = 
+    Sql.makeCompoundStatement [testDropTable, testCreateTable, testInsertValues];
+
+
+
+/**
+ * Builds the text for the query in each of the major query builders.
+ */
+testQuery :: Query -> String;
+private testQuery query = 
+    let
+        builders :: [(String, SqlBuilder)];
+        builders = [("Default",       SqlBuilder.defaultSqlBuilder),
+                    ("MS Access",     SqlBuilder.msAccessSqlBuilder),
+                    ("MS SQL Server", SqlBuilder.msSqlServerSqlBuilder),
+                    ("Oracle",        SqlBuilder.oracleSqlBuilder),
+                    ("Teradata",      SqlBuilder.ncrTeradataSqlBuilder),
+                    ("DB2",           SqlBuilder.db2SqlBuilder)];
+
+        testWithBuilder :: String -> SqlBuilder -> String;
+        testWithBuilder !name !builder = 
+            name ++ "\n------------------------------------------------------\n" ++ queryText builder True query ++ "\n\n";
+    in
+        List.concatMap (Prelude.uncurry testWithBuilder) builders;
+

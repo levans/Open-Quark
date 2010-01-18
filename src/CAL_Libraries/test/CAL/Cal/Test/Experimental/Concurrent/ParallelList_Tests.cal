@@ -1,0 +1,159 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * ParallelList_Tests.cal
+ * Creation date: October 15, 2007
+ */
+
+/**
+ * Experimental functions for processing list items in parallel.
+ * 
+ * @author Richard Webster
+ */
+module Cal.Test.Experimental.Concurrent.ParallelList_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int;
+    function = assert, error, seq;
+    ;
+import Cal.Collections.List;
+import Cal.Experimental.Concurrent.BlockingQueue;
+import Cal.Experimental.Concurrent.Parallel using
+    typeConstructor = Executor;
+    function = parallelExecute;
+    ;
+import Cal.Utilities.Random;
+import Cal.Core.System;
+import Cal.Core.Debug;
+
+
+/**
+ * This function will start the processing of all the list items on separate threads.
+ * The same list of items will be returned, but access to an item block until it is finished executing.
+ */
+parallelList :: Executor -> [a] -> [a];
+public parallelList !executor !list = 
+    let
+        parListHelper !list =
+            case list of
+            [] -> ();
+            x : xs -> parallelExecute executor x (parListHelper xs);
+            ;
+    in
+        parListHelper list
+        `seq`
+        list;
+
+/**
+ * This function will start the processing of all the list items on separate threads, but the result list will
+ * contain the items in the order that they finish processing.
+ */
+parallelListUnordered :: Executor -> [a] -> [a];
+public parallelListUnordered !executor !list = 
+    let
+        // Construct a queue to hold the result items when they are ready.
+        resultQueue = BlockingQueue.makeBlockingQueue 100;      // TODO: what is sensible here?
+
+        // Evaluate the item and add it to the result queue when it is done.
+        processItem item = 
+            item
+            `seq`
+            BlockingQueue.put resultQueue item
+            `seq`
+            ();
+
+        // Extract the finished items from the result queue in the order that they finished.
+        resultList inputList = 
+            case inputList of
+            [] -> [];
+            _ : inputTail -> 
+                BlockingQueue.take resultQueue : resultList inputTail;
+            ;
+    in
+        parallelList executor (List.map processItem list)
+        `seq`
+        List.seqList $ resultList list;
+
+
+// Random execution times (in seconds).
+execTimes :: [Int];
+execTimes = Random.randomBoundedInts 37 10;
+
+// Simulate performing a task which take the specified amount of time (in tenths of seconds).
+// The execution time is then returned.
+slowItem :: Int -> Int;
+slowItem !execTime = 
+    Debug.sleep (100 * Prelude.toLong execTime) ()
+    `seq`
+//    Debug.trace ("Finished in " ++ Prelude.intToString execTime ++ "/10 seconds.\n") 
+    execTime;
+
+// Process a number of items in parallel, and return the results in the same order.
+processSlowItems :: Executor -> Int -> [Int];
+processSlowItems executor nItems = 
+    parallelList executor $ List.map slowItem (List.take nItems execTimes);
+
+// Process a number of items in parallel, but return the results in the order
+// that the items finish processing.
+// Since the items return their execution time here, this result list should be in ascending order.
+processSlowItemsUnordered :: Executor -> Int -> [Int];
+processSlowItemsUnordered executor nItems = 
+    parallelListUnordered executor $ List.map slowItem (List.take nItems execTimes);
+
+
+testModule =
+    if System.concurrentRuntime then    
+        // parallelList should always return items in the original order, so processSlowItems
+        // should always return the execTimes in the same order as specified.
+        assert (processSlowItems Parallel.threadPerTaskExecutor 20 == 
+            List.take 20 execTimes)
+        && assert (processSlowItems Parallel.synchronousExecutor 20 == 
+            List.take 20 execTimes)
+        && assert (processSlowItems (Parallel.fixedThreadPoolExecutor 5) 20 == 
+            List.take 20 execTimes)
+        // The result order for parallelListUnordered might be somewhat unpredictable, but here the
+        // gaps between the execution times (1 sec) should be sufficient to produce reliable result ordering
+        // when all items are processed at the same time.
+        && assert (processSlowItemsUnordered Parallel.threadPerTaskExecutor 20 == 
+            List.sort (List.take 20 execTimes))
+        // When the executor is synchronous, the result order should be the same as the input order.
+        && assert (processSlowItemsUnordered Parallel.synchronousExecutor 20 == 
+            List.take 20 execTimes)
+        // When using a thread pool, the unordered results will be somewhat unpredictable.
+        // All that can really be tested is that the same items are returned in some order.
+        && assert (List.sort (processSlowItemsUnordered (Parallel.fixedThreadPoolExecutor 5) 20) == 
+            List.sort (List.take 20 execTimes))
+    else
+        error "Parallel tests need to be run with the org.openquark.cal.machine.lecc.concurrent_runtime system property set."
+    ;
+

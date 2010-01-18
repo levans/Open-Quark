@@ -1,0 +1,641 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * ExpressionLexer.cal
+ * Created: June 2005
+ * By: Greg McClement. 
+ */
+
+/**
+ * This module implements a lexer for general expressions, based on the module {@link Parser@}.
+ * 
+ * The function {@link tokenStream@} returns a parser that accepts a list of {@link Prelude.Char@} and produces a list of {@link Token@}.
+ * 
+ * For example (from the module {@link module = "Cal.Data.SqlParser"@}):
+ * 
+ * {@code
+ * identifierNonAlphaChars = ['_', '#', '$'];
+ * 
+ * sqlKeywords = [
+ *     "SELECT",
+ *     "FROM",
+ *     "WHERE",
+ *     // etc... 
+ *     ];
+ *     
+ * sqlFunctionNames = [
+ *     "ABS",
+ *     "ACOS",
+ *     "ATAN",
+ *     // etc...
+ *     ];
+ *     
+ * specialCharSequences = [
+ *    "(+)",
+ *    "*=*",
+ *    "*=",
+ *    "=*",
+ *    // etc...
+ *    ];
+ *    
+ * identifierQuoteChars = [('[', ']'),
+ *                        ('"', '"'),
+ *                        ('`', '`')];
+ *
+ * lexer = {@link tokenStream@} identifierNonAlphaChars sqlKeywords sqlFunctionNames specialCharSequences identifierQuoteChars;
+ * @}
+ * 
+ * The result of a successful call to this lexer can be used as input to a higher-level parser that accepts {@link Token@}s as input.
+ * 
+ * The module also provides a number of functions that can be used to recognize different kinds of tokens. 
+ * For example:
+ * 
+ * {@unorderedList
+ * {@item {@link keywordToken@} - recognizes a keyword in the list supplied to {@link tokenStream@}@}
+ * {@item {@link functionToken@} - recognizes a funnction in the list supplied to {@link tokenStream@}@}
+ * {@item {@link specialCharToken@} - recognizes a special character@}
+ * {@item {@link specialCharSequenceToken@} - recognizes a special character sequence@}
+ * {@item {@link nameToken@} - recognizes an identifier@}
+ * {@item {@link stringToken@} - recognizes a string literal@}
+ * {@item {@link numberToken@} - recognizes a numeric literal@}
+ * {@item {@link ampersandToken@} - recognizes an ampersand - there are several similar functions for special characters@}
+ * @}
+ * 
+ * For example:
+ * 
+ * {@code
+ * // a table name is one or more identifiers separated by dots
+ * table_name_parts = sepBy1 nameToken dotToken;
+ * @}
+ * 
+ * @author Luke Evans
+ * @author Greg McClement
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Utilities.ExpressionLexer;
+
+
+import Cal.Core.Prelude using
+    typeClass = Outputable;
+    typeConstructor = Boolean, Char, Double, Int, Integer, String;
+    dataConstructor = False, True;
+    function = compose, error, isEmpty, not, notEquals, seq, uncurry;
+    ;
+
+import Cal.Collections.List using
+    function = any, foldLeft, foldLeft1, head, isElem, map, subscript, tail, intersperse;
+    ;      
+import Cal.Core.String using
+    function = 
+        equalsIgnoreCase, fromList, normalizeWhitespace, splitString, 
+        substring, toUpperCase;
+    ;        
+import Cal.Core.Char;
+    
+import Cal.Core.Debug using
+    function = show;
+    ;     
+
+import Cal.Utilities.Parser using
+    typeConstructor = GenParser, ParseError, SourcePos;
+    function =
+        alphaNum, anyChar, between, caseStringU, char, choice, digit, eof, 
+        errorPos, exactString, label, letter, many, many1, manyUntil, 
+        newErrorUnknown, newPos, notFollowedBy, oneOf, option, pAppend, pBind, 
+        pFail, pOr, pReturn, pSeq, pZero, satisfy, sepEndBy, skipMany1, 
+        sourceColumn, sourceLine, sourceName, space, tokenSatisfy, try,
+        skipMany;
+    ;
+    
+//
+// A Lexer for general expressions (parser on a character stream)
+//
+
+// As we'll only be parsing small-ish expressions (not War and Peace volumes like CAL!), 
+// we will use the full backtracking parser on the character stream.  A somewhat more efficient
+// scheme is to use a traditional look-ahead scanner for this purpose.
+//
+// Things we will lex out of the character stream (tokenise):
+// 1) Numbers
+// 2) Strings
+// 3) Identifiers
+// 4) Operators
+// 5) White-space
+// 6) Keywords
+// We don't implement comments (ignored sequences) yet.
+//
+// For purposes of error reporting, the input stream consists of a list of Position, Char pairs: [(Position, Char)]
+// where a Position consists of line# and col#
+//
+
+/**
+ * A {@code Position@} is a {@code (line, col)@} pair
+ */ 
+data private Position = 
+    Position 
+        line    :: !Int 
+        col     :: !Int
+    deriving Outputable;
+
+showPosition position = 
+    "(line " ++ show (getPosLine position) ++ ", column " ++ show (getPosCol position) ++")";
+
+/**
+ * Gets the Line# from a {@link typeConstructor = Position@}
+ */
+getPosLine :: Position -> Int;
+public getPosLine !pos = pos.Position.line;
+
+/**
+ * Gets the Col# from a {@link typeConstructor = Position@}
+ */
+getPosCol :: Position -> Int;
+public getPosCol !pos = pos.Position.col;
+
+
+/**
+ * A {@code TokenImage@} is an object depicting an interesting lexeme, with no other information than that from the input stream
+ */
+data private TokenImage = 
+    TokenImage 
+        pos             :: Position 
+        image           :: String
+    deriving Outputable;
+
+showTokenImage ti =
+    "'" ++ getImage ti ++ "' " ++ showPosition (getPosition ti);
+    
+sourcePosToPosition sourcePos = 
+    Position (sourceLine sourcePos) (sourceColumn sourcePos);
+
+/**
+ * Makes a {@link typeConstructor = TokenImage@} from a lex results
+ */
+makeTokenImage :: (TokenImage -> Token) -> SourcePos -> [Char] -> GenParser Char st Token;
+makeTokenImage dataCons startPos !image =
+    pReturn (dataCons (TokenImage (sourcePosToPosition startPos) (fromList image)));
+    
+/**
+ * Gets the {@link typeConstructor = Position@} from a {@link typeConstructor = TokenImage@}
+ */
+getPosition :: TokenImage -> Position;
+public getPosition !tokenImage = tokenImage.TokenImage.pos;
+
+/**
+ * Gets the image from a {@link typeConstructor = TokenImage@}
+ */
+getImage :: TokenImage -> String;
+public getImage !tokenImage = tokenImage.TokenImage.image;
+
+/**
+ * A {@code Token@} is a typed lexeme represented a 'part of speech' in the source language
+ * Each {@code Token@} holds its {@link typeConstructor = TokenImage@}
+ */
+data public Token = 
+    Keyword             image::TokenImage |
+    Function            image::TokenImage |
+    String              image::TokenImage |
+    Name                image::TokenImage |
+    Double              image::TokenImage |
+    Integer             image::TokenImage |
+    Boolean             image::TokenImage |
+    SpecialCharSequence image::TokenImage
+    deriving Outputable;
+
+public showToken token =
+    case token of
+    Keyword {image} -> "Keyword " ++ showTokenImage image;
+    Function {image} -> "Function " ++ showTokenImage image;
+    String {image} -> "String " ++ showTokenImage image;
+    Name {image} -> "Name " ++ showTokenImage image;
+    Double {image} -> "Double " ++ showTokenImage image;
+    Integer {image} -> "Double " ++ showTokenImage image;
+    Boolean {image} -> "Boolean " ++ showTokenImage image;
+    SpecialCharSequence {image} -> "SpecialCharSequence " ++ showTokenImage image;
+    ;
+ 
+/**
+ * Gets a {@link typeConstructor = TokenImage@} from a {@link Token@}
+ */
+getTokenImage :: Token -> TokenImage;
+public getTokenImage token = 
+    case token of 
+    (Keyword | Function | String | Name | Double | Integer | Boolean | SpecialCharSequence) {image} -> image;
+    _ -> error "No image extractor for this Token type";
+    ;
+
+/**
+ * Gets the {@link typeConstructor = Position@} from a {@link Token@}
+ */
+getTokenPos :: Token -> Position;
+getTokenPos = compose getPosition getTokenImage;
+
+/**
+ * Gets the image from a {@link Token@}
+ */
+getTokenIm :: Token -> String;
+getTokenIm = compose getImage getTokenImage;
+
+/**
+ * Gets the string value from a string token.
+ */
+stringTokenValue :: Token -> String;
+public stringTokenValue token = 
+    case token of
+    String {image} -> getImage image;
+    _ -> error "Invalid token type";
+    ;
+
+/**
+ * Gets the number value from a number token.
+ */
+numericTokenValue :: Token -> Double;
+public numericTokenValue token =
+    case token of
+    (Double|Integer) {image} -> Prelude.stringToDouble (getImage image);
+    _ -> error "Invalid token type";
+    ;
+    
+intTokenValue :: Token -> Int;
+public intTokenValue token =
+    case token of
+    Integer {image} -> Prelude.stringToInt (getImage image);
+    _ -> error "Invalid token type";
+    ;
+
+/**
+ * Gets the boolean value from a boolean token.
+ */
+booleanTokenValue :: Token -> Boolean;
+public booleanTokenValue token = 
+    case token of
+    Boolean {image} -> equalsIgnoreCase "true" (getImage image);
+    _ -> error "Invalid token type";
+    ;
+
+/**
+ * Gets the name value from a name token.
+ */
+nameTokenValue :: Token -> String;
+public nameTokenValue token = 
+    case token of
+    Name {image} -> getImage image;
+    _ -> error "Invalid token type";
+    ;
+
+/**
+ * Gets the name of the function from a function token.
+ */
+functionTokenValue :: Token -> String;
+public functionTokenValue token = 
+    case token of
+    Function {image} -> getImage image;
+    _ -> error "Invalid token type";
+    ;
+
+//
+// Token constructors (from a lexer result)
+// The right flavour of token is returned with any interesting fields extracted from the image
+
+makeKeywordToken = makeTokenImage Keyword;
+makeFunctionToken = makeTokenImage Function;
+makeStringToken = makeTokenImage String;
+makeNameToken = makeTokenImage Name;
+makeDoubleToken  = makeTokenImage Double;
+makeIntegerToken = makeTokenImage Integer;
+
+makeBooleanToken = makeTokenImage Boolean;
+makeSpecialCharSequenceToken = makeTokenImage SpecialCharSequence;
+
+// Versions of lexers that operate over (Position, Char)
+// 
+
+literalQuoteChar = '\'';    // Quote char for string literals (not for quoting identifiers).
+literalQuote = char literalQuoteChar;   
+
+// Lexemes (intrinsically do not handle whitespace)
+// The result of matching a lexeme is a Token of the appropriate type for the lexeme
+
+/**
+ * String of lexemes with whitespace/comments between
+ * This is the top level rule for the expression lexer
+ * 
+ * @arg identifierNonAlphaChars Characters other than letters and numbers to allow in identifiers (other than the first character)
+ * @arg keywords Keyword sequences (separated by whitespace) - each individual keyword must be a valid identifier 
+ * @arg functionNames Function names - each must be a valid identifier
+ * @arg specialCharSequences Special character sequences, not separated by whitespace
+ * @arg identifierQuoteChars Pairs of matching opening and closing quote characters - e.g. ("[", "]") 
+ */
+tokenStream :: [Char] -> [String] -> [String] -> [String] -> [(Char, Char)] -> GenParser Char a [Token];
+public tokenStream identifierNonAlphaChars keywords functionNames specialCharSequences identifierQuoteChars = 
+    let
+        name_char_rule = alphaNum `pOr` oneOf identifierNonAlphaChars;
+        name_first_char_rule = letter `pBind` (\ch -> pReturn [ch]);
+
+        indentifier_rule :: GenParser Char st [Char];
+        indentifier_rule = 
+            name_first_char_rule `pAppend` many name_char_rule;
+    in
+        tokenStream2 indentifier_rule keywords functionNames specialCharSequences identifierQuoteChars [];
+    
+/**
+ * String of lexemes with whitespace/comments between
+ * This is the top level rule for the expression lexer
+ * 
+ * @arg indentifier_rule Parser to use in recognizing identifiers or "names"
+ * @arg keywords Keyword sequences (separated by whitespace) - each individual keyword must be a valid identifier 
+ * @arg functionNames Function names - each must be a valid identifier
+ * @arg specialCharSequences Special character sequences, not separated by whitespace
+ * @arg identifierQuoteChars Pairs of matching opening and closing quote characters - e.g. ("[", "]") 
+ * @arg commentDelimiters Pairs of matching opening and closing comment delimiters characters - e.g. ("//", "\n") 
+ */
+tokenStream2 :: GenParser Char st [Char] -> [String] -> [String] -> [String] -> [(Char, Char)] -> [(String, String)] -> GenParser Char st [Token];
+public tokenStream2 indentifier_rule keywords functionNames specialCharSequences identifierQuoteChars commentDelimiters = 
+    let
+        booleanConstantsChars = map String.toList ["TRUE", "FALSE"];
+
+        keywordSequences = map (\kw -> splitString " " (normalizeWhitespace kw)) keywords;
+        keywordSequencesChars = map (map (\n -> String.toList (toUpperCase n))) keywordSequences;
+        functionNamesChars = map (\n -> String.toList (toUpperCase n)) functionNames;
+
+        lexComment startString endString =
+            let
+                // Use backtracking here to allow multiple-character
+                // delimiters that re-use other symbols.
+                start = try (exactString $ String.toList startString);
+                end = try (exactString $ String.toList endString);
+            in
+                between start end (manyUntil anyChar end);
+        
+        ignoredSequence =
+            (space `pSeq` pReturn ())
+            `pOr` 
+            (choice (map (uncurry lexComment) commentDelimiters) `pSeq` pReturn ());
+
+        ignored = skipMany ignoredSequence;
+        
+        ignored1 = skipMany1 ignoredSequence;
+        
+        // Parse some unquoted text as either a boolean constant, a keyword sequence, a function, or a name.
+        lexUnquotedText =
+            let       
+                // A version of caseStringU that will not recognize a substring of
+                // a longer valid identifier
+                ungreedyCaseStringU s = 
+                    indentifier_rule `pBind` (\identifier ->
+                        if (map Char.toUpperCase identifier == s) then
+                            pReturn identifier
+                        else
+                            pZero)
+                    ;
+                    
+                single_keyword_sequence_rule keywordSequence = 
+                    if (isEmpty keywordSequence) then 
+                        pFail "keywordSequence is empty"
+                    else 
+                        try (foldLeft1 pAppend (intersperse (ignored1 `pSeq` pReturn [' ']) (map ungreedyCaseStringU keywordSequence))); 
+
+                keyword_sequence_rule = 
+                    Parser.getPosition `pBind` (\pos ->
+                    choice (map single_keyword_sequence_rule keywordSequencesChars) `pBind` (\keywordSequence ->
+                    makeKeywordToken pos keywordSequence));
+                
+                single_unquoted_text_rule = 
+                    Parser.getPosition `pBind` (\pos ->
+                    indentifier_rule `pBind` (\identifier ->
+                    let 
+                        upperCaseIdentifier = map Char.toUpperCase identifier;
+                    in
+                        if (isElem upperCaseIdentifier booleanConstantsChars) then
+                            makeBooleanToken pos upperCaseIdentifier
+                        else if (isElem upperCaseIdentifier functionNamesChars) then
+                            makeFunctionToken pos upperCaseIdentifier
+                        else
+                            makeNameToken pos identifier
+                    ));
+            in
+            try keyword_sequence_rule `pOr` try single_unquoted_text_rule;
+
+        // A quoted name must be enclosed in appropriate quote characters, and can contain any character except a single closing quote character.
+        // The closing quote character can be escaped by doubling it up.
+        // For example, the identifier 'test[x]123' should be quoted as [test[x]]123] if using square brackets.
+        // Note that the open quote character should not be escaped (and doesn't need to be).
+        lexQuotedName =
+            let
+                lexQuotedNameHelper openQuoteChar closeQuoteChar = 
+                    let
+                        open_char_rule = char openQuoteChar;
+                        close_char_rule = char closeQuoteChar;
+
+                        quotedNameCharRule = 
+                            try (exactString [closeQuoteChar, closeQuoteChar] `pSeq` pReturn closeQuoteChar) `pOr`
+                            (satisfy (notEquals closeQuoteChar));
+                    in
+                        Parser.getPosition `pBind` (\pos ->
+                        open_char_rule `label` "open quote" `pSeq`
+                        many quotedNameCharRule `pBind` (\name ->
+                        close_char_rule `label` "close quote" `pSeq`
+                        makeNameToken pos name));
+            in
+                choice (map (uncurry lexQuotedNameHelper) identifierQuoteChars);
+
+        lexString = 
+            let
+                // Handle escaped quote chars, but allow anything else.
+            
+                valid_text_char =
+                    try (exactString [literalQuoteChar,literalQuoteChar] `pSeq` pReturn literalQuoteChar) 
+                    `pOr`
+                    satisfy (notEquals literalQuoteChar);
+        
+                    //(xwith literalQuote literalQuote) `pOr` (lsatisfy (notEquals literalQuoteChar));
+                content = many valid_text_char;
+            in
+                // Ignore the delimiters in the return
+                Parser.getPosition `pBind` (\pos ->
+                literalQuote `pSeq`
+                content `pBind` (\content ->
+                literalQuote `pSeq` 
+                makeStringToken pos content));
+
+        lexDecimalNum = 
+            let
+                mantissa_rule = 
+                    let
+                        leading_digit_rule = 
+                            many1 digit `pBind` (\number ->
+                            option [] (char '.' `pSeq` option [] (many1 digit)) `pBind` (\decimal ->
+                            pReturn ( if (not (isEmpty decimal)) then ( number ++ ['.'] ++ decimal) else number ) 
+                            ));
+        
+                        leading_decimal_pt_rule = 
+                            char '.' `pSeq`
+                            many1 digit `pBind` (\decimal ->
+                            pReturn (['.'] ++ decimal));
+                    in
+                        try leading_digit_rule `pOr` try leading_decimal_pt_rule;
+
+                exp_rule = 
+                    let
+                        e_rule = oneOf ['e','E'] `pBind` (\ch -> pReturn [ch]);
+                        plus_minus_rule = option [] (oneOf ['+','-'] `pBind` (\ch -> pReturn [ch]));
+                        exp_val_rule = many1 digit;
+                    in
+                        option [] (e_rule `pAppend` plus_minus_rule `pAppend` exp_val_rule);
+                					
+            in
+                Parser.getPosition `pBind` (\pos ->
+                mantissa_rule `pBind` (\mantissa ->
+                exp_rule `pBind` (\exp -> 
+                (if (isElem '.' mantissa) then makeDoubleToken else makeIntegerToken)
+                   pos (mantissa++exp))));
+
+        lexIntNum =
+            Parser.getPosition `pBind` (\pos ->
+            many1 digit `pBind`
+            makeIntegerToken pos);
+
+        lexSpecialCharSequence =
+            Parser.getPosition `pBind` (\pos ->
+           	(choice (map (try `compose` exactString) (map String.toList specialCharSequences))) `pBind`
+            makeSpecialCharSequenceToken pos);
+    in
+        ignored `pSeq`
+        (sepEndBy (lexUnquotedText `pOr` lexQuotedName `pOr` lexString `pOr` lexDecimalNum `pOr` lexIntNum `pOr` lexSpecialCharSequence) ignored)
+        `pBind` (\tokens -> eof `pSeq` pReturn tokens);
+
+public keywordToken keyword = 
+    satisfyT (\token -> case token of Keyword {image} -> equalsIgnoreCase (normalizeWhitespace (getImage image)) keyword; _ -> False;);
+
+updatePosToken pos t =
+    let
+        position2 = getTokenPos t;
+        line2 = getPosLine position2;
+        col2 = getPosCol position2;
+    in
+        newPos (sourceName pos) line2 col2;
+    
+satisfyT :: (Token -> Boolean) -> GenParser Token st Token;    
+private satisfyT =
+    let
+        nextPos :: SourcePos -> Token -> [Token] -> SourcePos;
+        nextPos pos t ts = updatePosToken pos t;
+    in
+        tokenSatisfy showToken nextPos; 
+
+public nameToken = 
+    satisfyT (\token -> case token of Name {} -> True; _ -> False;) `pBind` (\token ->
+    pReturn (nameTokenValue token));
+    
+//     Matches a specific name (not case sensitive).
+
+public specificNameToken nameExpected =
+    let
+        f = (\nameFound ->
+            if (equalsIgnoreCase nameFound nameExpected) then 
+                pReturn nameFound
+            else 
+                pFail ("Token found does not match expected: " ++ nameExpected));
+    in
+    nameToken `pBind` f;
+
+public functionToken = 
+    satisfyT (\token -> case token of Function {} -> True; _ -> False;) `pBind` (\token ->
+    pReturn (functionTokenValue token));
+
+//stringToken :: State Token a -> Reply Consumed Token a Token;
+public stringToken = 
+    satisfyT (\token -> case token of String {} -> True; _ -> False;) `pBind` (\token ->
+    pReturn (stringTokenValue token)); 
+
+//     Note that a leading negative sign will likely be a separate token.
+public numberToken = 
+    satisfyT (\token -> case token of (Double|Integer){} -> True; _ -> False;) `pBind` (\token ->
+    pReturn (numericTokenValue token));
+    
+public integerToken = 
+    satisfyT (\token -> case token of Integer {} -> True; _ -> False;) `pBind` (\token ->
+    pReturn (intTokenValue token));
+
+//     Note that a leading negative sign will likely be a separate token.
+public booleanToken = 
+    satisfyT (\token -> case token of Boolean {} -> True; _ -> False;) `pBind` (\token ->
+    pReturn (booleanTokenValue token));
+
+public specialCharToken specialChar = specialCharSequenceToken (fromList [specialChar]);
+public specialCharSequenceToken specialChars = satisfyT (\token -> case token of SpecialCharSequence {image} -> (getImage image) == specialChars; _ -> False;); 
+
+// Common special character tokens.
+public commaToken      = specialCharToken ',';
+public dotToken        = specialCharToken '.';
+public openParenToken  = specialCharToken '(';
+public closeParenToken = specialCharToken ')';
+public eqToken         = specialCharToken '=';
+public gtToken         = specialCharToken '>';
+public ltToken         = specialCharToken '<';
+public exclmnToken     = specialCharToken '!';
+public plusToken       = specialCharToken '+';
+public minusToken      = specialCharToken '-';
+public asteriskToken   = specialCharToken '*';
+public slashToken      = specialCharToken '/';
+public percentToken    = specialCharToken '%';
+public tildeToken      = specialCharToken '~';
+public ampersandToken  = specialCharToken '&';
+public vertBarToken    = specialCharToken '|';
+public caretToken      = specialCharToken '^';
+public openBraceToken  = specialCharToken '{';
+public closeBraceToken = specialCharToken '}';
+public hashToken       = specialCharToken '#';
+public colonToken      = specialCharToken ':';
+
+parseErrorText :: String -> ParseError -> String;
+public parseErrorText text err = 
+    let
+        errorLine = (sourceLine (errorPos err)) - 1;
+        errorCol = sourceColumn (errorPos err) - 1;
+
+        // Use a chunk of the original text (from the error location) in the error message.
+        textLines = String.lines text;
+        errorLineText = subscript textLines errorLine;
+        errorText = substring errorLineText errorCol (String.length errorLineText);
+        maxErrorTextLength :: Int;
+        maxErrorTextLength = 20;
+        partialErrorText = if (String.length errorText <= maxErrorTextLength) then errorText
+                           else (substring errorText 0 maxErrorTextLength) ++ "...";
+
+        // Display 1-based values for line and column numbers.
+        errorTokenText = "'" ++ partialErrorText  ++ "' " ++ Parser.showParseError err;
+//        errorTokenText = "'" ++ partialErrorText  ++ "'  (line " ++ (intToString (errorLine + 1)) ++ ", column " ++ (intToString (errorCol + 1)) ++ ")";
+    in
+        "Failed to parse expression.  Error at:  " ++ errorTokenText ++ ".";

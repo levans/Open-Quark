@@ -1,0 +1,141 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Format.cal
+ * Created: Oct 28, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines some useful functions for formatting collections of Strings for pleasant viewing.
+ * 
+ * @author Richard Webster (original Prelude function), Bo Ilic 
+ */
+module Cal.Utilities.Format;
+import Cal.Core.Prelude using
+    typeConstructor = Int, String;
+    function = concat, isEmpty, max, seq;
+    ;
+import Cal.Collections.List using
+    function = 
+        chop, foldLeftStrict, foldRight, head, join, length, map, 
+        replicate, transpose, zipWith;
+    ; 
+import Cal.Core.String using
+    function = fromList;
+    ;
+
+/**
+ * Returns a string which can be used to display the specified rows of values in a nice table.
+ * It is assumed that each row has the same number of values.
+ * 
+ * @arg columnGap  the gap between columns.
+ * @arg rows       a list of the rows of cells to form the table.
+ * @return         a string representing the specified cells formatted in a table.
+ */
+formatTable :: Int -> [[String]] -> String;
+public formatTable columnGap !rows =
+    let
+        // Assume that each row has the name number of values.
+        nColumns = length (head rows);
+
+        // Determine the length of the longest item in each column.
+//        colSizes = foldLeft (\cur row -> zipWith max cur (map String.length row)) (replicate nColumns 0) rows;
+        colSizes = 
+            let
+                newLengthsForRow curLengths row = 
+                    let
+                        newLengths = zipWith max curLengths (map String.length row);
+                    in
+                        foldRight seq newLengths newLengths;
+            in
+                foldLeftStrict newLengthsForRow (replicate nColumns 0) rows;
+
+        textForRow :: [String] -> String;
+        textForRow row = concat (zipWith textForCol row colSizes);
+
+        textForCol :: String -> Int -> String;
+        textForCol val rowSize = 
+                let
+                    nPadChars = rowSize - (String.length val) + columnGap;
+                    padding = fromList (replicate nPadChars ' ');
+                in
+                    val ++ padding;
+    in
+        if (isEmpty rows) then ""
+        else join "\n" (map textForRow rows) ++ "\n";
+
+/**
+ * Returns a string which can be used to display the specified rows of values in a nice table.
+ * It is assumed that each row has the same number of values.
+ * The table will be truncated to the specified number of rows.
+ * If the results need to be truncated then a '...' will be included at the end of each column.
+ * If maxNRows is less than one, then the full table will be formatted.
+ * Keep in mind that the number of rows includes the heading rows, if any.
+ * 
+ * @arg maxNRows   the maximum number of rows to be displayed in the table
+ * @arg columnGap  the gap between columns.
+ * @arg rows       a list of the rows of cells to form the table.
+ * @return         a string representing the specified cells formatted in a table.
+ */
+formatTruncatedTable :: Int -> Int -> [[String]] -> String;
+public formatTruncatedTable maxNRows columnGap !rows = 
+    let
+        continuationRow :: [String] -> [String];
+        continuationRow row = 
+            map (\val -> "...") row;
+
+        truncatedRows :: [[String]];
+        truncatedRows = 
+            if maxNRows < 1 then rows
+            else List.mapIndexed (\row !index -> if index == maxNRows then continuationRow row else row) $ List.take (maxNRows + 1) rows;
+    in
+        formatTable columnGap truncatedRows;
+
+/**
+ * Returns a string which can be used to display the specified values in columns.
+ * 
+ * @arg nColumns the number of columns.
+ * @arg columnGap the gap between columns.
+ * @arg values the values to be formatted.
+ * @return a string representing the specified values formatted in columns.
+ */
+formatInColumns :: Int -> Int -> [String] -> String;
+public formatInColumns nColumns columnGap values = 
+    let
+        nValues = length values;
+        nRows = (nValues + (nColumns - 1)) / nColumns;
+        padding = replicate (nColumns * nRows - nValues) "";
+    in
+        formatTable columnGap (transpose (chop nRows (values ++ padding)));
+

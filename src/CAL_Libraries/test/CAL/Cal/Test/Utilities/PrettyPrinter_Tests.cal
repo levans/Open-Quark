@@ -1,0 +1,314 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * PrettyPrinter_Tests.cal
+ * Creation date: Nov 24, 2004.
+ * By: Richard Webster
+ */
+
+/*
+ * Test functions for pretty-printing.
+ *
+ * Author: Richard Webster
+ */
+
+module Cal.Test.Utilities.PrettyPrinter_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    function = empty;
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    function = concatMap, init;
+    ;      
+import Cal.Core.String using  
+    function = toList;   
+    ;        
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = bracket, fill, fillSeparatedList, group, line, nest, pretty, singleSpace, spread, stack, text;
+    ;
+
+
+
+// Tree example
+
+//data Tree = Node String [Tree]
+data private Tree = 
+    private Node 
+        text    :: String 
+        trees   :: [Tree];
+
+//showTree (Node s ts) = group (text s <> nest (length s) (showBracket ts))
+showTree :: Tree -> Document;
+showTree tree = 
+    case tree of
+    Node s ts -> group (text s ++ nest (String.length s) (showBracket ts));
+    ;
+
+/*
+showBracket [] = nil
+showBracket ts = text "[" <> nest 1 (showTrees ts) <> text "]"
+*/
+showBracket :: [Tree] -> Document;
+showBracket nodes = 
+    case nodes of
+    [] -> empty;
+    _ -> text "[" ++ nest 1 (showTrees nodes) ++ text "]";
+    ;
+
+/*
+showTrees [t] = showTree t
+showTrees (t:ts) = showTree t <> text "," <> line <> showTrees ts
+*/
+showTrees :: [Tree] -> Document;
+showTrees trees = 
+    case trees of
+    t : ts ->
+        case ts of
+        [] -> showTree t;
+        _ -> showTree t ++ text "," ++ line ++ showTrees ts;
+        ;
+    ;
+
+//showTree' (Node s ts) = text s <> showBracket' ts
+showTree2 :: Tree -> Document;
+showTree2 tree = 
+    case tree of
+    Node s ts -> text s ++ showBracket2 ts;
+    ;
+
+/*
+showBracket' [] = nil
+showBracket' ts = bracket "[" (showTrees' ts) "]"
+*/
+showBracket2 :: [Tree] -> Document;
+showBracket2 trees = 
+    case trees of
+    [] -> empty;
+    _ -> bracket "[" (showTrees2 trees) "]";
+    ;
+
+/*
+showTrees' [t] = showTree t
+showTrees' (t:ts) = showTree t <> text "," <> line <> showTrees ts
+*/
+showTrees2 :: [Tree] -> Document;
+showTrees2 trees = 
+    case trees of
+    t : ts ->
+        case ts of
+        [] -> showTree2 t;
+        _ -> showTree2 t ++ text "," ++ line ++ showTrees2 ts;
+        ;
+    ;
+
+tree = Node "aaa" [
+                Node "bbbbb" [
+                    Node "ccc" [],
+                    Node "dd" []
+                ],
+                Node "eee" [],
+                Node "ffff" [
+                    Node "gg" [],
+                    Node "hhh" [],
+                    Node "ii" []
+                ]
+            ];
+
+//testtree w = putStr (pretty w (showTree tree))
+testtree :: Int -> String;
+testtree w = pretty w (showTree tree);
+
+//testtree' w = putStr (pretty w (showTree' tree))
+testtree2 :: Int -> String;
+testtree2 w = pretty w (showTree2 tree);
+
+
+
+// XML example
+
+/*
+data XML = Elt String [Att] [XML]
+         | Txt String
+data Att = Att String String
+*/
+
+data private XML = 
+    private Elt 
+        name            :: String 
+        attrs           :: [Att] 
+        children        :: [XML] |
+    private Txt 
+        text            :: String;
+
+data private Att = 
+    private Att 
+        name            :: String 
+        val             :: String;
+
+
+//showXML x = folddoc (<>) (showXMLs x)
+showXML :: XML -> Document;
+showXML x = concat (showXMLs x);
+
+/*
+showXMLs (Elt n a []) = [text "<" <> showTag n a <> text "/>"]
+showXMLs (Elt n a c) = [text "<" <> showTag n a <> text ">" <>
+                       showFill showXMLs c <>
+                       text "</" <> text n <> text ">"]
+showXMLs (Txt s) = map text (words s)
+*/
+showXMLs :: XML -> [Document];
+showXMLs node = 
+    case node of
+    Elt name attrs children -> 
+        case children of
+        [] -> [text "<" ++ showTag name attrs ++ text "/>"];
+        _  -> [text "<" ++ showTag name attrs ++ text ">" ++ showFill showXMLs children ++ text "</" ++ text name ++ text ">"];
+        ;
+    Txt s -> map text (String.words s);
+    ;
+
+//showAtts (Att n v) = [text n <> text "=" <> text (quoted v)]
+showAtts :: Att -> [Document];
+showAtts attr = 
+    case attr of
+    Att name val -> [text name ++ text "=" ++ text (quoted val)];
+    ;
+
+//quoted s = "\"" ++ s ++ "\""
+quoted :: String -> String;
+quoted s = "\"" ++ s ++ "\"";
+
+//showTag n a = text n <> showFill showAtts a
+showTag :: String -> [Att] -> Document;
+showTag name attrs = text name ++ showFill showAtts attrs;
+
+/*
+showFill f [] = nil
+showFill f xs = bracket "" (fill (concat (map f xs))) ""
+*/
+
+showFill :: (a -> [Document]) -> [a] -> Document;
+showFill f items = 
+    case items of
+    [] -> empty;
+    _ -> bracket "" (fill (concatMap f items)) "";
+    ;
+
+xml = Elt "p" [
+                Att "color" "red",
+                Att "font" "Times",
+                Att "size" "10"
+              ] [
+                Txt "Here is some",
+                Elt "em" [] [
+                    Txt "emphasized"
+                ],
+                Txt "text.",
+                Txt "Here is a",
+                Elt "a" [
+                    Att "href" "http://www.eg.com/"
+                ] [
+                    Txt "link"
+                ],
+                Txt "elsewhere."
+              ];
+
+//testXML w = putStr (pretty w (showXML xml))
+testXML :: Int -> String;
+testXML w = pretty w (showXML xml);
+
+
+
+// SQL test
+
+showExpr expr = text expr;
+
+fillExprList exprs = 
+    fillSeparatedList True "," (map showExpr exprs);
+
+
+showTable table = text table;
+
+fillTableList tables = 
+    fillSeparatedList True "," (map showTable tables);
+
+
+showRestriction expr = text expr;
+
+fillRestrictionList exprs = 
+    fillSeparatedList False "AND " (map showRestriction exprs);
+
+
+showOrdering orderingExpr = 
+    if (snd orderingExpr) then text (fst orderingExpr) ++ text " ASC"
+    else text (fst orderingExpr) ++ text " DESC";
+
+fillOrderingList exprs = 
+    fillSeparatedList True "," (map showOrdering exprs);
+
+
+sqlDoc = 
+    let
+        projectExprs = ["Customer.ID", "Customer.Country", "Orders.[Order Amount]", "Orders.[Order Date]", "Product.ProductName", "Product.Price"];
+        fromTables = ["Customer", "Orders", "Product"];
+        restrictionExprs = ["Customer.Country = 'Canada'", "Product.Price > 1000.0", "Product.ProductName IN ('XXX', 'YYY', 'ZZZ')"];
+        groupingExprs = projectExprs;
+        orderingExprs = map (\e -> (e, True)) projectExprs;
+
+        selectDoc = group (text "SELECT" ++ nest 4 (line ++ fillExprList projectExprs));
+
+        fromDoc = group (text "FROM" ++ nest 4 (line ++ fillTableList fromTables));
+
+        whereDoc = group (text "WHERE" ++ nest 4 (line ++ fillRestrictionList restrictionExprs));
+
+        groupByDoc = group (text "GROUP BY" ++ nest 4 (line ++ fillExprList groupingExprs));
+
+        orderByDoc = group (text "ORDER BY" ++ nest 4 (line ++ fillOrderingList orderingExprs));
+    in
+        group (stack [selectDoc, fromDoc, whereDoc, groupByDoc, orderByDoc]);
+
+sqlTest w = pretty w sqlDoc;
+

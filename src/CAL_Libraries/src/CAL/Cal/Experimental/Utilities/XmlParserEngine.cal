@@ -1,0 +1,1297 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * XmlParserEngine.cal
+ * Creation date: September 2007.
+ * By: Malcolm Sharpe
+ */
+
+/**
+ * This module implements an XML 1.0 parser based on the functions
+ * from the {@link Parser@} library module. The public interface is exposed
+ * by the {@code XmlParser@} module.
+ *
+ * The layout of this file is closely modeled on the layout of the XML 1.0 specification.
+ * With a few exceptions, the productions in the spec have a one-to-one correspondence with
+ * parsers defined here. However, all parser names have been converted to camelCase, and
+ * sometimes prefixed with xml to avoid name conflicts.
+ * 
+ * @author Richard Webster
+ * @author Malcolm Sharpe
+ */
+module Cal.Experimental.Utilities.XmlParserEngine;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Byte, Char, Either, Int, Maybe, String;
+    dataConstructor = False, Just, Left, Right, Nothing, True;
+    function =
+        abs, append, concat, const, equals, error, flip, fromJust, fromMaybe,
+        fst, id, isEmpty, isJust, maybeApply, maybeToList, not, seq, snd,
+        uncurry;
+    typeClass = Eq, Inputable, Outputable;
+    ;
+import Cal.Core.Exception using
+    typeClass = Exception;
+    function = catch;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Collections.List using
+    function = any, concatMap, lengthAtLeast, list0, list1, map, take;
+    ;
+import Cal.Core.Char;
+import Cal.Core.String using
+    function = fromChar, fromList, toList, toLowerCase;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Collections.Set using
+    ;
+import Cal.Collections.Map using
+    function = lookup;
+    ;
+import Cal.Utilities.Parser using
+    typeConstructor = GenParser, ParseError, TokenSequence;
+    function =
+        anyChar, between, char, choiceT, digit, exactString, getInput,
+        getInputSeq, getPosition, getState, hexDigit, initialPos, label, many,
+        many1, manyTill, newErrorMessage, notFollowedBy, oneOf, option,
+        optional, pBind, pFail, pMap, pOr, pReturn, pSeq, runParser, satisfy,
+        sepBy, sepBy1, sepEndBy, setInput, setInputSeq, setPosition, setState,
+        showParseError, skipMany, skipMany1, sourceColumn, spaces,
+        try, makeTSString, runParserSeq, eof, updateState;
+    dataConstructor = Message;
+    ;
+import Cal.Experimental.Utilities.Encoding;
+import Cal.Experimental.Utilities.XmlCharacterClasses using
+    function = isLetter, isBaseChar, isIdeographic, isCombiningChar, isDigit,
+               isExtender;
+    ;
+import Cal.Experimental.Utilities.XmlParserState using
+    typeConstructor =
+        AttributeType, GeneralEntity, ReferenceContext, XmlParserState;
+    dataConstructor =
+        CDATAType, ExternalParsedGeneralEntity, InAttributeValue, InContent,
+        InEntityValue, InternalGeneralEntity, NonCDATAType, UnparsedEntity;
+    function =
+        addAttributeDefault, addAttributeType, addGeneralEntity,
+        addParameterEntity, applyDefaultAttributes, checkEncodingIsExpected,
+        expandEntity, getAttributeType, initialXmlParserState,
+        lookupGeneralEntity, lookupParameterEntity, setDeclaredStandalone,
+        setMaybeExpectedEncoding, setNotStandalone;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeConstructor = XmlDocument, XmlNode, XmlAttribute, XmlNotation;
+    function =
+        attributeLocalName, isTextNode, makeXmlDocument, makeXmlElement,
+        makeXmlCDataNode, makeXmlNotation, makeXmlTextNode, makeXmlComment,
+        makeXmlProcessingInstruction, makeXmlAttribute,
+        isWellFormedFirstXmlNameChar, isWellFormedXmlNameChar, setDocumentNotations,
+        textNodeText;
+    ;
+
+friend Cal.Experimental.Utilities.XmlParser;
+friend Cal.Test.Experimental.Utilities.XmlParserEngine_Tests;
+
+/// Utilities
+
+/**
+ * Join a list of maybes so that all the Just entries are returned. 
+ */
+catMaybes :: [Maybe a] -> [a];
+private catMaybes = concatMap maybeToList;
+
+/**
+ * Apply a function to the second element of a pair.
+ */
+mapPair :: (b -> c) -> (a,b) -> (a,c);
+private mapPair f ab =
+    case ab of
+    (a, b) -> (a, f b);
+    ;
+
+/**
+ * Divide a list of eithers into two lists, where the first list contains
+ * the contents of all Lefts and the second list contains the contents of
+ * all Rights.
+ */
+partitionEithers :: [Either a b] -> ([a], [b]);
+private partitionEithers !xxs =
+    case xxs of
+    [] -> ([], []);
+    x : xs ->
+        let
+            (lefts, rights) = partitionEithers xs;
+        in
+            case x of
+            Left w -> (w : lefts, rights);
+            Right w -> (lefts, w : rights);
+        ;
+    ;
+
+/**
+ * Parsec's {@code string@}.
+ */
+string :: String -> GenParser Char XmlParserState String;
+private string s =
+    pMap fromList (exactString (toList s));
+
+/**
+ * Run a parser but ignore its return value.
+ */
+pIgnore :: GenParser tok st a -> GenParser tok st ();
+private pIgnore = pMap (const ());
+
+/// 2.1 Well-Formed XML Documents
+
+/**
+ * document production.
+ */
+document :: GenParser Char XmlParserState XmlDocument;
+protected document =
+    prolog `pBind` (\notationsAndNodes1 ->
+    element `pBind` (\elemNode ->
+    many misc `pBind` (\nodeMaybes2 ->
+    eof `pSeq`
+    pReturn (setDocumentNotations (fst notationsAndNodes1) $
+             makeXmlDocument (snd notationsAndNodes1 ++ (elemNode : catMaybes nodeMaybes2))))));
+
+/// 2.2 Characters
+
+/**
+ * Char production.
+ * 
+ * The name {@code char@} is not used since it conflicts with {@link Parser.char@}.
+ */
+xmlChar :: GenParser Char XmlParserState String;
+protected xmlChar =
+    // Characters represented by a single Char.
+    pMap fromChar (satisfy (\c ->
+        '\u0020' <= c && c <= '\uD7FF' ||
+        c == '\u0009' || c == '\u000A' || c == '\u000D' ||
+        '\uE000' <= c && c <= '\uFFFD') `label` "character in #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD]") `pOr`
+    // Characters represented by a surrogate pair of Chars.
+    // This case needs to be handled since Java stores Strings
+    // as UTF-16.
+    (satisfy (\c -> '\uD800' <= c && c <= '\uDBFF') `label` "leading surrogate" `pBind` (\surrogate1 ->
+     satisfy (\c -> '\uDC00' <= c && c <= '\uDFFF') `label` "trailing surrogate" `pBind` (\surrogate2 ->
+     pReturn (fromList [surrogate1, surrogate2])))) `label`
+    "XML character";
+
+/**
+ * Test a code point to see if it matches the Char production.
+ */
+isXmlChar :: Int -> Boolean;
+private isXmlChar cp =
+    // At the time of writing, CAL doesn't support hexadecimal integer literals.
+    // When it does, replace the decimal literals with the commented hexadecimal literals.
+    32/*0x0020*/ <= cp && cp <= 55295/*0xD7FF*/ ||
+    cp == 9/*0x9*/ || cp == 10/*0xA*/ || cp == 13/*0xD*/ ||
+    57344/*0xE000*/ <= cp && cp <= 65533/*0xFFFD*/ ||
+    65536/*0x10000*/ <= cp && cp <= 1114111/*0x10FFFF*/;
+
+/// 2.3 Common Syntactic Constructs
+
+/**
+ * S production.
+ */
+s :: GenParser Char XmlParserState ();
+private s =
+    skipMany1 (oneOf ['\u0020', '\u0009', '\u000D', '\u000A']) `label` "whitespace";
+
+/**
+ * NameChar production.
+ */
+xmlNameChar :: GenParser Char XmlParserState Char;
+private xmlNameChar = satisfy isWellFormedXmlNameChar `label` "name character";
+
+/**
+ * A valid first character for an XML name; part of Name production.
+ */
+xmlNameFirstChar :: GenParser Char XmlParserState Char;
+private xmlNameFirstChar = satisfy isWellFormedFirstXmlNameChar `label` "leading name character";
+
+/**
+ * Name production.
+ */
+name :: GenParser Char XmlParserState String;
+protected name =
+    xmlNameFirstChar `pBind` (\ch -> 
+    many xmlNameChar `pBind` (\chs -> 
+    pReturn $ fromList (ch:chs)));
+
+/**
+ * Nmtoken production.
+ */
+nmtoken :: GenParser Char XmlParserState ();
+protected nmtoken =
+    skipMany1 xmlNameChar;
+
+/**
+ * EntityValue production.
+ * 
+ * At declaration time, only expands character references, not general entity references,
+ * in accordance with the spec.
+ * 
+ * Note that PE references are not allowed, since the parser only parses the internal
+ * subset of the DTD, and PE references are only allowed at the top level in the internal
+ * subset.
+ */
+entityValue :: GenParser Char XmlParserState String;
+private entityValue =
+    let
+        reference =
+            pMap snd (entityRef InEntityValue) `pOr` charRef;
+        
+        inside quoteChar =
+            pMap concat $
+            many ((notFollowedBy (oneOf ['%','&',quoteChar]) `pSeq` xmlChar) `pOr`
+                  reference);
+    in
+        between (char '"') (char '"') (inside '"') `pOr`
+        between (char '\'') (char '\'') (inside '\'') `label`
+        "entity value";
+
+/**
+ * AttValue production.
+ */
+attValue :: String -> String -> GenParser Char XmlParserState String;
+protected attValue elementName attributeName =
+    let
+        normalizeSpace s =
+            if s == "\u000D" || s == "\u000A" || s == "\u0009"
+            then " "
+            else s;
+        
+        // Value normalization applied to attributes that are not
+        // of CDATA type.
+        normalizeNonCdata =
+            let
+                trimStart = String.dropWhile (equals ' ');
+                trimEnd = String.reverse # trimStart # String.reverse;
+                shrinkSpaces s = String.replaceAllString s " +" " ";
+            in
+                shrinkSpaces # trimEnd # trimStart;
+        
+        // Check if the attribute is of CDATA type; if it is, do nothing,
+        // but otherwise apply normalizeNonCdata.
+        normalize rawValue =
+            getAttributeType elementName attributeName `pBind` (\type ->
+            pReturn (case type of
+                     CDATAType -> rawValue;
+                     NonCDATAType -> normalizeNonCdata rawValue;));
+        
+        entityRefParser =
+            entityRef InAttributeValue `pBind` (\nameAndReplacementText ->
+            expandEntity nameAndReplacementText
+              (insideEntity `pBind` (\parsedReplacementText ->
+               eof `pSeq`
+               pReturn parsedReplacementText)));
+        
+        reference =
+            entityRefParser `pOr` charRef;
+        
+        insideGeneral quoteChars =
+            (pMap concat $
+             many (pMap normalizeSpace (notFollowedBy (oneOf ('<':'&':quoteChars)) `pSeq` xmlChar) `pOr`
+                   // Instead of using Reference production, use EntityRef and
+                   // CharRef productions directly to do custom expansion of
+                   // general entities.
+                   reference)) `pBind` (\rawValue ->
+            normalize rawValue);
+        
+        insideEntity = insideGeneral [];
+        
+        inside quoteChar = insideGeneral [quoteChar];
+    in
+        between (char '"') (char '"') (inside '"') `pOr`
+        between (char '\'') (char '\'') (inside '\'');
+
+/**
+ * SystemLiteral production.
+ */
+systemLiteral :: GenParser Char XmlParserState String;
+private systemLiteral =
+    pMap concat $
+    (between (char '"') (char '"') $ many (notFollowedBy (char '"') `pSeq` xmlChar)) `pOr`
+    (between (char '\'') (char '\'') $ many (notFollowedBy (char '\'') `pSeq` xmlChar));
+
+/**
+ * PubidLiteral production.
+ */
+pubidLiteral :: GenParser Char XmlParserState String;
+private pubidLiteral =
+    pMap fromList $
+    (between (char '"') (char '"') $ many pubidChar) `pOr`
+    (between (char '\'') (char '\'') $ many (notFollowedBy (char '\'') `pSeq` pubidChar));
+
+/**
+ * PubidChar production.
+ */
+pubidChar :: GenParser Char XmlParserState Char;
+private pubidChar =
+    oneOf ['\u0020', '\u000D', '\u000A'] `pOr`
+    satisfy (\c ->
+        'a' <= c && c <= 'z' ||
+        'A' <= c && c <= 'Z' ||
+        '0' <= c && c <= '9') `pOr`
+    oneOf ['-','\'','(',')','+',',','.','/',':','=','?',';','!','*','#','@','$','_','%'];
+
+/// 2.4 Character Data and Markup
+
+/**
+ * CharData production.
+ */
+charData :: GenParser Char XmlParserState XmlNode;
+protected charData = 
+    let
+        textChar =
+            notFollowedBy (oneOf ['&','<']) `pSeq`
+            notFollowedBy (try (string "]]>")) `pSeq`
+            xmlChar;
+    in
+        pMap (makeXmlTextNode # concat) $ many1 textChar;
+
+/// 2.5 Comments
+
+/**
+ * Comment production.
+ * 
+ * Only consumes input if no other parser would succeed. By doing this
+ * instead of wrapping the whole parser in a try, better error messages
+ * are produced.
+ */
+comment :: GenParser Char XmlParserState XmlNode;
+protected comment = 
+    try (string "<!--") `pSeq`
+    manyTill xmlChar (try (string "--")) `pBind` (\contents ->
+    char '>' `pSeq`
+    pReturn (makeXmlComment (concat contents))) `label` "comment";
+
+/// 2.6 Processing Instructions
+
+/**
+ * PI production.
+ * 
+ * Only consumes input if no other parser would succeed except {@link xmldecl@}, which is
+ * tried first. This is necessary to emit a nice error message in cases such as
+ * "<?XML?>", which is an invalid processing instruction. If the whole parser were
+ * wrapped in a try, then the error would report an unexpected '?' when parsing
+ * an element name, which is not a very helpful error message.
+ */
+pi :: GenParser Char XmlParserState XmlNode;
+protected pi =
+    let
+        contentParser =
+            s `pSeq`
+            manyTill xmlChar (try (string "?>")) `pBind` (\contents ->
+            pReturn $ Just $ concat contents);
+        
+        noContentParser =
+            string "?>" `pSeq`
+            pReturn Nothing;
+    in
+        try (string "<?") `pSeq`
+        pitarget `pBind` (\target ->
+        (contentParser `pOr`
+         noContentParser) `pBind` (\maybeContents ->
+        pReturn $ makeXmlProcessingInstruction target (fromMaybe "" maybeContents)))
+        `label` "processing instruction";
+
+/**
+ * PITarget production.
+ */
+pitarget :: GenParser Char XmlParserState String;
+protected pitarget =
+    name `pBind` (\nameText ->
+    if toLowerCase nameText == "xml"
+    then
+        pFail "processing instruction target must not case-insensitively match \"xml\""
+    else
+        pReturn nameText) `label` "processing instruction target";
+
+/// 2.7 CDATA Sections
+
+/**
+ * CDSect production.
+ * Only consumes input if no other parser would succeed.
+ */
+cdsect :: GenParser Char XmlParserState XmlNode;
+protected cdsect =
+    cdstart `pSeq` cdata `pBind` (\content -> cdend `pSeq` pReturn content) `label` "CDATA section";
+
+/**
+ * CDStart production.
+ * Only consumes input if no other parser would succeed.
+ */
+cdstart :: GenParser Char XmlParserState ();
+private cdstart =
+    try (string "<![CDATA[") `pSeq`
+    pReturn ();
+
+/**
+ * CData production.
+ */
+cdata :: GenParser Char XmlParserState XmlNode;
+private cdata =
+    pMap (makeXmlCDataNode # concat) $ many (notFollowedBy (try (string "]]>")) `pSeq` xmlChar);
+
+/**
+ * CDEnd production.
+ */
+cdend :: GenParser Char XmlParserState ();
+private cdend =
+    string "]]>" `pSeq`
+    pReturn ();
+
+/// 2.8 Prolog and Document Type Declaration
+
+// Prolog
+
+/**
+ * prolog production.
+ */
+prolog :: GenParser Char XmlParserState ([XmlNotation], [XmlNode]);
+protected prolog =
+    optional xmldecl `pSeq`
+    many misc `pBind` (\nodeMaybes1 ->
+    optional (doctypedecl `pBind` (\notationsAndNodes ->
+              many misc `pBind` (\nodeMaybes2 ->
+              pReturn (fst notationsAndNodes, map Just (snd notationsAndNodes) ++ nodeMaybes2)))) `pBind` (\maybeNotationsAndNodeMaybes2 ->
+    pReturn $ (fromMaybe [] (maybeApply fst maybeNotationsAndNodeMaybes2),
+               catMaybes (nodeMaybes1 ++ fromMaybe [] (maybeApply snd maybeNotationsAndNodeMaybes2)))));
+
+/**
+ * XMLDecl production.
+ * 
+ * Only consumes input if no other parser would succeed. This approach is
+ * superior to wrapping the whole parser in a try, since it produces more
+ * helpful error messages.
+ */
+xmldecl :: GenParser Char XmlParserState ();
+protected xmldecl =
+    try (string "<?xml" `pSeq` notFollowedBy xmlNameChar) `pSeq`
+    versionInfo `pSeq`
+    optional (try encodingDecl) `pSeq`
+    optional (try sddecl) `pSeq`
+    optional s `pSeq`
+    string "?>" `pSeq`
+    pReturn () `label`
+    "XML declaration";
+
+/**
+ * VersionInfo production.
+ */
+versionInfo :: GenParser Char XmlParserState ();
+private versionInfo =
+    s `pSeq`
+    string "version" `pSeq`
+    eq `pSeq`
+    (between (char '\'') (char '\'') versionNum `pOr`
+     between (char '"') (char '"') versionNum);
+
+/**
+ * Eq production.
+ */
+eq :: GenParser Char XmlParserState ();
+private eq =
+    optional s `pSeq`
+    char '=' `pSeq`
+    optional s `pSeq`
+    pReturn ();
+
+/**
+ * VersionNum production.
+ */
+versionNum :: GenParser Char XmlParserState ();
+private versionNum =
+    string "1.0" `pSeq`
+    pReturn ();
+
+/**
+ * Misc production.
+ */
+misc :: GenParser Char XmlParserState (Maybe XmlNode);
+protected misc =
+    pMap Just comment `pOr`
+    pMap Just pi `pOr`
+    pMap (const Nothing) s;
+
+/**
+ * doctypedecl production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+doctypedecl :: GenParser Char XmlParserState ([XmlNotation], [XmlNode]);
+protected doctypedecl =
+    try (string "<!DOCTYPE") `pSeq`
+    s `pSeq`
+    name `pSeq`
+    ((s `pSeq`
+      optional (externalId `pSeq` setNotStandalone) `pSeq`
+      pReturn ()) `pOr`
+     pReturn ()) `pSeq`
+    optional s `pSeq`
+    optional (
+        char '[' `pSeq`
+        intSubset `pBind` (\notationsAndNodes ->
+        char ']' `pSeq`
+        optional s `pSeq`
+        pReturn notationsAndNodes)) `pBind` (\maybeNotationsAndNodes ->
+    char '>' `pSeq`
+    pReturn (fromMaybe ([], []) maybeNotationsAndNodes));
+
+/**
+ * DeclSep production.
+ */
+declSep :: GenParser Char XmlParserState ();
+private declSep =
+    pereference `pOr` s;
+
+/**
+ * intSubset production.
+ */
+intSubset :: GenParser Char XmlParserState ([XmlNotation], [XmlNode]);
+private intSubset =
+    pMap partitionEithers $
+    pMap catMaybes $
+    many (markupdecl `pOr` pMap (const Nothing) declSep);
+
+/**
+ * markupdecl production.
+ */
+markupdecl :: GenParser Char XmlParserState (Maybe (Either XmlNotation XmlNode));
+protected markupdecl =
+    pMap (const Nothing) elementdecl `pOr`
+    pMap (const Nothing) attlistDecl `pOr`
+    pMap (const Nothing) entityDecl `pOr`
+    pMap (Just # Left) notationDecl `pOr`
+    pMap (Just # Right) pi `pOr`
+    pMap (Just # Right) comment;
+
+/// 2.9 Standalone Document Declaration
+
+/**
+ * SDDecl production.
+ */
+sddecl :: GenParser Char XmlParserState ();
+private sddecl =
+    let
+        answer =
+            (string "yes" `pSeq` setDeclaredStandalone) `pOr` pIgnore (string "no");
+    in
+        s `pSeq`
+        string "standalone" `pSeq`
+        eq `pSeq`
+        (between (char '\'') (char '\'') answer `pOr`
+         between (char '"') (char '"') answer);
+
+/// 2.11 End-of-Line Handling
+
+/**
+ * Translate both #xD #xA and any #xD not followed by #xA to a single #xA.
+ */
+handleLineEndings :: String -> String;
+protected handleLineEndings =
+    let
+        aux chars =
+            case chars of
+            [] -> [];
+            c1 : rest1 ->
+                case c1 of
+                '\r' ->
+                    case rest1 of
+                    [] -> ['\n'];
+                    c2 : rest2 ->
+                        case c2 of
+                        '\n' -> '\n' : aux rest2;
+                        _ -> '\n' : aux rest1;
+                        ;
+                    ;
+                _ ->
+                    c1 : aux rest1;
+                ;
+            ;
+    in
+        fromList # aux # toList;
+
+/// 3 Logical Structures
+
+/**
+ * element production.
+ * Only consumes input if no other parser would succeed.
+ */
+element :: GenParser Char XmlParserState XmlNode;
+protected element =
+    emptyElemTag `pOr`
+    (stag `pBind` (\nameAttrs ->
+     content `pBind` (\children ->
+     etag (fst nameAttrs) `pSeq`
+     pReturn (makeXmlElement Nothing (fst nameAttrs) (snd nameAttrs) (joinAdjacentTextNodes children)))))
+    `label` "element";
+
+/**
+ * Concatenate the contents of adjacent text nodes.
+ */
+joinAdjacentTextNodes :: [XmlNode] -> [XmlNode];
+private joinAdjacentTextNodes nns =
+    case nns of
+    [] -> [];
+    n : ns ->
+        if not (isTextNode n)
+        then n : joinAdjacentTextNodes ns
+        else
+            let
+                (ns1, ns2) = List.span isTextNode nns;
+            in
+                makeXmlTextNode (concatMap textNodeText ns1) : joinAdjacentTextNodes ns2;
+    ;
+
+/// 3.1 Start-Tags, End-Tags, and Empty-Element Tags
+
+/**
+ * Detect a duplicated attribute name in a list of attributes.
+ */
+findDuplicatedAttributeName :: [XmlAttribute] -> Maybe String;
+private findDuplicatedAttributeName attrs =
+    let
+        walk nameSet names =
+            case names of
+            [] -> Nothing;
+            name : rest ->
+                if Set.member name nameSet
+                then Just name
+                else walk (Set.insert name nameSet) rest;
+            ;
+    in
+        walk Set.empty (map attributeLocalName attrs);
+
+/**
+ * Ensure that attributes in the list are not duplicated.
+ */
+checkAttributes :: [XmlAttribute] -> GenParser Char XmlParserState ();
+private checkAttributes attrs =
+    case findDuplicatedAttributeName attrs of
+    Just name -> pFail ("duplicated attribute: "++name);
+    Nothing -> pReturn ();
+    ;
+
+/**
+ * STag production.
+ * Only consumes input if no other parser would succeed except {@link emptyElemTag@},
+ * which is tried first.
+ */
+stag :: GenParser Char XmlParserState (String, [XmlAttribute]);
+private stag =
+    try (char '<' `pSeq`
+         notFollowedBy (oneOf ['!','?','/'])) `pSeq`
+    name `pBind` (\nameText ->
+    ((s `pSeq` sepEndBy (attribute nameText) s) `pOr` pReturn []) `pBind` (\attrs ->
+    char '>' `pSeq`
+    checkAttributes attrs `pSeq`
+    applyDefaultAttributes nameText attrs `pBind` (\attrsWithDefaults ->
+    pReturn (nameText, attrsWithDefaults))));
+
+/**
+ * Attribute production.
+ */
+attribute :: String -> GenParser Char XmlParserState XmlAttribute;
+protected attribute elementName =
+    name `pBind` (\attrName ->
+    eq `pSeq`
+    attValue elementName attrName `pBind` (\attrValue ->
+    pReturn $ makeXmlAttribute attrName attrValue))
+    `label` "attribute";
+
+/**
+ * ETag production.
+ */
+etag :: String -> GenParser Char XmlParserState ();
+private etag name =
+    string "</" `pSeq`
+    string name `pSeq`
+    optional s `pSeq`
+    char '>' `pSeq`
+    pReturn () `label`
+    "end tag";
+
+/**
+ * content production.
+ */
+content :: GenParser Char XmlParserState [XmlNode];
+private content =
+    let
+        entityRefParser =
+            entityRef InContent `pBind` (\nameAndReplacementText ->
+            expandEntity nameAndReplacementText
+              (content `pBind` (\parsedReplacementText ->
+               eof `pSeq`
+               pReturn parsedReplacementText)));
+    in
+        pMap concat $
+        many (entityRefParser `pOr`
+              pMap list1 (charData `pOr` element `pOr` pMap makeXmlTextNode charRef `pOr` cdsect `pOr` pi `pOr` comment));
+
+/**
+ * EmptyElemTag production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+emptyElemTag :: GenParser Char XmlParserState XmlNode;
+private emptyElemTag =
+    try (char '<' `pSeq`
+         name `pBind` (\nameText ->
+         ((s `pSeq` sepEndBy (attribute nameText) s) `pOr` pReturn []) `pBind` (\attrs ->
+         char '/' `pSeq`
+         pReturn (nameText, attrs)))) `pBind` (\nameTextAndAttrs ->
+    let
+        nameText = fst nameTextAndAttrs;
+        attrs = snd nameTextAndAttrs;
+    in
+        char '>' `pSeq`
+        checkAttributes attrs `pSeq`
+        applyDefaultAttributes nameText attrs `pBind` (\attrsWithDefaults ->
+        pReturn (makeXmlElement Nothing nameText attrsWithDefaults [])));
+
+/// 3.2 Element Type Declarations
+
+/**
+ * elementdecl production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+elementdecl :: GenParser Char XmlParserState ();
+private elementdecl =
+    try (string "<!ELEMENT") `pSeq`
+    s `pSeq`
+    name `pSeq`
+    s `pSeq`
+    contentspec `pSeq`
+    optional s `pSeq`
+    char '>' `pSeq`
+    pReturn () `label`
+    "element declaration";
+
+/**
+ * contentspec production.
+ */
+contentspec :: GenParser Char XmlParserState ();
+private contentspec =
+    pIgnore (string "EMPTY") `pOr`
+    pIgnore (string "ANY") `pOr`
+    mixed `pOr`
+    try children;
+
+/// 3.2.1 Element Content
+
+/**
+ * children production.
+ */
+children :: GenParser Char XmlParserState ();
+private children =
+    (try xmlChoice `pOr`
+     try xmlSeq) `pSeq`
+    optional (oneOf ['?','*','+']) `pSeq`
+    pReturn ();
+
+/**
+ * cp production.
+ */
+cp :: GenParser Char XmlParserState ();
+private cp =
+    (pIgnore name `pOr`
+     try xmlChoice `pOr`
+     try xmlSeq) `pSeq`
+    optional (oneOf ['?','*','+']) `pSeq`
+    pReturn ();
+
+/**
+ * choice production.
+ * 
+ * Named xmlChoice so as not to conflict with Parser.choice. 
+ */
+xmlChoice :: GenParser Char XmlParserState ();
+private xmlChoice =
+    char '(' `pSeq`
+    optional s `pSeq`
+    cp `pSeq`
+    optional s `pSeq`
+    skipMany1 (char '|' `pSeq` optional s `pSeq` cp `pSeq` optional s) `pSeq`
+    char ')' `pSeq`
+    pReturn () `label`
+    "choice";
+
+/**
+ * seq production.
+ * 
+ * Named xmlSeq so as not to conflict with Prelude.seq.
+ */
+xmlSeq :: GenParser Char XmlParserState ();
+private xmlSeq =
+    char '(' `pSeq`
+    optional s `pSeq`
+    cp `pSeq`
+    optional s `pSeq`
+    skipMany (char ',' `pSeq` optional s `pSeq` cp `pSeq` optional s) `pSeq`
+    char ')' `pSeq`
+    pReturn () `label`
+    "seq";
+
+/// 3.2.2 Mixed Content
+
+/**
+ * Mixed production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+mixed :: GenParser Char XmlParserState ();
+private mixed =
+    try (char '(' `pSeq`
+         optional s `pSeq`
+         string "#PCDATA") `pSeq`
+    optional s `pSeq`
+    (try (char ')' `pSeq` notFollowedBy (char '*')) `pOr`
+     (skipMany (char '|' `pSeq` optional s `pSeq` name `pSeq` optional s) `pSeq`
+      pIgnore (string ")*"))) `pSeq`
+    pReturn () `label`
+    "mixed content specification";
+
+/// 3.3 Attribute-List Declarations
+
+/**
+ * AttlistDecl production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+attlistDecl :: GenParser Char XmlParserState ();
+private attlistDecl =
+    try (string "<!ATTLIST") `pSeq`
+    s `pSeq`
+    name `pBind` (\elementName ->
+    ((s `pSeq` sepEndBy (attDef elementName) s) `pOr` pReturn []) `pSeq`
+    char '>' `pSeq`
+    pReturn ()) `label`
+    "attribute-list declaration";
+
+/**
+ * AttDef production, except that the S production is not expected to lead.
+ * (This is more convenient to handle in {@link attlistDecl@} instead.)
+ * 
+ * @arg elementName the name of the element that the containing attribute list is for.
+ */
+attDef :: String -> GenParser Char XmlParserState ();
+private attDef elementName =
+    name `pBind` (\attributeName ->
+    s `pSeq`
+    attType `pBind` (\attributeType ->
+    addAttributeType elementName attributeName attributeType `pSeq`
+    s `pSeq`
+    defaultDecl elementName attributeName `pBind` (\maybeAttributeDefault ->
+    case maybeAttributeDefault of
+    Just attributeDefault -> addAttributeDefault elementName attributeName attributeDefault;
+    Nothing -> pReturn ();)));
+
+/// 3.3.1 Attribute Types
+
+/**
+ * AttType production.
+ */
+attType :: GenParser Char XmlParserState AttributeType;
+private attType =
+    stringType `pOr`
+    tokenizedType `pOr`
+    enumeratedType;
+
+/**
+ * StringType production.
+ */
+stringType :: GenParser Char XmlParserState AttributeType;
+private stringType =
+    try (pIgnore $ string "CDATA") `pSeq`
+    pReturn CDATAType;
+
+/**
+ * TokenizedType production.
+ */
+tokenizedType :: GenParser Char XmlParserState AttributeType;
+private tokenizedType =
+    choiceT (map (pIgnore # string) $ [
+        // The first matching keyword is chosen,
+        // so order so that no keyword is a prefix
+        // of any keyword tried after it.
+        "IDREFS",
+        "IDREF",
+        "ID",
+        "ENTITIES",
+        "ENTITY",
+        "NMTOKENS",
+        "NMTOKEN"]) `pSeq`
+    pReturn NonCDATAType;
+
+/**
+ * EnumeratedType production.
+ */
+enumeratedType :: GenParser Char XmlParserState AttributeType;
+private enumeratedType =
+    (notationType `pOr` enumeration) `pSeq`
+    pReturn NonCDATAType;
+
+/**
+ * NotationType production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+notationType :: GenParser Char XmlParserState ();
+private notationType =
+    try (string "NOTATION") `pSeq`
+    s `pSeq`
+    char '(' `pSeq`
+    optional s `pSeq`
+    sepBy1 name (try (optional s `pSeq` char '|' `pSeq` optional s)) `pSeq`
+    optional s `pSeq`
+    char ')' `pSeq`
+    pReturn ();
+
+/**
+ * Enumeration production.
+ */
+enumeration :: GenParser Char XmlParserState ();
+private enumeration =
+    char '(' `pSeq`
+    optional s `pSeq`
+    sepBy1 nmtoken (try (optional s `pSeq` char '|' `pSeq` optional s)) `pSeq`
+    optional s `pSeq`
+    char ')' `pSeq`
+    pReturn ();
+
+/// 3.3.2 Attribute Defaults
+
+/**
+ * DefaultDecl production.
+ */
+defaultDecl :: String -> String -> GenParser Char XmlParserState (Maybe String);
+private defaultDecl elementName attributeName =
+    try (pMap (const Nothing) $ string "#REQUIRED") `pOr`
+    try (pMap (const Nothing) $ string "#IMPLIED") `pOr`
+    (optional (string "#FIXED" `pSeq` s) `pSeq`
+     pMap Just (attValue elementName attributeName));
+
+/// 4.1 Character and Entity References
+
+data foreign unsafe import jvm "java.lang.NumberFormatException" private JNumberFormatException deriving Inputable, Outputable, Show;
+instance Exception JNumberFormatException where;
+
+/**
+ * CharRef production.
+ * 
+ * Must return a String since code points can be produced that are
+ * greater than 0xFFFF, so they might not fit in a 16-bit Char.
+ */
+charRef :: GenParser Char XmlParserState String;
+protected charRef =
+    let
+        expandCharRef rawChar base =
+            let
+                codePoint = Prelude.stringToIntRadix (fromList rawChar) base;
+                // Check for overflow.
+                tooBig = (codePoint `seq` False) `catch` (const True :: JNumberFormatException -> Boolean);
+            in
+                if tooBig || not (isXmlChar codePoint)
+                then pFail "expected character reference to expand to a legal XML character"
+                else pReturn (Encoding.codePointToUTF16 codePoint);
+    in
+        (try (string "&#x") `pSeq`
+         many1 (digit `pOr`
+                satisfy (\c -> 'a' <= c && c <= 'f' ||
+                               'A' <= c && c <= 'F')) `pBind` (\hexChar ->
+         char ';' `pSeq`
+         expandCharRef hexChar 16)) `pOr`
+        (string "&#" `pSeq`
+         many1 digit `pBind` (\decimalChar ->
+         char ';' `pSeq`
+         expandCharRef decimalChar 10)) `label`
+         "character reference";
+
+// Reference production omitted since uses of it require varying handling
+// of the EntityRef production.
+
+/**
+ * EntityRef production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ * 
+ * @arg context where this entity reference occurs. This determines whether to expand and what references are legal.
+ * @return pair of entity name and either replacement text
+ *   (if expanding) or entity reference (if not expanding).
+ */
+entityRef :: ReferenceContext -> GenParser Char XmlParserState (String, String);
+protected entityRef context =
+    try (char '&' `pSeq` notFollowedBy (char '#')) `pSeq`
+    name `pBind` (\entityName ->
+    char ';' `pSeq`
+    (if context != InEntityValue
+     then
+         (lookupGeneralEntity entityName context `pBind` (\replacementText ->
+          pReturn (entityName, replacementText)))
+     else
+         pReturn (entityName, "&"++entityName++";"))) `label`
+    "entity reference";
+
+/**
+ * PEReference production.
+ * 
+ * After looking up the parameter entity, appends its replacement text
+ * to the front of the input.
+ */
+pereference :: GenParser Char XmlParserState ();
+private pereference =
+    char '%' `pSeq`
+    name `pBind` (\peName ->
+    char ';' `pSeq`
+    lookupParameterEntity peName `pBind` (\replacementText ->
+    // TODO: This is memory-inefficient since the input is converted to a list,
+    // but there is currently not a better way to do it.
+    getInput `pBind` (\inputTail ->
+    setInput (toList replacementText ++ inputTail) `pSeq`
+    pReturn ()))) `label`
+    "parameter entity reference";
+
+/// 4.2 Entity Declarations
+
+/**
+ * EntityDecl production.
+ */
+entityDecl :: GenParser Char XmlParserState ();
+private entityDecl =
+    pedecl `pOr` gedecl `label`
+    "entity declaration";
+
+/**
+ * GEDecl production.
+ * 
+ * Only consumes input if no other parser would succeed, except {@link pedecl@},
+ * which is tried first.
+ */
+gedecl :: GenParser Char XmlParserState ();
+private gedecl =
+    try (string "<!ENTITY") `pSeq`
+    s `pSeq`
+    name `pBind` (\geName ->
+    s `pSeq`
+    entityDef `pBind` (\maybeReplacementText ->
+    optional s `pSeq`
+    char '>' `pSeq`
+    addGeneralEntity geName maybeReplacementText));
+
+/**
+ * PEDecl production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+pedecl :: GenParser Char XmlParserState ();
+private pedecl =
+    try (string "<!ENTITY" `pSeq` s `pSeq` char '%') `pSeq`
+    s `pSeq`
+    name `pBind` (\peName ->
+    s `pSeq`
+    pedef `pBind` (\maybeReplacementText ->
+    optional s `pSeq`
+    char '>' `pSeq`
+    addParameterEntity peName maybeReplacementText));
+
+/**
+ * EntityDef production.
+ */
+entityDef :: GenParser Char XmlParserState GeneralEntity;
+private entityDef =
+    pMap InternalGeneralEntity entityValue `pOr`
+    (externalId `pSeq`
+     (pMap (const UnparsedEntity) ndataDecl `pOr`
+      pReturn ExternalParsedGeneralEntity));
+
+/**
+ * PEDef production.
+ */
+pedef :: GenParser Char XmlParserState (Maybe String);
+private pedef =
+    pMap Just entityValue `pOr`
+    pMap (const Nothing) externalId;
+
+/// 4.2.2 External Entities
+
+/**
+ * ExternalID production.
+ * 
+ * @return a parser that returns a (maybe public ID, system ID) pair
+ */
+externalId :: GenParser Char XmlParserState (Maybe String, String);
+protected externalId =
+    (string "SYSTEM" `pSeq`
+     s `pSeq`
+     systemLiteral `pBind` (\sysid ->
+     pReturn (Nothing, sysid))) `pOr`
+    (string "PUBLIC" `pSeq`
+     s `pSeq`
+     pubidLiteral `pBind` (\pubid ->
+     s `pSeq`
+     systemLiteral `pBind` (\sysid ->
+     pReturn (Just pubid, sysid))));
+
+/**
+ * NDataDecl production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+ndataDecl :: GenParser Char XmlParserState ();
+private ndataDecl =
+    try (s `pSeq` string "NDATA") `pSeq`
+    s `pSeq`
+    name `pSeq`
+    pReturn ();
+
+/// 4.3.3 Character Encoding in Entities
+
+/**
+ * EncodingDecl production.
+ */
+encodingDecl :: GenParser Char XmlParserState ();
+private encodingDecl =
+    s `pSeq`
+    string "encoding" `pSeq`
+    eq `pSeq`
+    (between (char '"') (char '"') encName `pOr`
+     between (char '\'') (char '\'') encName);
+
+/**
+ * EncName production.
+ */
+encName :: GenParser Char XmlParserState ();
+private encName =
+    let
+        isLeadingChar c = 'A' <= c && c <= 'Z' ||
+                          'a' <= c && c <= 'z';
+        isInnerChar c = 'A' <= c && c <= 'Z' ||
+                        'a' <= c && c <= 'z' ||
+                        '0' <= c && c <= '9' ||
+                        c == '.' ||
+                        c == '_' ||
+                        c == '-';
+    in
+        satisfy isLeadingChar `pBind` (\firstChar ->
+        many (satisfy isInnerChar) `pBind` (\otherChars ->
+        let
+            encName = fromList (firstChar : otherChars);
+        in
+            checkEncodingIsExpected encName));
+
+/// 4.7 Notation Declarations
+
+/**
+ * NotationDecl production.
+ * 
+ * Only consumes input if no other parser would succeed.
+ */
+notationDecl :: GenParser Char XmlParserState XmlNotation;
+private notationDecl =
+    try (string "<!NOTATION") `pSeq`
+    s `pSeq`
+    name `pBind` (\notationName ->
+    s `pSeq`
+    ((pMap (mapPair Just) $ try externalId) `label` "external ID" `pOr`
+     ((pMap (\pubid -> (Just pubid, Nothing)) $ try publicId) `label` "public ID")) `pBind` (\maybePublicIdAndMaybeSystemId ->
+    optional s `pSeq`
+    char '>' `pSeq`
+    pReturn (uncurry (makeXmlNotation notationName) maybePublicIdAndMaybeSystemId))) `label`
+    "notation declaration";
+
+/**
+ * PublicID production.
+ */
+publicId :: GenParser Char XmlParserState String;
+protected publicId =
+    string "PUBLIC" `pSeq`
+    s `pSeq`
+    pubidLiteral;
+
+//// Functions for parsing documents.
+
+/**
+ * Parses a string into an XML document.
+ * 
+ * @arg xmlText the input XML text.
+ * @arg maybeExpectedEncoding optionally, the encoding in which this XML text was read, to
+ *   be checked against the encoding declaration.
+ * @return either a parse error or the parsed XML document.
+ */
+parseXmlDocument :: String -> Maybe String -> Either ParseError XmlDocument;
+protected parseXmlDocument xmlText maybeExpectedEncoding =
+    let
+        state = setMaybeExpectedEncoding maybeExpectedEncoding initialXmlParserState;
+    in
+        runParserSeq document state "XML" (makeTSString (handleLineEndings xmlText));
+
+/**
+ * Parses a byte array into an XML document.
+ * 
+ * @arg xmlBytes encoded XML text in UTF-8 or UTF-16.
+ * @return either a parse error or the parsed XML document.
+ */
+parseXmlDocumentFromBytes :: Array Byte -> Either ParseError XmlDocument;
+protected parseXmlDocumentFromBytes xmlBytes =
+    let
+        byteList = Array.toList xmlBytes;
+        (maybeInputString, encoding) =
+            // UTF-16, big-endian or little-endian.
+            if take 2 byteList == [254, 255] || take 2 byteList == [255, 254]
+            then (Encoding.decode "UTF-16" xmlBytes, "UTF-16")
+            // Otherwise, assume UTF-8.
+            else
+                let
+                    decoded = Encoding.decode "UTF-8" xmlBytes;
+                    
+                    // Ignore the UTF-8 Byte Order Mark if there is one.
+                    stripByteOrderMark inputString =
+                        if String.length inputString >= 1 && String.subscript inputString 0 == '\uFEFF'
+                        then String.substring inputString 1 (String.length inputString)
+                        else inputString;
+                in
+                    (maybeApply stripByteOrderMark decoded, "UTF-8");
+    in
+        case maybeInputString of
+        Nothing ->
+            Left $ newErrorMessage (Message $ "Input is malformed "++encoding) (initialPos "XML document entity");
+        Just inputString ->
+            parseXmlDocument inputString (Just encoding);
+    ;

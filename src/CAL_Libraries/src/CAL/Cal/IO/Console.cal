@@ -1,0 +1,220 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Console.cal
+ * Creation date: July 3, 2007.
+ * By: Magnus Byne
+ */
+
+/** 
+ * The Console module defines basic functions for working with 
+ * Console input and output.
+ * 
+ * @author Magnus Byne
+ */
+module Cal.IO.Console;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Ord, Outputable;
+    typeConstructor =
+        Boolean, Byte, Either, JList, JObject, Long, Maybe, String;
+    dataConstructor = False, True, Left, Right, Nothing, Just;
+    function = error, input, output, seq, eager;
+    ;
+
+import Cal.Collections.List using
+    function = foldLeftStrict, inputList, map;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+
+data foreign unsafe import jvm "java.io.BufferedReader" public JBufferedReader;
+
+data foreign unsafe import jvm "java.io.InputStream" public JInputStream;
+
+data foreign unsafe import jvm "java.io.InputStreamReader"
+    private JInputStreamReader;
+
+data foreign unsafe import jvm "java.io.Reader" private JReader;
+
+data foreign unsafe import jvm "java.io.FileReader" private JFileReader;
+
+data foreign unsafe import jvm "java.io.PrintStream" private JPrintStream;
+
+foreign unsafe import jvm "constructor"
+    private createBufferedReader :: JReader -> JBufferedReader;
+
+foreign unsafe import jvm "constructor"
+    private createInputStreamReaderStream :: JInputStream -> JInputStreamReader;
+
+foreign unsafe import jvm "method println"
+    private jprintln :: JPrintStream -> String -> ();
+
+foreign unsafe import jvm "method print"
+    private jprint :: JPrintStream -> String -> ();
+
+foreign unsafe import jvm "cast"
+    jInputStreamReaderToJReader :: JInputStreamReader -> JReader;
+
+/** 
+ * The system output stream.
+ */
+foreign unsafe import jvm "static field java.lang.System.out"
+    public stdout :: JPrintStream;
+
+/** 
+ * The system input stream.
+ */
+foreign unsafe import jvm "static field java.lang.System.in"
+    public stdin :: JInputStream;
+
+/** 
+ * Reads a line from a buffered reader. 
+ * @arg buffered reader.
+ * @return the string.
+ */
+foreign unsafe import jvm "method readLine"
+    public readLine :: JBufferedReader -> String;
+
+/** 
+ * Returns {@link True@} iff a string is null.
+ * @arg string to check.
+ * @return {@link True@} if the string is null, otherwise {@link False@}.
+ */
+foreign unsafe import jvm "isNull" public isNullString :: String -> Boolean;
+
+/** 
+ * Creates a buffered reader from an input stream.
+ * @arg input the input stream.
+ * @return the buffered reader.
+ */
+makeBufferedReader :: JInputStream -> JBufferedReader;
+public makeBufferedReader !input =
+    eager
+    $ createBufferedReader
+        (jInputStreamReaderToJReader (createInputStreamReaderStream stdin))
+    ;
+
+/** 
+ * Converts a buffered reader to list of lines.
+ * @arg reader the buffered reader to read lines from.
+ * @return a list of strings, where each string represents a line of input. CR/linefeed characters are removed.
+ */
+inputLines :: JBufferedReader -> [String];
+private inputLines !reader =
+    let
+        line :: String;
+        line = readLine reader;
+    in
+        if (isNullString line) then
+            []
+        else
+            line : inputLines reader
+    ;
+
+/** 
+ * Prints a string to {@link stdout@}.
+ * @arg string the string to print.
+ */
+print :: String -> ();
+public print string = jprint stdout string;
+
+/** 
+ * Prints a string to {@link stdout@}, and terminates the line.
+ * @arg string the string to print.
+ */
+printLine :: String -> ();
+public printLine string = jprintln stdout string;
+
+/** 
+ * Prints a list of strings to {@link stdout@}, each string is printed
+ * on a sperate line.
+ * @arg lines the list of strings to print.
+ */
+printLines :: [String] -> ();
+public printLines lines = foldLeftStrict (\a b -> printLine b) () lines;
+
+/** 
+ * Reads a list of strings from a buffered reader.
+ * 
+ * @arg reader the reader to read lines from.
+ * @return the list of strings from the buffered reader.
+ */
+readLines :: JBufferedReader -> [String];
+public readLines !reader = inputLines reader;
+
+/** 
+ * Process lines from {@link stdin@}. This can be used to write basic interactive console
+ * programs.
+ * 
+ * e.g.
+ * {@code
+ * processLines 
+ *     (0::Int) 
+ *     (\i -> (show i) ++ "> ") 
+ *     (\i s -> s == "exit") 
+ *     (\i s -> {@link printLine@} ("You entered: " ++ s) `seq` i + 1);
+ * @}
+ * 
+ * @arg state the state that is used and updated during processing.
+ * @arg prompt the function that is used to prompt for each line of input.
+ * @arg end the function that is used to determine when this function will finish.
+ * @arg processLine the function that is called to process each line that is entered.
+ * @return the state at the end of the processing.
+ */
+processLines ::
+    a
+    -> (a -> String)
+    -> (a -> String -> Boolean)
+    -> (a -> String -> a)
+    -> a;
+public processLines state !prompt end processLine =
+    let
+        line :: String;
+        line = readLine (makeBufferedReader stdin);
+    in
+        print (prompt state)
+        `seq`
+        (
+            if (isNullString line || end state line) then
+                state
+            else
+                processLines (processLine state line) prompt end processLine
+        )
+    ;
+

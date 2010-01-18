@@ -1,0 +1,84 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+Computer Language Benchmarks Game (aka Shootout) .
+
+This project contains CAL implementations of the main benchmarks used in the 
+The Great Computer Language Benchmarks Game. See http://shootout.alioth.debian.org/ for
+more information. It also contains our internal benchmarks.
+
+Each of the benchmarks should be implemented in its' own CAL module under 
+Cal.Benchmarks.Shootout.
+
+The Java implmentations of the benchmarks, taken from the Shootout site July 15th, 
+are included in the JavaImplementation directory. The only modifications have been to
+repackage them within the OpenQuark namespace. 
+
+The data directory contains the sample input and expected output for the tests taken from the 
+shootout website. This can be used to verify the correctness of the implementations. 
+
+To get timming for the CAL and Java implementations use the TestHarness module. This has functions
+for running quick test to verify the benchmark programs are correctly implemented, and also longer 
+tests running the programs with the arguments used on the shootout site to get
+benchmark timings.
+
+e.g.
+Cal.Benchmarks.Shootout.Test.TestHarness> prepare
+Cal.Benchmarks.Shootout.Test.TestHarness> :rs
+Cal.Benchmarks.Shootout.Test.TestHarness> verify
+Cal.Benchmarks.Shootout.Test.TestHarness> :rs
+Cal.Benchmarks.Shootout.Test.TestHarness> big
+
+To get more accurate timings it is recommended to use the :pt command. It is possible to create
+a script for running all of the benchmarks with the :pt command using:
+Cal.Benchmarks.Shootout.Test.TestHarness> makePtScripts bigTests "bigTests" CAL
+Cal.Benchmarks.Shootout.Test.TestHarness> makePtScripts bigTests "bigTests" Java14
+
+
+Internal Benchmarks
+
+This project also contains our own internal benchmarks, which test certain aspects of CAL. 
+The scripts directory contains an ICE script that can be used to run all of these benchmarks.
+It is also possible to automatically benchmark OpenQuark builds using the comparebuilds script. 
+To do this create a new directory. Copy the contents of the scripts directory to this new 
+directory. Copy the open quark build .zip files to this directory. Then run the 
+comparebuilds.sh script in this directory giving the names of the quark 
+builds as the arguments. This will automatically unzip all of the builds and run the full 
+suite of benchmarks several times. The timing information for every benchmark 
+is written to disk. When the comparebuilds has finished (it will take several hours per build, 
+but there are some parameters in the comparebuilds.sh that can be tuned to reduce this) 
+it will create a file, results.txt, that contains a summary of all the individual results.
+
+ 
+
+
+
+

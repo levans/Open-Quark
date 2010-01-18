@@ -1,0 +1,190 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * ErrorTest.cal
+ * Creation date: June 23 2005
+ * By: Greg McClement
+ */
+
+
+/**
+ * This module contains test cases for CAL.
+ * 
+ * This is used by ErrorMessage_Test.java, if you change the file you will probably
+ * have to update the error test since it relies on the position in the source file of the error
+ * messages to be correct. If you add changed to the end of the file that should be okay.
+ * 
+ * @author Greg McClement
+ */
+
+module Cal.Test.JUnitSupport.ErrorTest;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, String;
+    dataConstructor = True, False, Left, Right;
+    function = assert, undefined, error;
+    ;   
+
+import Cal.Core.Debug;   
+
+jkjk :: Boolean;
+jkjk = False || error "three";
+
+kk = assert False && assert True;
+
+jj = False || error "three" || error ("hi" ++ "you");  
+
+aj = False || error "Problemo";
+
+j2 :: String;
+j2 = undefined "a";
+
+pj = assert False;
+
+dogdogdog :: String;
+public dogdogdog = undefined;   // ErrorTest:48.12: Prelude.undefined called.
+
+k1 :: Boolean;
+public k1 =      
+    assert True &&
+    assert True &&
+    assert False &&         // ErrorTest:38.5: Assert failed.
+      assert True;
+
+k2 :: Boolean;
+public k2 =      
+    assert False &&
+    assert True &&
+    assert False &&         // ErrorTest:38.5: Assert failed.
+      assert True;
+
+k3 :: Boolean;
+public k3 =      
+    assert True &&
+    assert True &&
+    assert True &&         // ErrorTest:38.5: Assert failed.
+    assert False;
+
+//t0 :: String;
+//public t0 = t1 error;
+//
+//t1 :: (String -> String) -> String;
+//public t1 f = f "hi";       // no source position. This should work like the old way
+
+j :: String;
+public j = undefined;   // ErrorTest:48.12: Prelude.undefined called.
+
+j1 :: String;
+j1 = undefined "a";
+
+f :: String;
+public f =  (\arg -> error arg) "hi";  // ErrorTest:54.22: hi 
+
+m :: String;
+public m = 
+    let
+        errMessage = "error message";
+    in
+        error errMessage;
+
+n :: String;
+public n =
+    if error "big problems" then
+        "Ok"
+    else
+        "Not Ok";
+
+o :: String;
+public o =
+    if False then
+        "ok"
+    else
+        error "Some Error";
+
+p :: String;
+public p =
+    case error "not another problem" of
+    _ -> "yes another problem";
+    ;
+
+q :: String;
+public q =
+    case True of 
+    _ -> error "not another problem";
+    ;
+    
+r :: String;
+public r =
+    let
+        m = error "this is bad";
+    in
+        m;
+    
+s :: String;
+public s =
+    if True then
+        error "Some Error"
+    else
+        "Not Ok";
+
+
+t0 :: (String -> String) -> String;
+t0 f = f "arg";
+    
+public t =
+    t0 error;
+         
+u :: String -> String -> String;
+u a b = a ++ b;
+v :: String;
+v = t0 (u "a");
+
+public testCases = 
+    let
+        value = True;
+    in
+        case value of
+            True -> 
+                case value of
+                False -> True;
+            ; 
+        ;
+
+public testCasesRecord = 
+    let
+        value = Right 1.0;
+    in
+        case value of
+        Left v -> True; 
+        ;
+

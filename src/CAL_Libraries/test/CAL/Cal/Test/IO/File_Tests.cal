@@ -1,0 +1,311 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * File_Tests.cal
+ * Creation date: June 27, 2005.
+ * By: Joseph Wong
+ */
+
+/**
+ * This module contains test cases for the {@link File@} module, and other test utilities for working with files.
+ * 
+ * @author Joseph Wong
+ * @author Bo Ilic
+ * @author James Wright
+ */
+module Cal.Test.IO.File_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    dataConstructor = Left, Right;
+    ;
+import Cal.Core.Char;    
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    ;      
+import Cal.Core.String using  
+    function = toList;    
+    ;        
+
+import Cal.IO.File using
+    function= readFile, makeFileName;
+    ;
+    
+import Cal.Test.General.M1;
+
+import Cal.Core.Debug;
+
+
+/**
+ * Test the functionalities of the File module.
+ */
+public testFileModule =
+    testIsAbsolutePath_Windows_FalseCase
+    && testIsAbsolutePath_Windows_TrueCase
+    && testGetCanonicalPath_Windows
+    && testGetNameFromPath_Windows
+    && testGetParentFromPath_Windows_NothingCase
+    && testGetParentFromPath_Windows_JustCase
+    && testExtendPath_Windows
+    && testBuildPathFromComponents_Windows
+    && testIsFile_Windows_FalseCase
+    && testIsDirectory_Windows_TrueCase
+    && testWriteFileReadFileRoundTrip_Windows
+    && testAppendFileReadFileRoundTrip_Windows
+    && testRenameFileReadFileRoundTrip_Windows
+    && testCreateDirectoryAndNonexistentParentDirectories_Windows
+    && testIOErrorType_FileNotFound_Windows
+    && testBadHost
+    && testIOSuccess_BadHost
+    && testHttp404
+    && testIOSuccess_Http404
+    || error "testFileModule failed";
+
+
+testIsAbsolutePath_Windows_FalseCase = not (File.isAbsolutePath $ File.makeFileName "c:");
+
+testIsAbsolutePath_Windows_TrueCase = File.isAbsolutePath $ File.makeFileName "c:\\";
+
+testGetCanonicalPath_Windows = (File.getCanonicalPath $ File.makeFileName "c:\\windows\\.\\..\\.\\windows") == File.makeFileName "C:\\WINDOWS";
+
+testGetNameFromPath_Windows = (File.getNameFromPath $ File.makeFileName "foo\\bar\\baz") == "baz";
+    
+testGetParentFromPath_Windows_NothingCase = Prelude.isNothing (File.getParentFromPath $ File.makeFileName "c:\\");
+
+testGetParentFromPath_Windows_JustCase = (Prelude.fromJust $ File.getParentFromPath $ File.makeFileName "c:\\windows") == File.makeFileName "c:\\";
+
+testExtendPath_Windows = (File.extendPath (File.makeFileName "c:\\") "windows") == File.makeFileName "c:\\windows";
+
+testBuildPathFromComponents_Windows = (File.buildPathFromComponents ["c:\\", "windows", "system32"]) == File.makeFileName "c:\\windows\\system32";
+
+testIsFile_Windows_FalseCase = not (File.isFile $ File.makeFileName "3:\\4");
+
+testIsDirectory_Windows_TrueCase = File.isDirectory $ File.makeFileName "c:\\windows";
+
+ioFinally result cleanup = result `seq` cleanup `seq` result;
+
+testWriteFileReadFileRoundTrip_Windows =
+    let
+        testRoundTrip !fileName !string =
+            case File.writeFile fileName string of
+            Right _ ->
+                ioFinally 
+                    (
+                        case File.readFile fileName of
+                        Right s -> s == string;
+                        _ -> False;
+                    )
+                $
+                    File.deleteFile fileName;
+            _ ->
+                False;
+            ;
+    in
+        testRoundTrip (File.makeFileName "c:\\__testWriteFileReadFileRoundTrip_Windows") "FooBarBaz";
+
+testAppendFileReadFileRoundTrip_Windows =
+    let
+        testRoundTrip !fileName !s1 !s2 =
+            case File.writeFile fileName s1 of
+            Right _ ->
+                ioFinally
+                    (
+                        case File.appendFile fileName s2 of
+                        Right _ ->
+                            case File.readFile fileName of
+                            Right s -> s == (s1 ++ s2);
+                            _ -> False;
+                            ;
+                        _ -> False;
+                    )
+                $
+                    File.deleteFile fileName;
+            _ ->
+                False;
+            ;
+    in
+        testRoundTrip (File.makeFileName "c:\\__testAppendFileReadFileRoundTrip_Windows") "Bar" "Baz";
+    
+testRenameFileReadFileRoundTrip_Windows =
+    let
+        testRoundTrip !f1 !f2 !string =
+            case File.writeFile f1 string of
+            Right _ ->
+                case File.renameFile f1 f2 of
+                True ->
+                    ioFinally
+                        (
+                            case File.readFile f2 of
+                            Right s -> s == string;
+                            _ -> False;
+                        )
+                    $
+                        File.deleteFile f2;
+                _ ->
+                    File.deleteFile f1 `seq`
+                    False;
+                ;
+            _ ->
+                False;
+            ;
+    in
+        testRoundTrip (File.makeFileName "c:\\__testRenameFileReadFileRoundTrip_Windows") (File.makeFileName "c:\\__XXX") "Baz";
+    
+testCreateDirectoryAndNonexistentParentDirectories_Windows =
+    if File.createDirectoryAndNonexistentParentDirectories $ File.makeFileName "c:\\__testCreateDirectoryAndNonexistentParentDirectories_Windows\\foo\\bar" then
+        let
+            result = 
+                (File.isDirectory $ File.makeFileName "c:\\__testCreateDirectoryAndNonexistentParentDirectories_Windows\\foo\\bar") &&
+                (File.isDirectory $ File.makeFileName "c:\\__testCreateDirectoryAndNonexistentParentDirectories_Windows\\foo") &&
+                (File.isDirectory $ File.makeFileName "c:\\__testCreateDirectoryAndNonexistentParentDirectories_Windows");
+        in
+            result `seq`
+            (File.deleteDirectory $ File.makeFileName "c:\\__testCreateDirectoryAndNonexistentParentDirectories_Windows\\foo\\bar") `seq`
+            (File.deleteDirectory $ File.makeFileName "c:\\__testCreateDirectoryAndNonexistentParentDirectories_Windows\\foo") `seq`
+            (File.deleteDirectory $ File.makeFileName "c:\\__testCreateDirectoryAndNonexistentParentDirectories_Windows") `seq`
+            result
+    else
+        False;
+
+testIOErrorType_FileNotFound_Windows =
+    case File.readFile $ File.makeFileName "3:\\4" of
+    Left ioError -> File.isDoesNotExistErrorType $ File.ioeGetErrorType ioError;
+    _ -> False;
+    ;
+
+testBadHost =
+    case File.readBinaryContentsFromFileOrUrl "http://foo.barbaz" of
+    Left ioError -> File.isUnknownHostErrorType $ File.ioeGetErrorType ioError;
+    _ -> False;
+    ;
+
+testIOSuccess_BadHost = not (File.isIOSuccess $ File.readBinaryContentsFromFileOrUrl "http://foo.barbaz");
+
+testHttp404 =
+    case File.readBinaryContentsFromFileOrUrl "http://www.google.com/foo" of
+    Left ioError -> File.isDoesNotExistErrorType $ File.ioeGetErrorType ioError;
+    _ -> False;
+    ;
+
+testIOSuccess_Http404 = not (File.isIOSuccess $ File.readBinaryContentsFromFileOrUrl "http://www.google.com/foo");
+
+
+
+
+
+//
+// The following functions were transplanted from M1 (following the extraction of the FileName type into the File module).
+//
+
+//Some gems handy for analyzing what symbols you might want to include in "import using" clauses.
+
+useOfQualifiedPreludeSymbols :: File.FileName -> [(Prelude.String, Prelude.Int)];
+useOfQualifiedPreludeSymbols fileName = useOfQualifiedModuleSymbols "Prelude." fileName;
+
+useOfQualifiedModuleSymbols :: Prelude.String -> File.FileName -> [(Prelude.String, Prelude.Int)];
+useOfQualifiedModuleSymbols moduleName fileName = List.reverse (List.sortBy (\p1 p2 -> Prelude.compare (Prelude.snd p1, Prelude.fst p1) (Prelude.snd p2, Prelude.fst p2)) (List.map (\x -> (List.head x, List.length x)) (List.group (List.sort (List.filter (String.startsWith moduleName) (List.map String.fromList (List.map (List.filter (\x -> Char.isLetter x || Char.isDigit x || (x == '.'))) (map String.toList (String.words (File.fromIOSuccess (File.readFile fileName)))))))))));
+
+runningPercentOfTotal :: [Prelude.Double] -> [Prelude.Double];
+runningPercentOfTotal listValue = let
+  percentDivide x_1 arg = 100.0 * (x_1 / (Prelude.toDouble arg));
+in
+  List.map (\x -> percentDivide x (List.sum listValue)) (List.map List.sum (List.tail (List.inits listValue)));
+
+useOfQualifiedPreludeSymbolsWithRunningPercentOfTotal :: File.FileName -> [((Prelude.String, Prelude.Int), Prelude.Double)];
+public useOfQualifiedPreludeSymbolsWithRunningPercentOfTotal fileName = let
+  freqData = useOfQualifiedPreludeSymbols fileName;
+in
+  List.zip freqData (runningPercentOfTotal (List.map Prelude.toDouble (List.map Prelude.snd freqData)));
+
+useOfQualifiedModuleSymbolsWithRunningPercentOfTotal :: Prelude.String -> File.FileName -> [((Prelude.String, Prelude.Int), Prelude.Double)];
+public useOfQualifiedModuleSymbolsWithRunningPercentOfTotal moduleName fileName = let
+  freqData = useOfQualifiedModuleSymbols moduleName fileName;
+in
+  List.zip freqData (runningPercentOfTotal (List.map Prelude.toDouble (List.map Prelude.snd freqData)));
+  
+//test reading 2 short files. They are different, which shows we aren't accidentally caching values.
+//this is why some of the functions above are not written as CAFs.          
+//testReadFile = concat [(readFile (makeFileName "d:\\dev\\testFile1.txt")), (readFile (makeFileName "d:\\dev\\testFile2.txt"))];           
+
+//test performance on a 21k file. It terminates after 3615626 instructions, with an incorrect result.
+//testReadFile = length (readFile (makeFileName "C:\\eclipse\\workspace\\CAL\\antlr grammar\\CAL.g"));
+
+testReadFile = String.length (File.fromIOSuccess (readFile (makeFileName "d:\\dev\\testFile1.txt")));
+
+// The gems below are handy for analyzing the CSV files that are dumped
+// by the GemCutter's Debug/Dump Frequency data menu option.
+
+// Parse the specified CSV file and return a list of records representing its rows.
+// Each row represents a single gem, with moduleName, gemName, and frequency fields.
+analyzeGemFrequencyData :: File.FileName -> [{frequency :: Int, gemName :: String, moduleName :: String}];
+public analyzeGemFrequencyData fileName = 
+    let
+        rowToRecord :: [String] -> {frequency :: Int, gemName :: String, moduleName :: String};        
+        rowToRecord fields =
+            {moduleName = List.subscript fields 0, gemName = List.subscript fields 1, frequency = Prelude.stringToInt (List.subscript fields 2)};
+        
+        filteredRows :: [[String]];
+        filteredRows = filter (\lst -> List.length lst >= 3) rows;
+        
+        rows :: [[String]];
+        rows = map (String.splitString ",") (String.splitString "\n" (File.fromIOSuccess (File.readFile fileName)));
+    in
+        map rowToRecord filteredRows;
+
+// Returns a list of (moduleName, totalFrequency) pairs based on the 
+// frequency-dump CSV file specified by fileName.  totalFrequency is
+// the total of the reference frequencies of every gem in the module.
+totalModuleFrequencies :: File.FileName -> [(String, Int)];
+private totalModuleFrequencies fileName = 
+    let
+        fieldGroupings :: [[{moduleName :: String, gemName :: String, frequency :: Int}]];
+        fieldGroupings = 
+            M1.groupByField (analyzeGemFrequencyData fileName) M1.moduleNameField;
+        
+        moduleNames :: [String];
+        moduleNames =
+            map (Prelude.compose M1.moduleNameField head) fieldGroupings;
+        
+        moduleTotals :: [Int];
+        moduleTotals =
+            map List.sum (map (map M1.frequencyField) fieldGroupings);
+            
+    in
+        zip moduleNames moduleTotals;

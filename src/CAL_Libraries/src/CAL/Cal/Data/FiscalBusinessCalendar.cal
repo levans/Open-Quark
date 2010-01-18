@@ -1,0 +1,349 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * FiscalBusinessCalendar.cal
+ * Creation date: Apr 25, 2006.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains an implementation of a {@link typeConstructor =
+ * BusinessCalendar@} based on a simple fiscal calendar which can be shifted
+ * some number of months from the Gregorian calendar.
+ *
+ * @author Richard Webster
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+module Cal.Data.FiscalBusinessCalendar;
+
+import Cal.Core.Prelude using
+    typeConstructor = Int, String;
+    dataConstructor = Nothing, Just;
+    function = error, field1, fromJust, isJust, not, truncate;
+    ;
+import Cal.Utilities.Range using
+    typeConstructor = Range;
+    function =
+        leftEndpoint, makeBetweenIncludingLeftEndpointRange, makeEntireRange;
+    ;
+import Cal.Utilities.Time using
+    typeConstructor = Duration, Time;
+    ;
+import Cal.Data.BusinessCalendar using
+    typeConstructor = BusinessCalendar, Period, PeriodType;
+    dataConstructor =
+        NoPeriod, YearPeriod, QuarterPeriod, MonthPeriod, WeekOfYearPeriod, 
+        DayOfYearPeriod, DayOfMonthPeriod, DayOfWeekPeriod;
+    function =
+        getBasePeriodType, getPeriodFromTime, getPeriodTimeRange, 
+        getPeriodValue, getPeriodValueFromTime, getPeriodValueRange, 
+        getTimePartExpr, makeBusinessCalendar, makeChildPeriod, makePeriod, 
+        periodDisplayName, shiftByNPeriods, wrapPeriodValue;
+    ;
+import Cal.Data.GregorianBusinessCalendar using
+    function = defaultBusinessCalendar;
+    ;
+import Cal.Data.DictionaryQuery using
+    typeConstructor = Expr;
+    function = untypedFunctionExpr;
+    ;
+import Cal.Data.Sql;
+
+
+/**
+ * Construct a fiscal business calendar that is offset from the default Gregorian 
+ * calendar by a fixed number of months.
+ * For example, if the fiscal calendar is shifted by +2 months, then the fiscal 2007 year would begin on Nov 1, 2006.
+ * If shifted by -2 months, then the fiscal 2007 year would begin on March 1, 2007.
+ * 
+ * @arg nMonthsOffset  the number of months which the fiscal calendar is offset from the Gregorian calendar
+ * @return             a fiscal business calendar shifted by N months from the Gregorian calendar
+ * 
+ * @see function=defaultBusinessCalendar
+ */
+fiscalBusinessCalendar :: Int -> BusinessCalendar;
+public fiscalBusinessCalendar !nMonthsOffset = 
+    if nMonthsOffset == 0 then
+        defaultBusinessCalendar
+    else
+        makeBusinessCalendar (fiscal_periodValueRange nMonthsOffset) 
+                             (fiscal_periodDisplayName nMonthsOffset) 
+                             (fiscal_periodTimeRange nMonthsOffset) 
+                             (fiscal_periodValueFromTime nMonthsOffset) 
+                             (fiscal_timePartExpr nMonthsOffset);
+
+
+/**
+ * Returns the range of valid values for the specified period type, given the parent period.
+ * If no parent period is available, then a maximal default range will be returned
+ * (e.g. (1, 31) for DayOfMonthPeriod).
+ */
+fiscal_periodValueRange :: Int -> Period -> PeriodType -> (Int, Int);
+private fiscal_periodValueRange nMonthsOffset parentPeriod !periodType = 
+    case periodType of
+    (NoPeriod
+        | YearPeriod 
+        | QuarterPeriod 
+        | MonthPeriod 
+        | DayOfWeekPeriod) ->
+            getPeriodValueRange defaultBusinessCalendar parentPeriod periodType;
+
+    WeekOfYearPeriod -> 
+        error "not implemented";    // TODO: ...
+
+    DayOfYearPeriod  ->
+        error "not implemented";    // TODO: ...
+
+    DayOfMonthPeriod ->
+      let
+          maybeMonth = getPeriodValue parentPeriod MonthPeriod;
+          hasMonthPeriod = isJust maybeMonth;
+
+          gregorianPeriod :: Period;
+          gregorianPeriod = convertToGregorianPeriod nMonthsOffset parentPeriod;
+      in
+          if hasMonthPeriod then
+              // Translate the period into the Gregorian calendar and apply the function to this using the Gregorian calendar.
+              getPeriodValueRange defaultBusinessCalendar gregorianPeriod periodType
+          else
+              getPeriodValueRange defaultBusinessCalendar parentPeriod periodType;
+    ;
+
+/**
+ * Returns the display name for the specified period value.
+ * For example, for the DayOfWeek period type, this might return {@code "Monday"@}.
+ * For example, for the Quarter period type, this might return {@code "Q1 98"@}.
+ */
+fiscal_periodDisplayName :: Int -> Period -> PeriodType -> Int -> String;
+private fiscal_periodDisplayName nMonthsOffset parentPeriod !periodType !periodValue = 
+    case periodType of
+    (NoPeriod
+        | YearPeriod 
+        | QuarterPeriod 
+        | WeekOfYearPeriod
+        | DayOfYearPeriod
+        | DayOfWeekPeriod) -> 
+        periodDisplayName defaultBusinessCalendar parentPeriod periodType periodValue;
+
+    MonthPeriod -> 
+        let
+            gregorianMonthValue :: Int;
+            gregorianMonthValue = 
+                convertToGregorianMonthValue nMonthsOffset periodValue;
+        in
+            // Get the name of the appropriate Gregorian month, but do not include the year in the display name.
+            periodDisplayName defaultBusinessCalendar (makePeriod []) MonthPeriod gregorianMonthValue;
+
+    DayOfMonthPeriod -> 
+        case getPeriodValue parentPeriod MonthPeriod of
+        Nothing -> 
+            periodDisplayName defaultBusinessCalendar (makePeriod []) DayOfMonthPeriod periodValue;
+        Just fiscalMonthValue -> 
+            let
+                gregorianMonthValue :: Int;
+                gregorianMonthValue = convertToGregorianMonthValue nMonthsOffset fiscalMonthValue;
+            in
+                // Get the display name for the day of month, but do not include the year in the display name.
+                periodDisplayName defaultBusinessCalendar (makePeriod [(MonthPeriod, gregorianMonthValue)]) DayOfMonthPeriod periodValue;
+        ;
+    ;
+
+/**
+ * Returns the range of time covered by the specified period.
+ * 
+ * NB: If this cannot be determined (esp. if no Year period value is specified),
+ * then the range will be unbounded in both directions.
+ */
+fiscal_periodTimeRange :: Int -> Period -> Range Time;
+private fiscal_periodTimeRange nMonthsOffset period = 
+    let
+        // TODO: this will not work if the period doesn't contain months...
+        gregorianPeriod :: Period;
+        gregorianPeriod = convertToGregorianPeriod nMonthsOffset period;
+
+        maybeYear = getPeriodValue period YearPeriod;
+        maybeMonth = getPeriodValue period MonthPeriod;
+
+        hasYear = isJust maybeYear;
+        hasMonth = isJust maybeMonth;
+        
+        basePeriodType :: PeriodType;
+        basePeriodType = getBasePeriodType period;
+    in
+        if not hasYear then makeEntireRange
+        else
+            case basePeriodType of
+            NoPeriod -> makeEntireRange;
+            (YearPeriod | QuarterPeriod) -> 
+                let
+                    // Create time ranges for the start of the first month of the period and the following period.
+                    firstMonthOfPeriod :: Period;
+                    firstMonthOfPeriod = 
+                        makeChildPeriod period MonthPeriod (field1 $ fiscal_periodValueRange nMonthsOffset period MonthPeriod);
+
+                    firstMonthOfNextPeriod :: Period;
+                    firstMonthOfNextPeriod = 
+                        shiftByNPeriods defaultBusinessCalendar firstMonthOfPeriod basePeriodType 1;
+
+                    // Shift the periods by N months and get the time range from the Gregorian calendar.
+                    firstMonthOfTimeRange :: Range Time;
+                    firstMonthOfTimeRange = 
+                        getPeriodTimeRange defaultBusinessCalendar $ convertToGregorianPeriod nMonthsOffset firstMonthOfPeriod;
+
+                    firstMonthOfNextTimeRange :: Range Time;
+                    firstMonthOfNextTimeRange = 
+                        getPeriodTimeRange defaultBusinessCalendar $ convertToGregorianPeriod nMonthsOffset firstMonthOfNextPeriod;
+                in
+                    // Create a time range from the start of the period up to the start of the next period.
+                    makeBetweenIncludingLeftEndpointRange (leftEndpoint firstMonthOfTimeRange) (leftEndpoint firstMonthOfNextTimeRange);
+            MonthPeriod -> 
+                // Convert the period to the gregorian equivalent, then defer to the gregorian calendar to get the time range.
+                getPeriodTimeRange defaultBusinessCalendar gregorianPeriod;
+            WeekOfYearPeriod -> 
+                error "Case not implemented";   // TODO: ...
+            DayOfYearPeriod -> 
+                error "Case not implemented";   // TODO: ...
+            DayOfMonthPeriod -> 
+                if hasMonth then 
+                    // Convert the period to the gregorian equivalent, then defer to the gregorian calendar to get the time range.
+                    getPeriodTimeRange defaultBusinessCalendar gregorianPeriod
+                else 
+                    makeEntireRange;
+            DayOfWeekPeriod -> 
+                error "Case not implemented";   // TODO: ...
+            ;
+
+
+/**
+ * Returns the value of the specified period for the time value.
+ */
+fiscal_periodValueFromTime :: Int -> Time -> PeriodType -> Int;
+private fiscal_periodValueFromTime nMonthsOffset time !periodType = 
+    let
+        baseGregorianPeriod :: Period;
+        baseGregorianPeriod = getPeriodFromTime defaultBusinessCalendar time [YearPeriod, QuarterPeriod, MonthPeriod];
+
+        shiftedPeriod :: Period;
+        shiftedPeriod = convertFromGregorianPeriod nMonthsOffset baseGregorianPeriod;
+    in
+        case periodType of
+        NoPeriod -> 0;
+        (YearPeriod 
+            | QuarterPeriod
+            | MonthPeriod) -> 
+                fromJust $ getPeriodValue shiftedPeriod periodType;
+
+        WeekOfYearPeriod -> 
+            error "Case not implemented";   // TODO: implement this...
+
+        DayOfYearPeriod -> 
+            let
+                fiscalYear :: Int;
+                fiscalYear = fiscal_periodValueFromTime nMonthsOffset time YearPeriod;
+
+                firstDayOfFiscalYearPeriod :: Period;
+                firstDayOfFiscalYearPeriod = makePeriod [(YearPeriod, fiscalYear), (MonthPeriod, 1), (DayOfMonthPeriod, 1)];
+
+                fiscalYearStartTime :: Time;
+                fiscalYearStartTime = Range.leftEndpoint $ fiscal_periodTimeRange nMonthsOffset firstDayOfFiscalYearPeriod;
+
+                timeDiff :: Duration;
+                timeDiff = Time.subtractTimeFromTime time fiscalYearStartTime;
+            in
+                truncate (Time.durationToDays timeDiff) + 1;
+
+        DayOfMonthPeriod -> 
+            // The day of the month will be the same as in the gregorian calendar.
+            getPeriodValueFromTime defaultBusinessCalendar time periodType;
+
+        DayOfWeekPeriod -> 
+            error "Case not implemented";   // TODO: implement this...
+
+        _ -> error "Unexpected period type";
+        ;
+
+/**
+ * Returns a database expression to extract a time part from a time value.
+ */
+fiscal_timePartExpr :: Int -> Expr -> PeriodType -> Expr;
+private fiscal_timePartExpr nMonthsOffset baseExpr !periodType = 
+    let
+        // Construct an expression to shift by N months.
+        shiftedTimeExpr :: Expr;
+        shiftedTimeExpr = untypedFunctionExpr (Sql.DateTimeAddFunction Sql.MonthInterval) 
+                            [DictionaryQuery.toUntypedExpr $ DictionaryQuery.numericConstant nMonthsOffset, baseExpr];
+    in
+        // Shift the date value by N months before extracting the time component values.
+        // Do not shift the date when extracting the DayOfMonth values.
+        case periodType of
+        DayOfMonthPeriod -> getTimePartExpr defaultBusinessCalendar baseExpr periodType;
+        _ -> getTimePartExpr defaultBusinessCalendar shiftedTimeExpr periodType;
+        ;
+
+/**
+ * Converts the fiscal month value (1 to 12) to the corresponding Gregorian month value.
+ */
+convertToGregorianMonthValue :: Int -> Int -> Int;
+private convertToGregorianMonthValue !nMonthsOffset !fiscalMonth = 
+    normalizeMonthValue (fiscalMonth - nMonthsOffset);
+
+/**
+ * Converts the Gregorian month value (1 to 12) to the corresponding fiscal month value.
+ */
+convertFromGregorianMonthValue :: Int -> Int -> Int;
+private convertFromGregorianMonthValue !nMonthsOffset !gregorianMonth = 
+    normalizeMonthValue (gregorianMonth + nMonthsOffset);
+
+/**
+ * Corrects a month value so that its value is between 1 and 12 (inclusive).
+ */
+normalizeMonthValue :: Int -> Int;
+private normalizeMonthValue !monthValue = wrapPeriodValue (1, 12) monthValue;
+
+/**
+ * Converts a fiscal calendar period to the equivalent in the Gregorian calendar
+ * by shifting nMonthsOffset months.
+ */
+convertToGregorianPeriod :: Int -> Period -> Period;
+private convertToGregorianPeriod !nMonthsOffset !fiscalPeriod = 
+    shiftByNPeriods defaultBusinessCalendar fiscalPeriod MonthPeriod (-nMonthsOffset);
+
+/**
+ * Converts a Gregorian calendar period to the equivalent in the fiscal calendar
+ * by shifting nMonthsOffset months.
+ */
+convertFromGregorianPeriod :: Int -> Period -> Period;
+private convertFromGregorianPeriod !nMonthsOffset !gregorianPeriod = 
+    shiftByNPeriods defaultBusinessCalendar gregorianPeriod MonthPeriod nMonthsOffset;
+

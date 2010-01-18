@@ -1,0 +1,254 @@
+<?xml version="1.0"?>
+<!DOCTYPE MODE SYSTEM "xmode.dtd">
+<!-- This is a JEdit Mode for CAL
+ 06 Jan 06 - Version 1.6 LWE Added more 'special' functions, e.g. deepSeq, eager etc.
+ 20 Dec 05 - Version 1.5 LWE Added CALDoc tags support
+ 05 Nov 05 - Version 1.4 LWE Added CALDoc support with supported tags
+ 04 Nov 05 - Version 1.3 PB  Added support for friend, protected
+ 16 Aug 05 - Version 1.2 LWE Added new syntax ` $ # and deriving
+ 23 Apr 05 - Version 1.1 LWE Added Auto-indent rules
+ dd Mmm 04 - Version 1.0 LWE Initial Version.  Syntax Colouring
+ 
+ --------------------------------------
+ The basic premise is to colour code entities in the following way:
+ Block comments -> COMMENT1
+ Line Comments -> COMMENT2
+ CALDoc Comments -> COMMENT3
+ CALDoc @tags -> KEYWORD3
+ CALDoc markup -> MARKUP
+ CALDoc embedded markup @tags -> KEYWORD1
+ Strings -> LITERAL1
+ Characters -> LITERAL2    
+ Numbers -> DIGIT
+ Primary keywords (data instance ...) -> KEYWORD1 
+ Importing keywords (import using unsafe jvm) -> KEYWORD2
+ Type decl special syntax (-> => ::) -> KEYWORD3
+ Pragma characters (!) -> MARKUP
+ Expression operators -> OPERATOR
+ Type/Data constructor identifiers -> LABEL  
+ Special functions (seq error etc.) -> FUNCTION   
+ Record field indices -> KEYWORD1 
+ --------------------------------------
+ The autoindenting rules work the following way:
+ Lines ending in (except for whitespace) 'let', 'where', 'using, '->', '=>', 
+ '(', '{', '[' and '=' without a ; following: cause a block indent
+ Lines including 'foreign', '::', both without a ; following, OR lines ending
+ (except for whitespace) in 'if', 'then', 'else', 'in': 
+ cause the next line only to be indented
+ 
+ These rules are designed to reflect the layout conventions for CAL, which 
+ incidentally also work very well with JEdit's indent folding scheme.  This 
+ can be turned on at (Utilities->Global Options (mode .cal)).
+ -->
+<MODE>
+    <PROPS>
+        <PROPERTY NAME="commentStart" VALUE="/*"/>
+        <PROPERTY NAME="commentEnd" VALUE="*/"/>
+        <PROPERTY NAME="lineComment" VALUE="//"/>
+        <!-- <PROPERTY NAME="indentOpenBrackets" VALUE="(" /> -->
+        <!-- <PROPERTY NAME="indentCloseBrackets" VALUE=")" /> -->
+        <PROPERTY NAME="lineUpClosingBracket" VALUE="false"/>
+        <PROPERTY NAME="doubleBracketIndent" VALUE="false" />
+        <PROPERTY NAME="wordBreakChars" VALUE=",+-=&lt;&gt;/?^&amp;*\;|:"/>
+        <PROPERTY NAME="indentNextLines" VALUE=".*(let|where|using|->|=>|\(|\{|\[|[^!=]=[^;=]*)\s*"/>
+        <PROPERTY NAME="indentNextLine" VALUE=".*((foreign|::)[^;]*|((if|then|else|in)\s*))"/>
+        <PROPERTY NAME="tabSize" VALUE="4"/>
+        <PROPERTY NAME="indentSize" VALUE="4"/>
+    </PROPS>
+    <RULES ESCAPE="\" IGNORE_CASE="FALSE" HIGHLIGHT_DIGITS="TRUE"
+        DIGIT_RE="(0x[[:xdigit:]]+|[[:digit:]]+(e[[:digit:]]*)?)[lLdDfF]?" NO_WORD_SEP="_!">
+            
+        <!-- Empty block comment -->
+        <SEQ TYPE="COMMENT1">/**/</SEQ>
+        
+        <!-- Line comment -->
+        <EOL_SPAN TYPE="COMMENT2">//</EOL_SPAN>
+        
+        <!-- CALDoc comment -->
+        <SPAN TYPE="COMMENT3" DELEGATE="CALDOC">
+                <BEGIN>/**</BEGIN>
+                <END>*/</END>
+        </SPAN>
+
+        <!-- Block comment -->
+        <SPAN TYPE="COMMENT1">
+            <BEGIN>/*</BEGIN>
+            <END>*/</END>
+        </SPAN>
+
+        <!-- String literal -->
+        <SPAN TYPE="LITERAL1" NO_LINE_BREAK="TRUE">
+            <BEGIN>"</BEGIN>
+            <END>"</END>
+        </SPAN>
+
+        <!-- Character literal -->
+        <SPAN TYPE="LITERAL2" NO_LINE_BREAK="TRUE">
+            <BEGIN>'</BEGIN>
+            <END>'</END>
+        </SPAN>
+
+        <!-- Infix function application -->
+        <SPAN TYPE="FUNCTION" NO_LINE_BREAK="TRUE">
+            <BEGIN>`</BEGIN>
+            <END>`</END>
+        </SPAN>
+
+        <!-- Mark record field indices -->
+        <SEQ_REGEXP TYPE="KEYWORD1" HASH_CHAR="#" AT_WORD_START="TRUE">#([[:digit:]])+</SEQ_REGEXP>
+        
+        <!-- Lexical sequences. Order is significant where greedy rule required. -->
+        <!-- 2 character sequences -->
+        <SEQ TYPE="KEYWORD3">=&gt;</SEQ>
+        <SEQ TYPE="KEYWORD3">-&gt;</SEQ>
+        <SEQ TYPE="KEYWORD3">::</SEQ>
+        <SEQ TYPE="OPERATOR">&lt;=</SEQ>
+        <SEQ TYPE="OPERATOR">&gt;=</SEQ>
+        <SEQ TYPE="OPERATOR">++</SEQ>
+        <SEQ TYPE="OPERATOR">&amp;&amp;</SEQ>
+        <SEQ TYPE="OPERATOR">!=</SEQ>
+        <SEQ TYPE="OPERATOR">||</SEQ>
+        <SEQ TYPE="OPERATOR">==</SEQ>
+        
+        <!-- 1 character sequences -->
+        <SEQ TYPE="KEYWORD1">;</SEQ>
+        <SEQ TYPE="KEYWORD3">|</SEQ>
+        <SEQ TYPE="KEYWORD3">=</SEQ>
+        <SEQ TYPE="KEYWORD3">\</SEQ>
+        <SEQ TYPE="OPERATOR">&lt;</SEQ>
+        <SEQ TYPE="OPERATOR">&gt;</SEQ>
+        <SEQ TYPE="OPERATOR">+</SEQ>
+        <SEQ TYPE="OPERATOR">-</SEQ>
+        <SEQ TYPE="OPERATOR">*</SEQ>
+        <SEQ TYPE="OPERATOR">/</SEQ>
+        <SEQ TYPE="FUNCTION">$</SEQ>
+        <SEQ TYPE="FUNCTION">#</SEQ>
+        <SEQ TYPE="MARKUP">!</SEQ>
+        <SEQ TYPE="LABEL">(</SEQ>
+        <SEQ TYPE="LABEL">)</SEQ>
+        <SEQ TYPE="LABEL">[</SEQ>
+        <SEQ TYPE="LABEL">]</SEQ>
+        <SEQ TYPE="LABEL">{</SEQ>
+        <SEQ TYPE="LABEL">}</SEQ>
+        <SEQ TYPE="LABEL">:</SEQ>
+        
+        <!-- Mark Constructors as Labels - this is a hack as SEQREGEXP does not allow rule differentiation on 1st char -->
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="A" AT_WORD_START="TRUE">A(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="B" AT_WORD_START="TRUE">B(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="C" AT_WORD_START="TRUE">C(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="D" AT_WORD_START="TRUE">D(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="E" AT_WORD_START="TRUE">E(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="F" AT_WORD_START="TRUE">F(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="G" AT_WORD_START="TRUE">G(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="H" AT_WORD_START="TRUE">H(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="I" AT_WORD_START="TRUE">I(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="J" AT_WORD_START="TRUE">J(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="K" AT_WORD_START="TRUE">K(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="L" AT_WORD_START="TRUE">L(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="M" AT_WORD_START="TRUE">M(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="N" AT_WORD_START="TRUE">N(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="O" AT_WORD_START="TRUE">O(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="P" AT_WORD_START="TRUE">P(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="Q" AT_WORD_START="TRUE">Q(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="R" AT_WORD_START="TRUE">R(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="S" AT_WORD_START="TRUE">S(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="T" AT_WORD_START="TRUE">T(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="U" AT_WORD_START="TRUE">U(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="V" AT_WORD_START="TRUE">V(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="W" AT_WORD_START="TRUE">W(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="X" AT_WORD_START="TRUE">X(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="Y" AT_WORD_START="TRUE">Y(_|[[:alnum:]])*</SEQ_REGEXP>
+        <SEQ_REGEXP TYPE="LABEL" HASH_CHAR="Z" AT_WORD_START="TRUE">Z(_|[[:alnum:]])*</SEQ_REGEXP>
+        
+        
+        <!-- CAL Keywords -->
+        <KEYWORDS>
+            <KEYWORD1>primitive</KEYWORD1>
+            <KEYWORD1>data</KEYWORD1>
+            <KEYWORD1>class</KEYWORD1>
+            <KEYWORD1>where</KEYWORD1>
+            <KEYWORD1>instance</KEYWORD1>
+            <KEYWORD1>deriving</KEYWORD1>
+            <KEYWORD1>public</KEYWORD1>
+            <KEYWORD1>protected</KEYWORD1>
+            <KEYWORD1>private</KEYWORD1>
+            <KEYWORD1>if</KEYWORD1>
+            <KEYWORD1>then</KEYWORD1>
+            <KEYWORD1>else</KEYWORD1>
+            <KEYWORD1>let</KEYWORD1>
+            <KEYWORD1>in</KEYWORD1>
+            <KEYWORD1>case</KEYWORD1>
+            <KEYWORD1>of</KEYWORD1>
+            <KEYWORD1>_</KEYWORD1>
+            <KEYWORD2>module</KEYWORD2>
+            <KEYWORD2>friend</KEYWORD2>
+            <KEYWORD2>import</KEYWORD2>
+            <KEYWORD2>using</KEYWORD2>
+            <KEYWORD2>typeConstructor</KEYWORD2>
+            <KEYWORD2>dataConstructor</KEYWORD2>
+            <KEYWORD2>typeClass</KEYWORD2>
+            <KEYWORD2>function</KEYWORD2>
+            <KEYWORD2>foreign</KEYWORD2>
+            <KEYWORD2>unsafe</KEYWORD2>
+            <KEYWORD2>jvm</KEYWORD2>
+            <FUNCTION>error</FUNCTION>
+            <FUNCTION>seq</FUNCTION>
+            <FUNCTION>deepSeq</FUNCTION>
+            <FUNCTION>strict</FUNCTION>
+            <FUNCTION>deepStrict</FUNCTION>
+            <FUNCTION>eager</FUNCTION>
+            <FUNCTION>undefined</FUNCTION>
+            <FUNCTION>unsafeCoerce</FUNCTION>
+            <FUNCTION>assert</FUNCTION>
+            <FUNCTION>typeOf</FUNCTION>
+        </KEYWORDS>
+    </RULES>
+    <RULES SET="CALDOC" DEFAULT="COMMENT3" IGNORE_CASE="TRUE">
+            <!-- CALDOC tags -->
+        <SPAN TYPE="MARKUP" DELEGATE="CALDOC_TAGS">
+                <BEGIN>{@</BEGIN>
+                <END>@}</END>
+        </SPAN>
+
+        <!-- so that @link{...} is highlighted -->
+        <SEQ TYPE="COMMENT3">{</SEQ>
+
+        <!-- so that *@arg is highlighted -->
+        <SEQ TYPE="COMMENT3">*</SEQ>
+
+        <!-- @see variants -->
+        <SEQ_REGEXP TYPE="COMMENT2" HASH_CHAR="@" AT_WORD_START="TRUE">@see\s*(function|dataConstructor|typeConstructor|typeClass|module)\s*=</SEQ_REGEXP>
+
+        <KEYWORDS>
+                <COMMENT2>@arg</COMMENT2>
+                <COMMENT2>@author</COMMENT2>
+                <COMMENT2>@deprecated</COMMENT2>
+                <COMMENT2>@return</COMMENT2>
+                <COMMENT2>@see</COMMENT2>  <!-- 'Naked' @see -->
+                <COMMENT2>@version</COMMENT2>
+        </KEYWORDS>        
+
+    </RULES>
+    <RULES SET="CALDOC_TAGS" DEFAULT="MARKUP" IGNORE_CASE="TRUE">
+            <!-- CALDOC tags.  Recurse into this ruleset -->
+        <SPAN TYPE="MARKUP" DELEGATE="CALDOC_TAGS">
+                <BEGIN>{@</BEGIN>
+                <END>@}</END>
+                <!-- Could use regexps here to avoid matching keyword in mid data? -->
+                <KEYWORDS>
+                        <KEYWORD1>code</KEYWORD1>
+                        <KEYWORD1>em</KEYWORD1>
+                        <KEYWORD1>item</KEYWORD1>
+                        <KEYWORD1>link</KEYWORD1>
+                        <KEYWORD1>orderedlist</KEYWORD1>
+                        <KEYWORD1>strong</KEYWORD1>
+                        <KEYWORD1>sub</KEYWORD1>
+                        <KEYWORD1>summary</KEYWORD1>
+                        <KEYWORD1>sup</KEYWORD1>
+                        <KEYWORD1>unorderedlist</KEYWORD1>
+                        <KEYWORD1>url</KEYWORD1>
+                </KEYWORDS>
+        </SPAN>
+
+    </RULES>
+</MODE>

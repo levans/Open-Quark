@@ -1,0 +1,1742 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Optimizer.cal
+ * Created: August 12, 2005
+ * By: Greg McClement
+ */
+
+/**
+ * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WAR 
+ * 
+ * This file is part of the compiler and not to be modified. 
+ * 
+ * ING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+ *
+ * This module contains all functions that are used to traverse and modify expressions. The two 
+ * traversers are transformAcc and transform. {@link transformAcc@} traverses and the expression bottom up 
+ * and maintains an accumulator throughout the traversal. {@link transform@} traverses the expression bottom up 
+ * and applies the given transformers. The difference is that transformAcc only maintains TransformState
+ * but transform maintains TransformHistory as well.
+ * 
+ * Also included in this file are some functions for combining transformations. For example, combineTransforms 
+ * takes two transformation functions and returns a single transformation function.
+ * 
+ * TODO: Get rid of transformAcc. 
+ * 
+ * @author Greg McClement
+ * 
+*/
+
+module Cal.Internal.Optimizer_Traversers;
+
+import Cal.Core.Prelude using
+    typeConstructor = String, Int, Boolean, JObject, JList, Double, Char, Maybe;
+    dataConstructor = True, False, Just, Nothing;
+    typeClass = Eq, Outputable, Inputable, Ord;
+    function = id, deepSeq, fromJust, seq, max, typeOf, empty, input, output, intToString, uncurry, assert, snd, fst, error, concat, or, isNothing, isJust, compare, and, not, undefined, compose, upFrom, isEmpty, upFromTo, append, isStringType, isIntType, isBooleanType, isDoubleType, isCharType;
+    ;
+
+import Cal.Collections.List using
+    function = zipWith, zipWith4, find, foldLeft, foldLeft1, andList, intersect, map, zip3, filter, orList, sortBy, tail, head, zip, reverse, length;
+    ;
+    
+import Cal.Core.String using
+    function = indexOfString;
+    ;
+    
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = trace, show;
+    ;
+
+import Cal.Internal.Optimizer_Type using
+    typeConstructor = Type, JTypeExpr;
+    dataConstructor = TypeConst, TypeConstTest, TypeVar, TypeId, FunctionType, ListType, AppType;
+
+    function = types_hasStrictArguments, type_specializeArguments, optimizerHelper_typeExpr_getName,
+               type_isStrict, type_hasStrictArguments, type_applyStrictness,
+               type_unify, type_applyBindings, inputType, flattenType, outputType, type_atLeastAsStrict,
+               type_listToType, type_isFunctionType, unflattenAppTypes, optimizerHelper_newTypeVar,
+               unflattenFunctionTypes; 
+    ;
+    
+import Cal.Internal.Optimizer_Expression using
+    typeConstructor = Expression, QualifiedName, FieldName, Alt,   
+                      DataCons, Literal, CaseConst, JFunctionalAgent, JCompiler_RecordType_RecordType;
+    dataConstructor = FNOrdinal, Alt, Alts,
+                      Var, Literal, App, Lambda, Let, Switch, RecordCase,  
+                      Opaque, RecordSelection, RecordExtensionLiteral, 
+                      RecordExtensionPolymorphic, DataConsSelection, DataConstructor, 
+                      LetInlinable, ErrorInfo, QN, ChainOfSeqs, 
+                      LitString, LitInt, LitBoolean, LitDouble, LitChar, LitOpaque, LitByte, LitLong,
+                      CaseLiteral, CaseDataCons, DataCons;
+                      
+    function = unflattenExpression, showExpressionStructure,  
+               qualifiedName_getName, qualifiedName_isTopLevel, optimizerHelper_functionalAgent_getTypeExprExact,
+               dataCons_getType, optimizerHelper_type_asRecordType, outputFieldName, 
+               compiler_RecordType_RecordType_getHasFieldType, isLambdaExpression, alt_getExpr,
+               getFunctor, flattenExpression,
+               expression_isWHNF, isVar, flattenSeqs2, isSeq;
+    ;
+    
+import Cal.Internal.Optimizer_State using
+    typeConstructor = TransformState, TransformHistory;
+    dataConstructor = TransformState, TransformHistory, 
+                      SeeAlt, SeeCaseExpr, SeeLeftApp, SeeRightApp, SeeKeepableOldLetDef, Other, NotAllowed;
+
+    function = newVar, substitute, transformState_isInContextBoundNames, prelude_seq_expr,  
+               expression_isUnsaturatedExpression, transformState_getTopLevelBoundNames, 
+               expression_getType, literal_getType, dp, inlinableState_transition, 
+               transformState_updateInContextBoundNames, transformState_deeper, 
+               transformState_update, inlinableState_set, transformState_updateLambdaVars, 
+               transformState_findType, transformState_addKnownForm, transformState_addKnownToBeWHFNs,
+               transformState_setParentExpr, transformState_updateType,
+               transformState_setType, transformState_updateSafeForInliningVars,
+               transformState_addAlreadySeqed, transformState_getType,
+               transformState_updateTopLevelBoundNames, transformState_clearInContextBoundNames,
+               transformState_updateDerivation, transformState_addKnownToBeWHFN,
+               transformHistory_init, qualifiedName_getType, transformHistory_takingTooLong, 
+               transformState_addKnownToNotBeForm, buildSeq2;
+    ;
+    
+friend Cal.Internal.Optimizer_Transformations;
+friend Cal.Test.Internal.Optimizer_Test;
+friend Cal.Internal.Optimizer;
+
+trace2 :: String -> a -> a;
+trace2 unused v = v;
+
+/**
+ * Traverse the tree in post-order (bottom-up) and apply the given transformation function.
+ *
+ * TODO: Go over this and make sure that the bound names are updated correctly.
+ * 
+ * @arg state Some state information for use by the transformations.
+ * @arg acc The accumulator for the traversal.
+ * @arg expression The expression being traversed.
+ * @arg transformer The function that transforms a not in the expression.
+ * @return The result of applying the transformer function in post order to the before expression.
+ */
+
+transformAcc :: TransformState -> acc -> Expression -> (TransformState -> acc -> Expression -> (acc, Expression)) -> (acc, Expression);
+protected transformAcc state acc expression transformer =
+    case expression of
+    App expr1 expr2 ->
+        case transformAcc state acc expr1 transformer of
+        (acc1, expr1Prime) ->
+            case transformAcc state acc1 expr2 transformer of
+            (acc2, expr2Prime) ->
+                transformer state acc2 (App expr1Prime expr2Prime);
+            ;
+        ;
+        
+    Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+        case transformAcc (transformState_updateLambdaVars lambdaVar lambdaType state) acc lambdaExpr transformer of
+        (acc1, lambdaExprPrime) ->
+            transformer state acc1 (Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExprPrime);
+        ;
+        
+    Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+        let
+            /**
+             * Only update the bound names for variables that will be at file scope.   
+             */
+            statePrime :: TransformState;
+            statePrime =
+                transformState_updateInContextBoundNames letVar state;
+        in
+                case transformAcc statePrime acc letBody transformer of
+                (acc1, letBodyPrime) ->
+                    case transformAcc statePrime acc1 letExpr transformer of
+                    (acc2, letExprPrime) ->
+                    transformer state acc2 (Let letVar isNew isKeepable isTopLevel letType letExprPrime letBodyPrime isRecursive arity isCoreFunction constArgs bodyWasChangedAt False);
+                ;
+            ;
+            
+    LetInlinable letVar letType letExpr letBody arity counter constArgs ->  // same as let (maybe combine the two with a param)
+        let
+            /**
+             * Only update the bound names for variables that will be at file scope.   
+             */
+            statePrime :: TransformState;
+            statePrime = transformState_updateTopLevelBoundNames letVar state;
+        in
+            case transformAcc statePrime acc letExpr transformer of
+            (acc1, letExprPrime) ->
+                case transformAcc statePrime acc1 letBody transformer of
+                (acc2, letBodyPrime) ->
+                    transformer state acc2 (LetInlinable letVar letType letExprPrime letBodyPrime arity counter constArgs);
+                ;
+            ;
+            
+    Switch switchExpr switchAlts ->
+        let
+
+//                transformerAlt :: (acc, Alt) -> (acc, Alt);
+            transformerAlt state !input =
+                case input of
+                (input_acc, input_alt) ->
+                    case input_alt of
+                    Alt caseConst ip fnqns expression -> 
+                        let
+                            statePrime :: TransformState;
+                            statePrime = 
+                                foldLeft 
+                                    (\state fnqn -> transformState_updateType fnqn.#2 fnqn.#3 state) 
+                                    state 
+                                    fnqns;
+                        in
+                            case transformAcc statePrime input_acc expression transformer of
+                            (history1, exprPrime) ->
+                                (history1, Alt caseConst ip fnqns exprPrime);
+                            ;    
+                    Alts caseConsts ip fnqns expression -> 
+                        let
+                            statePrime :: TransformState;
+                            statePrime = 
+                                foldLeft 
+                                    (\state fnqn -> transformState_updateType fnqn.#2 fnqn.#3 state) 
+                                    state 
+                                    fnqns;
+                        in
+                            case transformAcc statePrime input_acc expression transformer of
+                            (history1, exprPrime) ->
+                                (history1, Alts caseConsts ip fnqns exprPrime);
+                            ;    
+                    ;
+                ;    
+
+            transformerAlts state !input =
+                case input of
+                (input_acc, input_alts) ->
+                    case input_alts of
+                    [] -> (input_acc, []);
+                    alt:rest ->
+                        case transformerAlt state (input_acc, alt) of
+                        (acc1, altPrime) ->
+                            case transformerAlts state (acc1, rest) of
+                            (acc2, altsPrime) ->
+                                (acc2, altPrime : altsPrime);
+                            ;
+                        ;    
+                    ;
+                ;    
+                
+        in
+            case transformAcc state acc switchExpr transformer of
+            (acc1, switchExprPrime) ->
+                case transformerAlts state (acc1, switchAlts) of
+                (acc2, switchAltsPrime) ->
+                    transformer state acc2 (Switch switchExprPrime switchAltsPrime);
+                ;
+            ;    
+        
+    DataConsSelection dcValueExpr dc fieldIndex errorInfo ->
+        case transformAcc state acc dcValueExpr transformer of
+        (acc1, dcValueExprPrime) ->
+            transformer state acc1 (DataConsSelection dcValueExprPrime dc fieldIndex errorInfo);
+        ;    
+
+    RecordExtensionLiteral recordExtension ->
+        case transformExtensionFieldsAcc state acc transformer recordExtension of
+        (acc1, recordExtensionPrime) ->
+            transformer state acc1 (RecordExtensionLiteral recordExtensionPrime);
+        ;
+        
+    RecordExtensionPolymorphic body recordExtension ->
+        case transformExtensionFieldsAcc state acc transformer recordExtension of
+        (acc1, recordExtensionPrime) ->
+            case transformAcc state acc1 body transformer of
+            (acc2, bodyPrime) ->
+                transformer state acc2 (RecordExtensionPolymorphic bodyPrime recordExtensionPrime);
+            ;
+        ;    
+        
+    RecordSelection rsExpr rsField ->
+        let
+            rsExprPrime = transformAcc state acc rsExpr transformer; 
+        in
+            case transformAcc state acc rsExpr transformer of
+            (acc1, rsExprPrime) ->
+                transformer state acc1 (RecordSelection rsExprPrime rsField);
+            ;
+            
+    _ -> transformer state acc expression;
+    ;
+        
+prelude_eager :: QualifiedName;
+prelude_eager = QN "Cal.Core.Prelude" "eager";
+
+/**
+ * Traverses the given expression and applies the given transformations. The TransformState
+ * and TransformationHistory is maintained by this function.
+ * 
+ * TODO Go through this and make sure that the names are updated correctly.
+ *  
+ * @arg currentState Information about the context of the current subexpression. This is used to avoid inlining case expressions in strict contexts.
+ * @arg history Information about the history of the current transformation.
+ * @arg before The expression to transform.
+ * @arg transformer The function to use to transform the input expression.
+ * @return The transformed expression.
+ */
+
+transform :: 
+    TransformState -> 
+    TransformHistory -> 
+    Expression -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    (TransformHistory, Boolean, Expression);
+protected transform currentState history !before transformer =
+    if transformHistory_takingTooLong history then
+        (history, False, before)
+    else
+        transformInner currentState history before transformer;
+
+transformInner :: 
+    TransformState -> 
+    TransformHistory -> 
+    Expression -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    (TransformHistory, Boolean, Expression);
+protected transformInner currentState history !before transformer =
+    case before of
+    App expr1 expr2 ->
+        case
+            transform (transformState_setParentExpr (currentState `inlinableState_transition` SeeLeftApp) before) history expr1 transformer of
+        (history1, wasChanged1, expr1Prime) ->
+            case 
+                transform
+                    (
+                        (
+                        case expr1Prime of
+                        App functor arg ->
+                            if isSeq functor then
+                                transformState_addKnownToBeWHFN arg
+                            else
+                                id;
+                        _ -> id;
+                        )
+                        (currentState `inlinableState_transition` SeeRightApp `transformState_setParentExpr` before)
+                    )
+                    history1 expr2 transformer of
+            (history2, wasChanged2, expr2Prime) ->
+                if wasChanged1 || wasChanged2 then
+                    case transformer currentState history2 (App expr1Prime expr2Prime) of
+                    (history3, _, expr3) ->
+                        (history3, True, expr3);
+                else
+                    transformer currentState history2 before;
+            ;
+        ;
+    
+    Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+        let
+            state :: TransformState;
+            state = currentState;
+        in
+            case transform
+                    (
+                        (
+                            if type_isStrict lambdaType then
+                                transformState_addKnownToBeWHFN (Var lambdaVar [] Nothing Nothing)
+                            else
+                                id
+                        )
+                        (transformState_updateLambdaVars lambdaVar lambdaType (transformState_setParentExpr state before))
+                    )
+                    history lambdaExpr transformer of
+            (history1, wasChanged1, lambdaExprPrime) ->
+                if wasChanged1 then
+                    case transformer state history1 (Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExprPrime) of
+                    (history2, _, expr2) -> (history2, True, expr2);
+                else
+                    transformer state history1 before;
+            ;
+    
+    Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+        let
+            state :: TransformState;
+            state =
+                // If the function body is eager then update the WHFN list. See test107.
+//                case getFunctor letExpr of
+//                Var {name} ->
+//                    if name == prelude_eager then
+//                        transformState_addAlreadySeqed (Var letVar [] Nothing Nothing) currentState
+//                    else
+//                        currentState;
+//                _ -> 
+                    currentState;
+//                ;
+        
+            stateForDef :: TransformState;
+            stateForDef =
+                let
+                    statePrime :: TransformState;
+                    statePrime =                     
+                        if not isNew && isKeepable then
+                            state `inlinableState_transition` SeeKeepableOldLetDef
+                        else
+                            state;
+                in
+                    case letType of
+                    Nothing ->
+                        // Arg get the type the hard way.
+                        case expression_getType state history letExpr of
+                        Nothing -> statePrime;
+                        Just type -> transformState_setType statePrime letVar type;
+                        ;
+                    Just types -> 
+                        transformState_setType statePrime letVar (unflattenFunctionTypes types);
+                ;
+
+            letExprPrime :: (TransformHistory, Boolean, Expression);
+            letExprPrime =
+                let
+                    /*
+                     * If the function is not top level then clear the in context names. 
+                     */
+                    stateWithUpdatedContext :: TransformState;
+                    stateWithUpdatedContext  = 
+                        if isTopLevel then
+                            transformState_clearInContextBoundNames stateForDef
+                        else
+                            stateForDef;
+                in
+                    transform 
+                        (transformState_deeper (transformState_setParentExpr stateWithUpdatedContext before) letVar) 
+                        history letExpr transformer;
+        in
+            case letExprPrime of
+            (history1, wasChanged1, letExprPrime) ->
+                let
+                    stateWithDef :: TransformState;
+                    stateWithDef = 
+                        /*transformState_setParentExpr*/ 
+                        (transformState_update letVar letExprPrime letType constArgs isTopLevel state) 
+//                        (transformState_update letVar letExprPrime letType constArgs (not isKeepable) state) 
+                        /*before*/;
+                in    
+                    case 
+                        if False && bodyWasChangedAt < history1.TransformHistory.currentIteration then
+                            (history1, False, letBody)
+                        else
+                            transform stateWithDef history1 letBody transformer 
+                        of
+                    (history2, wasChanged2, letBodyPrime) ->
+                        if wasChanged1 || wasChanged2 then
+                            case transformer stateWithDef history2 (Let letVar isNew isKeepable isTopLevel letType letExprPrime letBodyPrime isRecursive arity isCoreFunction constArgs (if wasChanged2 then history.TransformHistory.currentIteration else bodyWasChangedAt) False) of
+                            (history3, _, expr3) -> (history3, True, expr3);
+                        else
+                            transformer stateWithDef history2 before;
+                    ;
+            ;    
+            
+    LetInlinable letVar letType letExpr letBody arity counter constArgs ->  // same as let (maybe combine the two with a param)
+        let
+            state :: TransformState;
+            state = currentState;
+            letExprPrime :: (TransformHistory, Boolean, Expression);
+            letExprPrime = transform (transformState_deeper /*(transformState_setParentExpr */ state /* before)*/ letVar) history letExpr transformer;
+        in
+            case letExprPrime of
+            (history1, wasChanged1, letExprPrime) ->
+                let
+                    stateWithDef :: TransformState;
+                    stateWithDef = transformState_setParentExpr (transformState_update letVar letExprPrime letType constArgs True state) before;
+                in                
+                    case transform stateWithDef history1 letBody transformer of
+                    (history2, wasChanged2, letBodyPrime) ->
+                        if wasChanged1 || wasChanged2 then
+                            case transformer stateWithDef history2 (LetInlinable letVar letType letExprPrime letBodyPrime arity counter constArgs) of
+                            (history3, _, expr3) -> (history3, True, expr3);
+                        else
+                            transformer stateWithDef history2 before;
+                    ;
+            ;
+        
+    Switch switchExpr switchAlts ->
+        let
+
+            /**
+             * Perform the transformations on the given Alt.
+             * 
+             * @arg state The context of current alternative.
+             * @arg history The history of the current transformation.
+             * @arg alt The alternative to transform.
+             */
+            transformerAlt :: TransformState -> TransformHistory -> Alt -> (TransformHistory, Boolean, Alt);
+            transformerAlt state history !alt =
+                case alt of
+                Alt caseConst ip fnqns expression -> 
+                    let
+                        statePrime :: TransformState;
+                        statePrime =
+                            transformState_addKnownForm 
+                                (
+                                foldLeft 
+                                    (\state fnqn -> transformState_updateSafeForInliningVars fnqn.#2 (transformState_updateType fnqn.#2 fnqn.#3 state)) 
+                                    state 
+                                    fnqns
+                                )
+                                switchExpr caseConst fnqns;
+                        
+                        exprPrime :: (TransformHistory, Boolean, Expression);
+                        exprPrime =
+                            transform statePrime history expression transformer;
+                    in
+                        case exprPrime of
+                        (history1, wasChanged1, exprPrime) ->
+                            if wasChanged1 then
+                                (history1, True, Alt caseConst ip fnqns exprPrime)
+                            else
+                                (history, False, alt);
+                        ;
+                        
+                Alts caseConsts ip fnqns expression -> 
+                    let
+                        statePrime :: TransformState;
+                        statePrime = 
+                            foldLeft 
+                                (\state fnqn -> transformState_updateType fnqn.#2 fnqn.#3 state) 
+                                state 
+                                fnqns;
+                        
+                        exprPrime :: (TransformHistory, Boolean, Expression);
+                        exprPrime = transform statePrime history expression transformer;
+                    in
+                        case exprPrime of
+                        (history1, wasChanged1, exprPrime) ->
+                            if wasChanged1 then
+                                (history1, True, Alts caseConsts ip fnqns exprPrime)
+                            else
+                                (history, False, alt);
+                        ;    
+                ;
+
+            /**
+             * Perform the transformations on each alternative.
+             * 
+             * @arg state The context of the current alternatives.
+             * @arg history The history of the current transformation.
+             * @arg alts The alternatives to transforms. 
+             * @arg seenCaseConsts The caseConsts of the alternatives already seen. 
+             */
+            transformerAlts :: TransformState -> TransformHistory -> [Alt] -> [CaseConst] -> (TransformHistory, Boolean, [Alt]);
+            transformerAlts state history !alts seenCaseConsts =
+                case alts of
+                [] -> (history, False, []);
+                alt:rest ->
+                    case transformerAlt
+                            (transformState_addKnownToNotBeForm state switchExpr seenCaseConsts)
+                        history alt of
+                    (history1, wasChanged1, altPrime) ->
+                        case transformerAlts state history1 rest (alt.Alt.caseConst:seenCaseConsts) of
+                        (history2, wasChanged2, altsPrime) ->
+                            if wasChanged1 || wasChanged2 then
+                                (history2, True, altPrime : altsPrime)
+                            else
+                                (history2, False, altPrime : altsPrime);
+                        ;
+                    ;
+                ;    
+                
+        in            
+            case
+                transform (transformState_setParentExpr (currentState `inlinableState_transition` SeeCaseExpr) before) history switchExpr transformer of
+            (history1, wasChanged1, switchExprPrime) ->
+                case transformerAlts
+                    (
+//                        detectPlingedArguments 
+//                            (transformState_addKnownToBeWHFN 
+//                                 switchExprPrime 
+                                 (transformState_setParentExpr (
+                                     (detectPlingedArguments 
+                                         currentState 
+                                         switchExprPrime
+                                     )
+                                     `inlinableState_transition` SeeAlt) before)
+//                        )
+//                            switchExprPrime
+                    )
+                    history1 switchAlts [] 
+                    of
+                (history2, wasChanged2, switchAltsPrime) ->
+                    if wasChanged1 || wasChanged2 then
+                        case transformer currentState history2 (Switch switchExprPrime switchAltsPrime) of
+                        (history3, _, expr3) -> (history3, True, expr3);
+                    else
+                        transformer currentState history2 before;
+                ;
+            ;    
+        
+        DataConsSelection dcValueExpr dc fieldIndex errorInfo -> 
+            case transform (transformState_setParentExpr currentState before) history dcValueExpr transformer of
+            (history1, wasChanged1, dcValueExprPrime) ->
+                case 
+                    transformer 
+                        currentState 
+                        history1 
+                        (if wasChanged1 then (DataConsSelection dcValueExprPrime dc fieldIndex errorInfo) else before) 
+                    of
+                (history2, wasChanged2, expr2) ->
+                    (history2, wasChanged1 || wasChanged2, expr2);
+                ;
+            ;
+            
+        RecordExtensionLiteral extensionFields ->
+            case transformExtensionFields (transformState_setParentExpr (currentState `inlinableState_set` NotAllowed) before) history transformer extensionFields of
+            (history1, wasChanged1, extensionFieldsPrime) ->
+                case 
+                    transformer 
+                        (transformState_setParentExpr currentState before) 
+                        history1 
+                        (if wasChanged1 then (RecordExtensionLiteral extensionFieldsPrime) else before) 
+                    of
+                (history2, wasChanged2, expr2) -> 
+                    (history2, wasChanged1 || wasChanged2, expr2);
+                ;
+            ;
+            
+        RecordExtensionPolymorphic body recordExtension ->
+            case transformExtensionFields (transformState_setParentExpr currentState before) history transformer recordExtension of
+            (history1, wasChanged1, recordExtensionPrime) -> 
+                case transform (transformState_setParentExpr currentState before)history1 body transformer of
+                (history2, wasChanged2, bodyPrime) ->
+                    let
+                        wasChanged :: Boolean;
+                        wasChanged = wasChanged1 || wasChanged2;
+                    in
+                        case 
+                            transformer 
+                                currentState 
+                                history2 
+                                (if wasChanged then (RecordExtensionPolymorphic bodyPrime recordExtensionPrime) else before) 
+                            of
+                        (history3, wasChanged3, expr3) -> (history3, wasChanged || wasChanged3, expr3);
+                        ;
+                ;
+            ;
+            
+        RecordSelection rsExpr rsFieldName ->
+            case transform (transformState_setParentExpr currentState before) history rsExpr transformer of
+            (history1, wasChanged1, rsExprPrime) ->
+                case 
+                    transformer 
+                        currentState 
+                        history1 
+                        (if wasChanged1 then (RecordSelection rsExprPrime rsFieldName) else before) 
+                    of
+                (history2, wasChanged2, expr2) -> (history2, wasChanged1 || wasChanged2, expr2);
+                ;
+            ;
+            
+    _ -> transformer currentState history before;
+    ;
+
+///**
+// * Traverses the given expression and applies the given transformations. The TransformState
+// * and TransformationHistory is maintained by this function.
+// * 
+// * TODO Go through this and make sure that the names are updated correctly.
+// *  
+// * @arg state Information about the context of the current subexpression. This is used to avoid inlining case expressions in strict contexts.
+// * @arg history Information about the history of the current transformation.
+// * @arg expr The expression to transform.
+// * @arg transformer The function to use to transform the input expression.
+// * @return The transformed expression.
+// */
+
+transformTopDown :: 
+    TransformState -> 
+    TransformHistory -> 
+    Expression -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    (TransformHistory, Boolean, Expression);
+protected transformTopDown state history0 !expr0 transformer =
+    case transformer state history0 expr0 of
+    (history1, wasChanged1, expr1) ->
+        case expr1 of
+        App expr1 expr2 ->
+            case flattenSeqs2 expr0 of
+            (innerExpr, seqedExprs) ->
+                // take out for toChain
+                if isEmpty seqedExprs then
+                    case transformTopDown (transformState_setParentExpr (state `inlinableState_transition` SeeLeftApp) expr0) history1 expr1 transformer of
+                    (history2, wasChanged2, expr1Prime) ->
+                        case transformTopDown (transformState_setParentExpr (state `inlinableState_transition` SeeRightApp) expr0) history2 expr2 transformer of
+                        (history3, wasChanged3, expr2Prime) ->
+                            (history3, wasChanged1 || wasChanged2 || wasChanged3, (App expr1Prime expr2Prime));
+                        ;
+                else
+                    case transformTopDown state history1 innerExpr transformer of
+                    (history2, wasChanged2, innerExprPrime) ->
+                        (history2, wasChanged1 || wasChanged2, buildSeq2 state seqedExprs innerExprPrime);                    
+                ;
+            ;
+        
+        Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+            case transformTopDown (transformState_updateLambdaVars lambdaVar lambdaType state) history1 lambdaExpr transformer of
+            (history2, wasChanged2, lambdaExprPrime) ->
+                (history2, wasChanged2, (Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExprPrime));
+            ;
+        
+        Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+            let
+                stateWithType :: TransformState;
+                stateWithType =
+                    case letType of
+                    Nothing ->
+                        // Arg get the type the hard way.
+                        case expression_getType state history1 letExpr of
+                        Nothing -> state;
+                        Just type -> transformState_setType state letVar type;
+                        ;
+                    Just types -> 
+                        transformState_setType state letVar (unflattenFunctionTypes types);
+                    ;
+
+                stateForDef :: TransformState;
+                stateForDef =
+                    if not isNew && isKeepable then
+                        stateWithType `inlinableState_transition` SeeKeepableOldLetDef
+                    else
+                        stateWithType;
+                
+                /*
+                 * If the function is not top level then clear the in context names. 
+                 */
+                stateWithUpdatedContext :: TransformState;
+                stateWithUpdatedContext  = 
+                    if isTopLevel then
+                        transformState_clearInContextBoundNames stateForDef
+                    else
+                        stateForDef;
+
+            in                
+                case 
+                    if state.TransformState.traverseCoreFunctions || isNew || isKeepable then
+                        transformTopDown (transformState_setParentExpr (transformState_deeper stateWithUpdatedContext letVar) expr1) history1 letExpr transformer 
+                    else
+                        (history1, False, letExpr) // Don't traverse core core functions
+                of
+                (history2, wasChanged2, letExprPrime) ->
+                    let
+                        stateWithDef :: TransformState;
+                        stateWithDef = transformState_update letVar letExprPrime letType constArgs (not isKeepable) state;
+                    in    
+                        case transformTopDown stateWithDef history2 letBody transformer of
+                        (history3, wasChanged3, letBodyPrime) ->                            
+                            (history3, wasChanged1 || wasChanged2 || wasChanged3, (Let letVar isNew isKeepable isTopLevel letType letExprPrime letBodyPrime isRecursive arity isCoreFunction constArgs (if wasChanged2 then history3.TransformHistory.currentIteration else bodyWasChangedAt) False))
+                            ;
+                    ;
+            ;
+        
+//        LetInlinable letVar letType letExpr letBody arity counter constArgs ->  // same as let (maybe combine the two with a param)
+//            case transformTopDown (transformState_deeper state letVar) history1 letExpr transformer of
+//            (history2, wasChanged2, letExprPrime) ->
+//                let
+//                    stateWithDef :: TransformState;
+//                    stateWithDef = transformState_update letVar letExprPrime letType constArgs True state;
+//                in                
+//                    case transformTopDown stateWithDef history2 letBody transformer of
+//                    (history3, wasChanged3, letBodyPrime) ->
+//                        (history2, wasChanged1 || wasChanged2 || wasChanged3, (LetInlinable letVar letType letExprPrime letBodyPrime arity counter constArgs));
+//                ;
+//            ;
+        
+        Switch switchExpr switchAlts->
+            let
+                
+                /**
+                 * Perform the transformations on the given Alt.
+                 * 
+                 * @arg state The context of current alternative.
+                 * @arg history The history of the current transformation.
+                 * @arg alt The alternative to transformTopDown.
+                 */
+                transformerAlt :: TransformState -> TransformHistory -> Alt -> (TransformHistory, Boolean, Alt);
+                transformerAlt state history !alt =
+                    case alt of
+                    Alt caseConst ip fnqns expression -> 
+                        let
+                            statePrime :: TransformState;
+                            statePrime =
+                                transformState_addKnownForm 
+                                (
+                                    foldLeft 
+                                    (\state fnqn -> transformState_updateType fnqn.#2 fnqn.#3 state) 
+                                    state 
+                                    fnqns
+                                )
+                                switchExpr caseConst fnqns;
+                            
+                            exprPrime :: (TransformHistory, Boolean, Expression);
+                            exprPrime = transformTopDown statePrime history expression transformer;
+                        in
+                            case exprPrime of
+                            (history1, wasChanged1, exprPrime) ->
+                                if wasChanged1 then
+                                    (history1, True, Alt caseConst ip fnqns exprPrime)
+                                else
+                                    (history, False, alt);
+                        ;
+                    
+                    Alts caseConsts ip fnqns expression -> 
+                        let
+                            statePrime :: TransformState;
+                            statePrime = 
+                                foldLeft 
+                                    (\state fnqn -> transformState_updateType fnqn.#2 fnqn.#3 state) 
+                                    state 
+                                    fnqns;
+                            
+                            exprPrime :: (TransformHistory, Boolean, Expression);
+                            exprPrime = transformTopDown statePrime history expression transformer;
+                        in
+                            case exprPrime of
+                            (history1, wasChanged1, exprPrime) ->
+                                if wasChanged1 then
+                                    (history1, True, Alts caseConsts ip fnqns exprPrime)
+                                else
+                                    (history, False, alt);
+                        ;    
+                    ;
+                
+                /**
+                 * Perform the transformations on each alternative.
+                 * 
+                 * @arg state The context of the current alternatives.
+                 * @arg history The history of the current transformation.
+                 * @arg alts The alternatives to transforms. 
+                 * @arg seenCaseConsts The caseConsts of the alternatives already seen. 
+                 */
+                transformerAlts :: TransformState -> TransformHistory -> [Alt] -> [CaseConst] -> (TransformHistory, Boolean, [Alt]);
+                transformerAlts state history !alts seenCaseConsts =
+                    case alts of
+                    [] -> (history, False, []);
+                    alt:rest ->
+                        case transformerAlt (transformState_addKnownToNotBeForm state switchExpr seenCaseConsts) history alt of
+                        (history1, wasChanged1, altPrime) ->
+                            case transformerAlts state history1 rest (alt.Alt.caseConst:seenCaseConsts) of
+                            (history2, wasChanged2, altsPrime) ->
+                                if wasChanged1 || wasChanged2 then
+                                    (history2, True, altPrime : altsPrime)
+                                else
+                                    (history2, False, altPrime : altsPrime);
+                            ;
+                        ;
+                    ;    
+                
+            in            
+                case transformTopDown (transformState_setParentExpr (state `inlinableState_transition` SeeCaseExpr) expr1) history1 switchExpr transformer of
+                (history2, wasChanged2, switchExprPrime) ->
+                    case transformerAlts (transformState_setParentExpr (state `inlinableState_transition` SeeAlt) expr1) history2 switchAlts [] of
+                    (history3, wasChanged3, switchAltsPrime) ->
+                        (history3, wasChanged1 || wasChanged2 || wasChanged3, (Switch switchExprPrime switchAltsPrime));
+                    ;
+            ;    
+        
+        DataConsSelection dcValueExpr dc fieldIndex errorInfo -> 
+            case transformTopDown (transformState_setParentExpr state expr1) history1 dcValueExpr transformer of
+            (history2, wasChanged2, dcValueExprPrime) ->
+                (history2, wasChanged1 || wasChanged2, (DataConsSelection dcValueExprPrime dc fieldIndex errorInfo)); 
+            ;
+        
+        RecordExtensionLiteral extensionFields ->
+            case transformExtensionFieldsTopDown (transformState_setParentExpr (state `inlinableState_set` NotAllowed) expr1) history1 transformer extensionFields of
+            (history2, wasChanged2, extensionFieldsPrime) ->
+                (history2, wasChanged1 || wasChanged2, (RecordExtensionLiteral extensionFieldsPrime)); 
+            ;
+        
+        RecordExtensionPolymorphic body recordExtension ->
+            case transformExtensionFieldsTopDown (transformState_setParentExpr state expr1) history1 transformer recordExtension of
+            (history2, wasChanged2, recordExtensionPrime) -> 
+                case transformTopDown (transformState_setParentExpr state expr1) history2 body transformer of
+                (history3, wasChanged3, bodyPrime) ->
+                    (history3, wasChanged1 || wasChanged2 || wasChanged3, (RecordExtensionPolymorphic bodyPrime recordExtensionPrime)); 
+                ;
+            ;
+        
+        RecordSelection rsExpr rsFieldName ->
+            case transformTopDown (transformState_setParentExpr state expr1) history1 rsExpr transformer of
+            (history2, wasChanged2, rsExprPrime) ->
+                (history2, wasChanged1 || wasChanged2, (RecordSelection rsExprPrime rsFieldName)); 
+            ;
+        ChainOfSeqs seqExprs innerExpr -> 
+            let
+                helper :: TransformHistory -> [Expression] -> (TransformHistory, Boolean, [Expression]); 
+                helper history seqExprs =
+                    case seqExprs of
+                    [] -> (history, False, []);
+                    se:ses ->
+                        case transformTopDown state history se transformer of
+                        (history2, wasChanged2, sePrime) ->
+                            case helper history2 ses of
+                            (history3, wasChanged3, sesPrime) ->
+                                (history3, wasChanged2||wasChanged3, sePrime:sesPrime);
+                            ;
+                        ;
+                    ;
+            in
+                case 
+                    trace2 ("ChainOfSeqs: Found the change\n")
+                    helper history0 seqExprs of
+                (history2, wasChanged2, seqExprsPrime) ->
+                    case transformer (transformState_setParentExpr state expr1) history2 innerExpr of
+                    (history3, wasChanged3, innerExprPrime) -> 
+                        (history3, wasChanged1 || wasChanged2 || wasChanged3, ChainOfSeqs seqExprsPrime innerExprPrime);
+                    ;
+            ;
+        Var {} -> (history1, wasChanged1, expr1);
+        Literal {} -> (history1, wasChanged1, expr1);
+        Opaque {} -> (history1, wasChanged1, expr1);
+        ErrorInfo {} -> (history1, wasChanged1, expr1);
+        DataConstructor {} -> (history1, wasChanged1, expr1);
+        ;    
+    ;
+
+/**
+ * Apply the given transformer to the given ExtensionField.
+ */    
+
+transformExtensionFieldAcc :: 
+    TransformState -> 
+    accumulator -> 
+    (TransformState -> accumulator -> Expression -> (accumulator, Expression)) -> 
+    (FieldName, Expression) -> 
+    (accumulator, (FieldName, Expression));
+transformExtensionFieldAcc state accumulator transformer extensionField =
+    case extensionField of
+    (fieldName, expression) ->
+        case transformAcc state accumulator expression transformer of
+        (accumulator1, expressionPrime) ->
+            (accumulator1, (fieldName, expressionPrime));
+        ;    
+    ;
+
+transformExtensionField :: 
+    TransformState -> 
+    TransformHistory -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    (FieldName, Expression) -> 
+    (TransformHistory, Boolean, (FieldName, Expression));
+transformExtensionField state history transformer extensionField =
+    case extensionField of
+    (fieldName, expression) ->
+        case transform state history expression transformer of
+        (history1, wasChanged, expressionPrime) ->
+            if wasChanged then
+                (history1, True, (fieldName, expressionPrime))
+            else
+                (history, False, extensionField);
+        ;                
+    ;
+
+transformExtensionFieldTopDown :: 
+    TransformState -> 
+    TransformHistory -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    (FieldName, Expression) -> 
+    (TransformHistory, Boolean, (FieldName, Expression));
+transformExtensionFieldTopDown state history transformer extensionField =
+    case extensionField of
+    (fieldName, expression) ->
+        case transformTopDown state history expression transformer of
+        (history1, wasChanged, expressionPrime) ->
+            if wasChanged then
+                (history1, True, (fieldName, expressionPrime))
+            else
+                (history, False, extensionField);
+        ;                
+    ;
+
+//    /**
+//     * Apply the given transformation to the given list of ExtensionFields.
+//     */
+    
+transformExtensionFieldsAcc :: 
+    TransformState -> 
+    accumulator -> 
+    (TransformState -> accumulator -> Expression -> (accumulator, Expression)) -> 
+    [(FieldName, Expression)] -> 
+    (accumulator, [(FieldName, Expression)]);
+    
+transformExtensionFieldsAcc state accumulator transformer extensionFields =
+    case extensionFields of
+    [] -> (accumulator, []);
+    ef:efs ->
+        case transformExtensionFieldAcc state accumulator transformer ef of
+        (accumulator1, efPrime) ->
+            case transformExtensionFieldsAcc state accumulator1 transformer efs of
+            (accumulator2, efsPrime) ->
+                (accumulator2, efPrime : efsPrime);
+            ;
+        ;    
+    ;    
+    
+transformExtensionFields :: 
+    TransformState -> 
+    TransformHistory -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    [(FieldName, Expression)] -> 
+    (TransformHistory, Boolean, [(FieldName, Expression)]);
+    
+transformExtensionFields state history transformer extensionFields =
+    case extensionFields of
+    [] -> (history, False, []);
+    ef:efs ->
+        case transformExtensionField state history transformer ef of
+        (history1, wasChanged1, efPrime) ->
+            case transformExtensionFields state history1 transformer efs of
+            (history2, wasChanged2, efsPrime) ->
+                if wasChanged1 || wasChanged2 then
+                    (history2, True, efPrime : efsPrime)
+                else
+                    (history, False, extensionFields);
+            ;
+        ;    
+    ;    
+
+transformExtensionFieldsTopDown :: 
+    TransformState -> 
+    TransformHistory -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    [(FieldName, Expression)] -> 
+    (TransformHistory, Boolean, [(FieldName, Expression)]);
+    
+transformExtensionFieldsTopDown state history transformer extensionFields =
+    case extensionFields of
+    [] -> (history, False, []);
+    ef:efs ->
+        case transformExtensionFieldTopDown state history transformer ef of
+        (history1, wasChanged1, efPrime) ->
+            case transformExtensionFieldsTopDown state history1 transformer efs of
+            (history2, wasChanged2, efsPrime) ->
+                if wasChanged1 || wasChanged2 then
+                    (history2, True, efPrime : efsPrime)
+                else
+                    (history, False, extensionFields);
+            ;
+        ;    
+    ;    
+    
+
+/**
+ * Takes two transformations and combines then by performing the first and then the second.
+ * 
+ * @arg t1 The first transformation to combine.
+ * @arg t2 The second transformation to combine.
+ * @return A function that performs t2 and then performs t1 on the input expression.
+ */
+    
+combineTransforms :: (TransformState -> Expression -> Expression) -> (TransformState -> Expression -> Expression) -> (TransformState -> Expression -> Expression);
+protected combineTransforms t1 t2 = (\state !expr -> t2 state (t1 state expr));
+    
+combineTransformsWithHistory :: 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)) -> 
+    (TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression));
+protected combineTransformsWithHistory t1 t2 =
+    (\state history expr ->
+        case t1 state history expr of
+        (history1, wasChanged1, expr1) ->
+            case t2 state history1 expr1 of
+            (history2, wasChanged2, expr2) ->
+                if wasChanged1 || wasChanged2 then
+                    (history2, True, expr2)
+                else
+                    (history2, False, expr2);
+//                (history2, wasChanged1 || wasChanged2, expr2);
+            ;
+    );
+
+transform_withHistory :: (TransformState -> Expression -> Expression) -> TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+protected transform_withHistory transform state history !expression =
+    (history, True, transform state expression);
+    
+transformNoHistory :: TransformState -> Expression -> (TransformState -> Expression -> Expression) -> Expression;
+protected transformNoHistory state !before transformer =
+    (transform state transformHistory_init before (transform_withHistory transformer)).#3; 
+
+/**
+ * Performs all of the given transformation on the given expression once.
+ * 
+ *  @arg transformations The set of transformations to perform.
+ *  @arg state Keeps track of information about the context of the expression traversal.
+ *  @arg history Information about the history of the traversal.
+ *  @arg expr The expression to perform the transformations on.
+ *  @return The result of apply the given transformation to the given expression.
+ */
+
+transformer :: [TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)] -> TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+protected transformer !transformations state history expr =
+    case transformations of
+    [] -> (history, False, expr);
+    t:ts ->
+        case t state history expr of
+        (history1, wasChanged1, expr1) -> 
+            case transformer ts state history1 expr1 of
+            (history2, wasChanged2, expr2) -> 
+                if wasChanged1 || wasChanged2 then
+                    (history2, True, expr2)
+                else
+                    (history2, False, expr2);
+//                (history2, wasChanged1 || wasChanged2, expr2);
+            ;
+        ;
+    ;
+    
+/**
+ * Traverse the tree in post-order (bottom-up) and apply the given transformation function.
+ *
+ * @arg expression The expression being traversed.
+ * @arg transformer The function that transforms a not in the expression.
+ * @return The result of applying the transformer function in post order to the before expression.
+ */
+
+transformOnly :: Expression -> (Expression -> Expression) -> Expression;
+protected transformOnly expression transformer =
+    case expression of
+    App expr1 expr2 ->
+        transformer (App (transformOnly expr1 transformer) (transformOnly expr2 transformer));
+            
+    Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+        transformer (Lambda lambdaVar lambdaType lambdaArgIsWHNF (transformOnly lambdaExpr transformer));
+        
+    Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+        transformer (Let letVar isNew isKeepable isTopLevel letType (transformOnly letExpr transformer) (transformOnly letBody transformer) isRecursive arity isCoreFunction constArgs bodyWasChangedAt False);
+            
+    LetInlinable letVar letType letExpr letBody arity counter constArgs ->  // same as let (maybe combine the two with a param)
+        transformer (LetInlinable letVar letType (transformOnly letExpr transformer) (transformOnly letBody transformer) arity counter constArgs);
+            
+    Switch switchExpr switchAlts ->
+        let
+
+            transformerAlt :: Alt -> Alt;
+            transformerAlt alt =
+                case alt of
+                Alt caseConst ip fnqns expression -> 
+                    Alt caseConst ip fnqns (transformOnly expression transformer);
+                Alts caseConsts ip fnqns expression -> 
+                    Alts caseConsts ip fnqns (transformOnly expression transformer);
+                ;
+
+            transformerAlts :: [Alt] -> [Alt];
+            transformerAlts alts =
+                case alts of
+                [] -> [];
+                alt:rest ->
+                    transformerAlt alt : transformerAlts rest;
+                ;
+                
+        in
+            transformer (Switch (transformOnly switchExpr transformer) (transformerAlts switchAlts));
+        
+    DataConsSelection dcValueExpr dc fieldIndex errorInfo ->
+        DataConsSelection (transformOnly dcValueExpr transformer) dc fieldIndex errorInfo;
+
+    RecordExtensionLiteral recordExtension ->
+        transformer (RecordExtensionLiteral (transformExtensionFieldsOnly transformer recordExtension));
+        
+    RecordExtensionPolymorphic body recordExtension ->
+        transformer (RecordExtensionPolymorphic (transformOnly body transformer) (transformExtensionFieldsOnly transformer recordExtension));
+        
+    RecordSelection rsExpr rsField ->
+        transformer (RecordSelection (transformOnly rsExpr transformer) rsField);
+            
+    _ -> transformer expression;
+    ;
+
+transformExtensionFieldsOnly :: 
+    (Expression -> Expression) -> 
+    [(FieldName, Expression)] -> 
+    [(FieldName, Expression)];
+    
+transformExtensionFieldsOnly transformer extensionFields =
+    case extensionFields of
+    [] -> [];
+    ef:efs ->
+        transformExtensionFieldOnly transformer ef : transformExtensionFieldsOnly transformer efs;
+    ;    
+    
+transformExtensionFieldOnly :: 
+    (Expression -> Expression) -> 
+    (FieldName, Expression) -> 
+    (FieldName, Expression);
+transformExtensionFieldOnly transformer extensionField =
+    case extensionField of
+    (fieldName, expression) ->
+        (fieldName, transformOnly expression transformer);
+    ;
+
+/**
+ * Convert the given expression into a type expression. A list of name to type can be used to lookup the type
+ * of an input expression after the unification is applied.
+ * 
+ * NOTE This is not fully implemented yet.
+ * 
+ * @arg state The context of the current traversal.
+ * @arg history The history of the current transformation.
+ * @arg counter A counter used to generate the TypeId objects.
+ * @arg nToT A list that maps Var's to TypeId's. This can be used to look up the type of the variables.
+ * @arg expression The expression to convert to a type.
+ * @return A triplet of counter of the TypeId, a list that maps Var's to TypeId's, and the resulting type. 
+ */
+ 
+convertToType :: TransformState -> TransformHistory -> Int -> [(QualifiedName, Type)] -> Expression -> (Int, [(QualifiedName, Type)], Type);
+protected convertToType state history counter nToT expression =
+    let
+        newId :: Int -> [(QualifiedName, Type)] -> Maybe Type -> QualifiedName -> (Int, [(QualifiedName, Type)], Type);
+        newId counter nToT maybeType name =
+            case 
+                find 
+                    (\nt ->
+                        case nt of
+                        (nt_name, nt_type) ->
+                            if nt_name == name then
+                                True
+                            else
+                                False;                        
+                    ) nToT of
+            Nothing ->
+                case qualifiedName_getType state history name of
+                Nothing ->
+                    case maybeType of
+                    Just type -> (counter, nToT, type);
+                    Nothing -> 
+                        let 
+                            type = TypeId counter False;
+                        in
+                            (counter+1, (name, type):nToT, type);
+                    ;
+                Just type -> (counter, nToT, type);
+                ; 
+            Just ntPair -> (counter, nToT, ntPair.#2);
+            ;
+    in           
+        case expression of
+        Var {name, type} ->
+            newId counter nToT type name;
+        
+        Literal {value=literal} ->
+            (counter, nToT, (literal_getType (state.TransformState.typeConstants) literal).Just.value);
+        
+        App expr1 expr2 ->
+            case convertToType state history counter nToT expr1 of
+            (counter1, nToT1, type1) ->
+                case convertToType state history counter1 nToT1 expr2 of
+                (counter2, nToT2, type2) ->
+                    (counter2, nToT2, AppType type1 type2);
+                ;
+            ;
+            
+        Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+            case convertToType state history counter nToT lambdaExpr of
+            (counter1, nToT1, lambdaExprType) ->
+                case transformState_findType state history lambdaVar of
+                Nothing ->
+                    case newId counter1 nToT1 (Just lambdaType) lambdaVar of
+                    (counter2, nToT2, lambdaVarType) ->
+                        (counter2, nToT2, FunctionType lambdaVarType lambdaExprType False);
+                    ;
+                Just lambdaVarType -> (counter1, nToT1, FunctionType lambdaVarType.#2 lambdaExprType False);
+                ;
+            ;
+            
+        Let {type=letType, body=letBody} ->
+            case letType of
+            Nothing -> convertToType state history counter nToT letBody;
+            Just type -> (counter, nToT, unflattenFunctionTypes type);
+            ;           
+                
+        Switch switchExpr switchAlts -> undefined;
+            
+        DataConstructor dc -> (counter, nToT, dataCons_getType dc);
+        
+        DataConsSelection dcValueExpr dc fieldIndex errorInfo -> undefined;
+    
+        RecordExtensionLiteral recordExtension -> undefined;
+            
+        RecordExtensionPolymorphic body recordExtension -> undefined;
+            
+        RecordSelection rsExpr rsField -> undefined;
+        
+        ;
+
+canConvertToType :: TransformState -> Expression -> Boolean;
+protected canConvertToType state expr = 
+    traverseTopDownAcc 
+        True 
+        state 
+        expr 
+        (\acc state expr ->
+            case expr of
+            Literal {value=literal} ->
+                case literal of
+                LitOpaque {} -> (False, False);
+                _ -> (True, True);
+                ;
+            Switch {} -> (False, False);
+            DataConsSelection {} -> (False, False);
+            RecordExtensionLiteral {} -> (False, False);
+            RecordExtensionPolymorphic {} -> (False, False);
+            RecordSelection {} -> (False, False);
+            _ -> (True, acc);            
+        );
+/**
+ * Traverse the tree in post-order (top down) and apply the given transformation function.
+ */
+
+traverseTopDownAcc :: acc -> TransformState -> Expression -> (acc -> TransformState -> Expression -> (Boolean, acc)) -> acc;
+protected traverseTopDownAcc acc state expression traverser =
+    case traverser acc state expression of
+    (continue, acc1) ->
+        if continue then
+            case expression of    
+            App expr1 expr2 ->
+                traverseTopDownAcc (traverseTopDownAcc acc1 state expr1 traverser) state expr2 traverser;
+                    
+            Lambda lambdaVar _ _ lambdaExpr ->
+                traverseTopDownAcc acc1 state lambdaExpr traverser;
+                
+            Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constVars _ _ ->
+                let
+                    stateWithDef :: TransformState;
+                    stateWithDef = transformState_update letVar letExpr letType constVars (not isKeepable) state;
+                in                
+                    traverseTopDownAcc (traverseTopDownAcc acc1 stateWithDef letExpr traverser) stateWithDef letBody traverser;
+                    
+            LetInlinable letVar letType letExpr letBody arity counter constArgs ->  // same as let (maybe combine the two with a param)
+                let
+                    stateWithDef :: TransformState;
+                    stateWithDef = transformState_update letVar letExpr letType constArgs False state;
+                in                
+                    traverseTopDownAcc (traverseTopDownAcc acc1 state letExpr traverser) state letBody traverser;
+                    
+            Switch switchExpr switchAlts ->
+                let        
+                    traverseerAlt acc alt =
+                        case alt of
+                        Alt caseConst ip fnqns expression -> 
+                            traverseTopDownAcc acc state expression traverser;
+                        Alts caseConsts ip fnqns expression -> 
+                            traverseTopDownAcc acc state expression traverser;
+                        ;
+        
+                    traverseerAlts acc alts =
+                        case alts of
+                        [] -> acc;
+                        alt:rest ->
+                            traverseerAlts (traverseerAlt acc alt) rest;
+                        ;
+                        
+                in
+                    traverseerAlts (traverseTopDownAcc acc1 state switchExpr traverser) switchAlts;
+                
+            DataConsSelection dcValueExpr dc fieldIndex errorInfo ->
+                traverseTopDownAcc acc1 state dcValueExpr traverser;
+        
+            RecordExtensionLiteral recordExtension ->
+                traverseExtensionFieldsTopDown acc1 state recordExtension traverser;
+                
+            RecordExtensionPolymorphic body recordExtension ->
+                traverseExtensionFieldsTopDown (traverseTopDownAcc acc1 state body traverser) state recordExtension traverser;
+                
+            RecordSelection rsExpr rsField ->
+                traverseTopDownAcc acc1 state rsExpr traverser;
+                    
+            _ -> 
+                case traverser acc1 state expression of
+                (_, acc2) -> acc2;
+                ;
+                
+        else
+            acc1;
+    ;
+ 
+/**
+ * Helper function for traverseTopDownAcc.
+ */            
+traverseExtensionFieldsTopDown :: acc -> TransformState -> [(FieldName, Expression)] -> (acc -> TransformState -> Expression -> (Boolean, acc)) -> acc;    
+traverseExtensionFieldsTopDown acc state extensionFields traverser =
+    case extensionFields of
+    [] -> acc;
+    ef:efs ->        
+        traverseExtensionFieldsTopDown (traverseExtensionFieldTopDown acc state ef traverser) state efs traverser;
+    ;    
+
+/**
+ * Helper function for traverseTopDownAcc.
+ */            
+traverseExtensionFieldTopDown :: acc -> TransformState -> (FieldName, Expression) -> (acc -> TransformState -> Expression -> (Boolean, acc)) -> acc;
+traverseExtensionFieldTopDown acc state extensionField traverser =
+    case extensionField of
+    (fieldName, expression) -> 
+        traverseTopDownAcc acc state expression traverser;
+    ;
+
+
+/**
+ * Traverse the tree in post-order (bottom-up) and apply the given transformation function.
+ *
+ * TODO: Go over this and make sure that the bound names are updated correctly.
+ * 
+ * @arg acc The accumulator for the traversal.
+ * @arg expression The expression being traversed.
+ * @arg traverser The function that transforms a not in the expression.
+ * @return The result of applying the traverser function in post order to the before expression.
+ */
+
+traverse :: acc -> Expression -> (acc -> Expression -> acc) -> acc;
+protected traverse acc expression traverser =
+    case expression of
+    App expr1 expr2 ->
+        traverser (traverse (traverse acc expr1 traverser) expr2 traverser) expression;
+        
+    Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+        traverser (traverse acc lambdaExpr traverser) expression;
+        
+    Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+        traverser (traverse (traverse acc letExpr traverser) letBody traverser) expression;
+            
+    LetInlinable letVar letType letExpr letBody arity counter constArgs ->  // same as let (maybe combine the two with a param)
+        traverser (traverse (traverse acc letExpr traverser) letBody traverser) expression;
+            
+    Switch switchExpr switchAlts ->
+        let
+            transformerAlt acc alt =
+                case alt of
+                Alt {expr} -> traverse acc expr traverser;
+                Alts {expr} -> traverse acc expr traverser;
+                ;
+
+            transformerAlts acc alts =
+                case alts of
+                [] -> acc;
+                alt:rest -> transformerAlts (transformerAlt acc alt) rest;
+                ;                
+        in
+            traverser (transformerAlts (traverse acc switchExpr traverser) switchAlts) expression;
+        
+    DataConsSelection dcValueExpr dc fieldIndex errorInfo ->
+        traverser (traverse acc dcValueExpr traverser) expression;
+
+    RecordExtensionLiteral recordExtension ->
+        traverser (traverseExtensionFieldsAcc acc traverser recordExtension) expression;
+        
+    RecordExtensionPolymorphic body recordExtension ->
+        traverser (traverse (traverseExtensionFieldsAcc acc traverser recordExtension) body traverser) expression;
+        
+    RecordSelection rsExpr rsField ->
+        traverser (traverse acc rsExpr traverser) expression;
+            
+    _ -> traverser acc expression;
+    ;
+
+
+traverseExtensionFieldAcc :: 
+    accumulator -> 
+    (accumulator -> Expression -> accumulator) -> 
+    (FieldName, Expression) -> 
+    accumulator;
+traverseExtensionFieldAcc acc traverser extensionField =
+    case extensionField of
+    (fieldName, expression) -> traverse acc expression traverser;
+    ;
+
+traverseExtensionFieldsAcc :: 
+    accumulator -> 
+    (accumulator -> Expression -> accumulator) -> 
+    [(FieldName, Expression)] -> 
+    accumulator;
+    
+traverseExtensionFieldsAcc acc traverser extensionFields =
+    case extensionFields of
+    [] -> acc;
+    ef:efs ->
+        traverseExtensionFieldsAcc (traverseExtensionFieldAcc acc traverser ef) traverser efs;
+    ;    
+
+/**
+ * This will detect that variables are strict because they are arguments to a function that
+ * has them plinged. See test118 for an example. 
+ */
+
+detectPlingedArguments :: TransformState -> Expression -> TransformState;
+protected detectPlingedArguments state !switchExpr =
+    case flattenExpression switchExpr [] of
+    functor : args ->
+        case functor of
+            Var {name} ->
+                case transformState_getType state name of
+                Nothing -> state;
+                Just type -> 
+                    let
+                        flatTypes :: [Type];
+                        flatTypes = flattenType type;
+                        
+                        strictness :: [Boolean];
+                        strictness = map type_isStrict flatTypes;
+                        
+                        plingedArguments :: [Expression];
+                        plingedArguments = 
+                            map 
+                                fromJust 
+                                (filter 
+                                     isJust 
+                                     (zipWith (\a s -> if s then Just a else Nothing) args strictness));
+                    in
+                        (transformState_addKnownToBeWHFNs (switchExpr:plingedArguments) state);
+                _ -> state;
+                ;
+            _ -> state;
+        ;
+    _ -> state;
+    ;
+
+transformTopDownSimple :: 
+    Expression -> 
+    (Expression -> (Boolean, Expression)) -> 
+    (Boolean, Expression);
+protected transformTopDownSimple !expr0 transformer =
+    case transformer expr0 of
+    (wasChanged1, expr1) ->
+        case expr1 of
+        App expr1 expr2 ->
+            case flattenSeqs2 expr0 of
+            (innerExpr, seqedExprs) ->
+                // take out for toChain
+            //    if isEmpty seqedExprs then
+                    case transformTopDownSimple expr1 transformer of
+                    (wasChanged2, expr1Prime) ->
+                        case transformTopDownSimple expr2 transformer of
+                        (wasChanged3, expr2Prime) ->
+                            (wasChanged1 || wasChanged2 || wasChanged3, (App expr1Prime expr2Prime));
+                        ;
+              //  else
+              //      case transformTopDownSimple innerExpr transformer of
+              //      (wasChanged2, innerExprPrime) ->
+              //          (wasChanged1 || wasChanged2, buildSeq2 seqedExprs innerExprPrime);                    
+                ;
+            ;
+        
+        Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+            case transformTopDownSimple lambdaExpr transformer of
+            (wasChanged2, lambdaExprPrime) ->
+                (wasChanged2, (Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExprPrime));
+            ;
+        
+        Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+                case transformTopDownSimple letExpr transformer of
+                (wasChanged2, letExprPrime) ->
+                        case transformTopDownSimple letBody transformer of
+                        (wasChanged3, letBodyPrime) ->                            
+                            (wasChanged1 || wasChanged2 || wasChanged3, (Let letVar isNew isKeepable isTopLevel letType letExprPrime letBodyPrime isRecursive arity isCoreFunction constArgs bodyWasChangedAt False))
+                            ;
+                    ;
+            ;
+        
+//        LetInlinable letVar letType letExpr letBody arity counter constArgs ->  // same as let (maybe combine the two with a param)
+//            case transformTopDownSimple letExpr transformer of
+//            (wasChanged2, letExprPrime) ->
+//                    case transformTopDownSimple letBody transformer of
+//                    (wasChanged3, letBodyPrime) ->
+//                        (wasChanged1 || wasChanged2 || wasChanged3, (LetInlinable letVar letType letExprPrime letBodyPrime arity counter constArgs));
+//                ;
+//            ;
+        
+        Switch switchExpr switchAlts->
+            let
+                
+                /**
+                 * Perform the transformations on the given Alt.
+                 * 
+                 * @arg alt The alternative to transformTopDownSimple.
+                 */
+                transformerAlt :: Alt -> (Boolean, Alt);
+                transformerAlt !alt =
+                    case alt of
+                    Alt caseConst ip fnqns expression -> 
+                        let
+                            exprPrime :: (Boolean, Expression);
+                            exprPrime = transformTopDownSimple expression transformer;
+                        in
+                            case exprPrime of
+                            (wasChanged1, exprPrime) ->
+                                if wasChanged1 then
+                                    (True, Alt caseConst ip fnqns exprPrime)
+                                else
+                                    (False, alt);
+                        ;
+                    
+                    Alts caseConsts ip fnqns expression -> 
+                        let
+                            exprPrime :: (Boolean, Expression);
+                            exprPrime = transformTopDownSimple expression transformer;
+                        in
+                            case exprPrime of
+                            (wasChanged1, exprPrime) ->
+                                if wasChanged1 then
+                                    (True, Alts caseConsts ip fnqns exprPrime)
+                                else
+                                    (False, alt);
+                        ;    
+                    ;
+                
+                /**
+                 * Perform the transformations on each alternative.
+                 * 
+                 * @arg alts The alternatives to transforms. 
+                 * @arg seenCaseConsts The caseConsts of the alternatives already seen. 
+                 */
+                transformerAlts :: [Alt] -> [CaseConst] -> (Boolean, [Alt]);
+                transformerAlts !alts seenCaseConsts =
+                    case alts of
+                    [] -> (False, []);
+                    alt:rest ->
+                        case transformerAlt alt of
+                        (wasChanged1, altPrime) ->
+                            case transformerAlts rest (alt.Alt.caseConst:seenCaseConsts) of
+                            (wasChanged2, altsPrime) ->
+                                if wasChanged1 || wasChanged2 then
+                                    (True, altPrime : altsPrime)
+                                else
+                                    (False, altPrime : altsPrime);
+                            ;
+                        ;
+                    ;    
+                
+            in            
+                case transformTopDownSimple switchExpr transformer of
+                (wasChanged2, switchExprPrime) ->
+                    case transformerAlts switchAlts [] of
+                    (wasChanged3, switchAltsPrime) ->
+                        (wasChanged1 || wasChanged2 || wasChanged3, (Switch switchExprPrime switchAltsPrime));
+                    ;
+            ;    
+        
+        DataConsSelection dcValueExpr dc fieldIndex errorInfo -> 
+            case transformTopDownSimple dcValueExpr transformer of
+            (wasChanged2, dcValueExprPrime) ->
+                (wasChanged1 || wasChanged2, (DataConsSelection dcValueExprPrime dc fieldIndex errorInfo)); 
+            ;
+        
+        RecordExtensionLiteral extensionFields ->
+            case transformExtensionFieldsTopDownSimple transformer extensionFields of
+            (wasChanged2, extensionFieldsPrime) ->
+                (wasChanged1 || wasChanged2, (RecordExtensionLiteral extensionFieldsPrime)); 
+            ;
+        
+        RecordExtensionPolymorphic body recordExtension ->
+            case transformExtensionFieldsTopDownSimple transformer recordExtension of
+            (wasChanged2, recordExtensionPrime) -> 
+                case transformTopDownSimple body transformer of
+                (wasChanged3, bodyPrime) ->
+                    (wasChanged1 || wasChanged2 || wasChanged3, (RecordExtensionPolymorphic bodyPrime recordExtensionPrime)); 
+                ;
+            ;
+        
+        RecordSelection rsExpr rsFieldName ->
+            case transformTopDownSimple rsExpr transformer of
+            (wasChanged2, rsExprPrime) ->
+                (wasChanged1 || wasChanged2, (RecordSelection rsExprPrime rsFieldName)); 
+            ;
+        ChainOfSeqs seqExprs innerExpr -> 
+            let
+                helper :: [Expression] -> (Boolean, [Expression]); 
+                helper seqExprs =
+                    case seqExprs of
+                    [] -> (False, []);
+                    se:ses ->
+                        case transformTopDownSimple se transformer of
+                        (wasChanged2, sePrime) ->
+                            case helper ses of
+                            (wasChanged3, sesPrime) ->
+                                (wasChanged2||wasChanged3, sePrime:sesPrime);
+                            ;
+                        ;
+                    ;
+            in
+                case helper seqExprs of
+                (wasChanged2, seqExprsPrime) ->
+                    case transformer innerExpr of
+                    (wasChanged3, innerExprPrime) -> 
+                        (wasChanged1 || wasChanged2 || wasChanged3, ChainOfSeqs seqExprsPrime innerExprPrime);
+                    ;
+            ;
+        Var {} -> (wasChanged1, expr1);
+        Literal {} -> (wasChanged1, expr1);
+        Opaque {} -> (wasChanged1, expr1);
+        ErrorInfo {} -> (wasChanged1, expr1);
+        DataConstructor {} -> (wasChanged1, expr1);
+        ;    
+    ;
+    
+transformExtensionFieldsTopDownSimple :: 
+    (Expression -> (Boolean, Expression)) -> 
+    [(FieldName, Expression)] -> 
+    (Boolean, [(FieldName, Expression)]);
+    
+transformExtensionFieldsTopDownSimple transformer extensionFields =
+    case extensionFields of
+    [] -> (False, []);
+    ef:efs ->
+        case transformExtensionFieldTopDownSimple transformer ef of
+        (wasChanged1, efPrime) ->
+            case transformExtensionFieldsTopDownSimple transformer efs of
+            (wasChanged2, efsPrime) ->
+                if wasChanged1 || wasChanged2 then
+                    (True, efPrime : efsPrime)
+                else
+                    (False, extensionFields);
+            ;
+        ;    
+    ;    
+    
+transformExtensionFieldTopDownSimple :: 
+    (Expression -> (Boolean, Expression)) -> 
+    (FieldName, Expression) -> 
+    (Boolean, (FieldName, Expression));
+transformExtensionFieldTopDownSimple transformer extensionField =
+    case extensionField of
+    (fieldName, expression) ->
+        case transformTopDownSimple expression transformer of
+        (wasChanged, expressionPrime) ->
+            if wasChanged then
+                (True, (fieldName, expressionPrime))
+            else
+                (False, extensionField);
+        ;                
+    ;
+    

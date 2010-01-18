@@ -1,0 +1,266 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Shape_Tests.cal
+ * Creation date: July 8, 2005.
+ * By: Bo Ilic
+ */
+
+/**
+This module contains an approach in CAL to solving the challenge of Jim Weirich to write a small
+example of a program in OO style in non-OO languages. The code is in Shape.cal, Circle.cal, Rectangle.cal and Shape_Tests.cal.
+Other approaches are in Shape2.cal etc.
+
+http://onestepback.org/articles/poly/
+http://www.angelfire.com/tx4/cus/shapes/index.html
+
+See Shape.cal for a detailed comment.
+
+@author Bo Ilic
+*/
+module Cal.Test.General.Shape_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    ;      
+import Cal.Core.String using  
+    function = toList;
+    ;        
+import Cal.Test.General.Shape using
+    typeClass = Shape;
+    typeConstructor = GenericShape;
+    typeConstructor = GenericShape3;
+    function = draw, moveTo, relativeMoveTo;
+    function = makeGenericShape, fromGenericShape;
+    function = makeGenericShape3, fromGenericShape3;
+    ;  
+import Cal.Test.General.Circle using
+    typeConstructor = Circle;
+    dataConstructor = MakeCircle;
+    ;
+import Cal.Test.General.Rectangle using
+    dataConstructor = MakeRectangle;
+    function = setWidth;
+    ;
+import Cal.Test.General.Shapes;    
+    
+doSomethingWithShape :: Shape a => a -> a;
+doSomethingWithShape s = relativeMoveTo s 100 100;
+
+//////////////////////////////////////
+//approach #1
+
+//the test function for the challenge...
+main_approach1 :: String;
+public main_approach1 =
+    let
+        r1 = MakeRectangle {x = 10, y = 20, width = 5, height = 6};
+        r2 = doSomethingWithShape r1;
+        
+        c1 = MakeCircle {x = 15, y = 25, radius = 8};
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+                        
+    in
+        //the problem here is that we would really like to map draw over [r1, r2, c1, c2, r4], but can't do this.
+        Prelude.concat ((intersperse "\n") [draw r1, draw r2, draw c1, draw c2, draw r4]); 
+    
+
+//////////////////////////////////////
+//approach #2    
+    
+//the test function for the challenge...
+main_approach2 :: String;
+public main_approach2 =
+    let
+        r1 = MakeRectangle {x = 10, y = 20, width = 5, height = 6};
+        r2 = doSomethingWithShape r1;
+        
+        c1 = MakeCircle {x = 15, y = 25, radius = 8};
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape];
+        genericList = [makeGenericShape r1, makeGenericShape r2, makeGenericShape c1, makeGenericShape c2, makeGenericShape r4];             
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw genericList));  
+    
+//tests filtering a GenericShape list to get just the Circles.    
+main2_approach2 :: String;
+public main2_approach2 =
+    let
+        r1 = MakeRectangle {x = 10, y = 20, width = 5, height = 6};
+        r2 = doSomethingWithShape r1;
+        
+        c1 = MakeCircle {x = 15, y = 25, radius = 8};
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape];
+        genericList = [makeGenericShape r1, makeGenericShape r2, makeGenericShape c1, makeGenericShape c2, makeGenericShape r4];
+         
+        filteredCircleList :: [Circle];
+        filteredCircleList = List.mapJust fromGenericShape genericList;       
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw filteredCircleList));    
+    
+//the test function for the challenge...
+//however, apply transforms *after* generifying    
+main3_approach2 :: String;
+public main3_approach2 =
+    let
+        r1 = makeGenericShape (MakeRectangle {x = 10, y = 20, width = 5, height = 6});
+        r2 = doSomethingWithShape r1;
+        
+        c1 = makeGenericShape (MakeCircle {x = 15, y = 25, radius = 8});
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape];
+        genericList = [r1, r2, c1, c2, makeGenericShape r4];             
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw genericList));  
+    
+//////////////////////////////////////
+//approach #3
+    
+    
+//the test function for the challenge...
+main_approach3 :: String;
+public main_approach3 =
+    let
+        r1 = MakeRectangle {x = 10, y = 20, width = 5, height = 6};
+        r2 = doSomethingWithShape r1;
+        
+        c1 = MakeCircle {x = 15, y = 25, radius = 8};
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape3];
+        genericList = [makeGenericShape3 r1, makeGenericShape3 r2, makeGenericShape3 c1, makeGenericShape3 c2, makeGenericShape3 r4];             
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw genericList));  
+    
+//tests filtering a GenericShape3 list to get just the Circles.    
+main2_approach3 :: String;
+public main2_approach3 =
+    let
+        r1 = MakeRectangle {x = 10, y = 20, width = 5, height = 6};
+        r2 = doSomethingWithShape r1;
+        
+        c1 = MakeCircle {x = 15, y = 25, radius = 8};
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape3];
+        genericList = [makeGenericShape3 r1, makeGenericShape3 r2, makeGenericShape3 c1, makeGenericShape3 c2, makeGenericShape3 r4];
+         
+        filteredCircleList :: [Circle];
+        filteredCircleList = List.mapJust fromGenericShape3 genericList;       
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw filteredCircleList));    
+    
+//the test function for the challenge...
+//however, apply transforms *after* generifying    
+main3_approach3 :: String;
+public main3_approach3 =
+    let
+        r1 = makeGenericShape3 (MakeRectangle {x = 10, y = 20, width = 5, height = 6});
+        r2 = doSomethingWithShape r1;
+        
+        c1 = makeGenericShape3 (MakeCircle {x = 15, y = 25, radius = 8});
+        c2 = doSomethingWithShape c1;
+        
+        r3 = MakeRectangle {x = 0, y = 0, width = 15, height = 15};
+        r4 = setWidth r3 30;
+        
+        genericList :: [GenericShape3];
+        genericList = [r1, r2, c1, c2, makeGenericShape3 r4];             
+                        
+    in       
+        Prelude.concat ((intersperse "\n") (map draw genericList));    
+    
+benchmarkResult = concat ((intersperse "\n") [
+    "Drawing a Rectangle at (10, 20), width 5, height 6",
+    "Drawing a Rectangle at (110, 120), width 5, height 6",
+    "Drawing a Circle at (15, 25), radius 8",
+    "Drawing a Circle at (115, 125), radius 8",
+    "Drawing a Rectangle at (0, 0), width 30, height 15"]); 
+
+filteredBenchmarkResult = concat ((intersperse "\n") [   
+    "Drawing a Circle at (15, 25), radius 8",
+    "Drawing a Circle at (115, 125), radius 8"]);
+    
+public testShapeTestsModule =
+    benchmarkResult == main_approach1
+    
+    && benchmarkResult == main_approach2
+    && filteredBenchmarkResult == main2_approach2
+    && benchmarkResult == main3_approach2
+    
+    && benchmarkResult == main_approach3
+    && filteredBenchmarkResult == main2_approach3     
+    && benchmarkResult == main3_approach3
+    
+    && benchmarkResult == Shapes.main_approach4
+    && filteredBenchmarkResult == Shapes.main2_approach4     
+    && benchmarkResult == Shapes.main3_approach4     
+    
+    || error "Shape_Tests.testShapeTestsModule failed.";

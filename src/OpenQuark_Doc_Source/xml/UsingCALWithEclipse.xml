@@ -1,0 +1,2006 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+ 
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ 
+    * Neither the name of Business Objects nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    UsinCALWithEclipse.xml
+    Creation date: May 23, 2007.
+    By: Edward Lam
+-->
+<!DOCTYPE book [
+<!ENTITY % sgml.features "IGNORE">
+<!ENTITY % xml.features "INCLUDE">
+<!ENTITY euro "&#8364;">
+<!ENTITY % dbcent PUBLIC "-//OASIS//ENTITIES DocBook Character Entities V4.4//EN" "http://www.oasis-open.org/docbook/xml/4.4/dbcentx.mod">
+%dbcent;
+
+<!ENTITY legal SYSTEM "LegalNotice.xml">
+]>
+<book version="5.0" xmlns="http://docbook.org/ns/docbook"
+      xmlns:xlink="http://www.w3.org/1999/xlink"
+      xmlns:xi="http://www.w3.org/2001/XInclude"
+      xmlns:svg="http://www.w3.org/2000/svg"
+      xmlns:mml="http://www.w3.org/1998/Math/MathML"
+      xmlns:html="http://www.w3.org/1999/xhtml"
+      xmlns:db="http://docbook.org/ns/docbook">
+  <title>Using CAL with Eclipse</title>
+
+  <info>
+    <releaseinfo>Last modified: August 24, 2007</releaseinfo>
+
+    <authorgroup>
+      <author>
+        <personname>Rick Cameron</personname>
+      </author>
+
+      <author>
+        <personname>Andrew Eisenberg</personname>
+      </author>
+
+      <author>
+        <personname>Edward Lam</personname>
+      </author>
+
+      <author>
+        <personname>Greg McClement</personname>
+      </author>
+    </authorgroup>
+
+    &legal;
+  </info>
+
+  <preface>
+    <title>Overview</title>
+
+    <para>This document explains how to use CAL with Eclipse. It consists of
+    four parts: <variablelist spacing="compact" termlength="25">
+        <varlistentry>
+          <term>Installing the CAL Eclipse Plug-in</term>
+
+          <listitem>
+            <para>Describes how to install the plug-in, either from the update
+            web site or from the archived .zip file</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Setting up Eclipse for CAL</term>
+
+          <listitem>
+            <para>Explains how to add the Quark Platform into your Eclipse
+            workspace</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Tutorial: Hello World</term>
+
+          <listitem>
+            <para>A brief introduction to using CAL in Eclipse</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Using the CAL Eclipse Plug-in</term>
+
+          <listitem>
+            <para>Information on the features of the plug-in</para>
+          </listitem>
+        </varlistentry>
+      </variablelist>We highly recommend that you install the CAL Eclipse
+    Plug-in. It provides many useful features when editing CAL source
+    code.</para>
+
+    <simplesect>
+      <title>System requirements</title>
+
+      <para><itemizedlist spacing="compact">
+          <listitem>
+            <para>Eclipse 3.2 or greater.</para>
+          </listitem>
+
+          <listitem>
+            <para>Java 5 or greater.</para>
+          </listitem>
+        </itemizedlist> Quark has been tested by us mainly on Windows XP,
+      Linux and Mac OS X, but as a pure Java application may work on other
+      platforms supporting Java 5 or greater.</para>
+    </simplesect>
+
+    <simplesect>
+      <title>Call for feedback</title>
+
+      <para>Any feedback you might have to help improve this document is very
+      welcome. Please send any comments, suggestions, or questions to the CAL
+      Language Discussion forum on Google Groups <link
+      xlink:href="http://groups.google.com/group/cal_language"></link>.</para>
+    </simplesect>
+  </preface>
+
+  <chapter>
+    <title>Installing the CAL Eclipse Plug-in</title>
+
+    <para>You can install the CAL Eclipse Plug-in from the update web site, or
+    from the .zip file included in the Open Quark distribution.</para>
+
+    <section>
+      <title>From the CAL Eclipse Plug-in update site</title>
+
+      <itemizedlist>
+        <listitem>
+          <para>Select from the Eclipse menu: <menuchoice>
+              <guimenu>Help</guimenu>
+
+              <guisubmenu>Software Updates</guisubmenu>
+
+              <guimenuitem>Find and Install...</guimenuitem>
+            </menuchoice></para>
+        </listitem>
+
+        <listitem>
+          <para>Select the "Search for new features to install" radio button.
+          Click "Next".</para>
+        </listitem>
+
+        <listitem>
+          <para>Click the "New Remote Site..." button</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>Name: Enter a name for the site. e.g. "CAL Eclipse Plug-in
+              update site"</para>
+            </listitem>
+
+            <listitem>
+              <para>URL:
+              <uri>http://resources.businessobjects.com/labs/cal/cal_eclipse_update/site.xml</uri></para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>Click "Finish"</para>
+        </listitem>
+
+        <listitem>
+          <para>Select the feature to install. Click "Next".</para>
+        </listitem>
+
+        <listitem>
+          <para>Read the license agreement. If you accept, select the radio
+          button and click "Next".</para>
+        </listitem>
+
+        <listitem>
+          <para>Click "Finish"</para>
+        </listitem>
+      </itemizedlist>
+    </section>
+
+    <section>
+      <title>From the archived update site</title>
+
+      <itemizedlist>
+        <listitem>
+          <para>Download cal_eclipse_update.zip to your local machine.</para>
+
+          <para>NB: The .zip file contains a text file with release notes. We
+          advise you to read this file before proceeding, in case the setup
+          procedure has changed.</para>
+        </listitem>
+
+        <listitem>
+          <para>Select from the Eclipse menu: <menuchoice>
+              <guimenu>Help</guimenu>
+
+              <guisubmenu>Software Updates</guisubmenu>
+
+              <guimenuitem>Find and Install...</guimenuitem>
+            </menuchoice></para>
+        </listitem>
+
+        <listitem>
+          <para>Select the "Search for new features to install" radio button.
+          Click "Next".</para>
+        </listitem>
+
+        <listitem>
+          <para>Click the "New Archived Site..." button</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>Select the site .zip file</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>Enter a name for the site. E.g. "CAL Eclipse Plug-in archived
+          update site". Click "OK".</para>
+        </listitem>
+
+        <listitem>
+          <para>Click "Finish"</para>
+        </listitem>
+
+        <listitem>
+          <para>Select the feature to install. Click "Next".</para>
+        </listitem>
+
+        <listitem>
+          <para>Read the license agreement. If you accept, select the radio
+          button and click "Next".</para>
+        </listitem>
+
+        <listitem>
+          <para>Click "Finish"</para>
+        </listitem>
+      </itemizedlist>
+    </section>
+
+    <section>
+      <title>Source Code for the CAL Eclipse Plug-in</title>
+
+      <!-- Try to keep the warning from appearing on a separate page by itself. -->
+
+      <?dbfo-need height="2in"?>
+
+      <para>The Open Quark distribution includes a .zip file containing the
+      source code for the CAL Eclipse Plug-in. You can import these projects
+      into an Eclipse workspace by unzipping the file to a directory and
+      directing Eclipse to import all projects found in the directory.</para>
+
+      <warning>
+        <para>Importing the source code is not an alternative to installing
+        the plug-in. You would only import the source code if you intend to
+        study or modify the plug-in. As with all Eclipse plug-in development,
+        changes to the source code are tested by launching a second copy of
+        Eclipse that will load the modified plug-in.</para>
+      </warning>
+    </section>
+  </chapter>
+
+  <chapter>
+    <title>Setting up Eclipse for CAL</title>
+
+    <para>In order to use CAL in your Java projects, you must include the
+    Quark Platform in your Eclipse workspace. You can choose between adding
+    the platform in binary form or in source form.</para>
+
+    <para>The binary version consists of several .jar files that contain the
+    compiled Java runtime for CAL, together with the CAL modules that make up
+    the core and standard libraries of the platform. It can be included into
+    Eclipse as a single project and provides everything you need to run Quark
+    tools like ICE and GemCutter and to create CAL modules in your own
+    projects.</para>
+
+    <para>The source version consists of the same set of components as the
+    binary version, except that everything is provided in source form,
+    including the Java runtime and samples. When imported into Eclipse, it
+    creates several projects. You can use it, as above, to run tools and to
+    create your own CAL modules; but you can also trace into the source of the
+    runtime and experiment with modifications to it.</para>
+
+    <para>Most programmers will choose to set up the binary version, as this
+    is simpler and avoids the need to compile the source of the
+    runtime.</para>
+
+    <para>NB: Once you have installed the CAL Eclipse Plug-in, you must add
+    the CAL nature to any project that contains CAL modules to have those
+    modules recognized by the plug-in. You can do this by using the CAL Tools
+    submenu of the context menu for the project in the Package Explorer. If
+    you use the New CAL Module wizard to make CAL Modules then the nature will
+    be added automatically.</para>
+
+    <para>After the setup instructions you will find a short tutorial on
+    various ways to run a CAL function from within Eclipse.</para>
+
+    <section>
+      <title>Adding the Quark Platform Binaries to Your Workspace</title>
+
+      <para>To create a Java project with the binary form of the Quark
+      Platform: <itemizedlist spacing="compact">
+          <listitem>
+            <para>Unzip the binary Quark Platform distribution from
+            open_quark_platform.zip</para>
+          </listitem>
+        </itemizedlist> Next there are two options for making the Quark
+      binaries project. This can be done using the CAL Eclipse wizard as
+      described in the next section or using the Java project wizard as
+      described in the following section.</para>
+
+      <section>
+        <title>Create a Quark Binaries Project using the CAL Eclipse
+        Plug-in</title>
+
+        <itemizedlist>
+          <listitem>
+            <para>In the Eclipse IDE select <menuchoice>
+                <guimenu>File</guimenu>
+
+                <guisubmenu>New</guisubmenu>
+
+                <guimenuitem>Project...</guimenuitem>
+              </menuchoice> and under the CAL category select the "Quark
+            Binaries Project" wizard.</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/newQuarkBinariesProjectWiz1.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+
+          <listitem>
+            <para>In the new Quark binaries project wizard, enter a name for
+            the Quark binaries project and the location where you unzipped the
+            downloaded Quark binaries. If the Java compiler compliance level
+            in Eclipse is less than 5.0, then there will be a check box for
+            setting the compiler to a higher version. This will allow the
+            wizard to set the compiler to a version that Quark binaries
+            need.</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/newQuarkBinariesProjectWiz2.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </itemizedlist>
+      </section>
+
+      <section>
+        <title>Create a Quark Binaries Project using the Eclipse Java Project
+        Wizard</title>
+
+        <itemizedlist>
+          <listitem>
+            <para>Copy the two root project files (.classpath and .project)
+            from the "eclipse-support" folder to its parent ("Quark") folder
+            of the unzipped Quark Platform distribution.</para>
+          </listitem>
+
+          <listitem>
+            <para>If the Java compiler compliance level in Eclipse is less
+            than 5.0, change it to 5.0 (or higher)</para>
+
+            <itemizedlist spacing="compact">
+              <listitem>
+                <para>From the Eclipse menu, select: <menuchoice>
+                    <guimenu>Window</guimenu>
+
+                    <guimenuitem>Preferences...</guimenuitem>
+                  </menuchoice></para>
+              </listitem>
+
+              <listitem>
+                <para>Preferences dialog:</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>Select (in the preferences tree): <menuchoice>
+                        <guimenu>Java</guimenu>
+
+                        <guimenuitem>Compiler</guimenuitem>
+                      </menuchoice>.</para>
+                  </listitem>
+
+                  <listitem>
+                    <para>Uncheck "Use default compliance settings".</para>
+                  </listitem>
+
+                  <listitem>
+                    <para>Change the following to "5.0": <simplelist
+                        type="inline">
+                        <member>"Compiler compliance level"</member>
+
+                        <member>"Generated .class files
+                        compatibility"</member>
+
+                        <member>"Source compatibility"</member>
+                      </simplelist></para>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+
+          <listitem>
+            <para>From the Eclipse menu, select: <menuchoice>
+                <guimenu>File</guimenu>
+
+                <guisubmenu>New</guisubmenu>
+
+                <guimenuitem>Project...</guimenuitem>
+              </menuchoice></para>
+          </listitem>
+
+          <listitem>
+            <para>Wizard (Select a wizard):</para>
+
+            <itemizedlist spacing="compact">
+              <listitem>
+                <para>Select <menuchoice>
+                    <guimenu>General</guimenu>
+
+                    <guimenuitem>Project</guimenuitem>
+                  </menuchoice></para>
+              </listitem>
+
+              <listitem>
+                <para>Click "Next".</para>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+
+          <listitem>
+            <para>Wizard (New Project):</para>
+
+            <itemizedlist spacing="compact">
+              <listitem>
+                <para>Enter a project name (e.g. "Quark").</para>
+              </listitem>
+
+              <listitem>
+                <para>Uncheck "Use default location"</para>
+              </listitem>
+
+              <listitem>
+                <para>Under "Location:", select the "Quark" folder from the
+                unzipped Quark Platform distribution.</para>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+
+          <listitem>
+            <para>Click "Finish".</para>
+          </listitem>
+        </itemizedlist>
+      </section>
+
+      <section>
+        <title>Running ICE or GemCutter (using Quark Platform
+        binaries)</title>
+
+        <para><itemizedlist>
+            <listitem>
+              <para>From the Eclipse menu, select: <menuchoice>
+                  <guimenu>Run</guimenu>
+
+                  <guimenuitem>Run...</guimenuitem>
+                </menuchoice></para>
+            </listitem>
+
+            <listitem>
+              <para>Create a new Java Application configuration</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Under configurations (on the left pane), right-click
+                  "Java Application", select "New"</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Enter a launch configuration name</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Enter a name in the "Name:" field. e.g. "ICE".</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Configure the Main tab:</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Set the Project.</para>
+
+                  <itemizedlist spacing="compact">
+                    <listitem>
+                      <para>This should be the project created above.</para>
+                    </listitem>
+                  </itemizedlist>
+                </listitem>
+
+                <listitem>
+                  <para>Set the Main class.</para>
+
+                  <itemizedlist spacing="compact">
+                    <listitem>
+                      <para>For ICE: set this to
+                      "org.openquark.cal.ICE".</para>
+                    </listitem>
+
+                    <listitem>
+                      <para>For GemCutter: set this to
+                      "org.openquark.gems.client.GemCutter".</para>
+                    </listitem>
+                  </itemizedlist>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Configure the Arguments tab:</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Specify the heap memory for the JVM:</para>
+
+                  <itemizedlist spacing="compact">
+                    <listitem>
+                      <para>Under VM arguments, add:
+                      <userinput>-Xmx256m</userinput></para>
+                    </listitem>
+                  </itemizedlist>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Click "Run".</para>
+            </listitem>
+          </itemizedlist></para>
+      </section>
+    </section>
+
+    <section>
+      <title>Adding the Quark Platform to Your Workspace as Source
+      Code</title>
+
+      <para>To import the Quark Platform into Eclipse as source-code projects:
+      <itemizedlist>
+          <listitem>
+            <para>Import the projects:</para>
+
+            <itemizedlist spacing="compact">
+              <listitem>
+                <para>Unzip the source Quark Platform distribution from
+                open_quark_platform_src.zip. This places all files under a
+                directory called "Quark".</para>
+              </listitem>
+
+              <listitem>
+                <para>From the Eclipse menu, select: <menuchoice>
+                    <guimenu>File</guimenu>
+
+                    <guimenuitem>Import...</guimenuitem>
+                  </menuchoice></para>
+              </listitem>
+
+              <listitem>
+                <para>Wizard (Import)</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>Select <menuchoice>
+                        <guimenu>General</guimenu>
+
+                        <guimenuitem>Existing Projects into
+                        Workspace</guimenuitem>
+                      </menuchoice></para>
+                  </listitem>
+
+                  <listitem>
+                    <para>Click "Next"</para>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+
+              <listitem>
+                <para>Wizard (Import Projects)</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>Click "Browse..." next to "Select root
+                    directory:"</para>
+
+                    <itemizedlist spacing="compact">
+                      <listitem>
+                        <para>Select the Quark directory created above</para>
+                      </listitem>
+
+                      <listitem>
+                        <para>Click OK</para>
+                      </listitem>
+                    </itemizedlist>
+                  </listitem>
+
+                  <listitem>
+                    <para>You will see several projects in the "Projects:"
+                    list. All except the "BAM_Sample", "CAL_Samples" and
+                    "CAL_Benchmarks" projects are essential parts of the Quark
+                    Platform</para>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+
+              <listitem>
+                <para>Click "Finish"</para>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+
+          <listitem>
+            <para>Disable unresolved PDE dependency compilation errors for the
+            import project:</para>
+
+            <itemizedlist spacing="compact">
+              <listitem>
+                <para>Open the Package Explorer view:</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>From the Eclipse menu, select: <menuchoice>
+                        <guimenu>Window</guimenu>
+
+                        <guisubmenu>Show View</guisubmenu>
+
+                        <guimenuitem>Package Explorer</guimenuitem>
+                      </menuchoice>.</para>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+
+              <listitem>
+                <para>Right-click the "import" project, select
+                "Properties".</para>
+              </listitem>
+
+              <listitem>
+                <para>Properties for import dialog:</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>Select (in the preferences tree): <menuchoice>
+                        <guimenu>Plug-in Development</guimenu>
+
+                        <guimenuitem>Plug-in Manifest Compiler</guimenuitem>
+                      </menuchoice>.</para>
+                  </listitem>
+
+                  <listitem>
+                    <para>Select "Use project settings".</para>
+                  </listitem>
+
+                  <listitem>
+                    <para>On the "Plugins" tab: change "Unresolved
+                    dependencies" from "Error" to "Ignore".</para>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+
+          <listitem>
+            <para>If the Java compiler compliance level is less than 5.0,
+            change it to 5.0 (or higher)</para>
+
+            <itemizedlist spacing="compact">
+              <listitem>
+                <para>From the Eclipse menu, select: <menuchoice>
+                    <guimenu>Window</guimenu>
+
+                    <guimenuitem>Preferences...</guimenuitem>
+                  </menuchoice></para>
+              </listitem>
+
+              <listitem>
+                <para>Preferences dialog:</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>Select (in the preferences tree): <menuchoice>
+                        <guimenu>Java</guimenu>
+
+                        <guimenuitem>Compiler</guimenuitem>
+                      </menuchoice>.</para>
+                  </listitem>
+
+                  <listitem>
+                    <para>Uncheck "Use default compliance settings".</para>
+                  </listitem>
+
+                  <listitem>
+                    <para>Change the following to "5.0": "Compiler compliance
+                    level", "Generated .class files compatibility", "Source
+                    compatibility".</para>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+        </itemizedlist></para>
+
+      <section>
+        <title>Running ICE or GemCutter (using Quark Platform source
+        code)</title>
+
+        <para><itemizedlist>
+            <listitem>
+              <para>From the Eclipse menu, select: <menuchoice>
+                  <guimenu>Run</guimenu>
+
+                  <guimenuitem>Run...</guimenuitem>
+                </menuchoice></para>
+            </listitem>
+
+            <listitem>
+              <para>Create a new Java Application configuration</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Under configurations (on the left pane), right-click
+                  "Java Application", select "New"</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Enter a launch configuration name</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Enter a name in the "Name:" field. e.g. "ICE".</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Configure the Main tab:</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Set the Project and Main class.</para>
+
+                  <itemizedlist spacing="compact">
+                    <listitem>
+                      <para>For ICE: use "CAL_Platform" and
+                      "org.openquark.cal.ICE".</para>
+                    </listitem>
+
+                    <listitem>
+                      <para>For GemCutter: use "Quark_Gems" and
+                      "org.openquark.gems.client.GemCutter".</para>
+                    </listitem>
+                  </itemizedlist>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Configure the Arguments tab:</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>Specify the heap memory for the JVM:</para>
+
+                  <itemizedlist spacing="compact">
+                    <listitem>
+                      <para>Under VM arguments, add:
+                      <userinput>-Xmx256m</userinput></para>
+                    </listitem>
+                  </itemizedlist>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Click "Run".</para>
+            </listitem>
+          </itemizedlist></para>
+      </section>
+    </section>
+
+    <section>
+      <title>Tips and Tricks</title>
+
+      <itemizedlist>
+        <listitem>
+          <para>To find .cal files and .cws files in Eclipse:</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>From the Eclipse menu, select: <menuchoice>
+                  <guimenu>Navigate</guimenu>
+
+                  <guimenuitem>Open Resource...</guimenuitem>
+                </menuchoice></para>
+            </listitem>
+
+            <listitem>
+              <para>Open Resource dialog:</para>
+            </listitem>
+
+            <listitem>
+              <para>Type "*.cal" or "*.cws".</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>To use a CAL workspace other than the default when launching a
+          project:</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>Open the appropriate launch configuration</para>
+            </listitem>
+
+            <listitem>
+              <para>Configure the Arguments Tab:</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <literallayout>Under VM arguments, add:
+<userinput>"-Dorg.openquark.cal.workspace.spec="StandardVault <replaceable>simple workspace name</replaceable>"</userinput>
+e.g. <userinput>-Dorg.openquark.cal.workspace.spec="StandardVault cal.samples.cws".</userinput></literallayout>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+
+            <listitem>
+              <para>Configure the Classpath Tab, if the workspace is not in
+              the CAL_Platform project:</para>
+
+              <itemizedlist spacing="compact">
+                <listitem>
+                  <para>In the "Classpath:" tree, select "User Entries". Click
+                  "Add Projects...".</para>
+                </listitem>
+
+                <listitem>
+                  <para>Check the project containing the desired workspace.
+                  Click "OK".</para>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+      </itemizedlist>
+    </section>
+  </chapter>
+
+  <chapter>
+    <title>Tutorial: Hello World</title>
+
+    <para>The following are examples of how to write and call a function in
+    CAL to output "Hello World". The tutorial assumes that you have installed
+    the CAL Eclipse Plug-in.</para>
+
+    <section>
+      <title>From ICE command line</title>
+
+      <itemizedlist>
+        <listitem>
+          <para>Start ICE.</para>
+        </listitem>
+
+        <listitem>
+          <para>Enter the code</para>
+
+          <para><prompt>=&gt; </prompt><userinput>"Hello World"</userinput>
+          (including quotes)</para>
+        </listitem>
+      </itemizedlist>
+    </section>
+
+    <section>
+      <title>In an existing module</title>
+
+      <itemizedlist>
+        <listitem>
+          <para>Open the file "String_Tests.cal" in Eclipse.</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>From the Eclipse menu: <menuchoice>
+                  <guimenu>Navigate</guimenu>
+
+                  <guimenuitem>Open Resource...</guimenuitem>
+                </menuchoice></para>
+            </listitem>
+
+            <listitem>
+              <para>In the dialog box, select "String_Tests.cal".</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>Add the function.</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>Navigate to the end of the file. Type:</para>
+
+              <para><userinput>myFunction = "Hello World";</userinput></para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>If ICE is running, type ":rc" to recompile modified modules.
+          Otherwise, start ICE. This will automatically recompile modified
+          modules.</para>
+        </listitem>
+
+        <listitem>
+          <para>Change to the String_Tests module.</para>
+
+          <para><prompt> =&gt; </prompt><userinput>:sm
+          String_Tests</userinput></para>
+        </listitem>
+
+        <listitem>
+          <para>Run the function.</para>
+
+          <para><prompt>=&gt;
+          </prompt><userinput>myFunction</userinput></para>
+        </listitem>
+      </itemizedlist>
+    </section>
+
+    <section>
+      <title>In a new module</title>
+
+      <para>In this step, you will create a new CAL module.</para>
+
+      <para>If you installed the Quark Platform binaries, you can create the
+      module in the Quark binaries project.</para>
+
+      <para>If you installed the Quark Platform as source projects, you can
+      create the module in the CAL_Samples project. You will also have to add
+      the CAL_Samples project to the classpath of the launch configuration for
+      ICE.</para>
+
+      <itemizedlist>
+        <listitem>
+          <para>Create a new module "MyModule" in the appropriate
+          project.</para>
+
+          <itemizedlist>
+            <listitem>
+              <para>From the Eclipse menu: <menuchoice>
+                  <guimenu>File</guimenu>
+
+                  <guisubmenu>New</guisubmenu>
+
+                  <guimenuitem>Other...</guimenuitem>
+                </menuchoice>. In the wizard dialog, select: <menuchoice>
+                  <guimenu>CAL</guimenu>
+
+                  <guimenuitem>CAL Module</guimenuitem>
+                </menuchoice></para>
+
+              <screenshot>
+                <mediaobject>
+                  <imageobject>
+                    <imagedata fileref="images/UsingCALWithEclipse/newModuleWiz1.png"></imagedata>
+                  </imageobject>
+                </mediaobject>
+              </screenshot>
+            </listitem>
+
+            <listitem>
+              <para>Select the appropriate CAL project.</para>
+
+              <screenshot>
+                <mediaobject>
+                  <imageobject>
+                    <imagedata fileref="images/UsingCALWithEclipse/newModuleWiz2.png"></imagedata>
+                  </imageobject>
+                </mediaobject>
+              </screenshot>
+            </listitem>
+
+            <listitem>
+              <para>For the file name, enter "MyModule"
+              (case-sensitive).</para>
+
+              <screenshot>
+                <mediaobject>
+                  <imageobject>
+                    <imagedata fileref="images/UsingCALWithEclipse/newModuleWiz3.png"></imagedata>
+                  </imageobject>
+                </mediaobject>
+              </screenshot>
+            </listitem>
+
+            <listitem>
+              <para>Click "Finish"</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>In the editor, enter the following text after the import
+          declaration.</para>
+
+          <para><userinput>myFunction = "Hello World";</userinput></para>
+        </listitem>
+
+        <listitem>
+          <para>Save the file</para>
+        </listitem>
+
+        <listitem>
+          <para>Run ICE (if not already running).</para>
+        </listitem>
+
+        <listitem>
+          <para>Add the module to the current environment.</para>
+
+          <para><prompt>=&gt; </prompt><userinput>:adm
+          MyModule</userinput></para>
+        </listitem>
+
+        <listitem>
+          <para>Change to the new module.</para>
+
+          <para><prompt>=&gt; </prompt><userinput>:sm
+          MyModule</userinput></para>
+        </listitem>
+
+        <listitem>
+          <para>Run the function.</para>
+
+          <para><prompt>=&gt;
+          </prompt><userinput>myFunction</userinput></para>
+        </listitem>
+      </itemizedlist>
+    </section>
+
+    <section>
+      <title>In a new module in a second project, loaded via a CAL workspace
+      file</title>
+
+      <itemizedlist>
+        <listitem>
+          <para>Create a new Java project.</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>From the Eclipse menu, select: <menuchoice>
+                  <guimenu>File</guimenu>
+
+                  <guisubmenu>New</guisubmenu>
+
+                  <guimenuitem>Project...</guimenuitem>
+                </menuchoice></para>
+
+              <itemizedlist>
+                <listitem>
+                  <para>Wizard (Select a wizard):</para>
+
+                  <itemizedlist spacing="compact">
+                    <listitem>
+                      <para>Select "Java Project".</para>
+                    </listitem>
+
+                    <listitem>
+                      <para>Click "Next".</para>
+                    </listitem>
+                  </itemizedlist>
+                </listitem>
+
+                <listitem>
+                  <para>Wizard (Create a Java project):</para>
+
+                  <itemizedlist spacing="compact">
+                    <listitem>
+                      <para>Enter a project name</para>
+                    </listitem>
+
+                    <listitem>
+                      <para>Click "Finish".</para>
+                    </listitem>
+                  </itemizedlist>
+                </listitem>
+              </itemizedlist>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>Add a Java source folder</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>In the Package Explorer view, right-click on the new
+              project. Select <menuchoice>
+                  <guimenu>New</guimenu>
+
+                  <guimenuitem>Source Folder</guimenuitem>
+                </menuchoice>.</para>
+            </listitem>
+
+            <listitem>
+              <para>Enter "MySource" as the folder name.</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>Create a new module "MyModule2" in the new source
+          folder.</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>In the Package Explorer view, right-click on the source
+              folder. Select <menuchoice>
+                  <guimenu>New</guimenu>
+
+                  <guimenuitem>Other...</guimenuitem>
+                </menuchoice>. In the wizard dialog, select: <menuchoice>
+                  <guimenu>CAL</guimenu>
+
+                  <guimenuitem>CAL Module</guimenuitem>
+                </menuchoice>.</para>
+            </listitem>
+
+            <listitem>
+              <para>For the file name, enter
+              "<userinput>MyModule2</userinput>" (case-sensitive).</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>In the editor, enter the following text after the import
+          declaration.</para>
+
+          <para><userinput>myFunction = "Hello World";</userinput></para>
+        </listitem>
+
+        <listitem>
+          <para>Add a folder for workspace declarations</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>In the Package Explorer view, right-click on the new
+              MySource folder. Select <menuchoice>
+                  <guimenu>New</guimenu>
+
+                  <guimenuitem>Folder</guimenuitem>
+                </menuchoice>.</para>
+            </listitem>
+
+            <listitem>
+              <para>For the folder name, enter "Workspace Declarations"
+              (case-sensitive).</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>Create a new workspace declaration "myworkspace.cws" in the
+          Workspace Declarations folder</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>In the Package Explorer view, right-click on the Workspace
+              Declarations folder. Select <menuchoice>
+                  <guimenu>New</guimenu>
+
+                  <guimenuitem>File...</guimenuitem>
+                </menuchoice>.</para>
+            </listitem>
+
+            <listitem>
+              <para>For the file name, enter "myworkspace.cws"
+              (case-sensitive).</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>Open the new file in an editor</para>
+
+          <itemizedlist spacing="compact">
+            <listitem>
+              <para>Expand the Workspace Declarations folder.</para>
+            </listitem>
+
+            <listitem>
+              <para>Double-click myworkspace.cws.</para>
+            </listitem>
+          </itemizedlist>
+        </listitem>
+
+        <listitem>
+          <para>In the editor, enter the following text:</para>
+
+          <programlisting>StandardVault MyModule2
+import StandardVault cal.platform.cws
+</programlisting>
+        </listitem>
+      </itemizedlist>
+
+      <section>
+        <title>Option 1: load the workspace on startup</title>
+
+        <itemizedlist>
+          <listitem>
+            <para>Create a new run target for ICE, which includes the new
+            project on the classpath.</para>
+
+            <itemizedlist>
+              <listitem>
+                <para>Follow the instructions above to create a new run target
+                for ICE, with the following modifications:</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>On the Classpath tab, add the new project to the
+                    classpath.</para>
+
+                    <itemizedlist spacing="compact">
+                      <listitem>
+                        <para>Select "User Entries" (under the "Classpath:"
+                        tree).</para>
+                      </listitem>
+
+                      <listitem>
+                        <para>Click "Add Projects..."</para>
+                      </listitem>
+
+                      <listitem>
+                        <para>Select the new project.</para>
+                      </listitem>
+                    </itemizedlist>
+                  </listitem>
+
+                  <listitem>
+                    <para>On the Arguments tab, specify the startup CAL
+                    workspace file.</para>
+
+                    <itemizedlist spacing="compact">
+                      <listitem>
+                        <literallayout>Under VM arguments, add:
+<userinput>-Dorg.openquark.cal.workspace.spec="StandardVault myworkspace.cws".</userinput></literallayout>
+                      </listitem>
+                    </itemizedlist>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+
+          <listitem>
+            <para>Run the new ICE run target.</para>
+          </listitem>
+
+          <listitem>
+            <para>Change to the new module.</para>
+
+            <para><prompt>=&gt; </prompt><userinput>:sm
+            MyModule2</userinput></para>
+          </listitem>
+
+          <listitem>
+            <para>Run the function.</para>
+
+            <para><prompt>=&gt;
+            </prompt><userinput>myFunction</userinput></para>
+          </listitem>
+        </itemizedlist>
+      </section>
+
+      <section>
+        <title>Option 2: load the workspace from the ICE command
+        prompt</title>
+
+        <itemizedlist>
+          <listitem>
+            <para>Create a new run target for ICE, which includes the new
+            project on the classpath.</para>
+
+            <itemizedlist>
+              <listitem>
+                <para>Follow the instructions above to create a new run target
+                for ICE, with the following modifications:</para>
+
+                <itemizedlist spacing="compact">
+                  <listitem>
+                    <para>On the Classpath tab, add the new project to the
+                    classpath.</para>
+
+                    <itemizedlist spacing="compact">
+                      <listitem>
+                        <para>Select "User Entries" (under the "Classpath:"
+                        tree).</para>
+                      </listitem>
+
+                      <listitem>
+                        <para>Click "Add Projects..."</para>
+                      </listitem>
+
+                      <listitem>
+                        <para>Select the new project.</para>
+                      </listitem>
+                    </itemizedlist>
+                  </listitem>
+                </itemizedlist>
+              </listitem>
+            </itemizedlist>
+          </listitem>
+
+          <listitem>
+            <para>Run the new ICE run target.</para>
+          </listitem>
+
+          <listitem>
+            <para>Load the new workspace.</para>
+
+            <para><prompt>=&gt; </prompt><userinput>:ldw
+            myworkspace.cws</userinput></para>
+          </listitem>
+
+          <listitem>
+            <para>Change to the new module.</para>
+
+            <para><prompt>=&gt; </prompt><userinput>:sm
+            MyModule2</userinput></para>
+          </listitem>
+
+          <listitem>
+            <para>Run the function.</para>
+
+            <para><prompt>=&gt;
+            </prompt><userinput>myFunction</userinput></para>
+          </listitem>
+        </itemizedlist>
+      </section>
+    </section>
+  </chapter>
+
+  <chapter>
+    <title>Using the CAL Eclipse Plug-in</title>
+
+    <para>The CAL Eclipse Plug-in makes editing CAL source code easier by
+    offering the following components:</para>
+
+    <variablelist>
+      <varlistentry>
+        <term>The CAL Editor</term>
+
+        <listitem>
+          <para>An enhanced text editor that provides syntax coloring, source
+          modification commands and refactorings.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>The CAL Builder</term>
+
+        <listitem>
+          <para>A CAL language analyzer that runs in the background and
+          enables smart processing of CAL source code.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>The CAL Workspace View</term>
+
+        <listitem>
+          <para>An Eclipse view that displays all the CAL modules in the
+          workspace as well as the CAL types and functions defined in the
+          modules.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>The Outline View</term>
+
+        <listitem>
+          <para>When the CAL editor is active, the standard Outline view shows
+          an outline of the CAL types and functions in the current CAL
+          module.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>The Quick Outline View</term>
+
+        <listitem>
+          <para>The Quick Outline view shows a tree of the types, constructors, 
+      type classes and functions in the CAL module being edited.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>The CAL Console</term>
+
+        <listitem>
+          <para>This console allows CAL expressions to be entered and
+          evaluated with respect to the CAL modules in the Eclipse
+          workspace.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>The CAL Metadata Editor</term>
+
+        <listitem>
+          <para>This editor allows you to view and modify the CAL metadata
+          associated with a CAL entity.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>CAL Search</term>
+
+        <listitem>
+          <para>A tab in the Search dialog that allows you to search all CAL
+          modules for definitions or references to an identifier</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>Preferences Pages</term>
+
+        <listitem>
+          <para>There are several pages in the Preferences dialog related to
+          the CAL Editor and Builder.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>The CAL Perspective</term>
+
+        <listitem>
+          <para>There is a perspective that is tailored for editing CAL
+          modules</para>
+        </listitem>
+      </varlistentry>
+    </variablelist>
+
+    <section>
+      <title>The CAL Editor</title>
+
+      <screenshot>
+        <mediaobject>
+          <imageobject>
+            <imagedata contentdepth="100%"
+                       fileref="images/UsingCALWithEclipse/editor-cal.png"
+                       scalefit="1" width="100%"></imagedata>
+          </imageobject>
+        </mediaobject>
+      </screenshot>
+
+      <para>The CAL Editor has many of the features found in the Java Editor,
+      such as bookmarks, copy/cut/paste, undo/redo and local file
+      history.</para>
+
+      <para>As you can see in the screen shot above, the CAL editor provides
+      syntax coloring to identify comments, Caldoc comments, keywords,
+      literals and type names. The font and color applied to these elements
+      can be configured in the preference page at CAL &gt; Editor &gt; Syntax
+      Coloring.</para>
+
+      <para>The editor automatically indents each line appropriately as you
+      type and highlights matching brackets.</para>
+
+      <para>If the CAL Builder is enabled, the module is rebuilt as soon as
+      you save the file. Compilation errors are indicated by a marker in the
+      left margin.</para>
+
+      <para>The context menu provides the following commands:</para>
+
+      <variablelist>
+        <varlistentry>
+          <term>Open Declaration (<keycap>F3</keycap> or Control+Left
+          Mouse)</term>
+
+          <listitem>
+            <para>Goes to the declaration of the selected identifier. This
+            work for foreign function as well so you can traverse to the Java
+            code.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Source &gt; Toggle Comment (<keycombo>
+              <keycap>Ctrl</keycap>
+
+              <keycap>7</keycap>
+            </keycombo> or <keycombo>
+              <keycap>Ctrl</keycap>
+
+              <keycap>/</keycap>
+            </keycombo>)</term>
+
+          <listitem>
+            <para>Adds // to the beginning of each selected line â€“ or removes
+            them if present</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Source &gt; Add Block Comment (<keycombo>
+              <keycap>Ctrl</keycap>
+
+              <keycap>Shift</keycap>
+
+              <keycap>/</keycap>
+            </keycombo>)</term>
+
+          <listitem>
+            <para>Surrounds the selected text with a block comment, delimited
+            by /* and */</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Source &gt; Remove Block Comment (<keycombo>
+              <keycap>Ctrl</keycap>
+
+              <keycap>Shift</keycap>
+
+              <keycap>\</keycap>
+            </keycombo>)</term>
+
+          <listitem>
+            <para>Removes a block comment surrounding the selected text</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Source &gt; Correct Indentation (<keycombo>
+              <keycap>Ctrl</keycap>
+
+              <keycap>I</keycap>
+            </keycombo>)</term>
+
+          <listitem>
+            <para>Adjusts the indentation of the selected lines to match the
+            CAL standard</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Source &gt; Organize Imports (<keycombo>
+              <keycap>Ctrl</keycap>
+
+              <keycap>Shift</keycap>
+
+              <keycap>O</keycap>
+            </keycombo>)</term>
+
+          <listitem>
+            <para>Adds or removes imported CAL modules, types, functions etc.
+            as needed</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Source &gt; <keycombo>
+              <keycap>Insert Type Declarations</keycap>
+            </keycombo></term>
+
+          <listitem>
+            <para>Insert type declarations for the functions in the selected
+            range if they are missing type declarations.</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>Refactor &gt; Rename... (<keycombo>
+              <keycap>Alt</keycap>
+
+              <keycap>Shift</keycap>
+
+              <keycap>R</keycap>
+            </keycombo>)</term>
+
+          <listitem>
+            <para>Renames a CAL entity, updating the definition and all
+            references</para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+
+      <section>
+        <title>Auto Completion</title>
+
+        <para>The CAL Editor supports auto-completion of statements. This is
+        accessed via the control space command key as in the Java editor.
+        Templates are also available for standard CAL expression format. This
+        is especially useful for foreign function definitions. There is a
+        property page for controlling the auto-complete behaviour as
+        well.</para>
+
+        <screenshot>
+          <mediaobject>
+            <imageobject>
+              <imagedata fileref="images/UsingCALWithEclipse/auto-complete-function.png"></imagedata>
+            </imageobject>
+          </mediaobject>
+        </screenshot>
+      </section>
+
+      <section>
+        <title>Hovers</title>
+
+        <para>The CAL doc of a symbol is displayed during hovers over a
+        symbol. If the control of shift key is held down then the source code
+        of the symbol is displayed along with type information. Pressing F2
+        will cause the display to become sticky.</para>
+
+        <screenshot>
+          <mediaobject>
+            <imageobject>
+              <imagedata fileref="images/UsingCALWithEclipse/hover-caldoc.PNG"></imagedata>
+            </imageobject>
+          </mediaobject>
+        </screenshot>
+
+        <screenshot>
+          <mediaobject>
+            <imageobject>
+              <imagedata fileref="images/UsingCALWithEclipse/hover-source.PNG"></imagedata>
+            </imageobject>
+          </mediaobject>
+        </screenshot>
+      </section>
+
+      <section>
+        <title>Templates</title>
+
+        <para>The CAL Editor has a number of templates defined that support
+        standard cal expressions. They are accessed by invoking auto-complete.
+        These can be quite useful for setting up standard expressions. There
+        is a property page for defining new templates.</para>
+
+        <screenshot>
+          <mediaobject>
+            <imageobject>
+              <imagedata fileref="images/UsingCALWithEclipse/templates.PNG"></imagedata>
+            </imageobject>
+          </mediaobject>
+        </screenshot>
+      </section>
+    </section>
+
+    <section>
+      <title>The CAL Workspace View</title>
+
+      <screenshot>
+        <mediaobject>
+          <imageobject>
+            <imagedata fileref="images/UsingCALWithEclipse/view-CalWorkspace.png"></imagedata>
+          </imageobject>
+        </mediaobject>
+      </screenshot>
+
+      <para>This view shows all the CAL modules in all projects in the Eclipse
+      workspace, arranged in a tree. Under each module there are nodes for
+      each type, constructor, type class and function found in the module. The
+      CAL element icons are marked with indicators that correspond to the
+      scope of the entity. A green dot marks public objects, a yellow diamond
+      marks protected objects and a red square marks private objects.</para>
+
+      <para>When you double-click on a CAL entity in the view, the CAL Editor
+      opens the corresponding module and selects the entity.</para>
+
+      <para>You can customize the display of the tree using commands on the
+      menu found in the upper-right area of the view. These commands are also
+      on the context menu that is shown when you right-click on a node.</para>
+
+      <para>The context menu also has commands that allow you to drill into
+      part of the tree. For example, you can drill into a module, causing the
+      tree to display just the entities that are found in that module. You can
+      drill again into the functions of the module. There are also commands to
+      back up a step in the drill sequence, and to return to the original
+      display of all modules.</para>
+
+      <para>If you right-click on a node that represents an applicable CAL
+      construct (that is, a module, type, constructor, type class or
+      function), the context menu will have a command that will open the CAL
+      Metadata Editor on the selected construct. The metadata editor is
+      described below.</para>
+    </section>
+
+    <section>
+      <title>The Outline View</title>
+
+      <para><screenshot>
+          <mediaobject>
+            <imageobject>
+              <imagedata contentdepth="100%"
+                         fileref="images/UsingCALWithEclipse/view-Outline.png"
+                         scalefit="1" width="100%"></imagedata>
+            </imageobject>
+          </mediaobject>
+        </screenshot>When the CAL editor is active, the standard Outline view
+      shows a tree of the types, constructors, type classes and functions in
+      the CAL module being edited.</para>
+
+      <para>When you double-click on an entity in the view, the CAL Editor
+      opens the corresponding module and selects the entity.</para>
+
+      <para>You can choose to keep the Outline synchronized with the editor,
+      so that as you change the selection in the editor, the corresponding
+      node in the Outline is selected.</para>
+
+      <para>If you right-click on a node that represents an applicable CAL
+      construct (that is, a module, type, constructor, type class or
+      function), the context menu will have a command that will open the CAL
+      Metadata Editor on the selected construct. The metadata editor is
+      described below.</para>
+    </section>
+
+    <section>
+      <title>The Quick Outline View</title>
+
+      <screenshot>
+        <mediaobject>
+          <imageobject>
+            <imagedata fileref="images/UsingCALWithEclipse/quick-outline.png"></imagedata>
+          </imageobject>
+        </mediaobject>
+      </screenshot>
+
+      <para>
+      The Quick Outline view shows a tree of the types, constructors, 
+      type classes and functions in the CAL module being edited. It can
+      invoked by pressing Control-O or by using the editor context menu. Entries
+      in the list can be filtered by typing in pattern strings in the
+      filter box. By selecting an entity the current position in the editor
+      will be moved to that entity in the editor.</para>
+
+    </section>
+
+    <section>
+      <title>The CAL Console</title>
+
+      <screenshot>
+        <mediaobject>
+          <imageobject>
+            <imagedata fileref="images/UsingCALWithEclipse/view-Console.png"></imagedata>
+          </imageobject>
+        </mediaobject>
+      </screenshot>
+
+      <para>The CAL console allows CAL expressions to be entered and evaluated
+      with respect to the CAL modules in the Eclipse workspace.</para>
+
+      <para>The console can be opened by selecting <menuchoice>
+          <guimenu>Run</guimenu>
+
+          <guimenuitem>Open CAL Console</guimenuitem>
+        </menuchoice> from the Eclipse menu. The module with respect to which
+      expressions are evaluated is displayed with the console prompt. To
+      evaluate a CAL expression, simply enter the expression at the prompt. To
+      change the current module, enter <command>:sm
+      <replaceable>New_Module_Name</replaceable></command>.</para>
+
+      <para>The console is also shown when interacting with elements in the
+      CAL Workspace or outline views. A runnable functional agent can be
+      evaluated in the console by selecting "Run in Console" in its context
+      menu. Similarly, a given module can be set to be the active module by
+      selecting "Open in Console" in its context menu.</para>
+
+      <para>Expression evaluation can be terminated at any time by clicking
+      the stop button on the toolbar.</para>
+    </section>
+
+    <section>
+      <title>The CAL Metadata Editor</title>
+
+      <para><screenshot>
+          <mediaobject>
+            <imageobject>
+              <imagedata contentdepth="100%"
+                         fileref="images/UsingCALWithEclipse/editor-metadata.png"
+                         scalefit="1" width="100%"></imagedata>
+            </imageobject>
+          </mediaobject>
+        </screenshot>Many modules and entities in a CAL workspace have
+      metadata associated with them. The metadata for these consists of a set
+      of named properties. There are several pre-defined properties, such as
+      Display Name, Short Description, Author and Related Features. It is
+      possible to create a custom property by specifying a name and a string
+      value.</para>
+
+      <para>Metadata is used by the Gem Cutter to enhance the display of gems
+      on the Table Top. It is also used by some programs to annotate CAL
+      entities in a manner specific to the program. For example, the BAM
+      sample included in the Open Quark distribution uses metadata to tag
+      trigger, metric and action gems.</para>
+
+      <para>The CAL Eclipse Plug-in includes a metadata editor that can be
+      used to view or edit metadata. You can open the editor from the context
+      menu in the CAL Workspace view or in the Outline view when a CAL file is
+      being edited.</para>
+
+      <para>The editor is very similar to the Properties Browser in the Gem
+      Cutter. The Gem Cutter Manual has a detailed description of the
+      browser.</para>
+    </section>
+
+    <section>
+      <title>CAL Search</title>
+
+      <screenshot>
+        <mediaobject>
+          <imageobject>
+            <imagedata fileref="images/UsingCALWithEclipse/searchDialog.png"></imagedata>
+          </imageobject>
+        </mediaobject>
+      </screenshot>
+
+      <para>Using CAL Search, you can find different kinds of occurrences of
+      CAL entities in the modules in the Eclipse workspace. The results are
+      displayed in the Search view.</para>
+    </section>
+
+    <section>
+      <title>Preferences Pages</title>
+
+      <para>The CAL Eclipse Plug-in contributes several pages to the
+      Preferences dialog:</para>
+
+      <variablelist>
+        <varlistentry>
+          <term>CAL &gt; Building</term>
+
+          <listitem>
+            <para>Enable the CAL builder and control clean-up of output
+            folders</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/prefPage-calBuilding.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>CAL &gt; Editor</term>
+
+          <listitem>
+            <para>Control smart caret positioning and highlighting of
+            brackets</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/prefPage-calEditor.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>CAL &gt; Editor &gt; Content Assist</term>
+
+          <listitem>
+            <para>Control CAL Editor content assist preferences</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/prefPage-calEditorContentAssist.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>CAL &gt; Editor &gt; Syntax Coloring</term>
+
+          <listitem>
+            <para>Control fonts and colors used for CAL language
+            elements</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/prefPage-calEditorSyntaxColoring.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>CAL &gt; Editor &gt; Tab Key Handling</term>
+
+          <listitem>
+            <para>Choose whether to insert spaces or a TAB character when the
+            Tab key is pressed</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/prefPage-calEditorTabKeyHandling.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>CAL &gt; Editor &gt; Templates</term>
+
+          <listitem>
+            <para>Create edit or remove code templates. This preference page
+            is similar to the Java Template Preference Page (Java &gt; Editor
+            &gt; Templates). Here you can create and edit code templates that
+            are available in the CAL Editor when content assist is
+            used.</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata contentwidth="100%"
+                             fileref="images/UsingCALWithEclipse/prefPage-calEditorTemplates.png"
+                             scalefit="1" width="100%"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term>CAL &gt; Editor &gt; Typing</term>
+
+          <listitem>
+            <para>Control options for automatically closing strings, bracket
+            pairs and comments, etc.</para>
+
+            <screenshot>
+              <mediaobject>
+                <imageobject>
+                  <imagedata fileref="images/UsingCALWithEclipse/prefPage-calEditorTyping.png"></imagedata>
+                </imageobject>
+              </mediaobject>
+            </screenshot>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </section>
+  </chapter>
+</book>

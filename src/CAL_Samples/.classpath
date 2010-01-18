@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry excluding="lecc_runtime/**|lecc_runtime/" kind="src" output="src" path="src"/>
+	<classpathentry excluding="lecc_runtime/**" kind="src" output="test" path="test"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/CAL_Libraries"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/CAL_Platform"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/Quark_Gems"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/Utilities"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/junit.jar"/>
+	<classpathentry kind="lib" path="Standalone Library JARs/directedgraph.jar" sourcepath="Standalone Library JARs/directedgraph.src.zip"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/CAL_Runtime"/>
+	<classpathentry kind="output" path="src"/>
+</classpath>

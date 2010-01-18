@@ -1,0 +1,136 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CALRenaming_Test_Support1.cal
+ * Creation date: April 2006
+ * By: James Wright
+ */
+
+/*
+ * This is a support file for the CALRenaming_Test suite of JUnit tests.
+ * The CALDOC comment below is needed for testing purposes and should not be edited.
+ */
+
+/** @see module = CALRenaming_Test_Support1 */
+module Cal.Test.JUnitSupport.CALRenaming_Test_Support1;
+import Cal.Core.Prelude using
+    function = intToOrdering;
+    dataConstructor = Cons;
+    ;
+foo :: Prelude.Num a => a -> a -> a;
+public foo x = Prelude.add x;
+refIntToOrdering = intToOrdering;
+
+w :: Prelude.Maybe Prelude.Int;
+w = Prelude.Nothing;
+x :: Prelude.Int;
+x = 55;
+y :: Prelude.Int;
+y = 22;
+z :: {a :: Prelude.Int, b :: Prelude.Int, c :: Prelude.Int, foo :: Prelude.Int};
+z = {a = 10, b = 20, c = 30, foo=99};
+
+codeGemIssuesFunction =
+    let
+        alpha = case w of
+        Prelude.Just a -> a;
+        ;
+        b = x; a = y;
+    in
+        Prelude.tuple3 b a (
+        let
+            a = b;
+            b_1 = Prelude.False;
+            beta = case z of
+            {_ |a} -> a + x;;
+            gamma = case z of
+            {_ |b = a} -> a;;
+            delta = case z of
+            {_ |c = b} -> b;;
+            eta = case z of
+            {b | foo} -> b;;
+            zeta = case (1,2,3) of
+            (x, y, z) -> (y, z, x);;
+            zeta2 = case (1,2,3) of
+            (a, b, b1) -> (b, b1, a);;
+        in
+            Prelude.tuple5 a b x y (
+            let
+                /**
+                 * @arg a a
+                 * @arg b b
+                 */
+                f a b = a + b + x;
+                /**
+                 * @arg a a
+                 * @arg b b
+                 */
+                f2 a b = a + b + x;
+                g = \b -> \a -> b - a;
+                a a = { a = a };
+                thunk :: Prelude.Boolean;
+                thunk = Prelude.True;
+            in
+                let
+                    x = 3.0;
+                in
+                    (x, Prelude.tuple4 z (
+                    let
+                        z = 4;
+                    in
+                        z) (f 3 4) (a (1 :: Prelude.Int)))));
+    
+/** @see module = CALRenaming_Test_Support1 */            
+public someFunction = 6.0;
+
+/** {@link module = CALRenaming_Test_Support1@}\n\n\n{@orderedList {@item {@unorderedList {@item {@summary {@code {@em {@link function = CALRenaming_Test_Support1.someFunction @} @} @} @} @} @} @} @}*/            
+public someFunction2 = 6.0;
+
+/** {@link Prelude.Maybe@} */            
+public someFunction3 = 6.0;
+
+/** @see Prelude.id */            
+public someFunction4 = 6.0;
+
+/** @see module = CALRenaming_Test_Support1 */            
+foobar :: Prelude.Double;
+private foobar = let /** @see module = CALRenaming_Test_Support1 */ foo = 7.0; /** @see module = CALRenaming_Test_Support1 */ bar :: Prelude.Int; bar = 7; in foo;
+
+data Alpha =
+    A | B | C;
+
+/**
+ * @see Alpha, Beta, Gamma, Cons, foobar
+ */
+data Beta =
+    Gamma;

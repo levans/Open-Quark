@@ -1,0 +1,294 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * BAM.cal
+ * Creation date: 9 Mar 2004
+ * By: Rick Cameron
+ */
+
+/**
+ * This module contains sample Triggers, Metrics, and Actions for BAM.
+ *
+ * @author Rick Cameron
+ * @author Magnus Byne 
+ */
+module Cal.Samples.BusinessActivityMonitor.BAM;
+
+import Cal.Core.Prelude using
+    typeClass = Num;
+    typeConstructor = Boolean, Double, Int, String;
+    function = fromInt, toDouble;
+    ;
+
+import Cal.Collections.List;
+import Cal.Utilities.Time;
+import Cal.Utilities.Math;
+import Cal.Core.String;
+
+
+/*
+ * Example trigger gems
+ * All trigger gems take produce a boolean value
+ */
+
+/**
+ * This trigger takes the mean, standard deviation, sample, and a threshold,
+ * and returns true if the sample is more than threshold standard deviations from the mean.
+ * 
+ * @arg sample the sample to check
+ * @arg stdDev the standard deviation of the population
+ * @arg threshold the number of stadard deviations that the sample must be away from the mean
+ * @arg mean the mean of the population
+ * 
+ * @return true if the sample is outside of the range
+ */
+outsideOfSigmas :: Double -> Double -> Double -> Double -> Boolean;
+public outsideOfSigmas sample stdDev threshold mean = outsideOfRange (mean - (stdDev * threshold)) (mean + (stdDev * threshold)) sample;
+
+/**
+ * This trigger returns true if the datum is outside of the interval specified by the low and high bounds
+ * 
+ * @arg lowBound lower bound
+ * @arg highBound upper bound
+ * @arg datum the datum
+ * @return true if the datum is outside the specified interval
+ */
+outsideOfRange :: Double -> Double -> Double -> Prelude.Boolean;
+public outsideOfRange lowBound highBound datum = (datum < lowBound) || (datum > highBound);
+
+/**
+ * This trigger returns true if the datum is less than the specified limit
+ * 
+ * @arg datum 
+ * @arg limit
+ * @return true if the value of datum is less than limit
+ */
+lessThan :: Double -> Double -> Prelude.Boolean;
+public lessThan datum limit = datum < limit;
+
+/**
+ * This trigger returns true if the datum is less than or equal to the specified limit
+ * 
+ * @arg datum
+ * @arg limit 
+ * @return true if the value of datum is less than or equal to the limit
+ */
+lessThanOrEqual :: Double -> Double -> Prelude.Boolean;
+public lessThanOrEqual datum limit = datum <= limit;
+
+/**
+ * This trigger returns true if the datum is greater than the specified limit
+ * 
+ * @arg datum
+ * @arg limit 
+ * @return true if the value of datum is greater than limit
+ */
+greaterThan :: Double -> Double -> Prelude.Boolean;
+public greaterThan datum limit = datum > limit;
+
+/**
+ * This trigger returns true if the datum is greater than or equal to the specified limit
+ * 
+ * @arg datum
+ * @arg limit 
+ * @return true if the value of datum is greater than or equal to limit
+ */
+greaterThanOrEqual :: Double -> Double -> Prelude.Boolean;
+public greaterThanOrEqual datum limit = datum >= limit;
+
+
+/* Example Metric Gems
+ * The metric gems all compute 'running' statistics. This means that given a list of values they return
+ * a corresponding list of outputs values, where the ith element in the output list is the statistic
+ * computed for values 1 .. i of the input list. 
+ * For example, BAM.max [3, 2, 6, 3, 4, 7] --> [3, 3, 6, 6, 6, 7]
+ */
+
+/**
+ * This is a helper function which converts a list of numbers to a list doubles.
+ * We use double for many of the metric statistics to avoid numeric overflow
+ * and provide approriate precision.
+ * @arg values a list of numbers
+ * @return a list of doubles
+ */
+toDoubles :: Num a => [a] -> [Double];
+toDoubles values = List.map toDouble values;                  
+
+/**
+ * This metric counts the number of items
+ * @arg values a list of message properties
+ * @return a list representing the running count of values
+ */
+count :: [a] -> [Int];
+public count values = List.tail $ List.accumulateLeftStrict (\count value -> count + 1) 0 values;
+
+/**
+ * This metric sums the input values
+ * @arg values a list of message properties
+ * @return a list representing the running sum of values
+ */
+sum :: Num a => [a] -> [Double];
+public sum values = List.accumulateLeft1Strict Prelude.add (toDoubles values);
+
+/**
+ * This metric computes the sum of the squares of the input values
+ * @arg values a list of message properties
+ * @return a list representing the running sum of squared values
+ */
+sum2 :: Num a => [a] -> [Double];
+public sum2 values = sum (List.map (\v -> v * v) values); 
+
+/**
+ * This computes the weighted average of the input values. It does not have the
+ * standard metric signature as it has an additonal parameter controlling the period,
+ * see weightedAverage14 for a standard metric based on this one.
+ * see: {@url http://en.wikipedia.org/wiki/Weighted_moving_average#J._Welles_Wilder@}
+ * 
+ * @arg period controls the influence of previous values on the running average
+ * @arg values a list of message properties
+ * @return a list representing the running weighted average of values
+ * @see weightedAverage14
+ */
+weightedAverage :: Num a => Int -> [a] -> [Double];
+public weightedAverage period values = 
+    List.accumulateLeft1Strict (\current value -> ((current) * ((fromInt period) - 1) + value) / (fromInt period)  ) (toDoubles values);
+
+/**
+ * This metric computes the 14 sample weighted average of the input values 
+ * It demonstrates a partial application of weightedAverage to provide a 
+ * function with the standard metric signature
+ * @arg values a list of message properties
+ * @return a list representing the running weighted average (period 14) of values
+ */
+public weightedAverage14 = weightedAverage 14;
+
+/**
+ * This metric computes the average of the input values
+ * @arg values a list of message properties
+ * @return a list representing the running average of values
+ */
+average :: Num a => [a] -> [Double];
+public average values = List.zipWith (\sum count -> sum / (fromInt count)) (sum values) (count values) ; 
+
+/**
+ * This metric computes the standard deviation of the input values
+ * @arg values a list of message properties
+ * @return a list representing the running standard deviation of values
+ */
+std :: Num a => [a] -> [Double];
+public std values = List.zipWith3 (\sum sum2 count -> Math.sqrt ((sum2 - (sum * sum)/(fromInt count)) / (fromInt count - 1))) (sum values) (sum2 values)  (count values) ;
+
+/**
+ * This metric computes the maximum of the input values
+ * @arg values a list of message properties
+ * @return a list representing the running maximum of values
+ */
+max :: Prelude.Ord a => [a] -> [a];
+public max values = 
+    List.accumulateLeft1Strict Prelude.max values;
+
+/**
+ * This metric computes the minimum of the input values
+ * @arg values a list of message properties
+ * @return a list representing the running minimum of values
+ */
+min :: Prelude.Ord a => [a] -> [a];
+public min values = 
+    List.accumulateLeft1Strict Prelude.min values;
+
+/**
+ * This metric computes transforms the input items to uppercase
+ * @arg values a list of message properties
+ * @return a list containing the upper case of values
+ */
+upper :: [Prelude.String] -> [Prelude.String];
+public upper values = List.map String.toUpperCase values;
+
+
+/*Next we define some action Gems, which are based on the following imported java functions*/
+foreign unsafe import jvm "static method org.openquark.samples.bam.CALSupport.sendEmail" private csSendEmail :: Prelude.String -> Prelude.String -> Prelude.String -> Prelude.Boolean;
+foreign unsafe import jvm "static method org.openquark.samples.bam.CALSupport.sendToLog" private csSendToLog :: Prelude.String -> Prelude.Boolean;
+
+/**
+ * Send a simulated email message
+ * In the BAM sample this just displays the email message that would be sent. 
+ * @arg toList  a list of recipients
+ * @arg subject the subject line of the email
+ * @arg message the contents of the message
+ * @return true if the message is sent successfully.
+ */
+public sendSimulatedEmail toList subject message =
+    csSendEmail toList subject message
+;
+
+/**
+ * This writes a message to the application's log
+ * @arg message the message to to the log
+ * @return true if the message is logged successfully.
+ */
+public sendToLog message =
+    csSendToLog message
+;
+    
+
+/**
+ * This type class is used to format template strings.
+ * It defines how the various message property types are converted to printable form
+ */
+public class Printable a where
+    public toString :: a -> String;
+    ;
+
+instance Printable Prelude.String where
+    toString = Prelude.id;
+    ;
+
+instance Printable Double where
+    toString = Prelude.doubleToString;
+    ;
+
+instance Printable Int where
+    toString = Prelude.intToString;
+    ;
+
+/**
+ * This concatenates two printable values.
+ * @arg first the first printable value
+ * @arg second the second printable value
+ * @return the two values printed and concatenated
+ */
+appendStrings :: (Printable a, Printable b) => a -> b -> String;
+public appendStrings first second = (toString first) ++ (toString second);
+
+
+       

@@ -1,0 +1,371 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * StringProperties.cal
+ * Creation date: May 31, 2006.
+ * By: Joseph Wong
+ */
+
+/**
+ * This module defines the types {@link typeConstructor=StringProperties@}
+ * and {@link typeConstructor=StringResourceBundle@} which are useful for working with string resource files.
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Utilities.StringProperties;
+
+import Cal.Core.Prelude using
+    function = fromJust, concat, input, output, eager;
+    dataConstructor = False, True, Nothing, Just;
+    typeConstructor = Boolean, String, Maybe, JList;
+    typeClass = Eq, Inputable, Outputable;
+    ;
+
+import Cal.Utilities.Locale using
+    function = currentLocale, invariantLocale;
+    typeConstructor = Locale;
+    ;
+
+import Cal.Core.Resource using
+    function = getResourceInputStreamFallbackList;
+    typeConstructor = InputStream;
+    ;
+
+import Cal.Collections.List using
+    function = foldRight, map, join;
+    ;
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+
+/**
+ * Represents a set of string-valued properties that can be loaded from a persisted format.
+ */
+/*
+ * @implementation private implementation scope so that users cannot take the properties object and modify it.
+ */
+data foreign unsafe import jvm private "java.util.Properties"
+    public StringProperties deriving Eq, Inputable, Outputable;
+
+/**
+ * The null value, which can be used validly as the {@em defaults@} of a {@link typeConstructor=StringProperties@}.
+ */
+foreign unsafe import jvm "null"
+    private nullProperties :: StringProperties;
+
+/**
+ * @arg properties the {@link typeConstructor=StringProperties@} to test.
+ * @return {@link True@} iff the argument is null.
+ */
+foreign unsafe import jvm "isNull"
+    private isNullProperties :: StringProperties -> Boolean;
+
+/**
+ * An empty {@link typeConstructor=StringProperties@}.
+ */
+foreign unsafe import jvm "constructor"
+    public emptyStringProperties :: StringProperties;
+
+/**
+ * Constructs a {@link typeConstructor=StringProperties@} by reading in the persisted format from an input stream.
+ * 
+ * @arg inputStream the stream to be read.
+ * @return a {@link typeConstructor=StringProperties@} with the key-value pairs read in from the stream.
+ */
+makeStringProperties :: InputStream -> StringProperties;
+public makeStringProperties !inputStream =
+    makeStringPropertiesWithDefaults inputStream nullProperties;
+
+/**
+ * Constructs a {@link typeConstructor=StringProperties@} by reading in the persisted format from an input stream, and
+ * with the given defaults.
+ * 
+ * @arg inputStream the stream to be read.
+ * @arg defaults the defaults to fall back on.
+ * @return a {@link typeConstructor=StringProperties@} with the key-value pairs read in from the stream.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.StringProperties.StringPropertiesSupport.makeProperties"
+    public makeStringPropertiesWithDefaults :: InputStream -> StringProperties -> StringProperties;
+
+
+////
+/// String resource bundles
+//
+
+/**
+ * Represents a {@link typeConstructor=StringProperties@} fetched as a user resource.
+ */
+data public StringResourceBundle =
+    /**
+     * Represents a {@link typeConstructor=StringProperties@} fetched as a user resource,
+     * with identification information for the resource: module name, name, file extension,
+     * and the requested and actual locales of the resource.
+     * 
+     * @arg moduleName the name of the module associated with the user resource.
+     * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+     * @arg extension the file extension for the user resource.
+     * @arg requestedLocale the locale for which the resource was to be fetched.
+     * @arg actualLocale the actual locale for the resource fetched.
+     * @arg strings the {@link typeConstructor=StringProperties@}.
+     */
+    private StringResourceBundle
+        moduleName      :: !String
+        name            :: !String
+        extension       :: !String
+        requestedLocale :: !Locale
+        actualLocale    :: !Locale
+        strings         :: !StringProperties
+    deriving Eq, Show;
+
+/**
+ * Returns the name of the module associated with the bundle.
+ * @arg bundle the string resource bundle.
+ * @return the name of the module associated with the bundle.
+ */
+bundleModuleName :: StringResourceBundle -> String;
+public bundleModuleName !bundle = bundle.StringResourceBundle.moduleName;
+
+/**
+ * Returns the name of the user resource associated with the bundle.
+ * @arg bundle the string resource bundle.
+ * @return the name of the user resource associated with the bundle.
+ */
+bundleName :: StringResourceBundle -> String;
+public bundleName !bundle = bundle.StringResourceBundle.name;
+
+/**
+ * Returns the file extension of the user resource associated with the bundle.
+ * @arg bundle the string resource bundle.
+ * @return the file extension of the user resource associated with the bundle.
+ */
+bundleExtension :: StringResourceBundle -> String;
+public bundleExtension !bundle = bundle.StringResourceBundle.extension;
+
+/**
+ * Returns the locale for which the resource was to be fetched.
+ * @arg bundle the string resource bundle.
+ * @return the locale for which the resource was to be fetched.
+ */
+bundleRequestedLocale :: StringResourceBundle -> Locale;
+public bundleRequestedLocale !bundle = bundle.StringResourceBundle.requestedLocale;
+
+/**
+ * Returns the actual locale for the resource fetched.
+ * @arg bundle the string resource bundle.
+ * @return the actual locale for the resource fetched.
+ */
+bundleActualLocale :: StringResourceBundle -> Locale;
+public bundleActualLocale !bundle = bundle.StringResourceBundle.actualLocale;
+
+/**
+ * Returns the {@link typeConstructor=StringProperties@} associated with the bundle.
+ * @arg bundle the string resource bundle.
+ * @return the {@link typeConstructor=StringProperties@} associated with the bundle.
+ */
+bundleStrings :: StringResourceBundle -> StringProperties;
+public bundleStrings !bundle = bundle.StringResourceBundle.strings;
+
+/**
+ * Constructs a string resource bundle by fetching the user resource with the given module name and resource name,
+ * in the current locale. The file extension defaults to "properties".
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ */
+makeStringResourceBundle :: String -> String -> StringResourceBundle;
+public makeStringResourceBundle !moduleName !name =
+    makeStringResourceBundleInLocale moduleName name currentLocale;
+
+/**
+ * Constructs a string resource bundle by fetching the user resource with the given module name and resource name, and in the
+ * specific locale. The file extension defaults to "properties".
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg locale the locale for which the resource is to be fetched.
+ */
+makeStringResourceBundleInLocale :: String -> String -> Locale -> StringResourceBundle;
+public makeStringResourceBundleInLocale !moduleName !name !locale =
+    makeStringResourceBundleWithExtensionInLocale moduleName name "properties" locale;
+
+/**
+ * Constructs a string resource bundle by fetching the user resource with the given module name and resource name and extension,
+ * and in the specific locale.
+ * 
+ * @arg moduleName the name of the module associated with the user resource.
+ * @arg name the name of the resource, not including any file extensions. Cannot contain the character '_'.
+ * @arg extension the file extension for the user resource.
+ * @arg locale the locale for which the resource is to be fetched.
+ */
+makeStringResourceBundleWithExtensionInLocale :: String -> String -> String -> Locale -> StringResourceBundle;
+public makeStringResourceBundleWithExtensionInLocale !moduleName !name !extension !locale =
+    let
+        /** The fallback list of input streams and their locales. */
+        fallbackList :: [(Locale, InputStream)];
+        fallbackList = getResourceInputStreamFallbackList moduleName name extension locale;
+        
+        /** The actual locale of the most-locale-specific resource fetched. */
+        actualLocale :: Locale;
+        actualLocale =
+            case fallbackList of
+            entry:_ -> entry.#1;
+            _ -> invariantLocale;
+            ;
+        
+        /** Constructs a {@link typeConstructor=StringProperties@} from an input stream and an instance for the defaults. */
+        makeStringPropertiesFromEntry :: (Locale, InputStream) -> StringProperties -> StringProperties;
+        makeStringPropertiesFromEntry !entry !defaults =
+            let
+                newStringPropertiesOrNull :: StringProperties;
+                newStringPropertiesOrNull = eager $ makeStringPropertiesWithDefaults entry.#2 defaults;
+            in
+                if isNullProperties newStringPropertiesOrNull then
+                    defaults
+                else
+                    newStringPropertiesOrNull;
+        
+        /** The {@link typeConstructor=StringProperties@} constructed from the fallback list. */
+        stringPropertiesOrNull :: StringProperties;
+        stringPropertiesOrNull = foldRight makeStringPropertiesFromEntry nullProperties fallbackList;
+        
+        /**
+         * The {@link typeConstructor=StringProperties@} constructed from the fallback list, or
+         * if it is null, the {@link emptyStringProperties@}. 
+         */ 
+        stringProperties :: StringProperties;
+        stringProperties =
+            if isNullProperties stringPropertiesOrNull then
+                emptyStringProperties
+            else
+                stringPropertiesOrNull;
+    in
+        StringResourceBundle moduleName name extension locale actualLocale stringProperties;
+
+
+////
+/// Accessors
+//
+
+/**
+ * Searches for the property with the specified key in the {@link typeConstructor=StringProperties@} instance.
+ * If the key is not found in there, its defaults, and its defaults' defaults, recursively, are then checked.
+ * If the property is not found, the Java {@code null@} value is returned.
+ * 
+ * @arg stringProperties the {@link typeConstructor=StringProperties@} instance.
+ * @arg key the property key.
+ * @return the value of the property, or the Java {@code null@} value if there is no property with that key.
+ */
+foreign unsafe import jvm "method getProperty"
+    private getProperty :: StringProperties -> String -> String;
+
+/**
+ * @arg string the string to test.
+ * @return {@link True@} iff the argument is null.
+ */
+foreign unsafe import jvm "isNull"
+    private isNullString :: String -> Boolean;
+
+/**
+ * Looks up the named property in the given {@link typeConstructor=StringProperties@}.
+ * 
+ * @arg key the name of the property.
+ * @arg stringProperties the {@link typeConstructor=StringProperties@} instance.
+ * @return {@link Just@} the value of the property, or {@link Nothing@} if there is no property with that key.
+ */
+lookup :: String -> StringProperties -> Maybe String;
+public lookup !key !stringProperties =
+    let
+        result :: String;
+        result = eager $ getProperty stringProperties key;
+    in
+        if isNullString result then
+            Nothing
+        else
+            Just result;
+
+/**
+ * Searches for the property with the specified key in the {@link typeConstructor=StringProperties@} instance.
+ * If the key is not found in there, its defaults, and its defaults' defaults, recursively, are then checked.
+ * If the proprety is not found, the default value argument is returned.
+ * 
+ * @arg stringProperties the {@link typeConstructor=StringProperties@} instance.
+ * @arg key the property key.
+ * @arg defaultValue the default value to use.
+ * @return the value of the property, or {@code defaultValue@} if there is no property with that key.
+ */
+foreign unsafe import jvm "method getProperty"
+    private getPropertyWithDefault :: StringProperties -> String -> String -> String;
+
+/**
+ * Looks up the named property in the given {@link typeConstructor=StringProperties@}, with the provided default.
+ * 
+ * @arg key the name of the property.
+ * @arg stringProperties the {@link typeConstructor=StringProperties@} instance.
+ * @arg defaultValue the default value to use.
+ * @return the value of the property, or {@code defaultValue@} if there is no property with that key.
+ */
+lookupWithDefault :: String -> StringProperties -> String -> String;
+public lookupWithDefault !key !stringProperties !defaultValue =
+    getPropertyWithDefault stringProperties key defaultValue;
+
+/**
+ * Returns a list of the keys defined in the given {@link typeConstructor=StringProperties@} instance (and
+ * its chain of defaults instances).
+ * 
+ * @arg stringProperties the {@link typeConstructor=StringProperties@} instance.
+ * @return a list of all the keys in the instance, including the keys in the default property list.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.StringProperties.StringPropertiesSupport.getPropertyNames"
+    private getPropertyNames :: StringProperties -> JList;
+
+/**
+ * Returns a list of all the keys defined in the given {@link typeConstructor=StringProperties@} (and
+ * its chain of defaults instances).
+ * 
+ * @arg stringProperties the {@link typeConstructor=StringProperties@} instance.
+ * @return a list of all the keys in the instance, including the keys in the default property list.
+ */
+keys :: StringProperties -> [String];
+public keys !stringProperties =
+    (input $ output $ getPropertyNames stringProperties) :: [String];
+
+instance Show StringProperties where
+    show = showStringProperties;
+    ;
+
+showStringProperties :: StringProperties -> String;
+private showStringProperties !stringProperties =
+    "(StringProperties: " ++
+    (join ", " $ map (\!key -> key ++ "=\"" ++ fromJust (lookup key stringProperties) ++ "\"") $ keys stringProperties) ++
+    ")";

@@ -1,0 +1,1171 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * File.cal
+ * Creation date: June 23, 2005.
+ * By: Joseph Wong
+ */
+
+/**
+ * The File module defines types and functions for working with files and
+ * directories.
+ * 
+ * The functions in this module work on all platforms. However, the semantics of
+ * some of these functions are platform-dependent, e.g. the treatment of paths
+ * and path separators.
+ * 
+ * If an error occurs during the course of an IO operation, an {@link typeConstructor = IOError@}
+ * value is constructed and returned to the caller. While each {@link typeConstructor = IOError@}
+ * value contains an {@link IOErrorType@} value, representing the type of the error, the
+ * translation of the underlying Java IOException to an {@link IOErrorType@} value can be
+ * regarded as a best-effort attempt. In particular, the accuracy of the {@link IOErrorType@}
+ * value for an {@link typeConstructor = IOError@} is platform-dependent. In the worst case,
+ * the {@link typeConstructor = IOError@} would have an error type that represents an unknown
+ * IOException. However, the caller can count on the one-to-one correspondence between a Java
+ * IOException and a CAL {@link typeConstructor = IOError@} value on all platforms. In other words,
+ * no error goes unreported.
+ * 
+ * @author Joseph Wong
+ */
+module Cal.IO.File;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Ord, Outputable;
+    typeConstructor = 
+        Boolean, Byte, Either, JList, JObject, Long, Maybe, String;
+    dataConstructor = False, True, Left, Right, Nothing, Just;
+    function = error, input, output;
+    ;
+
+import Cal.Collections.List using
+    function = foldLeftStrict, inputList, map;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+
+import Cal.Core.Exception using
+    typeClass = Exception;
+    function = catch;
+    ;
+
+import Cal.Core.System;
+
+import Cal.Core.Debug;
+
+
+////==============================================================================
+/// Representation of a file path: the FileName type and the JFile foreign type
+//
+
+/**
+ * A representation of file and directory paths.
+ * 
+ * The conversion of a path string to or from a {@code FileName@} is platform-dependent,
+ * due to the platform-dependent nature of the path separator character.
+ * 
+ * A path may be either absolute or relative. An absolute path completely specifies
+ * the location of a file or directory. Relative paths, on the other hand, must first be
+ * resolved against the current user directory.
+ */
+data public FileName =
+    /** @arg path the file or directory's path (can be a relative or an absolute path) */
+    private FileName 
+        path    :: !String
+    deriving Eq, Ord;
+    // These derived instances would yield case-sensitive equality and order comparisons.
+    // Alternatively, the method java.io.File.compareTo can be used to compare file paths using
+    // a platform-dependent notion of path equivalence: On UNIX, alphabetic case is
+    // significant in comparing paths; on Windows systems it is not.
+
+/**
+ * Constructs a {@link typeConstructor = FileName@} from a file path.
+ * @arg path the file path to be encapsulated by the {@code FileName@} value.
+ * @return a {@code FileName@} value.
+ */
+public makeFileName !path = FileName path;
+
+/**
+ * Gets the file path represented by the given {@link typeConstructor = FileName@} value as a string.
+ * @arg fileName the {@code FileName@} value whose path string is to be extracted.
+ * @return the file path as a string.
+ */
+getPathFromFileName :: FileName -> String;
+public getPathFromFileName !fileName = fileName.FileName.path;
+
+data foreign unsafe import jvm "java.io.File" private JFile deriving Inputable, Outputable;
+
+foreign unsafe import jvm "constructor"
+    private jFile_new_withPathName :: String -> JFile;
+
+foreign unsafe import jvm "method toString"
+    private jFile_toString :: JFile -> String;
+
+/**
+ * Converts a {@link typeConstructor = FileName@} into a {@link JFile@} value.
+ * @arg fileName the {@code FileName@} value to convert.
+ * @return the corresponding {@code JFile@} value.
+ */
+fileNameToJFile :: FileName -> JFile;
+private fileNameToJFile !fileName =
+    jFile_new_withPathName fileName.FileName.path;
+
+/**
+ * Converts a {@link JFile@} value into a {@link typeConstructor = FileName@}.
+ * @arg jFile the {@code JFile@} value to convert.
+ * @return the corresponding {@code FileName@} value.
+ */
+jFileToFileName :: JFile -> FileName;
+private jFileToFileName !jFile = makeFileName $ jFile_toString jFile;
+
+////==============================================================================
+/// Inputable, Outputable, and Debug.Show instances for FileName
+//
+
+instance Inputable FileName where
+    input = inputFileNameFromJObject;
+    ;
+
+inputFileNameFromJObject :: JObject -> FileName;
+private inputFileNameFromJObject jObject = makeFileName ((input jObject) :: String);
+
+instance Outputable FileName where
+    output = outputFileNameToJObject;
+    ;
+
+outputFileNameToJObject :: FileName -> JObject;
+private outputFileNameToJObject fileName = output (getPathFromFileName fileName);
+
+instance Debug.Show FileName where
+    show = getPathFromFileName;
+    ;
+
+////==============================================================================
+/// Manipulation of file paths
+//
+
+foreign unsafe import jvm "method isAbsolute"
+    private jFile_isAbsolute :: JFile -> Boolean;
+
+foreign unsafe import jvm "method getAbsolutePath"
+    private jFile_getAbsolutePath :: JFile -> String;
+
+foreign unsafe import jvm "method getCanonicalPath"
+    private jFile_getCanonicalPath :: JFile -> String;
+
+foreign unsafe import jvm "method getName"
+    private jFile_getName :: JFile -> String;
+
+foreign unsafe import jvm "method getParent"
+    private jFile_getParent :: JFile -> String;
+
+foreign unsafe import jvm "constructor"
+    private jFile_new_withParentChild :: String -> String -> JFile;
+
+foreign unsafe import jvm "constructor"
+    private jFile_new_withJFileParentChild :: JFile -> String -> JFile;
+
+foreign unsafe import jvm "isNull"
+    private isNullString :: String -> Boolean;
+
+/**
+ * Returns whether the given path is absolute.
+ * 
+ * {@unorderedList
+ *  {@item
+ *   On UNIX, a path is absolute if it starts with {@code '/'@}.
+ *  @}
+ *  {@item
+ *   On Windows, a path is absolute if its starts with {@code '\'@} or with
+ *   a drive specifier followed by {@code '\'@}.
+ *  @}
+ * @}
+ * 
+ * @arg fileName the path to check.
+ * @return {@link True@} if the given path is absolute; {@link False@} otherwise.
+ */
+isAbsolutePath :: FileName -> Boolean;
+public isAbsolutePath !fileName = jFile_isAbsolute $ fileNameToJFile fileName;
+
+/**
+ * Gets the absolute path of the specified file path.
+ * 
+ * {@unorderedList
+ *  {@item
+ *   If the path is empty, then the path of the current user directory is returned.
+ *  @}
+ *  {@item
+ *   On UNIX, the relative path is resolved against the current user directory.
+ *  @}
+ *  {@item
+ *   On Windows, the relative path is resolved against the current directory of
+ *   the drive named by the path. If the path does not name a specific drive, then it is
+ *   resolved against the current user directory.
+ *  @}
+ * @}
+ * 
+ * @arg fileName the path whose absolute path is to be returned.
+ * @return the absolute path of the specified file path.
+ */
+getAbsolutePath :: FileName -> FileName;
+public getAbsolutePath !fileName = makeFileName $ jFile_getAbsolutePath $ fileNameToJFile fileName;
+
+/**
+ * Gets the canonical path of the specified file path.
+ * 
+ * A canonical path is an absolute path without redundant path components such as "." and "..",
+ * and satisfying platform-dependent rules: (e.g. converting 'c:\' to 'C:\' on Windows, or resolving
+ * symlinks on UNIX).
+ * 
+ * @arg fileName the path whose canonical path is to be returned.
+ * @return the canonical path of the specified file path.
+ */
+getCanonicalPath :: FileName -> FileName;
+public getCanonicalPath !fileName = makeFileName $ jFile_getCanonicalPath $ fileNameToJFile fileName;
+
+/**
+ * Gets the file name from the file path. This is simply the last component of
+ * the path. For example, a Windows path 'C:\windows\explorer.exe' would yield
+ * "explorer.exe" as the file name.
+ * 
+ * @arg fileName the path from which the file name is to be extracted.
+ * @return the file name portion of the file path.
+ */
+getNameFromPath :: FileName -> String;
+public getNameFromPath !fileName = jFile_getName $ fileNameToJFile fileName;
+
+/**
+ * Gets the file path's parent. For example, a Windows path
+ * 'C:\windows\explorer.exe' would yield 'C:\windows' as the parent.
+ * 
+ * @arg fileName the path whose parent path is to be returned.
+ * @return {@code {@link Just@} parent@}, or {@link Nothing@} if the path has no parent.
+ */
+getParentFromPath :: FileName -> Maybe FileName;
+public getParentFromPath !fileName =
+    let
+        parentOrNull = jFile_getParent $ fileNameToJFile fileName;
+    in
+        if isNullString parentOrNull then
+            Nothing
+        else
+            Just $ makeFileName $ parentOrNull;
+
+/**
+ * Constructs a new file path representing a file or a subdirectory in a given
+ * parent directory.
+ * 
+ * @arg parent the parent path of the new path.
+ * @arg child the last component of the new path.
+ * @return a new file path representing a file or a subdirectory in the given
+ * parent directory.
+ */
+extendPath :: FileName -> String -> FileName;
+public extendPath !parent !child =
+    jFileToFileName $ jFile_new_withParentChild (parent.FileName.path) child;
+
+/**
+ * Constructs a file path from a list of components. For example, a Windows path
+ * 'C:\windows\explorer.exe' would have as components the list
+ * {@code ["C:", "windows", "explorer.exe"]@}. This function is meant to facilitate
+ * the construction of file paths in a platform-independent (or more specifically,
+ * path-separator-independent) manner.
+ * 
+ * @arg components the components of the new path.
+ * @return the file path constructed from the list of components.
+ */
+buildPathFromComponents :: [String] -> FileName;
+public buildPathFromComponents !components =
+    case components of
+    [] -> jFileToFileName $ jFile_new_withPathName "";
+    component : remainder -> jFileToFileName $ foldLeftStrict jFile_new_withJFileParentChild (jFile_new_withPathName component) remainder;
+    ;
+
+////==============================================================================
+/// Queries on files and directories
+//
+
+foreign unsafe import jvm "method canRead"
+    private jFile_canRead :: JFile -> Boolean;
+
+foreign unsafe import jvm "method canWrite"
+    private jFile_canWrite :: JFile -> Boolean;
+
+foreign unsafe import jvm "method isDirectory"
+    private jFile_isDirectory :: JFile -> Boolean;
+
+foreign unsafe import jvm "method isFile"
+    private jFile_isFile :: JFile -> Boolean;
+
+foreign unsafe import jvm "method exists"
+    private jFile_exists :: JFile -> Boolean;
+
+foreign unsafe import jvm "method isHidden"
+    private jFile_isHidden :: JFile -> Boolean;
+
+foreign unsafe import jvm "method length"
+    private jFile_length :: JFile -> Long;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileSystemAccess.getModificationTime"
+    private jGetModificationTime :: JFile -> Time;
+
+/**
+ * Returns whether the specified file or directory is readable.
+ * 
+ * @arg fileName the file or directory to check.
+ * @return {@link True@} if the specified file or directory is readable; {@link False@} otherwise.
+ */
+isFileOrDirectoryReadable :: FileName -> Boolean;
+public isFileOrDirectoryReadable !fileName = jFile_canRead $ fileNameToJFile fileName;
+
+/**
+ * Returns whether the specified file or directory is writable.
+ * 
+ * @arg fileName the file or directory to check.
+ * @return {@link True@} if the specified file or directory is writable; {@link False@} otherwise.
+ */
+isFileOrDirectoryWritable :: FileName -> Boolean;
+public isFileOrDirectoryWritable !fileName = jFile_canWrite $ fileNameToJFile fileName;
+
+/**
+ * Returns whether the specified path refers to an existent directory.
+ * 
+ * @arg dirName the path to check.
+ * @return {@link True@} if the specified path refers to an existent directory; {@link False@} otherwise.
+ */
+isDirectory :: FileName -> Boolean;
+public isDirectory !dirName = jFile_isDirectory $ fileNameToJFile dirName;
+
+/**
+ * Returns whether the specified path refers to an existent file.
+ * 
+ * @arg fileName the path to check.
+ * @return {@link True@} if the specified path refers to an existent file; {@link False@} otherwise.
+ */
+isFile :: FileName -> Boolean;
+public isFile !fileName = jFile_isFile $ fileNameToJFile fileName;
+
+/**
+ * Returns whether the file or directory denoted by the given path exists.
+ * 
+ * @arg fileOrDirName the path to check.
+ * @return {@link True@} if the specified path refers to an existent file or directory; {@link False@} otherwise.
+ */
+doesFileOrDirectoryExist :: FileName -> Boolean;
+public doesFileOrDirectoryExist !fileOrDirName = jFile_exists $ fileNameToJFile fileOrDirName;
+
+/**
+ * Returns whether the specified file or directory is hidden. (The semantics of
+ * being hidden is platform specific: on Windows this means having the 'hidden'
+ * attribute set, on UNIX this means the path of the file begins with a {@code '.'@}.)
+ * 
+ * @arg fileName the path to check.
+ * @return {@link True@} if the specified path refers to a hidden file or directory; {@link False@} otherwise.
+ */
+isFileOrDirectoryHidden :: FileName -> Boolean;
+public isFileOrDirectoryHidden !fileName = jFile_isHidden $ fileNameToJFile fileName;
+
+/**
+ * Returns the length, in bytes, of the file.
+ * 
+ * The return value is 0 if the file does not exist, and is unspecified if the
+ * path denotes a directory.
+ * 
+ * @arg fileName the file whose length is to be returned.
+ * @return the length, in bytes, of the file.
+ */
+getFileLength :: FileName -> Long;
+public getFileLength !fileName = jFile_length $ fileNameToJFile fileName;
+
+/**
+ * Gets the last modification time of the specified file or directory.
+ * 
+ * @arg fileName the file whose last modification time is to be returned.
+ * @return the last modification time of the specified file or directory.
+ */
+getModificationTime :: FileName -> Time;
+public getModificationTime !fileName = jGetModificationTime $ fileNameToJFile fileName;
+
+////==============================================================================
+/// Reading and writing files
+//
+data foreign unsafe import jvm "byte[]" JByteArray deriving Inputable, Outputable;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileIO.readFile"
+    private jReadFile :: JFile -> JIOResult; // actual result type: String
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileIO.readFileBinary"
+    private jReadFileBinary :: JFile -> JIOResult; // actual result type: JByteArray;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileIO.readBinaryContentsFromFileOrUrl"
+    private jReadBinaryContentsFromFileOrUrl :: String -> JIOResult; // actual result type: JByteArray;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileIO.writeFile"
+    private jWriteFile :: JFile -> String -> JIOResult; // actual result type: ()
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileIO.writeFileBinary"
+    private jWriteFileBinary :: JFile -> JByteArray -> JIOResult; // actual result type: ()
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileIO.appendFile"
+    private jAppendFile :: JFile -> String -> JIOResult; // actual result type: ()
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileIO.appendFileBinary"
+    private jAppendFileBinary :: JFile -> JByteArray -> JIOResult; // actual result type: ()
+
+data foreign unsafe import jvm "java.io.Reader" JReader;
+data foreign unsafe import jvm "java.io.BufferedReader" JBufferedReader;
+
+foreign unsafe import jvm "constructor java.io.FileReader" jNewFileReader :: JFile -> JReader;
+foreign unsafe import jvm "constructor" jNewBufferedReader :: JReader -> JBufferedReader;
+
+foreign unsafe import jvm "method readLine" jBufferedReader_readLine :: JBufferedReader -> String;
+foreign unsafe import jvm "method close" jBufferedReader_close :: JBufferedReader -> ();
+
+// Convert between JByteArray and (Array Byte).
+jByteArrayToByteArray :: JByteArray -> Array Byte;
+jByteArrayToByteArray = Array.inputPrimitive # output;
+
+byteArrayToJByteArray :: Array Byte -> JByteArray;
+byteArrayToJByteArray = input # Array.outputPrimitive;
+
+
+/**
+ * Evaluates the specified value and catches IOExceptions thrown.
+ * The IOError info will be returned if an IOException is thrown.
+ * Otherwise the value will be returned.
+ * @arg location  the name of the function to be reported in the error output
+ * @arg fileName  the name of the file causing the error
+ * @arg value     the value to be evaluated
+ * @return        the error information from any IOException or else the evaluated value
+ */
+catchIOException :: String -> FileName -> a -> Either IOError a;
+catchIOException location fileName value = 
+    Prelude.strict Right value
+    `catch`
+    (
+        let
+            handleIOException :: JIOException -> Either IOError a;
+            handleIOException !ioException = 
+                Left $ IOError
+                    (jIOExceptionToIOErrorType ioException)
+                    location
+                    (Just fileName)
+                    (Just $ jIOException_getMessage ioException);
+        in
+            handleIOException
+    );
+
+/**
+ * Reads the contents of the specified file into a string.
+ * 
+ * @arg fileName the path of the file to be read.
+ * @return either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a {@code {@link Right@} fileContents@} encapsulating
+ * the contents of the file. 
+ */
+readFile :: FileName -> Either IOError String;
+public readFile !fileName = ioTry "readFile" $ jReadFile $ fileNameToJFile fileName;
+
+/**
+ * Reads the contents of the specified file into a byte array.
+ * 
+ * @arg fileName the path of the file to be read.
+ * @return either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a {@code {@link Right@} fileContents@} encapsulating
+ * the contents of the file. 
+ */
+readFileBinary :: FileName -> Either IOError (Array Byte);
+public readFileBinary !fileName = ioTryWith jByteArrayToByteArray "readFileBinary" $ jReadFileBinary $ fileNameToJFile fileName;
+
+/**
+ * Reads the contents of the file specified by its file name or URL into a byte array.
+ * 
+ * @arg fileNameOrUrl the path or the URL of the file to be read.
+ * @return either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a {@code {@link Right@} fileContents@} encapsulating
+ * the contents of the file. 
+ */
+readBinaryContentsFromFileOrUrl :: String -> Either IOError (Array Byte);
+public readBinaryContentsFromFileOrUrl !fileNameOrUrl = ioTryWith jByteArrayToByteArray "readBinaryContentsFromFileOrUrl" $ jReadBinaryContentsFromFileOrUrl fileNameOrUrl;
+
+/**
+ * Reads the lines of the specified text file.
+ * The file will be closes when the end of the input is reached.
+ * 
+ * @arg fileName  the path of the file to be read
+ * @return        either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a 
+ *                {@code {@link Right@} fileContents@} encapsulating the lines of the text file 
+ */
+readFileLines :: FileName -> Either IOError [String];
+public readFileLines !fileName = 
+    let
+        // Construct a buffered reader for the file.
+        // Register the reader as cleanable.
+        fileReader :: JBufferedReader;
+        fileReader = 
+            System.registerCleanableFunction 
+                jBufferedReader_close 
+                (jNewBufferedReader $ jNewFileReader $ fileNameToJFile fileName);
+
+        readHelper :: JBufferedReader -> [String];
+        readHelper !reader = 
+            let
+                line :: String;
+                line = jBufferedReader_readLine reader;
+            in
+                // Close the reader when the end of the input is reached.
+                if isNullString line then jBufferedReader_close reader `Prelude.seq` []
+                else line `Prelude.seq` line : readHelper reader;
+    in
+        catchIOException "readFileLines" fileName (readHelper fileReader);
+
+/**
+ * Writes the specified contents into the file specified by the file name. If the
+ * file already exists, it will be overwritten with by the new contents.
+ * 
+ * @arg fileName the path of the file to be written.
+ * @arg contents the contents to be written.
+ * @return either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a {@code {@link Right@} ()@} indicating success. 
+ */
+writeFile :: FileName -> String -> Either IOError ();
+public writeFile !fileName !contents = ioTry "writeFile" $ jWriteFile (fileNameToJFile fileName) contents;
+
+/**
+ * Writes the specified binary contents into the file specified by the file name.
+ * If the file already exists, it will be overwritten with by the new contents.
+ * 
+ * @arg fileName the path of the file to be written.
+ * @arg contents the contents to be written.
+ * @return either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a {@code {@link Right@} ()@} indicating success. 
+ */
+writeFileBinary :: FileName -> Array Byte -> Either IOError ();
+public writeFileBinary !fileName !contents = ioTry "writeFileBinary" $ jWriteFileBinary (fileNameToJFile fileName) (byteArrayToJByteArray contents);
+
+/**
+ * Appends the specified contents to the file specified by the file name.
+ * 
+ * @arg fileName the path of the file to be appended.
+ * @arg contents the contents to be appended.
+ * @return either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a {@code {@link Right@} ()@} indicating success. 
+ */
+appendFile :: FileName -> String -> Either IOError ();
+public appendFile !fileName !contents = ioTry "appendFile" $ jAppendFile (fileNameToJFile fileName) contents;
+
+/**
+ * Appends the specified binary contents to the file specified by the file name.
+ * 
+ * @arg fileName the path of the file to be appended.
+ * @arg contents the contents to be appended.
+ * @return either a {@code {@link Left@} ioError@} indicating that the operation has failed, or a {@code {@link Right@} ()@} indicating success. 
+ */
+appendFileBinary :: FileName -> Array Byte -> Either IOError ();
+public appendFileBinary !fileName !contents = ioTry "appendFileBinary" $ jAppendFileBinary (fileNameToJFile fileName) (byteArrayToJByteArray contents);
+
+////==============================================================================
+/// Directory operations
+//
+
+foreign unsafe import jvm "method mkdir"
+    private jFile_mkdir :: JFile -> Boolean;
+
+foreign unsafe import jvm "method mkdirs"
+    private jFile_mkdirs :: JFile -> Boolean;
+
+foreign unsafe import jvm "method delete"
+    private jFile_delete :: JFile -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileSystemAccess.deleteDirectoryTree"
+    private jDeleteDirectoryTree :: JFile -> Boolean;
+
+foreign unsafe import jvm "method renameTo"
+    private jFile_renameTo :: JFile -> JFile -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileSystemAccess.getDirectoryContents"
+    private jGetDirectoryContents :: JFile -> JList;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.FileSystemAccess.getFilteredDirectoryContents"
+    private jGetFilteredDirectoryContents :: JFile -> String -> Boolean -> JList;
+
+/**
+ * Creates the specified directory. The directory's parent must already exist.
+ * 
+ * @arg dirName the path of the directory.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+createDirectory :: FileName -> Boolean;
+public createDirectory !dirName = jFile_mkdir $ fileNameToJFile dirName;
+
+/**
+ * Creates the specified directory, and all nonexistent parent directories.
+ * 
+ * @arg dirName the path of the directory.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+createDirectoryAndNonexistentParentDirectories :: FileName -> Boolean;
+public createDirectoryAndNonexistentParentDirectories !dirName = jFile_mkdirs $ fileNameToJFile dirName;
+
+/**
+ * Deletes the specified file.
+ * 
+ * @arg fileName the path of the file.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+deleteFile :: FileName -> Boolean;
+public deleteFile !fileName =
+    let
+        jFile = fileNameToJFile fileName;
+    in
+        if jFile_isFile jFile then
+            jFile_delete jFile
+        else
+            False;
+
+/**
+ * Deletes the specified directory. The directory must be empty; otherwise it
+ * will not be deleted.
+ * 
+ * @arg dirName the path of the directory.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+deleteDirectory :: FileName -> Boolean;
+public deleteDirectory !dirName =
+    let
+        jFile = fileNameToJFile dirName;
+    in
+        if jFile_isDirectory jFile then
+            jFile_delete jFile
+        else
+            False;
+
+/**
+ * Deletes the specified file or directory. If it is a directory, it must be
+ * empty; otherwise it will not be deleted.
+ * 
+ * @arg fileOrDirName the file or path of the directory.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+deleteFileOrDirectory :: FileName -> Boolean;
+public deleteFileOrDirectory !fileOrDirName = jFile_delete $ fileNameToJFile fileOrDirName;
+
+/**
+ * Recursively deletes the directory tree rooted at the specified directory.
+ * 
+ * @arg dirName the path of the directory.
+ * @return true if the operation succeeds; false otherwise
+ */
+deleteDirectoryTree :: FileName -> Boolean;
+public deleteDirectoryTree !dirName = jDeleteDirectoryTree $ fileNameToJFile dirName;
+
+/**
+ * Renames the specified file.
+ * 
+ * @arg sourceFileName the name of the source file.
+ * @arg destFileName the name of the destination file.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+renameFile :: FileName -> FileName -> Boolean;
+public renameFile !sourceFileName !destFileName =
+    let
+        sourceJFile = fileNameToJFile sourceFileName;
+    in
+        if jFile_isFile sourceJFile then
+            jFile_renameTo sourceJFile $ fileNameToJFile destFileName
+        else
+            False;
+
+/**
+ * Renames the specified directory.
+ * 
+ * @arg sourceDirName the name of the source directory.
+ * @arg destDirName the name of the destination directory.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+renameDirectory :: FileName -> FileName -> Boolean;
+public renameDirectory !sourceDirName !destDirName =
+    let
+        sourceJFile = fileNameToJFile sourceDirName;
+    in
+        if jFile_isDirectory sourceJFile then
+            jFile_renameTo sourceJFile $ fileNameToJFile destDirName
+        else
+            False;
+
+/**
+ * Renames the specified file or directory.
+ * 
+ * @arg source the name of the source file or directory.
+ * @arg dest the name of the destination file or directory.
+ * @return {@link True@} if the operation succeeds; {@link False@} otherwise
+ */
+renameFileOrDirectory :: FileName -> FileName -> Boolean;
+public renameFileOrDirectory !source !dest = jFile_renameTo (fileNameToJFile source) (fileNameToJFile dest);
+
+/**
+ * Gets the path of the current working directory.
+ * 
+ * @return the path of the current working directory.
+ */
+getCurrentDirectory :: FileName;
+public getCurrentDirectory = makeFileName $ jFile_getCanonicalPath $ jFile_new_withPathName ".";
+
+/**
+ * Gets a list of all the files and subdirectories within the specified
+ * directory.
+ * 
+ * If the specified path does not denote a directory, then this function returns
+ * an empty list. Otherwise a list of {@link typeConstructor = FileName@}s is returned,
+ * one for each file or directory in the directory.
+ * 
+ * If the specified path is absolute the returned paths are all absolute, and similarly if
+ * the specified path is relative then the returned paths are all relative.
+ * 
+ * The returned list is an {@em unordered@} list of paths.
+ * 
+ * @arg dirName the path of the directory.
+ * @return a list of the files and subdirectories within the specified directory.
+ */
+getDirectoryContents :: FileName -> [FileName];
+public getDirectoryContents !dirName = map jFileToFileName $ inputList $ jGetDirectoryContents $ fileNameToJFile dirName;
+
+/**
+ * Fetches a list of files, or a list of files and subdirectories, in a directory
+ * matching the specified pattern (such as {@code "*.txt"@} or {@code "test?.rpt"@}).
+ * 
+ * If the specified path does not denote a directory, then this function returns
+ * an empty list. Otherwise a list of {@link typeConstructor = FileName@}s is returned, one for each file
+ * in the directory, and if the {@code filesOnly@} argument is false, one for each
+ * subdirectory in the directory as well.
+ * 
+ * If the specified path is absolute the returned paths are all absolute, and similarly if
+ * the specified path is relative then the returned paths are all relative.
+ * 
+ * The returned list is an {@em unordered@} list of paths.
+ * 
+ * The file name pattern admits the use of the wildcard characters {@code '*'@} and {@code '?'@}. The
+ * wildcard {@code '*'@} stands for 0 or more characters, and the wildcard {@code '?'@} stands for a
+ * single character.
+ * 
+ * @arg dirName the path of the directory.
+ * @arg fileNamePattern the file name pattern to use.
+ * @arg filesOnly whether the list is to contain files only.
+ * @return a list of the files and subdirectories within the specified directory.
+ */
+getFilteredDirectoryContents :: FileName -> String -> Boolean -> [FileName];
+public getFilteredDirectoryContents !dirName !fileNamePattern !filesOnly = map makeFileName $ inputList $ jGetFilteredDirectoryContents (fileNameToJFile dirName) fileNamePattern filesOnly;
+
+////==============================================================================
+/// Error reporting
+//
+
+/**
+ * This is an unordered enumeration of the recognized types of IO errors. The
+ * error type of an IO error arising from a call to a Java method is determined
+ * by the corresponding Java IOException.
+ * 
+ * @see jIOExceptionToIOErrorType
+ */
+data public IOErrorType =
+    private PermissionDenied |
+    private DeviceNotReady |
+    private NoSuchThing |
+    private ResourceBusy |
+    private ResourceExhausted |
+    private UnknownHost |
+    private UnhandledIOException
+    deriving Eq;
+
+//---------------------------------------------------------------------------------------------
+// As the IOErrorType is an opaque type, we provie a collection of predicates for interrogating
+// IOErrorType values.
+
+/**
+ * Checks to see whether the error type represents an error that arose because
+ * the user did not having sufficient privileges to perform the operation.
+ * 
+ * @arg ioErrorType the error type to check.
+ * @return {@link True@} iff the error type represents an error that arose because
+ *         the user did not having sufficient privileges to perform the operation.
+ */
+isPermissionErrorType :: IOErrorType -> Boolean;
+public isPermissionErrorType !ioErrorType =
+    case ioErrorType of
+    PermissionDenied -> True;
+    _ -> False;
+    ;
+
+/**
+ * Checks to see whether the error type represents an error that arose because a
+ * hardware device was not ready.
+ * 
+ * @arg ioErrorType the error type to check.
+ * @return {@link True@} iff the error type represents an error that arose because a
+ *         hardware device was not ready.
+ */
+isDeviceNotReadyErrorType :: IOErrorType -> Boolean;
+public isDeviceNotReadyErrorType !ioErrorType =
+    case ioErrorType of
+    DeviceNotReady -> True;
+    _ -> False;
+    ;
+
+/**
+ * Checks to see whether the error type represents an error that arose because
+ * the specified file or directory did not exist.
+ * 
+ * @arg ioErrorType the error type to check.
+ * @return {@link True@} iff the error type represents an error that arose because
+ *         the specified file or directory did not exist.
+ */
+isDoesNotExistErrorType :: IOErrorType -> Boolean;
+public isDoesNotExistErrorType !ioErrorType =
+    case ioErrorType of
+    NoSuchThing -> True;
+    _ -> False;
+    ;
+
+/**
+ * Checks to see whether the error type represents an error that arose because
+ * the specified file or directory was already in use.
+ * 
+ * @arg ioErrorType the error type to check.
+ * @return {@link True@} iff the error type represents an error that arose because
+ *         the specified file or directory was already in use.
+ */
+isAlreadyInUseErrorType :: IOErrorType -> Boolean;
+public isAlreadyInUseErrorType !ioErrorType =
+    case ioErrorType of
+    ResourceBusy -> True;
+    _ -> False;
+    ;
+
+/**
+ * Checks to see whether the error type represents an error that arose because
+ * the hardware device (e.g. the disk) was full.
+ * 
+ * @arg ioErrorType the error type to check.
+ * @return {@link True@} iff the error type represents an error that arose because
+ *         the hardware device (e.g. the disk) was full.
+ */
+isFullErrorType :: IOErrorType -> Boolean;
+public isFullErrorType !ioErrorType =
+    case ioErrorType of
+    ResourceExhausted -> True;
+    _ -> False;
+    ;
+
+/**
+ * Checks to see whether the error type represents an error that arose because
+ * the specified network host could not be found.
+ * 
+ * @arg ioErrorType the error type to check.
+ * @return {@link True@} iff the error type represents an error that arose because
+ *         the specified network host could not be found.
+ */
+isUnknownHostErrorType :: IOErrorType -> Boolean;
+public isUnknownHostErrorType !ioErrorType =
+    case ioErrorType of
+    UnknownHost -> True;
+    _ -> False;
+    ;
+
+/**
+ * Checks to see whether the error type represents an unrecognized Java
+ * IOException.
+ * 
+ * @arg ioErrorType the error type to check.
+ * @return {@link True@} iff the error type represents an unrecognized Java IOException.
+ */
+isUnhandledIOExceptionErrorType :: IOErrorType -> Boolean;
+public isUnhandledIOExceptionErrorType !ioErrorType =
+    case ioErrorType of
+    UnhandledIOException -> True;
+    _ -> False;
+    ;
+
+instance Debug.Show IOErrorType where
+    show = showIOErrorType;
+    ;
+
+showIOErrorType :: IOErrorType -> String;
+private showIOErrorType !ioErrorType =
+    case ioErrorType of
+    PermissionDenied -> "permission denied";
+    DeviceNotReady -> "device not ready";
+    NoSuchThing -> "the file or directory does not exist";
+    ResourceBusy -> "resource busy";
+    ResourceExhausted -> "resource exhausted (No space left on device)";
+    UnknownHost -> "unknown host";
+    UnhandledIOException -> "[Java IOException]";
+    ;
+
+/** The foreign type corresponding to the Java IOException class. */
+data foreign unsafe import jvm "java.io.IOException" private JIOException deriving Outputable;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.IOResult.getStackTrace"
+    private jGetStackTrace :: JIOException -> String;
+
+foreign unsafe import jvm "method getMessage"
+    private jIOException_getMessage :: JIOException -> String;
+
+instance Debug.Show JIOException where
+    show = jIOException_getMessage;
+    ;
+
+instance Exception.Exception JIOException where
+    ;
+
+/**
+ * This is the CAL representation of an IO error. In particular, a Java
+ * IOException is translated into an {@code IOError@} value.
+ * 
+ * @see ioTry
+ */
+data public IOError =
+    /**
+     * @arg type
+     *        the type of this IO error.
+     * @arg location
+     *        the location (i.e. the name of the function) where this IO
+     *        error occured.
+     * @arg maybeFileName
+     *        the name of the file involved in this IO error, if applicable.
+     * @arg maybeExceptionMessage
+     *        the message from the corresponding Java IOException, if
+     *        applicable.
+     */
+    private IOError
+        type                    :: !IOErrorType 
+        location                :: !String 
+        maybeFileName           :: !(Maybe FileName) 
+        maybeExceptionMessage   :: !(Maybe String) 
+    deriving Eq;
+
+/**
+ * Gets the error type of the specified IO error.
+ * 
+ * @arg ioError the IO error.
+ * @return the error type of the specified IO error.
+ */
+ioeGetErrorType :: IOError -> IOErrorType;
+public ioeGetErrorType !ioError = ioError.IOError.type;
+
+/**
+ * Gets the error location of the specified IO error.
+ * 
+ * @arg ioError the IO error.
+ * @return the error location of the specified IO error.
+ */
+ioeGetErrorLocation :: IOError -> String;
+public ioeGetErrorLocation !ioError = ioError.IOError.location;
+
+/**
+ * Gets the associated file name (if any) of the specified IO error.
+ * 
+ * @arg ioError the IO error.
+ * @return the associated file name (if any) of the specified IO error.
+ */
+ioeGetFileName :: IOError -> Maybe FileName;
+public ioeGetFileName !ioError = ioError.IOError.maybeFileName;
+
+/**
+ * Gets the associated exception message (if any) of the specified IO error.
+ * 
+ * @arg ioError the IO error.
+ * @return the associated exception message (if any) of the specified IO error.
+ */
+ioeGetExceptionMessage :: IOError -> Maybe String;
+public ioeGetExceptionMessage !ioError = ioError.IOError.maybeExceptionMessage;
+
+instance Debug.Show IOError where
+    show = showIOError;
+    ;
+
+showIOError :: IOError -> String;
+private showIOError !ioError =
+    case ioError of
+    IOError {type, location, maybeFileName, maybeExceptionMessage} ->
+        let
+            fileNamePortion =
+                case maybeFileName of
+                Nothing -> "";
+                Just fileName -> Debug.show fileName ++ ": ";
+                ;
+            exceptionPortion =
+                case maybeExceptionMessage of
+                Nothing -> "";
+                Just exceptionMessage -> "\n\t[Java exception: " ++ exceptionMessage ++ "]";
+                ;
+        in
+            "IOError: " ++ fileNamePortion ++ location ++ ": " ++ Debug.show type ++ exceptionPortion;;
+
+instance Outputable IOError where
+    output = outputIOErrorAsString;
+    ;
+
+outputIOErrorAsString :: IOError -> JObject;
+private outputIOErrorAsString !ioError = output $ showIOError ioError;
+
+/**
+ * This foreign type represents an encapsulation of what a Java foreign support
+ * method returns to CAL, i.e. either a return value, or an uncaught exception.
+ * A {@code JIOResult@} value is translated into an
+ * {@code ({@link Either@} {@link typeConstructor = IOError@} a)@} value, the CAL
+ * representation of the result of an IO operation, by the function ioTry.
+ */
+data foreign unsafe import jvm "org.openquark.cal.foreignsupport.module.File.IOResult" private JIOResult deriving Outputable;
+
+foreign unsafe import jvm "method isError"
+    private jIOResult_isError :: JIOResult -> Boolean;
+
+foreign unsafe import jvm "method getResult"
+    private jIOResult_getResult :: JIOResult -> JObject;
+
+foreign unsafe import jvm "method getException"
+    private jIOResult_getException :: JIOResult -> JIOException;
+
+foreign unsafe import jvm "method getFile"
+    private jIOResult_getFile :: JIOResult -> JFile;
+
+foreign unsafe import jvm "isNull"
+    private isNullFile :: JFile -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.IOResult.isPermissionDenied_FileNotFoundException"
+    private jIsPermissionDenied_FileNotFoundException :: JIOException -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.IOResult.isDeviceNotReady_FileNotFoundException"
+    private jIsDeviceNotReady_FileNotFoundException :: JIOException -> Boolean;
+
+foreign unsafe import jvm "instanceof java.io.FileNotFoundException"
+    private jIsGenericFileNotFoundException :: JIOException -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.IOResult.isResourceBusyException"
+    private jIsResourceBusyException :: JIOException -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.File.IOResult.isResourceExhaustedException"
+    private jIsResourceExhaustedException :: JIOException -> Boolean;
+
+foreign unsafe import jvm "instanceof java.net.UnknownHostException"
+    private jIsUnknownHostException :: JIOException -> Boolean;
+
+/**
+ * Translates a {@link JIOResult@} value into an
+ * {@code ({@link Either@} {@link typeConstructor = IOError@} a)@} value, which can then
+ * be consumed by the caller of the IO operation. If the {@link JIOResult@} represents an
+ * error, then the corresponding Java IOException is translated into an
+ * {@link typeConstructor = IOError@} value (returned via {@link Left@}); otherwise,
+ * the return value is extracted from the {@link JIOResult@} and returned (via {@link Right@}).
+ */
+ioTry :: (Inputable a) => String -> JIOResult -> Either IOError a;
+private ioTry !errorLocation !ioResult = 
+    ioTryWith Prelude.id errorLocation ioResult;
+
+/**
+ * Translates a {@link JIOResult@} value into an
+ * {@code ({@link Either@} {@link typeConstructor = IOError@} a)@} value, which can then
+ * be consumed by the caller of the IO operation. If the {@link JIOResult@} represents an
+ * error, then the corresponding Java IOException is translated into an
+ * {@link typeConstructor = IOError@} value (returned via {@link Left@}); otherwise,
+ * the return value is extracted from the {@link JIOResult@}, {@em transformed via {@code f@}@},
+ * and returned (via {@link Right@}).
+ */
+ioTryWith :: (Inputable a) => (a -> b) -> String -> JIOResult -> Either IOError b;
+private ioTryWith f !errorLocation !ioResult =
+    if jIOResult_isError ioResult then
+        let
+            jFileOrNull = jIOResult_getFile ioResult;
+            ioException = jIOResult_getException ioResult;
+        in
+            Left $ IOError
+                (jIOExceptionToIOErrorType ioException)
+                errorLocation
+                (if isNullFile jFileOrNull then Nothing else Just $ jFileToFileName jFileOrNull)
+                (Just $ jIOException_getMessage ioException)
+    else
+        Right $ f $ input $ jIOResult_getResult ioResult;
+
+/**
+ * Translates a Java IOException into an appropriate {@link IOErrorType@}. This function
+ * uses a series of predicates defined in Java to determine the type of error
+ * represented by the IOException. If all the predicates return false, then an
+ * {@link IOErrorType@} value of {@link UnhandledIOException@} is returned.
+ */
+jIOExceptionToIOErrorType :: JIOException -> IOErrorType;
+private jIOExceptionToIOErrorType !exception =
+    if jIsPermissionDenied_FileNotFoundException exception then
+        PermissionDenied
+    else if jIsDeviceNotReady_FileNotFoundException exception then
+        DeviceNotReady
+    else if jIsGenericFileNotFoundException exception then
+        NoSuchThing
+    else if jIsResourceBusyException exception then
+        ResourceBusy
+    else if jIsResourceExhaustedException exception then
+        ResourceExhausted
+    else if jIsUnknownHostException exception then
+        UnknownHost
+    else
+        UnhandledIOException;
+
+/**
+ * Extracts the return value from an
+ * {@code ({@link Either@} {@link typeConstructor = IOError@} a)@} value. If the supplied
+ * value in fact represents an {@link typeConstructor = IOError@}, then the return value of a call to
+ * {@link Prelude.error@} is returned. This function is therefore analogous to {@link Prelude.fromJust@}.
+ * 
+ * @arg resultOrError an {@code (Either IOError a)@} value to be processed.
+ * @return either the intended return value of a successful IO operation, or a call to {@link Prelude.error@}
+ * if the IO operation failed.
+ */
+fromIOSuccess :: Either IOError a -> a;
+public fromIOSuccess !resultOrError =
+    case resultOrError of
+    Left ioError -> error $ showIOError ioError;
+    Right result -> result;
+    ;
+
+/**
+ * Determines whether an {@code ({@link Either@} {@link typeConstructor = IOError@} a)@}
+ * value represents an IO error, i.e. in fact the value is of the form {@code {@link Left@} ioError@}.
+ * This function is therefore analogous to {@link Prelude.isJust@}.
+ * 
+ * @arg resultOrError an {@code (Either IOError a)@} value to be processed.
+ * @return {@link True@} if the IO operation succeeded, or {@link False@} if the IO operation failed.
+ */
+isIOSuccess :: Either IOError a -> Boolean;
+public isIOSuccess !resultOrError =
+    case resultOrError of
+    Left {} -> False;
+    _ -> True;
+    ;

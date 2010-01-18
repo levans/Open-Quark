@@ -1,0 +1,1831 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * XmlBuilder.cal
+ * Creation date: Feb 28, 2003.
+ * By: Edward Lam
+ */
+
+/**
+ * This module contains types and functions for creating XML documents.
+ * 
+ * An {@link typeConstructor = XmlDocument@} consists of a list of top-level {@link XmlNode@}s. 
+ * 
+ * An {@link XmlNode@} is either an {@link XmlElement@}, an {@link XmlText@}, an {@link XmlCDataSection@} or an {@link XmlComment@}. 
+ * 
+ * The function {@link xmlDocumentToString@} can be used to turn an {@link typeConstructor = XmlDocument@} into a {@link typeConstructor = String@}.
+ * 
+ * The type classes {@link XmlOutputable@} and {@link XmlInputable@} provide a framework for serializing any type to XML.
+ * 
+ * This module provides implementations of these classes for several common types:
+ * {@unorderedList
+ * {@item {@link typeConstructor = Boolean@}@}
+ * {@item {@link typeConstructor = Color@}@}
+ * {@item {@link typeConstructor = Double@}@}
+ * {@item {@link typeConstructor = Int@}@}
+ * {@item {@link typeConstructor = Integer@}@}
+ * {@item {@link typeConstructor = Prelude.List@}@}
+ * {@item {@link typeConstructor = Long@}@}
+ * {@item {@link typeConstructor = Range@}@}
+ * {@item {@link typeConstructor = String@}@}
+ * {@item {@link typeConstructor = Time@}@}
+ * @}
+ * 
+ *  Lists and records of serializable types are also handled.
+ * 
+ * @author Tom Haggie
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+module Cal.Utilities.XmlBuilder;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Ord;
+    typeConstructor =
+        Boolean, Char, Double, Either, Int, Integer, Long, Maybe, String;
+    dataConstructor = False, True, Left, Right, Nothing, Just;
+    function =
+        append, concat, doubleToString, error, field1, field2, fromJust,
+        fromMaybe, fst, intToString, integerToString, isEmpty, isJust, isLeft,
+        listToMaybe, longToString, maybeApply, not, seq, snd, stringToDouble,
+        stringToInt, stringToInteger, stringToLong, uncurry;
+    ;
+import Cal.Collections.List using
+    function =
+        all, concatMap, filter, find, foldLeftStrict, head, last, length, map, 
+        replicate, splitEither, subscript, zipWith;
+    ;
+import Cal.Collections.Set using
+    typeConstructor = Set;
+    ;
+import Cal.Core.String using
+    function = equalsIgnoreCase, replaceAllString, splitString;
+    ;
+import Cal.Core.Char;
+import Cal.Graphics.Color using
+    typeConstructor = Color;
+    function = colorToRGBA, makeTranslucentColor;
+    ;
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+import Cal.Utilities.Range using
+    typeConstructor = Range;
+    ;
+import Cal.Core.Record using
+    typeConstructor = Dictionary;
+    function =
+        unsafeBuildList, unsafeBuildRecord, fieldNames, strictRecord, toTuple2,
+        unsafeBuildRecordFromList, unsafeBuildListFromRecord;
+    ;
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+import Cal.Experimental.Utilities.XmlCharacterClasses using
+    function = isLetter, isDigit, isCombiningChar, isExtender;
+    ;
+
+friend Cal.Experimental.Utilities.XmlPrinters;
+
+/**
+ * A CAL representation of an XML document.
+ */
+data public XmlDocument = 
+    protected XmlDocument 
+        topLevelNodes :: [XmlNode]
+        notations :: [XmlNotation]
+    ;
+
+/**
+ * Creates an XML document with the specified top-level nodes (one of which must be an element).
+ */
+makeXmlDocument :: [XmlNode] -> XmlDocument;
+public makeXmlDocument topLevelNodes = 
+    let
+        topLevelElems = filter isElementNode topLevelNodes;
+
+        // Only allow certain node types at the top level.
+        isValidTopLevelNode node = 
+            case node of
+            XmlProcessingInstruction  {} -> True;
+            XmlStyleSheet {} -> True;
+            XmlElement {} -> True;
+            XmlText {} -> False;
+            XmlCDataSection {} -> False;
+            XmlComment {} -> True;
+            ;
+    in
+        if (not $ List.isSingletonList topLevelElems) then error "There must be exactly one top-level element in the XML document"
+        else if (not $ all isValidTopLevelNode topLevelNodes) then error "Invalid top-level node specified"
+        else XmlDocument topLevelNodes [];
+
+/**
+ * Deserializes a value from the root XML element of the specified document.
+ */
+fromXmlDocument :: XmlElementInputable a => XmlDocument -> a;
+public fromXmlDocument document = fromXmlElement (documentRootElement document);
+
+/**
+ * Returns the root element of the XML document.
+ */
+documentRootElement :: XmlDocument -> XmlNode;
+public documentRootElement document = 
+    case document of
+    XmlDocument {topLevelNodes} -> fromMaybe (error "The document doesn't contain a root element") (find isElementNode topLevelNodes);
+    ;
+
+/**
+ * Returns the notations declared in the XML document.
+ */
+documentNotations :: XmlDocument -> [XmlNotation];
+public documentNotations document = document.XmlDocument.notations;
+
+/**
+ * Sets the notations declared in an XML document.
+ */
+setDocumentNotations :: [XmlNotation] -> XmlDocument -> XmlDocument;
+public setDocumentNotations notations !document =
+    case document of
+    XmlDocument {topLevelNodes} ->
+        XmlDocument topLevelNodes notations;
+    ;
+
+/**
+ * An XML namespace, with an optional prefix.
+ * If a prefix is specified, then the generated XML text will include a namespace
+ * declaration which associates the namespace URI with the prefix, and the prefix will
+ * be used to qualify the names of elements and attributes to which it applies.
+ * If no prefix is specified, the the namespace will be explicitly specified for any 
+ * elements to which it applies (unless the same namespace is the default from an ancestor element). 
+ * Note that a prefix must be specified for any namespace applied to an attribute.
+ */
+data public XmlNamespace = 
+    protected XmlNamespace 
+        prefix  :: String       // Empty string means that no prefix will be used.
+        uri     :: String
+    deriving Eq, Ord
+    ;
+
+/**
+ * Construct an XML namespace with an optional prefix.
+ * An empty string can be provided to indicate that no prefix should be used for the namespace.
+ */
+makeXmlNamespace :: String -> String -> XmlNamespace;
+public makeXmlNamespace !prefix uri = 
+    // Check that the prefix name is valid, unless it is empty.
+    (if isEmpty prefix then () else checkWellFormedXmlName prefix)
+    `seq`
+    XmlNamespace prefix uri;
+
+/**
+ * Returns the prefix associated with a namespace.
+ * An empty string means that the namespace has no prefix associated with it.
+ */
+namespacePrefix :: XmlNamespace -> String;
+public namespacePrefix !namespace = 
+    namespace.XmlNamespace.prefix;
+
+/**
+ * Returns the URI for a namespace.
+ */
+namespaceURI :: XmlNamespace -> String;
+public namespaceURI !namespace = 
+    namespace.XmlNamespace.uri;
+
+
+/**
+ * XML nodes (element, text, comments, etc...).
+ * 
+ * TODO: add other node types, as needed...
+ */
+data public XmlNode = 
+    protected XmlProcessingInstruction 
+        target          :: String
+        content         :: String
+    |
+    protected XmlStyleSheet
+        href            :: String 
+        type            :: String
+    |
+    protected XmlElement 
+        name            :: String 
+        namespace       :: (Maybe XmlNamespace)
+        attributes      :: [XmlAttribute] 
+        children        :: [XmlNode]
+    |
+    protected XmlText 
+        txt             :: String 
+    |
+    protected XmlCDataSection 
+        txt             :: String 
+    |
+    protected XmlComment 
+        commentText     :: String
+    ;
+
+
+/**
+ * Creates a new XML processing instruction node.
+ * The target must be a well-formed XML name and cannot have the text 'xml' (with any case).
+ */
+makeXmlProcessingInstruction :: String -> String -> XmlNode;
+public makeXmlProcessingInstruction target content = 
+    // Check that the target is valid.
+    checkWellFormedXmlName target
+    `seq`
+    (if String.equalsIgnoreCase target "xml" then error "The target of a processing instruction cannot be 'xml'." else ())
+    `seq`
+    XmlProcessingInstruction target content;
+
+/**
+ * Creates a new XML stylesheet node with the specified url and type.
+ * This is a special case of a processing instruction.
+ */
+makeXmlStyleSheet :: String -> String -> XmlNode; 
+public makeXmlStyleSheet href type = XmlStyleSheet href type;
+
+/**
+ * Creates a new XML TEXT node with the specified text content.
+ */
+makeXmlTextNode :: String -> XmlNode;
+public makeXmlTextNode txt = XmlText txt;
+
+/**
+ * Creates a new XML CDATA section with the specific text context.  Data in the CDATA
+ * section will not be validated by the parser.
+ */
+makeXmlCDataNode :: String -> XmlNode;
+public makeXmlCDataNode txt = XmlCDataSection txt;
+
+/**
+ * Creates a new XML comment node with the specified comment text.
+ */
+makeXmlComment :: String -> XmlNode;
+public makeXmlComment txt = XmlComment txt;
+
+/**
+ * Creates a new XML element.
+ * This will check the inputs for well-formedness.
+ */
+makeXmlElement :: Maybe XmlNamespace -> String -> [XmlAttribute] -> [XmlNode] -> XmlNode;
+public makeXmlElement !namespace !name !attributes childElements = 
+    // Check that the XML name is well-formed.
+    checkWellFormedXmlName name
+    `seq`
+    // Check that the localeName/URI (not the prefix) combination for each attribute is distinct.
+    (case findDuplicate (List.map (\attr -> (attributeLocalName attr, maybeApply namespaceURI $ attributeNamespace attr)) attributes) of
+     Nothing -> ();
+     Just duplicateAttrQName -> 
+         case field2 duplicateAttrQName of
+         Nothing -> 
+             error ("The element contains multiple attributes with the name '" ++ field1 duplicateAttrQName ++ "'.");
+         Just duplicateURI -> 
+             error ("The element contains multiple attributes with the name '" ++ field1 duplicateAttrQName 
+                    ++ "' and namespace URI '" ++ duplicateURI ++ "'.");
+         ;
+    )
+    `seq`
+    // Check that the element namespace prefix (if any) doesn't conflict with the prefix of any of the element attributes.
+    (case maybeApply namespacePrefix namespace of
+     Nothing -> ();
+     Just elemNamespacePrefix -> 
+         // Look for an attribute with the same namespace prefix as the element.
+         case List.find (\attr -> Just elemNamespacePrefix == maybeApply namespacePrefix (attributeNamespace attr)) attributes of
+         Nothing -> ();
+         Just conflictingAttr -> 
+             error ("The attribute '" ++ attributeQualifiedName conflictingAttr 
+                    ++ "' has a namespace prefix that conflicts with the element.");
+         ;
+    )
+    `seq`
+    // If the arguments are ok, then construct the element.
+    XmlElement name namespace attributes childElements;
+
+/**
+ * Creates a new XML element with the specified text content.
+ * A namespace can optionally be specified for the resulting element.
+ */
+makeXmlTextElement :: Maybe XmlNamespace -> String -> String -> XmlNode;
+public makeXmlTextElement namespace name txt = 
+    makeXmlElement Nothing name [] [XmlText txt];
+
+/**
+ * Creates a new XML element with the specified text content wrapped in
+ * in a CDATA section.
+ * A namespace can optionally be specified for the resulting element.
+ */
+makeXmlCDataSectionElement :: Maybe XmlNamespace -> String -> String -> XmlNode;
+public makeXmlCDataSectionElement namespace name txt = 
+    makeXmlElement namespace name [] [XmlCDataSection txt];
+
+
+
+/**
+ * Returns whether the XML node is TEXT.
+ */
+isTextNode :: XmlNode -> Boolean;
+public isTextNode !node = case node of XmlText {} -> True; _ -> False;;
+
+/**
+ * Returns whether the XML node is an element.
+ */
+isElementNode :: XmlNode -> Boolean;
+private isElementNode !node = case node of XmlElement {} -> True; _ -> False;;
+
+
+/**
+ * Returns the text of an XML text node.
+ * An error is thrown if the node is not an XML text node.
+ */
+textNodeText :: XmlNode -> String;
+public textNodeText !textNode = 
+    case textNode of
+    XmlText {txt}         -> txt;
+    XmlCDataSection {txt} -> txt;
+    _ -> error "The XML node is not text.";
+    ;
+
+
+/**
+ * Returns the local name of an XML element.
+ * This name will not include any namespace prefix.
+ * An error is thrown if the node is not an XML element.
+ */
+elementLocalName :: XmlNode -> String;
+public elementLocalName !xmlElement = 
+    case xmlElement of
+    XmlElement {name} -> name;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the qualified name of an XML element.
+ * This will include the namespace prefix, if any.
+ * An error is thrown if the node is not an XML element.
+ */
+elementQualifiedName :: XmlNode -> String;
+public elementQualifiedName !xmlElement = 
+    case xmlElement of
+    XmlElement {name, namespace} -> 
+        // Include the namespace prefix if a namespace is specified.
+        case namespace of
+        Nothing -> name;
+        Just ns -> ns.XmlNamespace.prefix ++ ":" ++ name;
+        ;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the namespace (if any) for an XML Element.
+ * An error is thrown if the node is not an XML element.
+ */
+elementNamespace :: XmlNode -> Maybe XmlNamespace;
+public elementNamespace !xmlElement = 
+    case xmlElement of
+    XmlElement {namespace} -> namespace;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the attributes for an XML element.
+ * An error is thrown if the node is not an XML element.
+ */
+elementAttributes :: XmlNode -> [XmlAttribute];
+public elementAttributes !xmlElement = 
+    case xmlElement of
+    XmlElement {attributes} -> attributes;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the first attribute with the given name
+ * An error is thrown if the node is not an XML element.
+ */
+elementAttributeByName :: XmlNode -> String -> Maybe XmlAttribute;
+public elementAttributeByName !xmlElement attrName =
+    case xmlElement of
+    XmlElement {attributes} -> find (\attr -> attrName == attr.XmlAttribute.name) attributes;
+    _ -> error "The XML node is not an element.";
+    ;
+
+
+/**
+ * Returns the child nodes (not necessarily elements) for an XML element.
+ * An error is thrown if the node is not an XML element.
+ */
+elementChildren :: XmlNode -> [XmlNode];
+public elementChildren !xmlElement = 
+    case xmlElement of
+    XmlElement {children} -> children;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the child elements for an XML element.
+ * Any child nodes that are not elements will be ignored.
+ * An error is thrown if the node is not an XML element.
+ */
+elementChildElements :: XmlNode -> [XmlNode];
+public elementChildElements !xmlElement = 
+    case xmlElement of
+    XmlElement {children} -> filter isElementNode children;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the first child element for an XML element.
+ * Any child nodes that are not elements will be ignored.
+ * An error is thrown if the node is not an XML element or there is no child element.
+ */
+elementFirstChildElement :: XmlNode -> XmlNode;
+public elementFirstChildElement !xmlElement =
+    case (elementChildElements xmlElement) of
+    [] -> error ("The XML element '" ++ elementLocalName xmlElement ++ "' has no children.");
+    headNode : _ -> headNode;
+    ;
+
+/**
+ * Returns the child elements with a specified name for an XML element.
+ * Any child nodes that are not elements will be ignored.
+ * An error is thrown if the node is not an XML element.
+ */
+elementChildElementsByName :: XmlNode -> String -> [XmlNode];
+public elementChildElementsByName !xmlElement elemName = 
+    case xmlElement of
+    XmlElement {children} -> filter (\node -> isElementNode node && elemName == elementLocalName node) children;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the first child element with a specified name for an XML element.
+ * An error is thrown if the node is not an XML element or there is no first child.
+ */
+elementFirstChildElementByName :: XmlNode -> String -> XmlNode;
+public elementFirstChildElementByName !xmlElement elemName =
+    case (elementChildElementsByName xmlElement elemName) of
+    [] -> error ("The XML element '" ++ elemName ++ "' is not a child of the element '" ++ elementLocalName xmlElement ++ "'.");
+    headNode : _ -> headNode;
+    ;
+
+
+/**
+ * Returns the fist child elements with a specified name (if any) for an XML element.
+ * Any child nodes that are not elements will be ignored.
+ * An error is thrown if the node is not an XML element.
+ */
+elementChildElementByName :: XmlNode -> String -> Maybe XmlNode;
+public elementChildElementByName !xmlElement elemName = listToMaybe (elementChildElementsByName xmlElement elemName);
+
+/**
+ * Returns the child text for an XML element.
+ * Any child nodes that are not text will be ignored.
+ * If there are no child text nodes, then an empty string will be returned.
+ * If there are multiple child text nodes, then their text will be concatenated.
+ * An error is thrown if the node is not an XML element.
+ */
+elementChildText :: XmlNode -> String;
+public elementChildText !xmlElement = 
+    case xmlElement of
+    XmlElement {children} -> concatMap textNodeText (filter isTextNode children);
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the deserialized value from the specified attribute for an XML element.
+ * An error is thrown if the attribute is not present.
+ * An error is thrown if the node is not an XML element.
+ */
+elementAttributeValue :: XmlAttributeInputable a => XmlNode -> String -> a;
+public elementAttributeValue !xmlElement attrName =
+    case (elementAttributeValueMaybe xmlElement attrName) of
+    Just value -> value;
+    Nothing -> error ("The XML attribute '" ++ attrName ++ "' is not an present on the element '" ++ elementLocalName xmlElement ++ "'.");
+    ;
+
+/**
+ * Returns the deserialized value from the specified attribute for an XML element.
+ * If the attribute is not present, then {@link Nothing@} will be returned.
+ * An error is thrown if the node is not an XML element.
+ */
+elementAttributeValueMaybe :: XmlAttributeInputable a => XmlNode -> String -> Maybe a;
+public elementAttributeValueMaybe !xmlElement attrName = 
+    case xmlElement of
+    XmlElement {attributes} -> 
+        case (find (\attr -> attrName == attr.XmlAttribute.name) attributes) of
+        Nothing -> Nothing;
+        Just attr -> Just (fromXmlAttribute attr);
+        ;
+    _ -> error "The XML node is not an element.";
+    ;
+
+/**
+ * Returns the deserialized value from the specified child for an XML element.
+ * An error is thrown if the element is not present.
+ * An error is thrown if the node is not an XML element.
+ */
+elementChildValue :: XmlElementInputable a => XmlNode -> String -> a;
+public elementChildValue !xmlElement attrName =
+    fromXmlElement (elementFirstChildElementByName xmlElement attrName);
+
+/**
+ * Returns the deserialized value from the specified child for an XML element.
+ * If the element is not present, then {@link Nothing@} will be returned.
+ * An error is thrown if the node is not an XML element.
+ */
+elementChildValueMaybe :: XmlElementInputable a => XmlNode -> String -> Maybe a;
+public elementChildValueMaybe !xmlElement elementName =
+    let
+        maybeChild :: Maybe XmlNode;
+        maybeChild = elementChildElementByName xmlElement elementName;
+    in
+        case maybeChild of
+        Nothing -> Nothing;
+        Just childNode -> Just (fromXmlElement childNode);
+    ;
+
+/**
+ * Adds the specified attributes to an XML element.
+ * An error will be thrown if the specified node is not an Element.
+ */
+addAttributesToXmlElement :: XmlNode -> [XmlAttribute] -> XmlNode;
+public addAttributesToXmlElement !original newAttributes =
+    case original of
+    XmlElement {name, namespace, attributes, children} -> 
+        makeXmlElement namespace name (attributes ++ newAttributes) children;
+    _ -> error "The XML node is not an element.";
+    ;
+
+
+
+/**
+ * XML attributes.
+ */
+data public XmlAttribute = 
+    protected XmlAttribute 
+        name      :: String
+        namespace :: (Maybe XmlNamespace)
+        value     :: String
+    ;
+
+/**
+ * Creates a new XML attribute with the specified name and value.
+ */
+makeXmlAttribute :: String -> String -> XmlAttribute;
+public makeXmlAttribute name txt = 
+    // Check that the attribute name is well-formed.
+    checkWellFormedXmlName name
+    `seq`
+    XmlAttribute name Nothing txt;
+
+/**
+ * Creates a new XML attribute with the specified name, value, and namespace.
+ * The namespace provided must have a non-empty prefix.
+ */
+makeXmlAttributeWithNamespace :: XmlNamespace -> String -> String -> XmlAttribute;
+public makeXmlAttributeWithNamespace !namespace name txt = 
+    // Check that the attribute name is well-formed.
+    checkWellFormedXmlName name
+    `seq`
+    // Check that the namespace prefix specified is not empty.
+    // This is allowed for elements, but not for attributes.
+    (if isEmpty namespace.XmlNamespace.prefix then 
+        error ("An empty namespace prefix was specified for an XML attribute (" ++ name ++ "=" ++ txt ++ ").")
+     else ()
+    )
+    `seq`
+    XmlAttribute name (Just namespace) txt;
+
+/**
+ * Returns the local name of an XML attribute.
+ * This name will not include any namespace prefix.
+ */
+attributeLocalName :: XmlAttribute -> String;
+public attributeLocalName !attr = attr.XmlAttribute.name;
+
+/**
+ * Returns the qualified name of an XML attribute.
+ * This will include the namespace prefix, if any.
+ */
+attributeQualifiedName :: XmlAttribute -> String;
+attributeQualifiedName !attr = 
+    case attr of
+    XmlAttribute {name, namespace} -> 
+        // Include the namespace prefix if a namespace is specified.
+        case namespace of
+        Nothing -> name;
+        Just ns -> ns.XmlNamespace.prefix ++ ":" ++ name;
+        ;
+    ;
+
+/**
+ * Returns the namespace (if any) for the attribute.
+ */
+attributeNamespace :: XmlAttribute -> Maybe XmlNamespace;
+public attributeNamespace !attr = attr.XmlAttribute.namespace;
+
+/**
+ * Returns the value of an XML attribute.
+ */
+attributeValue :: XmlAttribute -> String;
+public attributeValue !attr = attr.XmlAttribute.value;
+
+
+
+/**
+ * XML notations.
+ */
+data public XmlNotation = 
+    protected XmlNotation 
+        name     :: String
+        publicId :: (Maybe String)
+        systemId :: (Maybe String)
+    ;
+
+/**
+ * Creates a new XML notation with the specified name, system ID, and public ID.
+ */
+makeXmlNotation :: String -> Maybe String -> Maybe String -> XmlNotation;
+public makeXmlNotation name publicId systemId = 
+    // Check that the notation name is well-formed.
+    checkWellFormedXmlName name
+    `seq`
+    (case publicId of
+     Just pubid -> checkWellFormedPublicId pubid;
+     Nothing -> ();)
+    `seq`
+    (case systemId of
+     Just sysid -> checkWellFormedSystemId sysid;
+     Nothing -> ();)
+    `seq`
+    (if Prelude.isNothing publicId && Prelude.isNothing systemId
+     then error "An XML notation must have at least one of a Public ID or a System ID"
+     else ())
+    `seq`
+    XmlNotation name publicId systemId;
+
+/**
+ * Returns the name of an XML notation.
+ */
+notationName :: XmlNotation -> String;
+public notationName !notation = notation.XmlNotation.name;
+
+/**
+ * Returns the public ID of an XML notation.
+ */
+notationPublicId :: XmlNotation -> Maybe String;
+public notationPublicId !notation = notation.XmlNotation.publicId;
+
+/**
+ * Returns the system ID of an XML notation.
+ */
+notationSystemId :: XmlNotation -> Maybe String;
+public notationSystemId !notation = notation.XmlNotation.systemId;
+
+/**
+ * Generates a string representation of an XML document with the specified root node.
+ */
+xmlElementToString :: XmlNode -> String;
+public xmlElementToString rootElem = xmlDocumentToString $ makeXmlDocument [rootElem];
+
+/**
+ * Generates the xml for an attribute.
+ * eg xx="yy" or a:xx="yy"
+ */
+stringForAttribute :: XmlAttribute -> String;
+private stringForAttribute !attr = 
+    attributeQualifiedName attr ++ "=\"" ++ escapeXmlChars attr.XmlAttribute.value ++ "\"";
+
+instance Show XmlAttribute where
+    show = stringForAttribute;
+    ;
+
+/**
+ * An attribute to indicate that an element doesn't belong to a namespace.
+ */
+noNamespaceAttribute :: XmlAttribute;
+noNamespaceAttribute = namespaceAttribute "";
+
+/**
+ * An attribute to indicate that an element belongs to the specified namespace.
+ */
+namespaceAttribute :: String -> XmlAttribute;
+namespaceAttribute uri = makeXmlAttribute "xmlns" uri;
+
+/**
+ * An attribute to associate a prefix with a namespace URI.
+ */
+namespaceDeclarationAttribute :: XmlNamespace -> XmlAttribute;
+namespaceDeclarationAttribute !namespace = 
+    case namespace of
+    XmlNamespace {prefix, uri} ->
+        makeXmlAttribute ("xmlns" ++ ":" ++ prefix) uri;
+    ;
+
+/**
+ * Generates a string representation of the XML document.
+ * The output will be indented and {@code '<'@} and {@code '>'@} chars will be replaced by the
+ * appropriate escape sequences.
+ */
+xmlDocumentToString :: XmlDocument -> String;
+public xmlDocumentToString !document = 
+    let
+        xmlHeader :: String;
+        xmlHeader = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+    in
+        xmlHeader 
+            ++ concatMap (stringForNode "" "" Set.empty True) document.XmlDocument.topLevelNodes 
+            ++ "\n";
+
+instance Show XmlDocument where
+    show = xmlDocumentToString;
+    ;
+
+/**
+ * Generates a string representation of the XML node (element, comment, etc...).
+ * The output will be indented and {@code '<'@} and {@code '>'@} chars will be replaced by the
+ * appropriate escape sequences.
+ */
+xmlNodeToString :: XmlNode -> String;
+public xmlNodeToString = stringForNode "" "" Set.empty False;
+
+// If the defaultNamespaceURI is an empty string, then it means that no default namespace has been specified.
+stringForNode :: String -> String -> Set XmlNamespace -> Boolean -> XmlNode -> String;
+stringForNode !indentString !defaultNamespaceURI !ancestorNamespaceDecls !startOnNewLine !node = 
+    case node of
+    XmlProcessingInstruction {target, content} -> 
+        let
+            piTag = 
+                if isEmpty content then "<?" ++ target ++ "?>"
+                else "<?" ++ target ++ " " ++ content ++ "?>";
+        in
+            if (startOnNewLine) then "\n" ++ indentString ++ piTag
+            else piTag;
+
+    XmlStyleSheet href type -> 
+        let
+            styleSheetTag = "<?xml-stylesheet href=\"" ++ (escapeXmlChars href) ++ "\" type=\"" ++ (escapeXmlChars type) ++ "\"?>";
+        in
+            if (startOnNewLine) then "\n" ++ indentString ++ styleSheetTag
+            else styleSheetTag;
+
+    XmlElement {name, namespace, attributes, children} -> 
+        let
+            // Based on the (optional) namespace specified, construct the qualified name, 
+            // namespace attributes, and the default namespace and namespace declarations
+            // for any nested elements/attributes.
+            qualifiedName :: String;
+            namespaceAttributes :: [XmlAttribute];
+            innerDefaultNamespaceURI :: String;
+            innerAncestorNamespaceDecls :: Set XmlNamespace;
+            (qualifiedName, namespaceAttributes, innerDefaultNamespaceURI, innerAncestorNamespaceDecls) = 
+                case namespace of
+                Nothing -> 
+                    // If the element has no namespace, then use the local name as the qualified name.
+                    // If a default namespace is in place from an ancestor element then this needs to be overridden.
+                    // Otherwise, no namespace attributes are needed.
+                    // Pass no default namespace URI to the nested elements.
+                    // The namespace declarations for nested elements/attributes remain unchanged.
+                    if isEmpty defaultNamespaceURI then
+                        (name, [], "", ancestorNamespaceDecls)
+                    else 
+                        (name, [noNamespaceAttribute], "", ancestorNamespaceDecls);
+                Just ns -> 
+                    case ns of
+                    XmlNamespace {prefix, uri} -> 
+                        // Check whether the namespace specifies a prefix or not.
+                        if isEmpty prefix then
+                            // No namespace prefix is specified, so create an attribute for the element namespace
+                            // unless this namespace URI is already the default (from an outer scope).
+                            if uri == defaultNamespaceURI then
+                                (name, [], defaultNamespaceURI, ancestorNamespaceDecls)
+                            else
+                                (name, [namespaceAttribute uri], uri, ancestorNamespaceDecls)
+                        else
+                            // A namespace prefix is specified, so construct a qualified name for the element.
+                            // Also add an attribute for the namespace declaration, unless there is already  
+                            // one in scope.
+                            if Set.member ns ancestorNamespaceDecls then
+                                (prefix ++ ":" ++ name, [], defaultNamespaceURI, ancestorNamespaceDecls)
+                            else
+                                // Remove any other namespaces with this prefix from the ancestorNamespaceDecls set,
+                                // then add the new one.
+                                (prefix ++ ":" ++ name, 
+                                 [namespaceDeclarationAttribute ns], 
+                                 defaultNamespaceURI, 
+                                 Set.insert ns $ Set.filter (\!ns -> prefix != ns.XmlNamespace.prefix) ancestorNamespaceDecls);
+                    ;
+                ;
+
+            // Additional namespace attributes may be needed if attributes of this element reference
+            // a namespace which isn't already in scope.
+            namespaceAttrsForAttributes :: [XmlAttribute];
+            namespaceAttrsForAttributes = 
+                let
+                    // Get the set of namespaces referenced by the element attributes.
+                    attributeNamespaces :: Set XmlNamespace;
+                    attributeNamespaces = 
+                        Set.fromList $ List.mapJust attributeNamespace attributes;
+
+                    // From the set of attribute namespaces, remove those already in scope (including
+                    // the namespace for the element, if any).
+                    newNamespaces :: Set XmlNamespace;
+                    newNamespaces = 
+                        case namespace of
+                        Nothing -> Set.difference attributeNamespaces ancestorNamespaceDecls;
+                        Just ns -> Set.delete ns $ Set.difference attributeNamespaces ancestorNamespaceDecls;
+                        ;
+                in
+                    Set.toListWith namespaceDeclarationAttribute newNamespaces;
+
+            // The full set of attributes for the element, including any namespace attributes needed.
+            allElementAttributes :: [XmlAttribute];
+            allElementAttributes = namespaceAttributes ++ namespaceAttrsForAttributes ++ attributes;
+        in
+            if (isEmpty children) then
+                let
+                    emptyElemTag = "<" ++ qualifiedName ++ attributesString allElementAttributes ++ " />";
+                in
+                    if (startOnNewLine) then "\n" ++ indentString ++ emptyElemTag
+                    else emptyElemTag
+            else
+                let
+                    nextIndent :: String;
+                    nextIndent = singleIndent ++ indentString;
+
+                    openElemTag = "<" ++ qualifiedName ++ attributesString allElementAttributes ++ ">";
+                    closeElemTag = "</" ++ qualifiedName ++ ">";
+
+                    prefix = if (startOnNewLine) then "\n" ++ indentString ++ openElemTag else openElemTag;
+
+                    startOnNewLineFlags = True : map (not # isTextNode) children;
+                    elemBody = concat (zipWith (stringForNode nextIndent innerDefaultNamespaceURI innerAncestorNamespaceDecls) startOnNewLineFlags children);
+
+                    closeTagOnNewLine = not $ isTextNode (last children);
+                    suffix = if (closeTagOnNewLine) then "\n" ++ indentString ++ closeElemTag else closeElemTag;
+                in
+                    prefix ++ elemBody ++ suffix;
+
+    XmlText txt -> escapeXmlChars txt;
+    
+    XmlCDataSection txt ->
+        let
+            cdataTag = "<![CDATA[" ++ txt ++ "]]>";
+        in 
+            if (startOnNewLine) then "\n" ++ indentString ++ cdataTag
+            else cdataTag;
+
+    XmlComment txt -> 
+        let
+            commentTag = "<!--" ++ txt ++ "-->";
+        in
+            if (startOnNewLine) then "\n" ++ indentString ++ commentTag
+            else commentTag;
+    ;
+
+instance Show XmlNode where
+    show = xmlNodeToString;
+    ;
+
+/**
+ * The number of spaces to insert per indent level.
+ */
+indentSize :: Int;
+indentSize = 2;
+
+/**
+ * The string for a single indent level.
+ */
+singleIndent :: String;
+singleIndent = String.space indentSize;
+
+/**
+ * Construct the text for the attributes of an element.
+ */
+attributesString :: [XmlAttribute] -> String;
+attributesString attrs = 
+    concatMap (\attr -> " " ++ stringForAttribute attr) attrs;
+
+/**
+ * Returns the specified string with items in the substitutions list
+ * replaced by the corresponding substitution strings.
+ */
+substituteStrings :: [(String, String)] -> String -> String;
+private substituteStrings substitutions !strVal = 
+    foldLeftStrict (uncurry # replaceAllString) strVal substitutions;
+
+/**
+ * Replaces the chars {@code '&'@}, {@code '<'@}, and {@code '>'@} with the appropriate XML escape sequences.
+ */
+escapeXmlChars :: String -> String;
+public escapeXmlChars !txt = 
+    let
+        xmlCharSubs = [("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ("\"", "&quot;"), ("'", "&apos;")];
+    in
+        substituteStrings xmlCharSubs txt;
+
+
+
+/**
+ * Checks that the specified name is a well-formed XML name.
+ * An error will be thrown if the name is not well-formed.
+ */
+checkWellFormedXmlName :: String -> ();
+checkWellFormedXmlName !name = 
+    // Check that the name contains at least one character.
+    case String.toList name of
+    [] -> error "An XML name must have at least one character";
+    headChar : tailChars -> 
+        // Check that the first character is well-formed, then
+        // check that any remaining characters are well-formed.
+        List.foldLeftStrict (\!cur !char -> checkWellFormedNameChar char) (checkWellFormedFirstNameChar headChar) tailChars;
+    ;
+
+/**
+ * Checks that the specified character is well-formed as the first character in an XML name.
+ * An error will be thrown if the character is not well-formed.
+ */
+checkWellFormedFirstNameChar :: Char -> ();
+checkWellFormedFirstNameChar !firstChar = 
+    if isWellFormedFirstXmlNameChar firstChar then ()
+    else error ("The character '" ++ String.fromChar firstChar ++ "' is not well-formed as the first character in an XML name.");
+
+/**
+ * Checks that the specified character is well-formed as a character in an XML name.
+ * An error will be thrown if the character is not well-formed.
+ */
+checkWellFormedNameChar :: Char -> ();
+checkWellFormedNameChar !char = 
+    if isWellFormedXmlNameChar char then ()
+    else error ("The character '" ++ String.fromChar char ++ "' is not a well-formed character in an XML name.");
+
+/**
+ * Returns whether the specified character is well-formed as the first character in an XML name.
+ */
+isWellFormedFirstXmlNameChar :: Char -> Boolean;
+public isWellFormedFirstXmlNameChar !firstChar =
+    isLetter firstChar || firstChar == '_' || firstChar == ':';
+
+/**
+ * Returns whether the specified character is well-formed as a character in an XML name (not the first character).
+ */
+isWellFormedXmlNameChar :: Char -> Boolean;
+public isWellFormedXmlNameChar !char =
+    isLetter char ||
+    isDigit char ||
+    char == '.' ||
+    char == '-' ||
+    char == '_' ||
+    char == ':' ||
+    isCombiningChar char ||
+    isExtender char;
+
+/**
+ * Checks that the specified string is a well-formed XML public ID.
+ * An error will be thrown if the public ID is not well-formed.
+ */
+checkWellFormedPublicId :: String -> ();
+checkWellFormedPublicId !pubid =
+    List.foldLeftStrict (\!cur !char -> checkWellFormedPublicIdChar char) () (String.toList pubid);
+
+/**
+ * Checks that the specified character is well-formed as a character in an XML public ID.
+ * An error will be thrown if the character is not well-formed.
+ */
+checkWellFormedPublicIdChar :: Char -> ();
+checkWellFormedPublicIdChar !char =
+    if char == '\u0020' || char == '\u000D' || char == '\u000A' ||
+       'a' <= char && char <= 'z' ||
+       'A' <= char && char <= 'Z' ||
+       '0' <= char && char <= '9' ||
+       List.isElem char ['-','\'','(',')','+',',','.','/',':','=','?',';','!','*','#','@','$','_','%']
+    then ()
+    else error ("The character '" ++ String.fromChar char ++ "' is not well-formed in an XML public ID.");
+
+/**
+ * Checks that the specified string is a well-formed XML system ID.
+ * An error will be thrown if the system ID is not well-formed.
+ */
+checkWellFormedSystemId :: String -> ();
+checkWellFormedSystemId !sysid =
+    // The only restriction on system IDs is that they cannot contain both kinds
+    // of quote character.
+    if -1 == String.indexOf '\'' sysid || -1 == String.indexOf '"' sysid
+    then ()
+    else error ("An XML system ID cannot contain both single quotes and double quotes.");
+
+/**
+ * Returns whether the list contains at least one duplicate value.
+ */
+// TODO: move this function somewhere else (List.cal?)...
+containsDuplicate :: Eq a => [a] -> Boolean;
+containsDuplicate !list = 
+    let
+        containsDuplicateHelper !list accList = 
+            case list of
+            [] -> False;
+            listHead : listTail ->
+                if (List.isElem listHead accList) then True
+                else containsDuplicateHelper listTail (listHead : accList);
+            ;
+    in  
+        containsDuplicateHelper list [];
+
+/**
+ * Returns the first duplicate value found in the specified list, if any.
+ * Nothing will be returned if the items in the list are distinct.
+ */
+// TODO: move this function somewhere else (List.cal?)...
+findDuplicate :: Eq a => [a] -> Maybe a;
+findDuplicate !list = 
+    let
+        containsDuplicateHelper !list accList = 
+            case list of
+            [] -> Nothing;
+            listHead : listTail ->
+                if (List.isElem listHead accList) then Just listHead
+                else containsDuplicateHelper listTail (listHead : accList);
+            ;
+    in  
+        containsDuplicateHelper list [];
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Type classes for inputing and outputing XML, types subscribe to be input / output as either Attributes or Elements
+// but not both, the caller is *always* responsible for naming the element / attribute. 
+
+/**
+ * This type class of for any type that can produce XML Elements or Attributes
+ */
+public class XmlOutputable a where
+    public toXml :: String -> a -> (Either XmlAttribute XmlNode);
+    ;
+
+/**
+ * This type class if for types that wish to be serialized as XML Elements (rather than Attributes) - so complex types 
+ */
+public class XmlOutputable a => XmlElementOutputable a where
+    public toXmlElement :: String -> a -> XmlNode;
+    ;
+    
+/**
+ * This type class if for types that wish to be serialized as XML Attributes (rather than Elements) - so simple types 
+ */
+public class XmlOutputable a => XmlAttributeOutputable a where 
+    public toXmlAttribute :: String -> a -> XmlAttribute;
+    ;
+
+
+/**
+ * This type class is for any type that can be input from xml
+ */
+public class XmlInputable a where
+    public fromXml :: (Either XmlAttribute XmlNode) -> a;
+    ;
+
+/**
+ * This type class if for types that wish to be deserialized from XML Elements (rather than Attributes) - so complex types
+ */
+public class XmlInputable a => XmlElementInputable a where
+    public fromXmlElement :: XmlNode -> a;
+    ;
+    
+/**
+ * This type class if for types that wish to be deserialized from XML Attributes (rather than Elements ) - so simple types
+ */
+public class XmlInputable a => XmlAttributeInputable a where 
+    public fromXmlAttribute :: XmlAttribute -> a;
+    ;
+
+/**
+ * This is a helper function for the occasional time when during serialization something that's normally serialized as an 
+ * attribute needs to be stored as an element.
+ */
+elementForXmlAttributeOutputable :: XmlAttributeOutputable a => String -> String -> a -> XmlNode;
+public elementForXmlAttributeOutputable elementName attributeName value =
+    makeXmlElement Nothing elementName [toXmlAttribute attributeName value] [];
+
+/**
+ * Helper for implementing toXml from XmlAttributeOutputable types 
+ */
+outputFromXmlAttributeOutputable :: XmlAttributeOutputable a => String -> a -> (Either XmlAttribute XmlNode);
+public outputFromXmlAttributeOutputable name value =
+    Left (toXmlAttribute name value);
+
+/**
+ * Helper for implementing fromXml from XmlAttributeInputable types 
+ */
+inputFromXmlAttributeInputable :: XmlAttributeInputable a => (Either XmlAttribute XmlNode) -> a;
+public inputFromXmlAttributeInputable either =
+    case either of 
+    Left attribute -> fromXmlAttribute attribute;
+    _ -> error "inputFromXmlAttributeInputable used with an xml node";
+    ;
+        
+/**
+ * Helper for implementing toXml from XmlElementOutputable types 
+ */
+outputFromXmlElementOutputable :: XmlElementOutputable a => String -> a -> (Either XmlAttribute XmlNode);
+public outputFromXmlElementOutputable name value =
+    Right (toXmlElement name value);
+
+/**
+ * Helper for implementing fromXml from XmlAttributeOutputable types 
+ */
+inputFromXmlElementInputable :: XmlElementInputable a => (Either XmlAttribute XmlNode) -> a;
+public inputFromXmlElementInputable either =
+    case either of 
+    Right node -> fromXmlElement node;
+    _ -> error "inputFromXmlElementInputable used with an xml attribute";
+    ;
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// String 
+
+instance XmlAttributeOutputable String where
+    toXmlAttribute = outputXmlAttributeForString;
+    ;
+
+outputXmlAttributeForString :: String -> String -> XmlAttribute;
+outputXmlAttributeForString name value = 
+    makeXmlAttribute name value;
+
+instance XmlOutputable String where
+    toXml = outputStringXml;
+    ;
+
+outputStringXml :: String -> String -> (Either XmlAttribute XmlNode);
+outputStringXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable String where
+    fromXmlAttribute = inputStringXmlAttribute;
+    ;
+
+inputStringXmlAttribute :: XmlAttribute -> String;
+inputStringXmlAttribute attribute = 
+    attributeValue attribute;
+
+instance XmlInputable String where
+    fromXml = inputStringXml;
+    ;
+
+inputStringXml :: (Either XmlAttribute XmlNode) -> String;
+inputStringXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Boolean 
+trueTag = "true";
+falseTag = "false";
+
+instance XmlAttributeOutputable Boolean where
+    toXmlAttribute = outputXmlAttributeForBoolean;
+    ;
+
+outputXmlAttributeForBoolean :: String -> Boolean -> XmlAttribute;
+outputXmlAttributeForBoolean name value = 
+    makeXmlAttribute name (if value then trueTag else falseTag);
+
+instance XmlOutputable Boolean where
+    toXml = outputBooleanXml;
+    ;
+
+outputBooleanXml :: String -> Boolean -> (Either XmlAttribute XmlNode);
+outputBooleanXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable Boolean where
+    fromXmlAttribute = inputBooleanXmlAttribute;
+    ;
+
+inputBooleanXmlAttribute :: XmlAttribute -> Boolean;
+inputBooleanXmlAttribute attribute = 
+    equalsIgnoreCase (attributeValue attribute) trueTag;
+
+instance XmlInputable Boolean where
+    fromXml = inputBooleanXml;
+    ;
+
+inputBooleanXml :: (Either XmlAttribute XmlNode) -> Boolean;
+inputBooleanXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Int 
+
+instance XmlAttributeOutputable Int where
+    toXmlAttribute = outputXmlAttributeForInt;
+    ;
+
+outputXmlAttributeForInt :: String -> Int -> XmlAttribute;
+outputXmlAttributeForInt name value = 
+    makeXmlAttribute name (intToString value);
+
+instance XmlOutputable Int where
+    toXml = outputIntXml;
+    ;
+
+outputIntXml :: String -> Int -> (Either XmlAttribute XmlNode);
+outputIntXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable Int where
+    fromXmlAttribute = inputIntXmlAttribute;
+    ;
+
+inputIntXmlAttribute :: XmlAttribute -> Int;
+inputIntXmlAttribute attribute = 
+    stringToInt (attributeValue attribute);
+
+instance XmlInputable Int where
+    fromXml = inputIntXml;
+    ;
+
+inputIntXml :: (Either XmlAttribute XmlNode) -> Int;
+inputIntXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Long 
+
+instance XmlAttributeOutputable Long where
+    toXmlAttribute = outputXmlAttributeForLong;
+    ;
+
+outputXmlAttributeForLong :: String -> Long -> XmlAttribute;
+outputXmlAttributeForLong name value = 
+    makeXmlAttribute name (longToString value);
+
+instance XmlOutputable Long where
+    toXml = outputLongXml;
+    ;
+
+outputLongXml :: String -> Long -> (Either XmlAttribute XmlNode);
+outputLongXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable Long where
+    fromXmlAttribute = inputLongXmlAttribute;
+    ;
+
+inputLongXmlAttribute :: XmlAttribute -> Long;
+inputLongXmlAttribute attribute = 
+    stringToLong (attributeValue attribute);
+
+instance XmlInputable Long where
+    fromXml = inputLongXml;
+    ;
+
+inputLongXml :: (Either XmlAttribute XmlNode) -> Long;
+inputLongXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Integer 
+
+instance XmlAttributeOutputable Integer where
+    toXmlAttribute = outputXmlAttributeForInteger;
+    ;
+
+outputXmlAttributeForInteger :: String -> Integer -> XmlAttribute;
+outputXmlAttributeForInteger name value = 
+    makeXmlAttribute name (integerToString value);
+
+instance XmlOutputable Integer where
+    toXml = outputIntegerXml;
+    ;
+
+outputIntegerXml :: String -> Integer -> (Either XmlAttribute XmlNode);
+outputIntegerXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable Integer where
+    fromXmlAttribute = inputIntegerXmlAttribute;
+    ;
+
+inputIntegerXmlAttribute :: XmlAttribute -> Integer;
+inputIntegerXmlAttribute attribute = 
+    stringToInteger (attributeValue attribute);
+
+instance XmlInputable Integer where
+    fromXml = inputIntegerXml;
+    ;
+
+inputIntegerXml :: (Either XmlAttribute XmlNode) -> Integer;
+inputIntegerXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Double 
+
+instance XmlAttributeOutputable Double where
+    toXmlAttribute = outputXmlAttributeForDouble;
+    ;
+
+outputXmlAttributeForDouble :: String -> Double -> XmlAttribute;
+outputXmlAttributeForDouble name value = 
+    makeXmlAttribute name (doubleToString value);
+
+instance XmlOutputable Double where
+    toXml = outputDoubleXml;
+    ;
+
+outputDoubleXml :: String -> Double -> (Either XmlAttribute XmlNode);
+outputDoubleXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable Double where
+    fromXmlAttribute = inputDoubleXmlAttribute;
+    ;
+
+inputDoubleXmlAttribute :: XmlAttribute -> Double;
+inputDoubleXmlAttribute attribute = 
+    stringToDouble (attributeValue attribute);
+
+instance XmlInputable Double where
+    fromXml = inputDoubleXml;
+    ;
+
+inputDoubleXml :: (Either XmlAttribute XmlNode) -> Double;
+inputDoubleXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Time 
+
+instance XmlAttributeOutputable Time where
+    toXmlAttribute = outputXmlAttributeForTime;
+    ;
+
+outputXmlAttributeForTime :: String -> Time -> XmlAttribute;
+outputXmlAttributeForTime name value = 
+    makeXmlAttribute name (Time.serializeTimeValue value);
+
+instance XmlOutputable Time where
+    toXml = outputTimeXml;
+    ;
+
+outputTimeXml :: String -> Time -> (Either XmlAttribute XmlNode);
+outputTimeXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable Time where
+    fromXmlAttribute = inputTimeXmlAttribute;
+    ;
+
+inputTimeXmlAttribute :: XmlAttribute -> Time;
+inputTimeXmlAttribute attribute = 
+    Time.deserializeTimeValue (attributeValue attribute);
+
+instance XmlInputable Time where
+    fromXml = inputTimeXml;
+    ;
+
+inputTimeXml :: (Either XmlAttribute XmlNode) -> Time;
+inputTimeXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Color 
+
+colorToString :: Color -> String;
+colorToString color = 
+    case (colorToRGBA color) of
+    (r, g, b, a) -> (intToString r ++ " " ++
+                     intToString g ++ " " ++
+                     intToString b ++ " " ++
+                     intToString a);
+    ;
+
+stringToColor :: String -> Color;
+stringToColor string =
+    let
+        rgbaVals = map stringToInt (splitString " " string);
+        nVals = length rgbaVals;
+        r = if (nVals >= 1) then subscript rgbaVals 0 else 0;
+        g = if (nVals >= 2) then subscript rgbaVals 1 else 0;
+        b = if (nVals >= 3) then subscript rgbaVals 2 else 0;
+        a = if (nVals >= 4) then subscript rgbaVals 3 else 255;
+    in
+        makeTranslucentColor r g b a;
+
+instance XmlAttributeOutputable Color where
+    toXmlAttribute = outputXmlAttributeForColor;
+    ;
+
+outputXmlAttributeForColor :: String -> Color -> XmlAttribute;
+outputXmlAttributeForColor name value = 
+    makeXmlAttribute name (colorToString value);
+
+instance XmlOutputable Color where
+    toXml = outputColorXml;
+    ;
+
+outputColorXml :: String -> Color -> (Either XmlAttribute XmlNode);
+outputColorXml name value =
+    outputFromXmlAttributeOutputable name value;
+
+instance XmlAttributeInputable Color where
+    fromXmlAttribute = inputColorXmlAttribute;
+    ;
+
+inputColorXmlAttribute :: XmlAttribute -> Color;
+inputColorXmlAttribute attribute = 
+    stringToColor (attributeValue attribute);
+
+instance XmlInputable Color where
+    fromXml = inputColorXml;
+    ;
+
+inputColorXml :: (Either XmlAttribute XmlNode) -> Color;
+inputColorXml value =
+    inputFromXmlAttributeInputable value;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// List
+
+itemTag = "Item";
+attributeBasedTag = "AttributeBased";
+
+instance XmlOutputable a => XmlElementOutputable [a] where
+    toXmlElement = outputXmlElementForList;
+    ;
+
+outputXmlElementForList :: XmlOutputable a => String -> [a] -> XmlNode;
+outputXmlElementForList name list =
+    case list of
+    [] -> makeXmlElement Nothing name [] [];
+    headItem : tailItems -> 
+        let
+            nodify :: Either XmlAttribute XmlNode -> XmlNode;
+            nodify attributeOrNode =
+                case attributeOrNode of
+                Left attribute -> makeXmlElement Nothing itemTag [attribute] [];
+                Right node -> node;
+                ;
+                
+            toXmlItem item = 
+                toXml itemTag item;
+            
+            firstItem = toXmlItem headItem;
+            
+            attributeBased :: Boolean;
+            attributeBased = isLeft firstItem;
+            
+            children :: [XmlNode];
+            children = (nodify firstItem) : map (\x -> nodify (toXmlItem x)) tailItems;
+            
+            attributeBasedAttribute :: XmlAttribute;
+            attributeBasedAttribute = 
+                toXmlAttribute attributeBasedTag attributeBased;
+            
+            attributes = 
+                if attributeBased 
+                then [toXmlAttribute attributeBasedTag attributeBased]
+                else [];
+        in
+            makeXmlElement Nothing name attributes children;
+    ;
+
+
+instance XmlOutputable a => XmlOutputable [a] where
+    toXml = outputListXml;
+    ;
+
+outputListXml :: XmlOutputable a => String -> [a] -> (Either XmlAttribute XmlNode);
+outputListXml name value =
+    outputFromXmlElementOutputable name value;
+
+
+instance XmlInputable a => XmlElementInputable [a] where
+    fromXmlElement = inputListXmlElement;
+    ;
+
+inputListXmlElement :: XmlInputable a => XmlNode -> [a];
+inputListXmlElement node =
+    let
+        attributeBased :: Boolean;
+        attributeBased = case (elementAttributeValueMaybe node attributeBasedTag) of
+            Just value -> value;
+            Nothing -> False;
+            ;
+        
+        children :: [XmlNode];
+        children = (elementChildElements node);
+        
+        xmlAttributes :: [XmlAttribute];
+        xmlAttributes = map (\x -> fromJust (elementAttributeByName x itemTag)) children;
+        
+        eitherAttributesOrNodes = 
+            if attributeBased then
+                map Left xmlAttributes
+            else 
+                map Right children;
+               
+        results :: XmlInputable a => [a];
+        results = map fromXml eitherAttributesOrNodes;
+    in
+        results;
+
+instance XmlInputable a => XmlInputable [a] where
+    fromXml = inputListXml;
+    ;
+
+inputListXml :: XmlInputable a => (Either XmlAttribute XmlNode) -> [a];
+inputListXml attributeOrNode =
+    case attributeOrNode of
+    Right node -> inputListXmlElement node;
+    ;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Range
+
+inclusiveTag = "Inclusive";
+valueTag = "Value";
+startTag = "Start";
+endTag = "End";
+
+instance (Ord a, XmlOutputable a) => XmlElementOutputable (Range a) where
+    toXmlElement = outputXmlElementForRange;
+    ;
+
+outputXmlElementForRange :: (Ord a, XmlOutputable a) => String -> Range a -> XmlNode;
+outputXmlElementForRange elemName value =
+    let
+        makeInclusiveAttr includesEndpointFn =
+            toXmlAttribute inclusiveTag (includesEndpointFn value);
+        
+        makeEndPointXml extractEndpointFn = 
+             toXml valueTag $ extractEndpointFn value;
+        
+        leftEndpointXml = 
+            let
+                inclusiveAttr = makeInclusiveAttr Range.includesLeftEndpoint;  
+                endpoint = makeEndPointXml Range.leftEndpoint;
+                
+                (attributes, children) =
+                    case endpoint of 
+                    Left attribute -> ([inclusiveAttr, attribute],[]);
+                    Right node ->([inclusiveAttr],[node]);
+                    ;
+                    
+            in
+                makeXmlElement Nothing startTag attributes children;
+                
+        rightEndpointXml = 
+            let
+                inclusiveAttr = makeInclusiveAttr Range.includesRightEndpoint;  
+                endpoint = makeEndPointXml Range.rightEndpoint;  
+
+                (attributes, children) =
+                    case endpoint of 
+                    Left attribute -> ([inclusiveAttr, attribute],[]);
+                    Right node -> ([inclusiveAttr],[node]);
+                    ;
+            in
+                makeXmlElement Nothing endTag attributes children;
+        
+        endpoints = 
+            let
+                left = if (Range.hasLeftEndpoint value) then
+                       [leftEndpointXml]
+                       else [];
+                right = if (Range.hasRightEndpoint value) then
+                        [rightEndpointXml]
+                        else [];
+            in
+                left ++ right;
+    in
+        makeXmlElement Nothing elemName [] endpoints;
+
+instance (Ord a, XmlOutputable a) => XmlOutputable (Range a) where
+    toXml = outputXmlForRange;
+    ;
+
+outputXmlForRange :: (Ord a, XmlOutputable a) => String -> Range a -> (Either XmlAttribute XmlNode);
+outputXmlForRange name value = 
+    Right (outputXmlElementForRange name value);
+
+
+instance (Ord a, XmlInputable a) => XmlElementInputable (Range a) where
+    fromXmlElement = inputRangeFromElement;
+    ;
+
+instance (Ord a, XmlInputable a) => XmlInputable (Range a) where
+    fromXml = inputRangeXml;
+    ;
+
+inputRangeXml :: (Ord a, XmlInputable a) => (Either XmlAttribute XmlNode) -> Range a;
+inputRangeXml nodeOrAttribute =
+    case nodeOrAttribute of
+    Right node -> inputRangeFromElement node;
+    ;
+
+
+inputRangeFromElement :: (Ord a, XmlInputable a) => XmlNode -> Range a;
+inputRangeFromElement node = 
+    let      
+        getChild name = 
+            listToMaybe $ getChildrenByName name;
+        
+        getChildrenByName name = 
+            elementChildElementsByName node name;
+        
+        maybeLeftEndpointXml = getChild startTag;
+
+        maybeRightEndpointXml = getChild endTag;
+
+        hasLeft = isJust maybeLeftEndpointXml;
+        hasRight = isJust maybeRightEndpointXml;
+        
+        isInclusive :: Maybe XmlNode -> Boolean;
+        isInclusive maybeNode = 
+            case maybeNode of
+            Nothing -> False;
+            Just node -> elementAttributeValue node inclusiveTag;
+            ;
+
+        
+        includesLeft  = isInclusive maybeLeftEndpointXml;
+        includesRight = isInclusive maybeRightEndpointXml;
+        
+        extractEndpoint maybeEndPointNode =
+            let
+                endPointNode = fromJust maybeEndPointNode;
+                
+                maybeValueAttribute = elementAttributeByName endPointNode valueTag;
+                
+                maybeValueNode = listToMaybe $ elementChildElementsByName endPointNode valueTag;
+                
+                attributeOrNode = 
+                    case maybeValueAttribute of
+                    Just attribute -> Left attribute;
+                    Nothing -> Right (fromJust maybeValueNode);
+                    ;
+            in
+                fromXml attributeOrNode;
+        
+        left = extractEndpoint maybeLeftEndpointXml;
+        right = extractEndpoint maybeRightEndpointXml;
+        
+        maybeLeft = if hasLeft then Just (includesLeft, left) else Nothing;
+        maybeRight = if hasRight then Just (includesRight, right) else Nothing;
+    in
+        Range.makeRangeFromEndpoints maybeLeft maybeRight;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Records
+
+
+instance XmlOutputable r => XmlElementOutputable {r} where
+    toXmlElement = buildXmlElementForRecord;
+    ;
+
+instance XmlOutputable r => XmlOutputable {r} where
+    toXml = buildXmlForRecord;
+    ;
+
+buildXmlForRecord :: XmlOutputable r => String -> {r} -> (Either XmlAttribute XmlNode);
+buildXmlForRecord name value =
+    Right (buildXmlElementForRecord name value);
+
+/**
+ * This function converts a record field name to a well-formed xml name -
+ * it replaces the leading '#' in oridinal field name with an '_'
+ */
+fieldNameToXmlName !name =
+    if String.subscript name 0 == '#' then
+        "_" ++ (String.substring name 1 (String.length name))
+    else
+        name;
+
+buildXmlElementForRecord :: XmlOutputable r => String -> {r} -> XmlNode;
+buildXmlElementForRecord !name !value =
+    let
+        toXmlDict :: XmlOutputable r => {r} -> Record.Dictionary {r};
+        toXmlDict r = Record.dictionary r "toXml";
+
+        dict = toXmlDict value;
+
+        // the toXml instance function has two params name and value
+        // - for name we use the record field names mapped to xml, 
+        // for value we use the record field values
+        childNodes =
+            unsafeBuildList
+                dict
+                (
+                    map fieldNameToXmlName (Record.dictionaryFieldNames dict),
+                    value
+                )
+            ;
+
+        (attributes, elements) = List.splitEither childNodes;
+    in
+        makeXmlElement Nothing name attributes elements
+    ;
+
+/**
+ * xml inputable for records 
+ */
+instance XmlInputable r => XmlInputable {r} where
+    fromXml = inputRecordXml;
+    ;
+
+/**
+ * Records are always serialized as XmlNodes.
+ */
+inputRecordXml :: XmlInputable a => Either XmlAttribute XmlNode -> {a};
+inputRecordXml value =
+    case value of
+    Right n -> fromXmlRecord n;
+    _ -> error "not supported";
+    ;
+/** 
+ * A record can be read from an XmlNode. The node must contain a child node
+ * or attribute for each of the record fields, or an error will be thrown.
+ * If the XmlNode contains additional fields they will be ignored.
+ */
+instance XmlInputable r => XmlElementInputable {r} where
+    fromXmlElement = fromXmlRecord;
+    ;
+
+fromXmlRecord :: XmlInputable r => XmlNode -> {r};
+fromXmlRecord !node =
+    let
+
+        /**
+         * get either the element or attribute for a record field by its name
+         * error if no such name exists.
+         */
+        getinput :: String -> Either XmlAttribute XmlNode;
+        getinput !name =
+            let
+                attr = elementAttributeByName node name;
+                elem = elementChildElementByName node name;
+            in
+                case attr of
+                Just a -> Left a;
+                _ ->
+                    case elem of
+                    Just a -> Right a;
+                    _ ->
+                        error
+                            (
+                                "Can\'t find attribute or element for record field: "
+                                ++ name
+                            )
+                        ;
+                    ;
+            ;
+
+        /**
+         * creates a list of xml inputs which are used to create the record
+         * fields
+         */
+        xmlinput !dict =
+            List.map
+                (\name -> getinput (fieldNameToXmlName name))
+                (Record.dictionaryFieldNames (dict))
+            ;
+
+        /** dummy record for getting the output type */
+        r = Prelude.undefined;
+    in
+        unsafeBuildRecordFromList
+            (Record.dictionary r "fromXml")
+            (xmlinput (Record.dictionary r "fromXml"))
+    ;
+

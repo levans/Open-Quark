@@ -1,0 +1,235 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * System.cal
+ * Creation date: May 31, 2006.
+ * By: Joseph Wong
+ */
+
+/**
+ * This module contains functions for interacting with the current CAL
+ * execution environment.
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Core.System;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Boolean, CalFunction, ExecutionContext, JList, JObject, String;
+    dataConstructor = False, True;
+    function = executionContext, input, makeCalFunction, output, seq;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+friend Cal.Utilities.Locale;
+friend Cal.Utilities.TimeZone;
+
+
+/**
+ * This foreign type represents the set of properties associated with an execution context.
+ * 
+ * This type encapsulates an {@em immutable@} map of key-value pairs which are exposed in CAL as
+ * system properties. Only strings can be used as keys.
+ * 
+ * There are a number of keys whose values are constrained to be of a particular type, e.g.
+ * the value for the "cal.locale" property must be of type {@code java.util.Locale@}. For these
+ * special keys, dedicated functions are available for accessing their values (e.g. {@link "Cal.Utilities.Locale.currentLocale"@}).
+ * These properties are known as {@em system properties@}.
+ * 
+ * For other keys, their conresponding values can be objects of any type. It is up to the client
+ * code to coordinate the setting of the property on the Java side with the retrieval on the CAL side.
+ */
+data foreign unsafe import jvm protected "org.openquark.cal.runtime.ExecutionContextProperties"
+    protected ExecutionContextProperties;
+
+////
+/// Properties support
+//
+
+/**
+ * Returns the {@link ExecutionContextProperties@} instance encapsulating the set of properties associated with
+ * the given execution context.
+ * 
+ * @arg executionContext the execution context whose properties are to be returned.
+ * @return the {@link ExecutionContextProperties@} instance for the given execution context.
+ */
+foreign unsafe import jvm "method getProperties"
+    private jGetProperties :: ExecutionContext -> ExecutionContextProperties;
+
+/**
+ * Returns the {@link ExecutionContextProperties@} instance encapsulating the set of properties associated with
+ * the current execution context.
+ * 
+ * @return the {@link ExecutionContextProperties@} instance for the current execution context.
+ */
+executionContextProperties :: ExecutionContextProperties;
+protected executionContextProperties = jGetProperties executionContext;
+
+/**
+ * Looks up the specified property in the given {@link ExecutionContextProperties@} instance.
+ * 
+ * @arg executionContextProperties the instance encapsulating the set of properties associated with an execution context.
+ * @arg key the name of the property.
+ * @return the value of the property, or the Java {@code null@} value if there is no property with that key.
+ */
+foreign unsafe import jvm "method getProperty"
+    private jGetProperty :: ExecutionContextProperties -> String -> JObject;
+
+/**
+ * Looks up the specified system property of the current execution context.
+ * 
+ * @arg key the name of the property.
+ * @return the value of the property, or the Java {@code null@} value if there is no property with that key.
+ */
+getProperty :: String -> JObject;
+public getProperty !key = jGetProperty executionContextProperties key;
+
+/**
+ * Returns whether the specified property is in the given {@link ExecutionContextProperties@} instance.
+ * 
+ * @arg executionContextProperties the instance encapsulating the set of properties associated with an execution context.
+ * @arg key the name of the property.
+ * @return {@link True@} if the specified property is defined; {@link False@} otherwise.
+ */
+foreign unsafe import jvm "method hasProperty"
+    private jHasProperty :: ExecutionContextProperties -> String -> Boolean;
+
+/**
+ * Returns whether the specified system property is defined in the current execution context.
+ * 
+ * @arg key the name of the property.
+ * @return {@link True@} if the specified property is defined; {@link False@} otherwise.
+ */
+hasProperty :: String -> Boolean;
+public hasProperty !key = jHasProperty executionContextProperties key;
+
+/**
+ * Returns the keys of the properties in the given {@link ExecutionContextProperties@} instance.
+ * 
+ * @arg executionContextProperties the instance encapsulating the set of properties associated with an execution context.
+ * @return a list of the keys.
+ */
+foreign unsafe import jvm "method getPropertyKeys"
+    private jGetPropertyKeys :: ExecutionContextProperties -> JList;
+
+/**
+ * Returns the keys of the system properties defined in the current execution context.
+ * 
+ * @return a list of the keys.
+ */
+propertyKeys :: [String];
+public propertyKeys = (input $ output $ jGetPropertyKeys executionContextProperties) :: [String];
+
+////
+/// Cleanup hooks support
+//
+
+/**
+ * Represents a Java interface for cleaning up resources (sessions, connections, files, etc.). 
+ */
+data foreign unsafe import jvm public "org.openquark.cal.runtime.Cleanable"
+    public Cleanable deriving Eq, Inputable, Outputable;
+
+/**
+ * Registers a cleanup hook to be run whenever the given execution context is cleaned up. Not a pure function.
+ * 
+ * If the cleanup hook is null, this function throws a NullPointerException. 
+ * 
+ * @arg executionContext the execution context with which the cleanup hook should be registered.
+ * @arg cleanable the cleanup hook to be registered.
+ */
+foreign unsafe import jvm "method registerCleanable"
+    private jRegisterCleanable :: ExecutionContext -> Cleanable -> ();
+
+/**
+ * Registers a cleanup hook to be run whenever the current execution context is cleaned up. Not a pure function.
+ * 
+ * If the cleanup hook is null, this function throws a NullPointerException.
+ * 
+ * When the cleanup hooks for the execution context are run, they are run in the order in which they were
+ * originally registered. If a cleanup hook is registered multiple times, it will also be run the same number of times.
+ * 
+ * @arg cleanable the cleanup hook to be registered.
+ */
+registerCleanable :: Cleanable -> ();
+public registerCleanable !cleanable = jRegisterCleanable executionContext cleanable;
+
+instance Show Cleanable where
+    show = showCleanable;
+    ;
+
+showCleanable :: Cleanable -> String;
+private showCleanable !cleanable = show $ output cleanable;
+
+/**
+ * Registers a cleanup hook based on a CAL to be run whenever the current execution context is cleaned up. 
+ * Not a pure function.
+ * 
+ * When the cleanup hooks for the execution context are run, they are run in the order in which they were
+ * originally registered. If a cleanup hook is registered multiple times, it will also be run the same number of times.
+ * 
+ * @arg cleanupFn  the CAL clean up function for the specified value
+ * @arg value      the value to be registered as cleanable
+ * @return         the original value, once the registration is complete
+ */
+registerCleanableFunction :: (a -> ()) -> a -> a;
+public registerCleanableFunction cleanupFn value = 
+    let
+        marshalledCleanupFn :: JObject -> JObject;
+        marshalledCleanupFn ignoredArg = 
+            output $ cleanupFn value;
+    in
+        jRegisterCleanableFunction executionContext (makeCalFunction marshalledCleanupFn)
+        `seq`
+        value;
+
+foreign unsafe import jvm "method registerCleanable"
+    private jRegisterCleanableFunction :: ExecutionContext -> CalFunction -> ();
+
+/**
+ * If true, the CAL run-time supports concurrent reduction of CAL programs on a single 
+ * execution context. Note that the runtime is thread-safe even when this flag is false in the sense
+ * that concurrent evaluation of CAL entry points on separate execution contexts that do not share graph
+ * is thread-safe (assuming that referenced foreign entities that are shared are thread-safe).
+ * 
+ * When this flag is true, the run-time supports concurrent threads doing CAL evaluation on a single execution context.
+ * The concurrent run-time is enabled by using the LECC machine and setting the sytem property 
+ * org.openquark.cal.machine.lecc.concurrent_runtime.
+ */  
+foreign unsafe import jvm "static method org.openquark.cal.internal.runtime.lecc.LECCMachineConfiguration.concurrentRuntime"
+    public concurrentRuntime :: Boolean;
+
+

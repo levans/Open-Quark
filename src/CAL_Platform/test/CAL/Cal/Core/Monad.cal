@@ -1,0 +1,470 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Monad.cal
+ * Creation date: Oct 10, 2006.
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines the {@link typeClass = Monad@} and {@link typeClass = MonadPlus@} type classes and some useful functions and instances.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Core.Monad;
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, List, Maybe;
+    dataConstructor = Nothing, Just;
+    ;
+import Cal.Collections.List using
+    function = concatMap;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Core.Functor using
+    typeClass = Functor;
+    ;
+
+/** 
+ * Instances of {@link typeClass = Monad@} should satisfy the following algebraic
+ * laws to behave as expected:
+ * 
+ * {@orderedList
+ *     {@item {@code (return x) `bind` f == f x@}@}
+ *     {@item {@code f `bind` return == f@}@}
+ *     {@item {@code f `bind` (\x -> g x `bind` h) == (f `bind` g) `bind` h@}@}   
+ * @}
+ * 
+ * The first law says that {@link return@} is a left-identity with respect to {@link bind@}.
+ * The second law says that {@link return@} is a right-identity with respect to {@link bind@}.
+ * The third law says that {@link bind@} is associative, in a certain sense.
+ */
+public class Functor m => Monad m where
+    /** 
+     * Creates a new action by sequencing two actions, passing the value produced by the first as an
+     * argument to the second action. 
+     * This is the >>= operator in Haskell. 
+     */
+    public bind :: m a -> (a -> m b) -> m b;
+    /**
+     * Creates a new action by sequencing two actions, discarding the value produced by the first.
+     * This is the >> operator in Haskell.
+     */
+    public anonymousBind :: m a -> m b -> m b; 
+    /**
+     * Wraps a value in a monadic type.
+     */
+    public return :: a -> m a;
+    ;
+
+
+instance Monad List where
+    bind = bindList;
+    anonymousBind = anonymousBindList;
+    return = returnList;
+    ;
+        
+bindList :: [a] -> (a -> [b]) -> [b];
+private bindList !list f = concatMap f list;
+
+anonymousBindList :: [a] -> [b] -> [b];
+private anonymousBindList !list1 list2 = bindList list1 (\ignored -> list2);    
+
+returnList :: a -> [a];
+private returnList value = [value];
+
+instance Monad Array where
+    bind = bindArray;
+    anonymousBind = anonymousBindArray;
+    return = returnArray;
+    ;
+
+bindArray :: Array a -> (a -> Array b) -> Array b;
+private bindArray !array f = Array.concat $ Array.map f array;
+
+anonymousBindArray :: Array a -> Array b -> Array b;
+private anonymousBindArray !array1 array2 = bindArray array1 (\ignored -> array2);    
+
+returnArray :: a -> Array a;
+private returnArray value = Array.array1 value;
+
+instance Monad Maybe where
+    bind = bindMaybe;
+    anonymousBind = anonymousBindMaybe;
+    return = returnMaybe;
+    ;
+    
+bindMaybe :: Maybe a -> (a -> Maybe b) -> Maybe b;
+private bindMaybe !maybeValue f =
+    case maybeValue of
+    Nothing -> Nothing;
+    Just {value} -> f value;
+    ;
+
+anonymousBindMaybe :: Maybe a -> Maybe b -> Maybe b;
+private anonymousBindMaybe !maybeValue1 maybeValue2 =
+    case maybeValue1 of
+    Nothing -> Nothing;
+    Just {} -> maybeValue2;
+    ;
+
+returnMaybe :: a -> Maybe a;
+private returnMaybe value = Just value;
+
+sequence :: Monad m => [m a] -> m [a];
+public sequence =
+    let        
+        mcons :: Monad m => m b -> m [b] -> m [b];
+        mcons p q = p `bind` (\x -> q `bind` (\y -> return (x:y)));
+    in
+        List.foldRight mcons (return []); 
+
+sequence_ :: Monad m => [m a] -> m ();
+public sequence_ = List.foldRight anonymousBind (return ());
+
+map :: Monad m => (a -> m b) -> [a] -> m [b];
+public map f list = sequence (List.map f list);
+
+map_ :: Monad m => (a -> m b) -> [a] -> m ();
+public map_ f list =  sequence_ (List.map f list);
+
+/** this is the =<< operator in Haskell */
+flipBind :: Monad m => (a -> m b) -> m a -> m b;
+public flipBind f x = bind x f;
+
+
+/**
+ * Instances of {@link typeClass = MonadPlus@} should satisfy the following algebraic
+ * laws to behave as expected:
+ * 
+ * {@orderedList
+ *     {@item {@code zero `bind` f == zero@}@}
+ *     {@item {@code f `anonymousBind` zero == zero@}@}
+ *     {@item {@code f `bind` (\x -> g x `bind` h) == (f `bind` g) `bind` h@}@} 
+ *     {@item {@code plus@} is associative@}
+ * @}
+ */
+public class Monad m => MonadPlus m where
+    public zero :: m a;        
+    public plus :: m a -> m a -> m a;
+    ;
+
+instance MonadPlus List where
+    zero = List.list0;
+    plus = plusList;
+    ;
+
+plusList :: [a] -> [a] -> [a];
+private plusList !list1 list2 = list1 ++ list2;
+
+instance MonadPlus Array where
+    zero = Array.array0;
+    plus = plusArray;
+    ;
+
+plusArray :: Array a -> Array a -> Array a;
+private plusArray !array1 array2 = array1 ++ array2;
+
+instance MonadPlus Maybe where
+    zero = plusZero;
+    plus = plusMaybe;
+    ;
+
+plusZero :: Maybe a;
+private plusZero = Prelude.Nothing;
+
+plusMaybe :: Maybe a -> Maybe a -> Maybe a;
+private plusMaybe !maybe1 maybe2 =
+    case maybe1 of
+    Nothing -> maybe2;
+    _ -> maybe1;
+    ;
+    
+
+// -- -----------------------------------------------------------------------------
+// -- Functions mandated by the Prelude
+//
+// -- | @'guard' b@ is @'return' ()@ if @b@ is 'True',
+// -- and 'mzero' if @b@ is 'False'.
+// guard           :: (MonadPlus m) => Bool -> m ()
+// guard True      =  return ()
+// guard False     =  mzero
+//
+// -- | This generalizes the list-based 'filter' function.
+//
+// filterM          :: (Monad m) => (a -> m Bool) -> [a] -> m [a]
+// filterM _ []     =  return []
+// filterM p (x:xs) =  do
+//    flg <- p x
+//    ys  <- filterM p xs
+//    return (if flg then x:ys else ys)
+
+//generalizes the list-based 'filter' function.
+filter :: (Monad m) => (a -> m Boolean) -> [a] -> m [a];
+public filter predicate !list =
+    case list of
+    [] -> return [];
+    x : xs ->
+        predicate x `bind` (\flg ->
+            filter predicate xs `bind` (\ys ->
+                return (if flg then x : ys else ys)));     
+    ;
+
+
+//
+// -- | This generalizes the list-based 'concat' function.
+//
+// msum        :: MonadPlus m => [m a] -> m a
+// {-# INLINE msum #-}
+// msum        =  foldr mplus mzero
+
+
+concat :: MonadPlus m => [m a] -> m a;
+public concat = List.foldRight plus zero;
+
+//
+// -- -----------------------------------------------------------------------------
+// -- Other monad functions
+//
+// -- | The 'join' function is the conventional monad join operator. It is used to
+// -- remove one level of monadic structure, projecting its bound argument into the
+// -- outer level.
+// join              :: (Monad m) => m (m a) -> m a
+// join x            =  x >>= id
+
+join :: (Monad m) => m (m a) -> m a;
+public join x = x `bind` Prelude.id;
+
+//
+// -- | The 'mapAndUnzipM' function maps its first argument over a list, returning
+// -- the result as a pair of lists. This function is mainly used with complicated
+// -- data structures or a state-transforming monad.
+// mapAndUnzipM      :: (Monad m) => (a -> m (b,c)) -> [a] -> m ([b], [c])
+// mapAndUnzipM f xs =  sequence (map f xs) >>= return . unzip
+
+mapAndUnzip :: (Monad m) => (a -> m (b,c)) -> [a] -> m ([b], [c]);
+public mapAndUnzip f xs = sequence (List.map f xs) `bind` (return # List.unzip);
+
+//
+// -- | The 'zipWithM' function generalizes 'zipWith' to arbitrary monads.
+// zipWithM          :: (Monad m) => (a -> b -> m c) -> [a] -> [b] -> m [c]
+// zipWithM f xs ys  =  sequence (zipWith f xs ys)
+
+zipWith :: (Monad m) => (a -> b -> m c) -> [a] -> [b] -> m [c];
+public zipWith f list1 list2 = sequence (List.zipWith f list1 list2);
+
+//
+// -- | 'zipWithM_' is the extension of 'zipWithM' which ignores the final result.
+// zipWithM_         :: (Monad m) => (a -> b -> m c) -> [a] -> [b] -> m ()
+// zipWithM_ f xs ys =  sequence_ (zipWith f xs ys)
+
+zipWith_ :: (Monad m) => (a -> b -> m c) -> [a] -> [b] -> m ();
+public zipWith_ f xs ys = sequence_ (List.zipWith f xs ys);
+
+
+//
+// {- | The 'foldM' function is analogous to 'foldl', except that its result is
+// encapsulated in a monad. Note that 'foldM' works from left-to-right over
+// the list arguments. This could be an issue where '(>>)' and the `folded
+// function' are not commutative.
+//
+//
+// >  foldM f a1 [x1, x2, ..., xm ]
+//
+// ==  
+//
+// >  do
+// >    a2 <- f a1 x1
+// >    a3 <- f a2 x2
+// >    ...
+// >    f am xm
+//
+// If right-to-left evaluation is required, the input list should be reversed.
+// -}
+//
+// foldM             :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a
+// foldM _ a []      =  return a
+// foldM f a (x:xs)  =  f a x >>= \fax -> foldM f fax xs
+
+foldLeft :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m a;
+public foldLeft foldFunction initialValue !list =
+    case list of
+    [] -> return initialValue;
+    x : xs ->
+        foldFunction initialValue x
+        `bind`
+        (\value -> foldLeft foldFunction value xs);
+    ;
+
+//
+// -- | Like 'foldM', but discards the result.
+// foldM_            :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m ()
+// foldM_ f a xs     = foldM f a xs >> return ()
+foldLeft_ :: (Monad m) => (a -> b -> m a) -> a -> [b] -> m ();
+public foldLeft_ foldFunction initialValue !list =
+    foldLeft foldFunction initialValue list `anonymousBind` return ();
+
+//
+// -- | @'replicateM' n act@ performs the action @n@ times,
+// -- gathering the results.
+// replicateM        :: (Monad m) => Int -> m a -> m [a]
+// replicateM n x    = sequence (replicate n x)
+
+//replicateM        :: (Monad m) => Int -> m a -> m [a]
+//replicateM n x    = sequence (replicate n x)
+
+replicate :: (Monad m) => Int -> m a -> m [a];
+public replicate nCopies valueToReplicate = sequence (List.replicate nCopies valueToReplicate);
+
+//
+// -- | Like 'replicateM', but discards the result.
+// replicateM_       :: (Monad m) => Int -> m a -> m ()
+// replicateM_ n x   = sequence_ (replicate n x)
+
+replicate_ :: (Monad m) => Int -> m a -> m ();
+public replicate_ nCopies valueToReplicate =
+    sequence_ (List.replicate nCopies valueToReplicate);
+
+//
+// {- | Conditional execution of monadic expressions. For example, 
+//
+// >  when debug (putStr "Debugging\n")
+//
+// will output the string @Debugging\\n@ if the Boolean value @debug@ is 'True',
+// and otherwise do nothing.
+// -}
+//
+// when              :: (Monad m) => Bool -> m () -> m ()
+// when p s          =  if p then s else return ()
+
+when :: (Monad m) => Boolean -> m () -> m ();
+public when p s =
+    if p then s else return ();
+
+//
+// -- | The reverse of 'when'.
+//
+// unless            :: (Monad m) => Bool -> m () -> m ()
+// unless p s        =  if p then return () else s
+
+unless :: (Monad m) => Boolean -> m () -> m ();
+public unless p s =
+    if p then return () else s;
+
+//
+// -- | Promote a function to a monad.
+// liftM   :: (Monad m) => (a1 -> r) -> m a1 -> m r
+// liftM f m1              = do { x1 <- m1; return (f x1) }
+
+lift :: (Monad m) => (a1 -> r) -> m a1 -> m r;
+public lift f m1 = m1 `bind` (\x1 -> return (f x1)); 
+    
+  
+//
+// -- | Promote a function to a monad, scanning the monadic arguments from
+// -- left to right.  For example,
+// --
+// -- >   liftM2 (+) [0,1] [0,2] = [0,2,1,3]
+// -- >   liftM2 (+) (Just 1) Nothing = Nothing
+// --
+// liftM2  :: (Monad m) => (a1 -> a2 -> r) -> m a1 -> m a2 -> m r
+// liftM2 f m1 m2          = do { x1 <- m1; x2 <- m2; return (f x1 x2) }
+
+lift2 :: (Monad m) => (a1 -> a2 -> r) -> m a1 -> m a2 -> m r;
+public lift2 f m1 m2 = 
+    m1 `bind` (\x1 ->
+    m2 `bind` (\x2 ->
+    return (f x1 x2)));   
+
+    
+//
+// -- | Promote a function to a monad, scanning the monadic arguments from
+// -- left to right (cf. 'liftM2').
+// liftM3  :: (Monad m) => (a1 -> a2 -> a3 -> r) -> m a1 -> m a2 -> m a3 -> m r
+// liftM3 f m1 m2 m3       = do { x1 <- m1; x2 <- m2; x3 <- m3; return (f x1 x2 x3) }
+
+lift3 :: (Monad m) => (a1 -> a2 -> a3 -> r) -> m a1 -> m a2 -> m a3 -> m r;
+public lift3 f m1 m2 m3 = 
+    m1 `bind` (\x1 ->
+    m2 `bind` (\x2 ->
+    m3 `bind` (\x3 ->
+    return (f x1 x2 x3))));
+
+//
+// -- | Promote a function to a monad, scanning the monadic arguments from
+// -- left to right (cf. 'liftM2').
+// liftM4  :: (Monad m) => (a1 -> a2 -> a3 -> a4 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m r
+// liftM4 f m1 m2 m3 m4    = do { x1 <- m1; x2 <- m2; x3 <- m3; x4 <- m4; return (f x1 x2 x3 x4) }
+
+lift4 :: (Monad m) => (a1 -> a2 -> a3 -> a4 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m r;
+public lift4 f m1 m2 m3 m4 = 
+    m1 `bind` (\x1 ->
+    m2 `bind` (\x2 ->
+    m3 `bind` (\x3 ->
+    m4 `bind` (\x4 ->
+    return (f x1 x2 x3 x4)))));
+
+
+//
+// -- | Promote a function to a monad, scanning the monadic arguments from
+// -- left to right (cf. 'liftM2').
+// liftM5  :: (Monad m) => (a1 -> a2 -> a3 -> a4 -> a5 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m a5 -> m r
+// liftM5 f m1 m2 m3 m4 m5 = do { x1 <- m1; x2 <- m2; x3 <- m3; x4 <- m4; x5 <- m5; return (f x1 x2 x3 x4 x5) }
+
+lift5 :: (Monad m) => (a1 -> a2 -> a3 -> a4 -> a5 -> r) -> m a1 -> m a2 -> m a3 -> m a4 -> m a5 -> m r;
+public lift5 f m1 m2 m3 m4 m5 = 
+    m1 `bind` (\x1 ->
+    m2 `bind` (\x2 ->
+    m3 `bind` (\x3 ->
+    m4 `bind` (\x4 ->
+    m5 `bind` (\x5 ->
+    return (f x1 x2 x3 x4 x5))))));
+
+//
+// {- | In many situations, the 'liftM' operations can be replaced by uses of
+// 'ap', which promotes function application. 
+//
+// >  return f `ap` x1 `ap` ... `ap` xn
+//
+// is equivalent to 
+//
+// >  liftMn f x1 x2 ... xn
+//
+// -}
+//
+// ap                :: (Monad m) => m (a -> b) -> m a -> m b
+// ap                =  liftM2 id
+    
+ap :: (Monad m) => m (a -> b) -> m a -> m b;
+public ap = lift2 Prelude.id;   

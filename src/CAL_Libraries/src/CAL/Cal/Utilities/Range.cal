@@ -1,0 +1,1634 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Range.cal
+ * Created: March 9, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines the {@link typeConstructor = Range@} type as well as core support functions associated with ranges. 
+ * The range type is similar to ranges in Crystal Reports, but the element type can be any orderable type.
+ *  
+ * @author Iulian Radu
+ */
+
+module Cal.Utilities.Range;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Ord, Outputable;
+    typeConstructor = Boolean, Double, JObject, Maybe, String;
+    dataConstructor = False, True, Nothing, Just;
+    function = append, assert, concat, error, fromJust, input, not, output;
+    ;
+import Cal.Collections.List using
+    function = filter, head, map, reverse, tail;
+    ;            
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+    
+/** Type Invariant: left endpoint <= right endpoint */
+data public Range a =
+    private IsLessThan 
+        u       :: a |
+    private IsLessThanEquals 
+        u       :: a |
+    private IsGreaterThanEquals 
+        u       :: a |
+    private IsGreaterThan 
+        u       :: a |
+    private BetweenIncludingEndpoints 
+        u       :: a 
+        v       :: a |
+    private BetweenIncludingLeftEndpoint 
+        u       :: a 
+        v       :: a |
+    private BetweenIncludingRightEndpoint 
+        u       :: a 
+        v       :: a |
+    private BetweenExcludingEndpoints 
+        u       :: a 
+        v       :: a |
+    private EntireRange
+    deriving Eq;
+
+/** Constructs a range strictly less than {@code x@}. */
+makeIsLessThanRange :: a -> Range a;
+public makeIsLessThanRange x = IsLessThan x;
+
+/** Constructs a range less than or equals to {@code x@}. */
+makeIsLessThanEqualsRange :: a -> Range a;
+public makeIsLessThanEqualsRange x = IsLessThanEquals x;
+
+/** Constructs a range strictly greater than {@code x@}. */
+makeIsGreaterThanEqualsRange :: a -> Range a;
+public makeIsGreaterThanEqualsRange x = IsGreaterThanEquals x;
+
+/** Constructs a range strictly less than {@code x@} */
+makeIsGreaterThanRange :: a -> Range a;
+public makeIsGreaterThanRange x = IsGreaterThan x;
+
+/** Constructs a range between two endpoints, including both. */
+makeBetweenIncludingEndpointsRange :: Ord a => a -> a -> Range a;
+public makeBetweenIncludingEndpointsRange !x !y =
+    if x <= y then
+        BetweenIncludingEndpoints x y
+    else
+        BetweenIncludingEndpoints y x;
+    
+/** Constructs a range between two endpoints, including the left. */
+makeBetweenIncludingLeftEndpointRange :: Ord a => a -> a -> Range a;
+public makeBetweenIncludingLeftEndpointRange !x !y =
+    if x <= y then
+        BetweenIncludingLeftEndpoint x y
+    else
+        BetweenIncludingLeftEndpoint y x;
+
+/** Constructs a range between two endpoings, including the right. */
+makeBetweenIncludingRightEndpointRange :: Ord a => a -> a -> Range a;
+public makeBetweenIncludingRightEndpointRange !x !y =
+    if x <= y then
+        BetweenIncludingRightEndpoint x y
+    else
+        BetweenIncludingRightEndpoint y x;
+
+/** Constructs a range between two endpoings, not including either. */
+makeBetweenExcludingEndpointsRange :: Ord a => a -> a -> Range a;
+public makeBetweenExcludingEndpointsRange !x !y =
+    if x <= y then
+        BetweenExcludingEndpoints x y
+    else
+        BetweenExcludingEndpoints y x;    
+    
+/** Constructs a range including the entire space. */
+makeEntireRange :: Range a;
+public makeEntireRange = EntireRange;
+
+/** 
+ * Constructs a {@link typeConstructor = Range@} by describing its endpoints as {@link Maybe@} pairs.
+ * Each pair contains the value of the endpoint and a {@link Boolean@} to signify whether
+ * the endpoint is inclusive.
+ * @arg leftEndpoint 
+ *  {@link Maybe@} a pair describing the left enpoint of the range.  If {@link Nothing@}, the endpoint is infinite.
+ * @arg rightEndpoint 
+ *  {@link Maybe@} a pair describing the right endpoint of the range.  If {@link Nothing@}, the endpoint is infinite.
+ * @return 
+ *  A {@link typeConstructor = Range@} described by the specified endpoints.
+ */
+/* 
+ * @implementation
+ * Note: In the future it might be nice to expose an endpoint datatype as defined below.
+ *       This would make the code more readable; we would have a case statement
+ *       with nine alternatives instead of nested if-then-else clauses.
+ * 
+ *  Endpoint
+ *   | Infinite
+ *   | Inclusive a
+ *   | Exclusive a
+ */
+makeRangeFromEndpoints :: Ord a => Maybe (Boolean, a) -> Maybe (Boolean, a) -> Range a;
+public makeRangeFromEndpoints !leftEndpoint !rightEndpoint =
+    case leftEndpoint of
+    Nothing ->
+        case rightEndpoint of
+        Nothing -> makeEntireRange;
+        Just {value=right} ->
+            if right.#1 then
+                makeIsLessThanEqualsRange right.#2
+            else
+                makeIsLessThanRange right.#2;
+        ;
+    Just {value=left} -> 
+        case rightEndpoint of
+        Nothing ->
+            if left.#1 then
+                makeIsGreaterThanEqualsRange left.#2
+            else
+                makeIsGreaterThanRange left.#2;
+        Just {value=right} ->
+            if left.#1 then
+                if right.#1 then
+                    makeBetweenIncludingEndpointsRange left.#2 right.#2
+                else
+                    makeBetweenIncludingLeftEndpointRange left.#2 right.#2
+            else
+                if right.#1 then
+                    makeBetweenIncludingRightEndpointRange left.#2 right.#2
+                else
+                    makeBetweenExcludingEndpointsRange left.#2 right.#2;
+        ;
+    ;
+
+/**
+ * Returns whether the specified value falls within the range.
+ * 
+ * Complexity: time O(n), space O(n)
+ */
+inRange :: Ord a => a -> Range a -> Boolean;
+public inRange x !r =
+    case r of
+    IsLessThan {u} ->
+        x < u;
+    IsLessThanEquals {u} ->
+        x <= u;
+    IsGreaterThanEquals {u} ->
+        x >= u;
+    IsGreaterThan {u} ->
+        x > u;
+    BetweenIncludingEndpoints {u, v} ->
+        x >= u && x <= v;
+    BetweenIncludingLeftEndpoint {u, v} ->
+        x >= u && x < v;
+    BetweenIncludingRightEndpoint {u, v} ->
+        x > u && x <= v;
+    BetweenExcludingEndpoints {u, v} ->
+        x > u && x < v;
+    EntireRange ->
+        True;
+    ;
+
+/**
+ * Returns whether the specified value is contained in the list of ranges.
+ * 
+ * Complexity: time O(n), space O(n)
+ */
+inRangeList :: Ord a => a -> [Range a] -> Boolean;
+public inRangeList x !rl =
+    case rl of
+    [] -> False;
+    r1 : rs -> (inRange x r1) || (inRangeList x rs);
+    ;
+
+/**
+ * Returns whether the range is algebraically of the sort that it can never
+ * contain a data value e.g. {@code {@link BetweenExcludingEndpoints@} 2 2@}.
+ */
+isRedundantRange :: Eq a => Range a -> Boolean;
+public isRedundantRange !r =
+    case r of     
+   (BetweenIncludingLeftEndpoint |
+    BetweenIncludingRightEndpoint |
+    BetweenExcludingEndpoints) {u, v} ->
+        u == v;
+    _ -> False;        
+    ;
+    
+/**
+ * Strips all redundant ranges from the specified list.
+ * 
+ * Complexity: time O(n), space O(n)
+ */
+stripRedundantRanges :: Eq a => [Range a] -> [Range a];
+public stripRedundantRanges rl = filter (\r -> not (isRedundantRange r)) rl;
+
+/**
+ * Returns whether the range has a left endpoint.
+ */              
+hasLeftEndpoint :: Range a -> Boolean;
+public hasLeftEndpoint !r =
+    case r of
+   (EntireRange | 
+    IsLessThan | 
+    IsLessThanEquals) {} -> False;
+    _ -> True;
+    ;
+    
+/**
+ * Returns whether the range includes its left endpoint.
+ */
+includesLeftEndpoint :: Range a -> Boolean;
+public includesLeftEndpoint !r =
+    case r of
+   (IsGreaterThanEquals | 
+    BetweenIncludingEndpoints | 
+    BetweenIncludingLeftEndpoint) {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns the left endpoint of the range.
+ */
+leftEndpoint :: Range a -> a;
+public leftEndpoint !r =
+    case r of
+   (IsGreaterThanEquals |
+    IsGreaterThan |
+    BetweenIncludingEndpoints |
+    BetweenIncludingLeftEndpoint |
+    BetweenIncludingRightEndpoint |
+    BetweenExcludingEndpoints) {u} -> u;
+    _ -> error "The range does not have a left endpoint.";
+    ;
+
+/**
+ * Returns whether the range has a right endpoint.
+ */
+hasRightEndpoint :: Range a -> Boolean;
+public hasRightEndpoint !r =
+    case r of
+   (EntireRange |
+    IsGreaterThanEquals |
+    IsGreaterThan) {} -> False;
+    _ -> True;
+    ;
+
+/**
+ * Returns whether the range includes a right endpoint.
+ */
+includesRightEndpoint :: Range a -> Boolean;
+public includesRightEndpoint !r = 
+    case r of
+   (IsLessThanEquals |
+    BetweenIncludingEndpoints |
+    BetweenIncludingRightEndpoint) {} -> True;
+    _ -> False;
+    ;       
+
+/**
+ * Returns the right endpoint of the range.
+ */
+rightEndpoint :: Range a -> a;
+public rightEndpoint !r =
+    case r of
+   (IsLessThan |
+    IsLessThanEquals) {u} -> 
+        u;
+   (BetweenIncludingEndpoints |
+    BetweenIncludingLeftEndpoint |
+    BetweenIncludingRightEndpoint |
+    BetweenExcludingEndpoints) {v} -> 
+        v;
+    _ -> error "The range does not have a right endpoint.";   
+    ;       
+
+/** Displays text version of a range of {@link Maybe@}. */
+displayMaybeDoubleRange :: Maybe (Range Double) -> [String];
+private displayMaybeDoubleRange !a = 
+    case a of
+    Nothing -> ["Nothing"];
+    Just b -> displayDoubleRange b;
+    ;
+
+/** Displays text version of a range of {@link Double@}. */
+displayDoubleRange :: Range Double -> [String];
+private displayDoubleRange !r =
+    case r of
+    IsLessThan {u} ->
+        ["<", Prelude.doubleToString u];
+    IsLessThanEquals {u} ->
+        ["<=", Prelude.doubleToString u];
+    IsGreaterThanEquals {u} ->
+        [">=", Prelude.doubleToString u];
+    IsGreaterThan {u} ->
+        [">", Prelude.doubleToString u];
+    BetweenIncludingEndpoints {u, v} ->
+        [Prelude.doubleToString u, "@-@", Prelude.doubleToString v];
+    BetweenIncludingLeftEndpoint {u, v} ->
+        [Prelude.doubleToString u, "@-.", Prelude.doubleToString v];
+    BetweenIncludingRightEndpoint {u, v} ->
+        [Prelude.doubleToString u, ".-@", Prelude.doubleToString v];
+    BetweenExcludingEndpoints {u, v} ->
+        [Prelude.doubleToString u, ".-.", Prelude.doubleToString v];
+    EntireRange ->
+        ["ALL"];
+    ;
+    
+/** Displays string version of double lists. */
+displayDoubleRangeList :: [Range Double] -> [[String]];
+private displayDoubleRangeList !l =
+    case l of
+    [] -> [];
+    r1 : rs -> (displayDoubleRange r1) : (displayDoubleRangeList rs);
+    ;
+
+/**
+ * Applies the specified function to the endpoints of the range.
+ */
+mapRange :: Ord b => (a -> b) -> Range a -> Range b;
+public mapRange f !r =
+    case r of
+    IsLessThan {u} ->
+        makeIsLessThanRange (f u);
+    IsLessThanEquals {u} ->
+        makeIsLessThanEqualsRange (f u);
+    IsGreaterThanEquals {u} ->
+        makeIsGreaterThanEqualsRange (f u);
+    IsGreaterThan {u} ->
+        makeIsGreaterThanRange (f u);
+    BetweenIncludingEndpoints {u, v} ->
+        makeBetweenIncludingEndpointsRange (f u) (f v);
+    BetweenIncludingLeftEndpoint {u, v} ->
+        makeBetweenIncludingLeftEndpointRange (f u) (f v);
+    BetweenIncludingRightEndpoint {u, v} ->
+        makeBetweenIncludingRightEndpointRange (f u) (f v);
+    BetweenExcludingEndpoints {u, v} ->
+        makeBetweenExcludingEndpointsRange (f u) (f v);
+    EntireRange ->
+        makeEntireRange;
+    ;
+    
+/**
+ * Applies the specified function to the endpoints of each ranges in the list.
+ */
+mapRanges :: Ord b => (a -> b) -> [Range a] -> [Range b];
+public mapRanges f !rl = map (mapRange f) rl;
+
+
+/**
+ * Intersects the ranges in the specified list.
+ */    
+intersectRanges :: Ord a => [Range a] -> Maybe (Range a);
+public intersectRanges !rl =
+    case rl of
+    r : rs ->
+        case rs of
+        rs1 : rss ->
+            case (intersectRanges rs) of
+            Nothing -> Nothing;
+            Just r2 -> intersectTwoRanges r r2;
+            ;
+        [] -> Just r;
+        ;
+    [] -> Nothing;
+    ;
+
+/**
+ * Consolidate the specified ranges
+ * The returned ranges will be ordered by increasing start time
+ * 
+ * Complexity: time O(n), space O(n)
+ */    
+consolidateRanges :: Ord a => [Range a] -> [Range a];
+public consolidateRanges !rl =
+    case rl of 
+    [] -> [];
+    r1 : rs -> unionSingleRange r1 (consolidateRanges rs);
+    ;
+
+/**
+ * Unifies the two lists of ranges into a single list
+ * The returned ranges will be ordered by increasing start time
+ * 
+ * Complexity: time O(n+m), space O(n+m)
+ */    
+unionRanges :: Ord a => [Range a] -> [Range a] -> [Range a];
+public unionRanges rl1 rl2 = consolidateRanges (append rl1 rl2);
+
+/**
+ * Unifies the specified range with all ranges from the range list
+ * 
+ * Assumed: ranges in list are sorted by increasing start time, and their unification
+ *          produces the same list (ie: ranges are non-overlapping and not having equal endpoints)
+ *          
+ * Complexity: time O(n), space O(n)
+ */
+unionSingleRange :: Ord a => Range a -> [Range a] -> [Range a];
+private unionSingleRange r !rl =
+    case rl of
+    [] -> [r];
+    r1 : rs -> 
+        let
+            x = reverse (unionTwoRanges r r1);
+            // Note: unionTwoRanges will return either one ranges (if overlapping) or two (otherwise)
+        in
+            if (head x == r1) then
+                // Optimization: the ranges either (1) did not intersect, so the later period is contained
+                //              in our list, or (2) did intersect, and the unification is the period contained
+                //              in our list; in either case, because the list is non-overlapping and ordered by start time,
+                //              further unications will not produce any new ranges. Thus, stop here.
+                (reverse x) ++ rs
+            else 
+                (tail x) ++ (unionSingleRange (head x) rs);
+    ;
+   
+/**
+ * Calculates range on the left side of the difference between range1 and the intersection
+ * of range 1 and range 2
+ * 
+ * Returns: {@code []@} if no range is resulted on the left side, {@code [range]@} otherwise
+ * 
+ * Complexity: time O(1), space O(1)
+ */
+differenceLeftRange :: Ord a => Range a -> Range a -> [Range a];
+private differenceLeftRange !r1 ir2 =
+    if (hasLeftEndpoint r1) then
+        let 
+            u1 = (leftEndpoint r1);
+            u2 = (leftEndpoint ir2);
+        in
+            if (includesLeftEndpoint r1) then
+                if (includesLeftEndpoint ir2) then
+                    if (u1 == u2) then 
+                        []
+                    else 
+                        [makeBetweenIncludingLeftEndpointRange u1 u2]
+                else
+                    [makeBetweenIncludingEndpointsRange u1 u2]
+            else
+                if (includesLeftEndpoint ir2) then
+                    [makeBetweenExcludingEndpointsRange u1 u2]
+                else
+                    if (u1 == u2) then 
+                        []
+                    else 
+                        [makeBetweenIncludingRightEndpointRange u1 u2]
+    else
+        if (hasLeftEndpoint ir2) then
+            if (includesLeftEndpoint ir2) then
+                [makeIsLessThanRange (leftEndpoint ir2)]
+            else
+                [makeIsLessThanEqualsRange (leftEndpoint ir2)]
+        else
+            []
+    ;
+
+/**
+ * Calculates the range on the left side of the difference between range 1 and the intersection
+ * of range 1 and range 2
+ * 
+ * Returns: {@code []@} if no range is resulted on the right side, {@code [range]@} otherwise
+ * 
+ * Complexity: time O(1), space O(1)
+ */
+differenceRightRange :: Ord a => Range a -> Range a -> [Range a];
+private differenceRightRange !r1 ir2 =
+    if (hasRightEndpoint r1) then
+        let 
+            v1 = (rightEndpoint r1);
+            v2 = (rightEndpoint ir2);
+        in
+            if (includesRightEndpoint r1) then
+                if (includesRightEndpoint ir2) then
+                    if (v1 == v2) then 
+                        []
+                    else 
+                        [makeBetweenIncludingRightEndpointRange v1 v2]
+                else
+                    [makeBetweenIncludingEndpointsRange v1 v2]
+            else
+                if (includesRightEndpoint ir2) then
+                    [makeBetweenExcludingEndpointsRange v1 v2]
+                else
+                    if (v1 == v2) then 
+                        []
+                    else 
+                        [makeBetweenIncludingLeftEndpointRange v1 v2]
+    else
+        if (hasRightEndpoint ir2) then
+            if (includesRightEndpoint ir2) then
+                [makeIsGreaterThanRange (rightEndpoint ir2)]
+            else
+                [makeIsGreaterThanEqualsRange (rightEndpoint ir2)]
+        else
+            []
+    ;
+
+/**
+ * Returns the difference ranges resulting from of subtracting the second range list from the first.
+ * 
+ * Assumed: The ranges are non overlapping and sorted by increasing start time.
+ * 
+ * Complexity: time O(n+m), space O(n+m)
+ */
+differenceRanges :: Ord a => [Range a] -> [Range a] -> [Range a];
+public differenceRanges !rl1 rl2 =
+    case rl1 of
+    [] -> [];
+    r1 : rl1s ->
+        case rl2 of
+        [] -> rl1;
+        r2 : rl2s ->
+            if (beforeRange r2 r1) then
+                // r2 does not overlap, should be ignored
+                differenceRanges rl1 rl2s
+            else if (afterRange r2 r1) then
+                // r1 does not overlap, so keep it
+                r1 : (differenceRanges rl1s rl2)
+            else
+                // Ranges overlap, so:
+                let 
+                    ir = (fromJust (intersectTwoRanges r1 r2)); 
+                    leftRange  = differenceLeftRange r1 ir;
+                    rightRange = differenceRightRange r1 ir;
+                in
+                    case rightRange of
+                    [] -> leftRange ++ (differenceRanges rl1s rl2);
+                    rr : _ -> leftRange ++ (differenceRanges (rightRange ++ rl1s) rl2s);
+                    ;
+        ;
+    ;
+    
+/**
+ * Indicates whether the first range preceeds the second.
+ */
+beforeRange :: Ord a => Range a -> Range a -> Boolean;
+public beforeRange !r1 r2 =
+    if (hasRightEndpoint r1) then
+        if (hasLeftEndpoint r2) then
+            let
+                v1 = rightEndpoint r1;
+                u2 = leftEndpoint r2;
+            in
+                if (v1 < u2) then
+                    True
+                else if (v1 == u2) then 
+                    ((isRedundantRange r1) || (isRedundantRange r2)) ||
+                    (not ((includesRightEndpoint r1) && (includesLeftEndpoint r2)))
+                else
+                    False
+        else
+            False
+    else
+        False;
+
+/**
+ * Indicates whether the first range succeeds the second.
+ */
+afterRange :: Ord a => Range a -> Range a -> Boolean;
+public afterRange !r1 r2 =
+    if (hasLeftEndpoint r1) then
+        if (hasRightEndpoint r2) then
+            let
+                u1 = leftEndpoint r1;
+                v2 = rightEndpoint r2;
+            in
+                if (v2 < u1) then
+                    True
+                else if (u1 == v2) then
+                    ((isRedundantRange r2) || (isRedundantRange r1)) ||
+                    (not ((includesLeftEndpoint r1) && (includesRightEndpoint r2)))
+                else
+                    False
+        else
+            False
+    else
+        False;
+
+/**
+ * Complements the specified list of ranges.
+ * The ranges returned will be sorted by increasing start time.
+ * 
+ * Complexity: time O(n), space O(n)
+ */
+complementRanges :: Ord a => [Range a] -> [Range a];
+public complementRanges rl =
+    differenceRanges [EntireRange] (consolidateRanges rl); 
+
+/**
+ * Computes the symmetric difference between the two range lists.
+ * 
+ * Assumed: the lists are non-overlaping and sorted by start time (consolidate if this is not so)
+ * 
+ * Complexity: time O(n+m) space O(n+m)
+ */
+symmetricDifferenceRanges :: Ord a => [Range a] -> [Range a] -> [Range a];
+public symmetricDifferenceRanges rl1 rl2 =
+    unionRanges (differenceRanges rl1 rl2) (differenceRanges rl2 rl1);
+
+/**
+ * Unifies two ranges.
+ * 
+ * Returns {@code [unifiedRange]@} if ranges overlap, or {@code [rangeA, rangeB]@} in start order
+ * 
+ * Complexity: time O(1), space O(1)
+ */
+unionTwoRanges :: Ord a => Range a -> Range a -> [Range a];
+public unionTwoRanges !r1 r2 =
+    case r1 of
+    
+    IsLessThan u1 ->
+        case r2 of
+        IsLessThan u2 ->
+            if u1 <= u2 then
+                [r2]
+            else
+                [r1];
+        IsLessThanEquals u2 ->
+            if u1 <= u2 then
+                [r2]
+            else
+                [r1];
+        IsGreaterThanEquals u2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else
+                [EntireRange];
+        IsGreaterThan u2 ->
+            if u1 <= u2 then
+                [r1, r2]
+            else
+                [EntireRange]; 
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else if u1 <= v2 then
+                [IsLessThanEquals v2]
+            else
+                [r1];
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else if u1 <= v2 then
+                [IsLessThan v2]
+            else
+                [r1];
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if u1 <= u2 then
+                [r1, r2]
+            else if u1 <= v2 then
+                [IsLessThanEquals v2]
+            else
+                [r1];
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 <= u2 then
+                [r1, r2]
+            else if u1 <= v2 then
+                [IsLessThan v2]
+            else
+                [r1];
+        EntireRange ->
+            [r2];
+        ;
+        
+    IsLessThanEquals u1 ->
+        case r2 of
+        IsLessThan u2 ->
+            unionTwoRanges r2 r1;
+        IsLessThanEquals u2 ->
+            if u1 <= u2 then
+                [r2]
+            else
+                [r1];
+        IsGreaterThanEquals u2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else
+                [EntireRange];
+        IsGreaterThan u2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else
+                [EntireRange];
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else if u1 <= v2 then
+                [IsLessThanEquals v2]
+            else
+                [r1];
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else if u1 < v2 then
+                [IsLessThan v2]
+            else
+                [r1];
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else if u1 <= v2 then
+                [IsLessThanEquals v2]
+            else
+                [r1];
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 < u2 then
+                [r1, r2]
+            else if u1 < v2 then
+                [IsLessThan v2]
+            else
+                [r1];
+        EntireRange ->
+            [r2];
+        ;
+        
+    IsGreaterThanEquals u1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals) {} ->
+            unionTwoRanges r2 r1;
+        IsGreaterThanEquals u2 ->
+            if u1 < u2 then
+                [r1]
+            else
+                [r2];
+        IsGreaterThan u2 ->
+            if u1 <= u2 then
+                [r1]
+            else
+                [r2];
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 > v2 then
+                [r2, r1] 
+            else if u1 >= u2 then
+                [IsGreaterThanEquals u2]
+            else
+                [r1];
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if u1 > v2 then
+                [r2, r1] 
+            else if u1 >= u2 then
+                [IsGreaterThanEquals u2]
+            else
+                [r1];
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if u1 > v2 then
+                [r2, r1]
+            else if u1 > u2 then
+                [IsGreaterThan u2]
+            else
+                [r1];
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 > v2 then
+                [r2, r1]
+            else if u1 > u2 then
+                [IsGreaterThan u2]
+            else
+                [r1];
+        EntireRange ->
+            [r2];
+        ;
+        
+    IsGreaterThan u1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals) {} ->
+            unionTwoRanges r2 r1;
+        IsGreaterThan u2 ->
+            if u1 <= u2 then
+                [r1]
+            else
+                [r2];
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 > v2 then
+                [r2, r1]
+            else if u1 >= u2 then
+                [IsGreaterThanEquals u2]
+            else
+                [r1];
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if u1 >= v2 then
+                [r2, r1]
+            else if u1 >= u2 then
+                [IsGreaterThanEquals u2]
+            else
+                [r1];
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if u1 > v2 then
+                [r2, r1]
+            else if u1 > u2 then
+                [IsGreaterThan u2]
+            else
+                [r1];
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 >= v2 then
+                [r2, r1]
+            else if u1 > u2 then
+                [IsGreaterThan u2]
+            else
+                [r1];
+        EntireRange ->
+            [r2];
+        ;
+        
+    BetweenIncludingEndpoints u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan) {} ->
+            unionTwoRanges r2 r1;
+        BetweenIncludingEndpoints u2 v2 ->
+            if v1 < u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if v1 <= v2 then
+                if u1 < u2 then
+                    [BetweenIncludingEndpoints u1 v2]
+                else
+                    [r2]
+            else
+                if u1 < u2 then
+                    [r1]
+                else
+                    [BetweenIncludingEndpoints u2 v1];
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if v1 < u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if u1 >= u2 then
+                if v1 < v2 then
+                    [r2]
+                else
+                    [BetweenIncludingEndpoints u2 v1]
+            else
+                if v1 < v2 then
+                    [BetweenIncludingLeftEndpoint u1 v2]
+                else
+                    [r1];
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if v1 < u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if u1 > u2 then
+                if v1 <= v2 then
+                    [r2]
+                else
+                    [BetweenIncludingRightEndpoint u2 v1]
+            else
+                if v1 <= v2 then
+                    [BetweenIncludingEndpoints u1 v2]
+                else
+                    [r1];
+                    
+        BetweenExcludingEndpoints u2 v2 ->
+            if v1 < u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if u1 > u2 then
+                if v1 < v2 then
+                    [r2]
+                else
+                    [BetweenIncludingRightEndpoint u2 v1]            
+            else
+                if v1 < v2 then
+                    [BetweenIncludingLeftEndpoint u1 v2]
+                else
+                    [r1];
+        EntireRange ->
+            [r2];
+        ;
+        
+    BetweenIncludingLeftEndpoint u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan |
+        BetweenIncludingEndpoints) {} ->
+            unionTwoRanges r2 r1;
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if v1 < u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if u1 >= u2 then
+                if v1 <= v2 then
+                    [r2]
+                else
+                    [BetweenIncludingLeftEndpoint u2 v1]
+            else
+                if v1 <= v2 then
+                    [BetweenIncludingLeftEndpoint u1 v2]
+                else
+                    [r1];
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if v1 <= u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if u1 > u2 then
+                if v1 <= v2 then
+                    [r2]
+                else
+                    [BetweenExcludingEndpoints u2 v1]            
+            else
+                if v1 <= v2 then
+                    [BetweenIncludingEndpoints u1 v2]
+                else
+                    [r1];
+                    
+        BetweenExcludingEndpoints u2 v2 ->
+            if v1 <= u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if u1 > u2 then
+                if v1 < v2 then
+                    [r2]
+                else
+                    [BetweenExcludingEndpoints u2 v1]            
+            else
+                if v1 < v2 then
+                    [BetweenIncludingLeftEndpoint u1 v2]
+                else
+                    [r1];
+        EntireRange ->
+            [r2];
+        ;
+        
+    BetweenIncludingRightEndpoint u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan |
+        BetweenIncludingEndpoints |
+        BetweenIncludingLeftEndpoint) {} ->
+            unionTwoRanges r2 r1;
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if v1 < u2 then
+                [r1, r2]
+            else if v2 < u1 then
+                [r2, r1]
+            else if u1 >= u2 then
+                if v1 <= v2 then
+                    [r2]
+                else
+                    [BetweenIncludingRightEndpoint u2 v1]            
+            else
+                if v1 <= v2 then
+                    [BetweenIncludingRightEndpoint u1 v2]
+                else
+                    [r1];
+                    
+        BetweenExcludingEndpoints u2 v2 ->
+            if v1 < u2 then
+                [r1, r2]
+            else if v2 <= u1 then
+                [r2, r1]
+            else if u1 >= u2 then
+                if v1 < v2 then
+                    [r2]
+                else
+                    [BetweenIncludingRightEndpoint u2 v1]            
+            else
+                if v1 < v2 then
+                    [BetweenExcludingEndpoints u1 v2]
+                else
+                    [r1];
+        EntireRange ->
+            [r2];
+        ;
+    
+    BetweenExcludingEndpoints u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan |
+        BetweenIncludingEndpoints |
+        BetweenIncludingLeftEndpoint |
+        BetweenIncludingRightEndpoint) {} ->
+            unionTwoRanges r2 r1;
+        BetweenExcludingEndpoints u2 v2 ->
+            if v1 <= u2 then
+                [r1, r2]
+            else if v2 <= u1 then
+                [r2, r1]
+            else if u1 > u2 then
+                if v1 <= v2 then
+                    [r2]
+                else
+                    [BetweenExcludingEndpoints u2 v1]            
+            else
+                if v1 <= v2 then
+                    [BetweenExcludingEndpoints u1 v2]
+                else
+                    [r1];
+        EntireRange ->
+            [r2];
+        ;
+
+    EntireRange -> 
+        [r1];
+    ;
+
+/**
+ * Intersects two ranges.
+ * 
+ * Returns {@link Nothing@} if the ranges do not overlap, or {@code {@link Just@} ir@} where {@code ir@} is the intersection range
+ * 
+ * Complexity: time O(1), space O(1)
+ */
+intersectTwoRanges :: Ord a => Range a -> Range a -> Maybe (Range a);
+public intersectTwoRanges !r1 r2 =
+    case r1 of
+    
+    IsLessThan u1 ->
+        case r2 of
+        IsLessThan u2 ->
+            if u1 <= u2 then
+                Just r1
+            else
+                Just r2;            
+        IsLessThanEquals u2 ->
+            if u1 <= u2 then
+                Just r1
+            else
+                Just r2;
+        IsGreaterThanEquals u2 ->
+            if u1 <= u2 then
+                Nothing
+            else
+                Just (BetweenIncludingLeftEndpoint u2 u1);
+        IsGreaterThan u2 ->
+            if u1 <= u2 then
+                Nothing
+            else
+                Just (BetweenExcludingEndpoints u2 u1);
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 <= u2 then
+                Nothing
+            else if u1 <= v2 then
+                Just (BetweenIncludingLeftEndpoint u2 u1)
+            else
+                Just r2;
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if (u1 <= u2) || (u2 == v2) then
+                Nothing
+            else if u1 <= v2 then
+                Just (BetweenIncludingLeftEndpoint u2 u1)
+            else
+                Just r2;
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if (u1 <= u2) || (u2 == v2) then
+                Nothing
+            else if u1 <= v2 then
+                Just (BetweenExcludingEndpoints u2 u1)
+            else
+                Just r2;
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 <= u2 then
+                Nothing
+            else if u1 <= v2 then
+                Just (BetweenExcludingEndpoints u2 u1)
+            else
+                Just r2;
+        EntireRange ->
+            Just r1;
+        ;
+        
+    IsLessThanEquals u1 ->
+        case r2 of
+        IsLessThan u2 ->
+            intersectTwoRanges r2 r1;          
+        IsLessThanEquals u2 ->
+            if u1 <= u2 then
+                Just r1
+            else
+                Just r2;
+        IsGreaterThanEquals u2 ->
+            if u1 < u2 then
+                Nothing
+            else
+                Just (BetweenIncludingEndpoints u2 u1);
+        IsGreaterThan u2 ->
+            if u1 <= u2 then
+                Nothing
+            else
+                Just (BetweenIncludingRightEndpoint u2 u1);
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 < u2 then
+                Nothing
+            else if u1 <= v2 then
+                Just (BetweenIncludingEndpoints u2 u1)
+            else
+                Just r2;
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if (u1 < u2) || (u2 == v2) then
+                Nothing
+            else if u1 < v2 then
+                Just (BetweenIncludingEndpoints u2 u1)
+            else
+                Just r2;
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if (u1 <= u2) || (u2 == v2) then
+                Nothing
+            else if u1 <= v2 then
+                Just (BetweenIncludingRightEndpoint u2 u1)
+            else
+                Just r2;
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 <= u2 then
+                Nothing
+            else if u1 < v2 then
+                Just (BetweenIncludingRightEndpoint u2 u1)
+            else
+                Just r2;
+        EntireRange ->
+            Just r1;
+        ;
+        
+    IsGreaterThanEquals u1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals) {} ->
+            intersectTwoRanges r2 r1;
+        IsGreaterThanEquals u2 ->
+            if u1 < u2 then
+                Just r2
+            else
+                Just r1;
+        IsGreaterThan u2 ->
+            if u1 <= u2 then
+                Just r2
+            else
+                Just r1;
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 > v2 then
+                Nothing
+            else if u1 >= u2 then
+                Just (BetweenIncludingEndpoints u1 v2)
+            else
+                Just r2;
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if (u1 >= v2) || (u2 == v2) then
+                Nothing
+            else if u1 >= u2 then
+                Just (BetweenIncludingLeftEndpoint u1 v2)
+            else
+                Just r2;
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if (u1 > v2) || (u2 == v2) then
+                Nothing
+            else if u1 > u2 then
+                Just (BetweenIncludingEndpoints u1 v2)
+            else
+                Just r2;
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 >= v2 then
+                Nothing
+            else if u1 > u2 then
+                Just (BetweenIncludingLeftEndpoint u1 v2)
+            else
+                Just r2;
+        EntireRange ->
+            Just r1;
+        ;
+        
+    IsGreaterThan u1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals) {} ->
+            intersectTwoRanges r2 r1;
+        IsGreaterThan u2 ->
+            if u1 <= u2 then
+                Just r2
+            else
+                Just r1;
+        BetweenIncludingEndpoints u2 v2 ->
+            if u1 >= v2 then
+                Nothing
+            else if u1 >= u2 then
+                Just (BetweenIncludingRightEndpoint u1 v2)
+            else
+                Just r2;
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if (u1 >= v2) || (u2 == v2) then
+                Nothing
+            else if u1 >= u2 then
+                Just (BetweenExcludingEndpoints u1 v2)
+            else
+                Just r2;
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if (u1 >= v2) || (u2 == v2) then
+                Nothing
+            else if u1 >= u2 then
+                Just (BetweenIncludingRightEndpoint u1 v2)
+            else
+                Just r2;
+        BetweenExcludingEndpoints u2 v2 ->
+            if u1 >= v2 then
+                Nothing
+            else if u1 >= u2 then
+                Just (BetweenExcludingEndpoints u1 v2)
+            else
+                Just r2;
+        EntireRange ->
+            Just r1;
+        ;
+        
+    BetweenIncludingEndpoints u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan) {} ->
+            intersectTwoRanges r2 r1;
+        BetweenIncludingEndpoints u2 v2 ->
+            if (v1 < u2) || (v2 < u1) then
+                Nothing
+            else if v1 <= v2 then
+                if u1 < u2 then
+                    Just (BetweenIncludingEndpoints u2 v1)
+                else
+                    Just (r1)
+            else
+                if u1 < u2 then
+                    Just (r2)
+                else
+                    Just (BetweenIncludingEndpoints u1 v2);
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if (v1 < u2) || (v2 <= u1) || (u2 == v2) then
+                Nothing
+            else if u1 >= u2 then
+                if v1 < v2 then
+                    Just (r1)
+                else
+                    Just (BetweenIncludingLeftEndpoint u1 v2)            
+            else
+                if v1 < v2 then
+                    Just (BetweenIncludingEndpoints u2 v1)
+                else
+                    Just (r2);
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if (v1 <= u2) || (v2 < u1) || (u2 == v2) then
+                Nothing
+            else if u1 > u2 then
+                if v1 < v2 then
+                    Just (r1)
+                else
+                    Just (BetweenIncludingEndpoints u1 v2)            
+            else
+                if v1 < v2 then
+                    Just (BetweenIncludingRightEndpoint u2 v1)
+                else
+                    Just (r2);
+                    
+        BetweenExcludingEndpoints u2 v2 ->
+            if (v1 <= u2) || (v2 <= u1) || (u2 == v2) then
+                Nothing
+            else if u1 > u2 then
+                if v1 < v2 then
+                    Just (r1)
+                else
+                    Just (BetweenIncludingLeftEndpoint u1 v2)            
+            else
+                if v1 < v2 then
+                    Just (BetweenIncludingRightEndpoint u2 v1)
+                else
+                    Just (r2);
+        EntireRange ->
+            Just r1;
+        ;
+        
+    BetweenIncludingLeftEndpoint u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan |
+        BetweenIncludingEndpoints) {} ->
+            intersectTwoRanges r2 r1;
+        BetweenIncludingLeftEndpoint u2 v2 ->
+            if (v1 <= u2) || (v2 <= u1) || (u2 == v2) || (u1 == v1) then
+                Nothing
+            else if u1 >= u2 then
+                if v1 <= v2 then
+                    Just (r1)
+                else
+                    Just (BetweenIncludingLeftEndpoint u1 v2)            
+            else
+                if v1 <= v2 then
+                    Just (BetweenIncludingLeftEndpoint u2 v1)
+                else
+                    Just (r2);
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if (v1 <= u2) || (v2 < u1) || (u2 == v2) || (u1 == v1) then
+                Nothing
+            else if u1 > u2 then
+                if v1 <= v2 then
+                    Just (r1)
+                else
+                    Just (BetweenIncludingEndpoints u1 v2)            
+            else
+                if v1 <= v2 then
+                    Just (BetweenExcludingEndpoints u2 v1)
+                else
+                    Just (r2);
+                    
+        BetweenExcludingEndpoints u2 v2 ->
+            if (v1 <= u2) || (v2 <= u1) || (u1 == v1) then
+                Nothing
+            else if u1 > u2 then
+                if v1 <= v2 then
+                    Just (r1)
+                else
+                    Just (BetweenIncludingLeftEndpoint u1 v2)            
+            else
+                if v1 <= v2 then
+                    Just (BetweenExcludingEndpoints u2 v1)
+                else
+                    Just (r2);
+        EntireRange ->
+            Just r1;
+        ;
+        
+    BetweenIncludingRightEndpoint u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan |
+        BetweenIncludingEndpoints |
+        BetweenIncludingLeftEndpoint) {} ->
+            intersectTwoRanges r2 r1;
+        BetweenIncludingRightEndpoint u2 v2 ->
+            if (v1 <= u2) || (v2 <= u1) || (u2 == v2) || (u1 == v1) then
+                Nothing
+            else if u1 >= u2 then
+                if v1 <= v2 then
+                    Just (r1)
+                else
+                    Just (BetweenIncludingRightEndpoint u1 v2)            
+            else
+                if v1 <= v2 then
+                    Just (BetweenIncludingRightEndpoint u2 v1)
+                else
+                    Just (r2);
+                    
+        BetweenExcludingEndpoints u2 v2 ->
+            if (v1 <= u2) || (v2 <= u1) || (u1 == v1) then
+                Nothing
+            else if u1 >= u2 then
+                if v1 < v2 then
+                    Just (r1)
+                else
+                    Just (BetweenExcludingEndpoints u1 v2)            
+            else
+                if v1 < v2 then
+                    Just (BetweenIncludingRightEndpoint u2 v1)
+                else
+                    Just (r2);
+        EntireRange ->
+            Just r1;
+        ;
+        
+    BetweenExcludingEndpoints u1 v1 ->
+        case r2 of
+       (IsLessThan |
+        IsLessThanEquals |
+        IsGreaterThanEquals |
+        IsGreaterThan |
+        BetweenIncludingEndpoints |
+        BetweenIncludingLeftEndpoint |
+        BetweenIncludingRightEndpoint) {} ->
+            intersectTwoRanges r2 r1;
+        BetweenExcludingEndpoints u2 v2 ->
+            if (v1 <= u2) || (v2 <= u1) then
+                Nothing
+            else if u1 >= u2 then
+                if v1 <= v2 then
+                    Just (r1)
+                else
+                    Just (BetweenExcludingEndpoints u1 v2)            
+            else
+                if v1 <= v2 then
+                    Just (BetweenExcludingEndpoints u2 v1)
+                else
+                    Just (r2);
+        EntireRange ->
+            Just r1;
+        ;
+        
+    EntireRange ->
+        Just r2;
+    ;   
+    
+// Debugging support for Range    
+instance Show a => Show (Range a) where
+    show = showRange;
+    ;
+    
+showRange :: Show a => Range a -> String;
+private showRange !range =
+    case range of
+    IsLessThan u -> concat ["(x < ", show u, ")"];
+    IsLessThanEquals u -> concat ["(x <= ", show u, ")"];
+    IsGreaterThanEquals u -> concat ["(x >= ", show u, ")"];
+    IsGreaterThan u -> concat ["(x > ", show u, ")"];
+    BetweenIncludingEndpoints u v -> concat ["(", show u, " <= x <= ", show v, ")"];
+    BetweenIncludingLeftEndpoint u v -> concat ["(", show u, " <= x < ", show v, ")"];
+    BetweenIncludingRightEndpoint u v -> concat ["(", show u, " < x <= ", show v, ")"];
+    BetweenExcludingEndpoints u v -> concat ["(", show u, " < x < ", show v, ")"];
+    EntireRange -> "(entire range)";
+    ;
+
+/* @example */
+showRangeExamples =
+    assert (show (makeIsLessThanRange 1.0) == "(x < 1.0)") &&
+    assert (show (makeIsLessThanEqualsRange 5.4) == "(x <= 5.4)") &&
+    assert (show (makeIsGreaterThanEqualsRange (-9.9)) == "(x >= -9.9)") &&
+    assert (show (makeIsGreaterThanRange 9.1) == "(x > 9.1)") &&
+    assert (show (makeBetweenIncludingEndpointsRange 5.5 5.9) == "(5.5 <= x <= 5.9)") &&
+    assert (show (makeBetweenIncludingLeftEndpointRange (-100.0) 100.0) == "(-100.0 <= x < 100.0)") &&
+    assert (show (makeBetweenIncludingRightEndpointRange 23.0 24.5) == "(23.0 < x <= 24.5)") &&
+    assert (show (makeBetweenExcludingEndpointsRange (-1.0) 1.0) == "(-1.0 < x < 1.0)") &&
+    assert (show (makeEntireRange :: Range Double) == "(entire range)");
+    
+// Range Java I/O
+
+data foreign unsafe import jvm public "org.openquark.cal.foreignsupport.module.Range.RangeValue" public JRange deriving Inputable, Outputable;
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructEntireRange"
+    jRange_new_EntireRange :: JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructIsLessThan"
+    jRange_new_IsLessThan :: JObject -> JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructIsLessThanEquals"
+    jRange_new_IsLessThanEquals :: JObject -> JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructIsGreaterThan"
+    jRange_new_IsGreaterThan :: JObject -> JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructIsGreaterThanEquals"
+    jRange_new_IsGreaterThanEquals :: JObject -> JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructBetweenIncludingEndpoints"
+    jRange_new_BetweenIncludingEndpoints :: JObject -> JObject -> JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructBetweenIncludingLeftEndpoint"
+    jRange_new_BetweenIncludingLeftEndpoint :: JObject -> JObject -> JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructBetweenIncludingRightEndpoint"
+    jRange_new_BetweenIncludingRightEndpoint :: JObject -> JObject -> JRange;
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Range.RangeValue.constructBetweenExcludingEndpoints"
+    jRange_new_BetweenExcludingEndpoints :: JObject -> JObject -> JRange;
+
+instance (Outputable a) => Outputable (Range a) where
+    output = outputRangeToJObject;
+    ;
+    
+outputRangeToJObject :: (Outputable a) => Range a -> JObject;
+private outputRangeToJObject !range = output (outputRange range);
+
+/**
+ * Converts a {@link typeConstructor = Range@} value into a {@link JRange@} value.
+ * @arg range the {@code Range@} value to be converted.
+ * @return the corresponding {@code JRange@} value.
+ */
+outputRange :: (Outputable a) => Range a -> JRange;
+public outputRange !range = outputRangeWith range output;
+
+/**
+ * Converts a {@link typeConstructor = Range@} value into a {@link JRange@} value, with an endpoint transformation function.
+ * @arg range the {@code Range@} value to be converted.
+ * @arg arg1Function the function to be applied to the endpoints of the range.
+ * @return the corresponding {@code JRange@} value.
+ */
+outputRangeWith :: Range a -> (a -> JObject) -> JRange;
+public outputRangeWith !range arg1Function =
+    case range of
+    IsLessThan {u} ->
+        jRange_new_IsLessThan (arg1Function u);
+    IsLessThanEquals {u} ->
+        jRange_new_IsLessThanEquals (arg1Function u);
+    IsGreaterThanEquals {u} ->
+        jRange_new_IsGreaterThanEquals (arg1Function u);
+    IsGreaterThan {u} ->
+        jRange_new_IsGreaterThan (arg1Function u);
+    BetweenIncludingEndpoints {u, v} ->
+        jRange_new_BetweenIncludingEndpoints (arg1Function u) (arg1Function v);
+    BetweenIncludingLeftEndpoint {u, v} ->
+        jRange_new_BetweenIncludingLeftEndpoint (arg1Function u) (arg1Function v);
+    BetweenIncludingRightEndpoint {u, v} ->
+        jRange_new_BetweenIncludingRightEndpoint (arg1Function u) (arg1Function v);
+    BetweenExcludingEndpoints {u, v} ->
+        jRange_new_BetweenExcludingEndpoints (arg1Function u) (arg1Function v);
+    EntireRange ->
+        jRange_new_EntireRange;
+    ;
+
+foreign unsafe import jvm "method hasLeftBound" 
+    jRange_hasLeftBound :: JRange -> Boolean;    
+foreign unsafe import jvm "method hasRightBound" 
+    jRange_hasRightBound :: JRange -> Boolean;    
+foreign unsafe import jvm "method includesRightBound" 
+    jRange_includesRightBound :: JRange -> Boolean;    
+foreign unsafe import jvm "method includesLeftBound" 
+    jRange_includesLeftBound :: JRange -> Boolean;    
+foreign unsafe import jvm "method getRightEndpoint" 
+    jRange_getRightBound :: JRange -> JObject;    
+foreign unsafe import jvm "method getLeftEndpoint" 
+    jRange_getLeftBound :: JRange -> JObject;    
+    
+instance (Inputable a) => Inputable (Range a) where
+    input = inputRangeFromJObject;
+    ;
+    
+inputRangeFromJObject :: (Inputable a) => JObject -> Range a;
+private inputRangeFromJObject !range = inputRange (input range);
+
+/**
+ * Converts a {@link JRange@} value into a {@link typeConstructor = Range@} value.
+ * @arg range the {@code JRange@} value to be converted.
+ * @return the corresponding {@code Range@} value.
+ */
+inputRange :: (Inputable a) => JRange -> Range a;
+public inputRange !range = inputRangeWith range input;
+
+/**
+ * Converts a {@link JRange@} value into a {@link typeConstructor = Range@} value, with an endpoint transformation function.
+ * @arg range the {@code JRange@} value to be converted.
+ * @arg arg1Function the function to be applied to the endpoints of the range.
+ * @return the corresponding {@code Range@} value.
+ */
+inputRangeWith :: JRange -> (JObject -> a) -> Range a;
+public inputRangeWith !range arg1Function =
+    let
+        hasLeft :: Boolean;
+        hasLeft = (jRange_hasLeftBound range);
+        hasRight :: Boolean;
+        hasRight = (jRange_hasRightBound range);
+        includesLeft :: Boolean;
+        includesLeft = (jRange_includesLeftBound range);
+        includesRight :: Boolean;
+        includesRight = (jRange_includesRightBound range);
+    in
+        if (hasLeft && hasRight) then
+            if (includesLeft && includesRight) then
+                BetweenIncludingEndpoints (arg1Function (jRange_getLeftBound range)) (arg1Function (jRange_getRightBound range))
+            else if (includesLeft) then
+                BetweenIncludingLeftEndpoint (arg1Function (jRange_getLeftBound range)) (arg1Function (jRange_getRightBound range))
+            else if (includesRight) then
+                BetweenIncludingRightEndpoint (arg1Function (jRange_getLeftBound range)) (arg1Function (jRange_getRightBound range))
+            else
+                BetweenExcludingEndpoints (arg1Function (jRange_getLeftBound range)) (arg1Function (jRange_getRightBound range))
+        else if (hasLeft) then
+            if (includesLeft) then
+                IsGreaterThanEquals (arg1Function (jRange_getLeftBound range))
+            else
+                IsGreaterThan (arg1Function (jRange_getLeftBound range))
+        else if (hasRight) then
+            if (includesRight) then
+                IsLessThanEquals (arg1Function (jRange_getRightBound range))
+            else
+                IsLessThan (arg1Function (jRange_getRightBound range))
+        else 
+            EntireRange
+    ;
+
+/* @test */
+public testRangeModule =
+    assert showRangeExamples;

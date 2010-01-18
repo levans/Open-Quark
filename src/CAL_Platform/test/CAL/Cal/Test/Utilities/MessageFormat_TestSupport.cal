@@ -1,0 +1,373 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * MessageFormat_TestSupport.cal
+ * Creation date: June 6, 2006.
+ * By: Joseph Wong
+ */
+
+// Note: the tutorial narrative is presented both as a module-level CALDoc comment, and as regular
+// comments interspersed with the example code.
+
+/**
+ * This tutorial module goes over the basics on using localized string resources in CAL.
+ * 
+ * 
+ * {@strong Introduction@}
+ * 
+ * This module has associated with it 2 resouce files: test.properties, and test_fr.properties.
+ * These two files represent the resource strings for the invariant locale and the French locale
+ * respectively.
+ * 
+ * Some salient points:
+ * {@unorderedList
+ *  {@item
+ *   the {@em invariant locale@} ({@link Locale.invariantLocale@}) is a locale that is not associated with any
+ *   language or country. It is used as the final fallback locale in the lookup for localized resources.
+ *  @}
+ *  {@item
+ *   for string resource bundles, the fallback mechanism is actually on a per key basis. For example,
+ *   test.properties defines 2 keys ("hello" and "likes"), but test_fr.properties only overrides the
+ *   "likes" key. So looking up the "hello" key on the French bundle will return the string from the
+ *   bundle for the invariant locale.
+ *  @}
+ * @}
+ * 
+ * 
+ * {@strong String Resource Bundles (see: {@link StringProperties.StringResourceBundle@})@}
+ * 
+ * To make a string resource bundle for the current locale (of the current execution context), i.e.
+ * {@link Locale.currentLocale@}, it is as simple as calling {@link StringProperties.makeStringResourceBundle@}.
+ * 
+ * Note that we allow multiple resource bundles per module, so that the strings can be further
+ * organized, e.g. into strings of different categories, strings for different purposes.
+ * 
+ * The default file extension is the same as that of Java, i.e. "properties".
+ * 
+ * {@em Example:@}
+ * {@code
+ * public {@link strings@} = {@link makeStringResourceBundle@} "Cal.Tutorials.LocalizedStrings" "test";
+ * @}
+ * 
+ * 
+ * {@strong Using a String Resource Bundle with a Specified Locale.@}
+ *
+ * It is also possible to make a string resource bundle for a specific locale. In this case, we
+ * request the locale "fr_CA", i.e. the locale for French in Canada.
+ * 
+ * Since there is no test_fr_CA.properties file, the lookup actually defaults to the
+ * test_fr.properties file, i.e. the resources for the country-neutral French locale.
+ * 
+ * This fact can be queried by checking {@code ({@link StringProperties.bundleRequestedLocale@} frenchStrings)@}
+ * against {@code ({@link StringProperties.bundleActualLocale@} frenchStrings)@}.
+ * 
+ * {@em Example:@}
+ * {@code
+ * public {@link frenchStrings@} =
+ *      {@link makeStringResourceBundleInLocale@} "Cal.Tutorials.LocalizedStrings" "test" Locale.canadaFrenchLocale;
+ * 
+ * // should be the "fr_CA" locale
+ * public {@link frenchStringsRequestedLocale@} = {@link bundleRequestedLocale@} frenchStrings;
+ * 
+ * // should be the "fr" locale
+ * public {@link frenchStringsActualLocale@} = {@link bundleActualLocale@} frenchStrings;
+ * @}
+ * 
+ * 
+ * {@strong Formatting a String Using a String Resource Bundle@}
+ * 
+ * There are 3 similar ways for formatting a string using a resource bundle. All 3 ways take
+ * the string resource bundle as the first argument, and the key for the message in the bundle
+ * as the second argument.
+ * 
+ * The 3 ways are:
+ * {@unorderedList
+ *  {@item
+ *   using {@code MessageFormat.format{@em N@}@}, which takes {@em N@} additional arguments for the message
+ *   arguments {@em (N=0..7)@}
+ *  @}
+ *  {@item
+ *   using {@link MessageFormat.format@}, which takes a record (can be a tuple) with fields for the message
+ *   arguments. The arguments will be ordered according to field name order (ordinal fields first, in
+ *   ascending order, followed by textual fields, in lexicographical order).
+ *   In most cases the code is clearer if you use simple tuples (no textual fields).
+ *  @}
+ *  {@item
+ *   using {@link MessageFormat.formatForArgList@}, which takes a list of {@link JObject@}s for the message
+ *   arguments
+ *  @}
+ * @}
+ * 
+ * It is okay to have message arguments of different types, as long as they are all {@link Outputable@}.
+ * 
+ * The message arguments need to be {@code Outputable@} because they are ultimately passed into Java as an
+ * Object[] to be formatted by the java.text.MessageFormat class.
+ * 
+ * {@em Example:@}
+ * {@code
+ * public {@link format2Example1@} =
+ *     {@link format2@} strings "likes" "Joe" 123456.987654;
+ * 
+ * // note that for a message with no arguments or just one argument, it is more convenient to use
+ * // {@link format0@} and {@link format1@} respectively.
+ * public {@link formatExample1@} =
+ *     {@link format@} strings "likes" ("Joe", 123456.987654);
+ * 
+ * public {@link formatForArgListExample1@} =
+ *     {@link formatForArgList@} strings "likes" [{@link output@} "Joe", output 123456.987654];
+ * @}
+ * 
+ * {@em Additional examples for formatting in French:@} {@link format2Example2@}, {@link formatExample2@},
+ * {@link formatForArgListExample2@}
+ * 
+ * 
+ * {@strong Overriding the Behaviour of Outputable Instances for Formatting Strings.@}
+ * 
+ * If you want to override the behaviour of the {@code Outputable@} instance for a particular argument
+ * (e.g. it outputs to a Java object that is not handled by java.text.MessageFormat), you can manually
+ * convert it to a {@link String@} first.
+ * 
+ * {@em Example:@}
+ * {@code
+ * // True rendered as "true"
+ * public {@link formatNonOverridenBooleanExample@} =
+ *     format strings "likes" ("Joe", True);
+ * 
+ * // True rendered as "Prelude.True"
+ * public {@link formatOverridenBooleanExample@} =
+ *     format strings "likes" ("Joe", {@link show@} True);
+ * 
+ * // ("foo", 2.0, 3.0) rendered as "[foo, 2.0, 3.0]"
+ * public {@link formatNonOverridenTupleExample@} =
+ *     format strings "likes" ("Joe", ("foo", 2.0, 3.0));
+ * 
+ * // ("foo", 2.0, 3.0) rendered as "("foo", 2.0, 3.0)"
+ * public {@link formatOverridenTupleExample@} =
+ *     format strings "likes" ("Joe", show ("foo", 2.0, 3.0));
+ * @}
+ * 
+ * 
+ * {@strong Sorting Natural Language Strings@}
+ *
+ * For sorting strings that are to be displayed to users, one should consider using the collation
+ * support.
+ * 
+ * For example, sorting the following list according to English and Swedish rules would yield
+ * different results.
+ *
+ * {@code
+ * {@link someCitiesInCanadaAndSweden@} =
+ *     ["Vancouver", "Victoria", "V\u00e4stervik", "White Rock",
+ *      "Armstrong", "\u00c4ngelholm", "Ottawa", "\u00d6sthammar"];
+ *      
+ * {@link englishCollator@} = {@link makeCollator@} {@link Locale.englishLocale@};
+ * 
+ * {@link swedishCollator@} = makeCollator $ {@link Locale.makeLocaleFromLanguage@} "sv";
+ * 
+ * {@link citiesSortedInCurrentLocale@} = {@link sortBy@} ({@link compareByCollator@} {@link Locale.currentLocaleCollator@}) someCitiesInCanadaAndSweden;
+ * 
+ * {@link citiesSortedInEnglish@} = sortBy (compareByCollator englishCollator) someCitiesInCanadaAndSweden;
+ * 
+ * {@link citiesSortedInSwedish@} = sortBy (compareByCollator swedishCollator) someCitiesInCanadaAndSweden;
+ * @}
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Test.Utilities.MessageFormat_TestSupport;
+
+import Cal.Core.Prelude using
+    function = assert, output;
+    dataConstructor = True;
+    typeConstructor = String, JObject;
+    typeClass = Outputable;
+    ;
+
+import Cal.Utilities.Locale using
+    function = makeCollator, compareByCollator;
+    typeConstructor = Collator;
+    ;
+
+import Cal.Utilities.StringProperties using
+    function = makeStringResourceBundle, makeStringResourceBundleInLocale;
+    function = bundleModuleName, bundleName, bundleExtension, bundleRequestedLocale, bundleActualLocale;
+    ;
+
+import Cal.Utilities.MessageFormat using
+    function = format, format0, format1, format2, formatForArgList;
+    function = formatWithPattern, formatWithPattern1, formatWithPattern2, formatWithPattern3;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = sortBy;
+    ;
+
+/*
+ * This module has associated with it 2 resouce files: test.properties, and test_fr.properties.
+ * These two files represent the resource strings for the invariant locale and the French locale
+ * respectively.
+ * 
+ * Some salient points:
+ * - the invariant locale is a locale that is not associated with any language or country.
+ *   It is used as the final fallback locale in the lookup for localized resources.
+ * 
+ * - for string resource bundles, the fallback mechanism is actually on a per key basis. For example,
+ *   test.properties defines 2 keys ("hello" and "likes"), but test_fr.properties only overrides the
+ *   "likes" key. So looking up the "hello" key on the French bundle will return the string from the
+ *   bundle for the invariant locale.
+ */
+
+/*
+ * To make a string resource bundle for the current locale (of the current execution context), it is as
+ * simple as calling makeStringResourceBundle.
+ * 
+ * Note that we allow multiple resource bundles per module, so that the strings can be further
+ * organized, e.g. into strings of different categories, strings for different purposes.
+ * 
+ * The default file extension is the same as that of Java, i.e. "properties".
+ */
+public strings = makeStringResourceBundle "Cal.Test.Utilities.MessageFormat_TestSupport" "test";
+
+/*
+ * It is also possible to make a string resource bundle for a specific locale. In this case, we
+ * request the locale "fr_CA", i.e. the locale for French in Canada.
+ * 
+ * Since there is no test_fr_CA.properties file, the lookup actually defaults to the
+ * test_fr.properties file, i.e. the resources for the country-neutral French locale.
+ * 
+ * This fact can be queried by checking (bundleRequestedLocale frenchStrings) against
+ * (bundleActualLocale frenchStrings).
+ */
+public frenchStrings = makeStringResourceBundleInLocale "Cal.Test.Utilities.MessageFormat_TestSupport" "test" Locale.canadaFrenchLocale;
+
+// should be the "fr_CA" locale
+public frenchStringsRequestedLocale = bundleRequestedLocale frenchStrings;
+// should be the "fr" locale
+public frenchStringsActualLocale = bundleActualLocale frenchStrings;
+
+/*
+ * There are 3 similar ways for formatting a string using a resource bundle. All 3 ways take
+ * the string resource bundle as the first argument, and the key for the message in the bundle
+ * as the second argument.
+ * 
+ * The 3 ways are:
+ * - using formatN, which takes N additional arguments for the message arguments (N=0..7)
+ * 
+ * - using format, which takes a record (can be a tuple) with fields for the message arguments.
+ *   The arguments will be ordered according to field name order (ordinal fields first, in
+ *   ascending order, followed by textual fields, in lexicographical order).
+ *   In most cases the code is clearer if you use simple tuples (no textual fields).
+ *   
+ * - using formatForArgList, which takes a list of JObjects for the message arguments
+ * 
+ * It is okay to have message arguments of different types, as long as they are all Outputable.
+ * 
+ * The message arguments need to be Outputable because they are ultimately passed into Java as an
+ * Object[] to be formatted by the java.text.MessageFormat class.
+ */
+public format2Example1 =
+    format2 strings "likes" "Joe" 123456.987654;
+
+// note that for a message with no arguments or just one argument, it is more convenient to use
+// format0 and format1 respectively.
+public formatExample1 =
+    format strings "likes" ("Joe", 123456.987654);
+
+public formatForArgListExample1 =
+    formatForArgList strings "likes" [output "Joe", output 123456.987654];
+
+/*
+ * If you want to override the behaviour of the Outputable instance for a particular argument
+ * (e.g. it outputs to a Java object that is not handled by java.text.MessageFormat), you can manually
+ * convert it to a String first.
+ */
+// True rendered as "true"
+public formatNonOverridenBooleanExample =
+    format strings "likes" ("Joe", True);
+
+// True rendered as "Prelude.True"
+public formatOverridenBooleanExample =
+    format strings "likes" ("Joe", show True);
+
+// ("foo", 2.0, 3.0) rendered as "[foo, 2.0, 3.0]"
+public formatNonOverridenTupleExample =
+    format strings "likes" ("Joe", ("foo", 2.0, 3.0));
+
+// ("foo", 2.0, 3.0) rendered as "("foo", 2.0, 3.0)"
+public formatOverridenTupleExample =
+    format strings "likes" ("Joe", show ("foo", 2.0, 3.0));
+
+/*
+ * For comparison, here is the first example again, but done in French.
+ * 
+ * Note that when the output is displayed, the number formatting is different (thousand separator
+ * and decimal point).
+ */
+public format2Example2 =
+    format2 frenchStrings "likes" "Joe" 123456.987654;
+
+public formatExample2 =
+    format frenchStrings "likes" ("Joe", 123456.987654);
+
+public formatForArgListExample2 =
+    formatForArgList frenchStrings "likes" [output "Joe", output 123456.987654];
+
+/*
+ * For sorting strings that are to be displayed to users, one should consider using the collation
+ * support.
+ */
+
+/*
+ * For example, sorting the following list according to English and Swedish rules would yield
+ * different results.
+ */
+someCitiesInCanadaAndSweden =
+    ["Vancouver", "Victoria", "V\u00e4stervik", "White Rock",
+     "Armstrong", "\u00c4ngelholm", "Ottawa", "\u00d6sthammar"];
+
+englishCollator = makeCollator Locale.englishLocale;
+
+swedishCollator = makeCollator $ Locale.makeLocaleFromLanguage "sv";
+
+citiesSortedInCurrentLocale = sortBy (compareByCollator Locale.currentLocaleCollator) someCitiesInCanadaAndSweden;
+
+citiesSortedInEnglish = sortBy (compareByCollator englishCollator) someCitiesInCanadaAndSweden;
+
+citiesSortedInSwedish = sortBy (compareByCollator swedishCollator) someCitiesInCanadaAndSweden;
+
+/*
+ * End of tutorial
+ */

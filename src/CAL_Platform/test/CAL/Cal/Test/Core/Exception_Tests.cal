@@ -1,0 +1,623 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Exception_Tests.cal
+ * Created: August 31, 2006
+ * By: Bo Ilic
+ */
+
+/**
+ * Tests for the {@link module = Exception@} module.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Exception_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = 
+        Boolean, Byte, Char, Double, Float, Int, Integer, CalValue, JList, JObject, Long, Maybe, Ordering, Short, 
+        String, TypeRep, Either;
+    typeClass = Appendable, Eq, Inputable, Num, Ord, Outputable, Typeable;
+    dataConstructor = False, True, Nothing, Just, LT, EQ, GT, Left, Right;
+    function = 
+        add, asTypeOf, assert, compare, compose, eager, empty, equals, error, flip, fst, input, isEven, max, min, 
+        multiply, not, notEquals, output, seq, typeOf, undefined, unsafeCoerce, upFromTo;     
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Collections.List;
+import Cal.Test.General.M1 using
+    function = throwException;
+    ;
+import Cal.Core.Exception using
+    typeConstructor = JThrowable;
+    typeClass = Exception;
+    function = try, catch, throw;
+    function = isError, isJavaNullPointerException, isJavaIllegalStateException, isPatternMatchingFailure, isJavaException;
+    ;
+
+
+
+safeHead :: [a] -> Either a String;
+public safeHead list =    
+    Prelude.strict Left (List.head list)
+    `catch`    
+    (
+        let
+            handler throwable =
+                if isError throwable then
+                    Right ("trapped error call " ++ show throwable)
+                else
+                    throw throwable;
+        in
+            handler
+    );
+
+strangeMultiply !x !y =
+    if (x == 0) then
+        throwException "java.lang.NullPointerException" "strangeMultiply x == 0"
+        `seq`
+        0
+    else if y == 0 then
+        throwException "java.lang.IllegalStateException" "strangeMultiply y == 0"
+        `seq`
+        0
+    else
+        x * y;
+
+haveSomeFun :: Num a => a -> a -> Either a String;
+haveSomeFun x y =
+    Prelude.strict Left (strangeMultiply x y)
+    `catch`
+    (
+        let
+            handler throwable =
+                if isJavaNullPointerException throwable then
+                    Right ("exception handler called: " ++ show throwable)
+                else
+                    throw throwable;
+        in
+            handler
+    );
+
+haveSomeMoreFun x y =   
+    haveSomeFun x y
+    `catch`
+    (
+        let
+            handler throwable =
+                if isJavaIllegalStateException throwable then
+                    Right ("exception handler called: " ++ show throwable)
+                else
+                    throw throwable;
+        in
+            handler
+    );
+   
+
+//this is an interesting example, since plinging the 'action' argument of try will result in failing
+//with an ArithmeticException. Othewise, we produce the list:
+//[(Prelude.Right 2), (Prelude.Right 5), (Prelude.Left java.lang.ArithmeticException: / by zero), (Prelude.Right 0), (Prelude.Left java.lang.ArithmeticException: / by zero), (Prelude.Left java.lang.ArithmeticException: / by zero), (Prelude.Right 2)]
+trying = List.map try [(2::Int) / 1, 10/2, 5 / 0, 3/5, 5 / (1-1), 0/0, 10/5];
+
+handlePatternMatchingFailure :: JThrowable -> Boolean;
+handlePatternMatchingFailure throwable =
+    if isError throwable then 
+        //should not be the Prelude.error exception
+        False
+    else if isPatternMatchingFailure throwable then
+        True
+    else
+        False;
+
+patternMatchingFailureTest1 :: Boolean;
+patternMatchingFailureTest1 =
+    (case Just 'a' of Nothing -> False;)
+    `catch`
+    handlePatternMatchingFailure
+    ;
+
+patternMatchingFailureTest2 :: Boolean;
+patternMatchingFailureTest2 =
+    ((\x -> case x of Left value -> value;) (Right False))
+    `catch`
+    handlePatternMatchingFailure
+    ;
+
+patternMatchingFailureTest3 :: Boolean;
+patternMatchingFailureTest3 =
+    //the data constructor field selection is compiled in a lazy context
+    (Left False :: Either Boolean Boolean).Right.value
+    `catch`
+    handlePatternMatchingFailure; 
+
+patternMatchingFailureTest4 :: Boolean;
+patternMatchingFailureTest4 =
+    let
+        //the data constructor field selection is compiled in a strict context
+        extractRight !x = x.Right.value;
+    in
+        extractRight (Left False :: Either Boolean Boolean)
+        `catch`
+        handlePatternMatchingFailure; 
+
+patternMatchingFailureTest5 :: Boolean;
+patternMatchingFailureTest5 =
+    let
+        f x y = if y then g x else False;
+        g x = case x of Right value -> value;;
+    in        
+        f (Left False) True           
+        `catch`
+        handlePatternMatchingFailure
+        ;
+
+handleErrorFailure :: JThrowable -> Boolean;
+handleErrorFailure throwable =
+    if isPatternMatchingFailure throwable then
+        //should not be a pattern matching failure
+        False
+    else if isError throwable then            
+        True
+    else
+        False;
+
+errorTest1 :: Boolean;
+errorTest1 =
+    error "oops this isn't working out"
+    `catch`
+    handleErrorFailure
+    ;
+
+errorTest2 :: Boolean;
+errorTest2 =
+    List.head []
+    `catch`
+    handleErrorFailure
+    ;
+
+//assertion failures are handled as calls to the error function (since the assert function simply calls error)
+errorTest3 :: Boolean;
+errorTest3 =
+    assert ((1::Int) + 1 == 3)
+    `catch`
+    handleErrorFailure
+    ;
+
+handleAnyThrowableWithDefault :: a -> JThrowable -> a;
+handleAnyThrowableWithDefault def throwable  = def;
+
+//tests mapping an exception handler over a list.
+exceptionTest1 :: Boolean;
+exceptionTest1 =
+    List.map (\x -> x `catch` handleAnyThrowableWithDefault (-999)) 
+        [(4 :: Int) / 1, 10 /2, 5 / 0, (1 - 1) / 0, 2 / 2, 5 / (2 -2)]
+    == [4, 5, -999, -999, 1, -999]             
+    ;
+
+
+strangeMultiply2 :: Int -> Int -> Int;
+strangeMultiply2 !x !y =
+    if (x == 0) then
+        throwException "java.lang.NullPointerException" "strangeMultiply x == 0"
+        `seq`
+        (-999)
+    else if y == 0 then
+        throwException "java.lang.IllegalStateException" "strangeMultiply y == 0"
+        `seq`
+        (-999)
+    else
+        x * y;
+
+haveSomeFun2 :: Int -> Int -> Int;
+haveSomeFun2 x y =
+    strangeMultiply2 x y
+    `catch`
+    (
+        let
+            handler throwable =
+                if isJavaNullPointerException throwable then
+                    -777
+                else
+                    throw throwable;
+        in
+            handler
+    );
+
+//exceptions are raised in strangeMultiply2. Some are caught in haveSomeFun2, and some are caught in haveeSomeMoreFun2
+//This illustrates the support for different levels of exception handlers
+haveSomeMoreFun2 :: Int -> Int -> Int;
+haveSomeMoreFun2 x y =   
+    haveSomeFun2 x y
+    `catch`
+    (
+        let
+            handler throwable =
+                if isJavaIllegalStateException throwable then
+                    -555
+                else
+                    throw throwable;
+        in
+            handler
+    );
+
+//test of the typical Java style of having multiple catch clauses. In CAL, this is not necessarily the way to
+//go since one can abstract the exception handling block as a function and reuse accross different contexts.
+//In particular, one might like to handle a variety of exceptions in a single catch. However, it does provide
+//a test and an example of this programming style.
+whichOneWasThatOne :: Int -> String;
+whichOneWasThatOne !n =
+    (
+        case n of
+        1 -> throwException "java.lang.NullPointerException" "it was ... java.lang.NullPointerException";
+        2 -> throwException "java.lang.IllegalStateException" "it was .... java.lang.IllegalStateException";
+        3 -> throwException "java.lang.IllegalArgumentException" "it was ... java.lang.IllegalArgumentException";
+        _ -> "it was okey-dokey";
+    )
+    `catch`
+    (
+        \throwable ->
+            if isJavaNullPointerException throwable then
+                "caught a java.lang.NullPointerException"
+            else
+                throw throwable        
+    )
+    `catch`
+    (
+        \throwable ->
+            if isJavaIllegalStateException throwable then
+                "caught a java.lang.IllegalStateException"
+            else
+                throw throwable                     
+    )
+    `catch`
+    (
+        \throwable ->
+            if isJavaException throwable then
+                "caught a java.lang.Exception"
+            else
+                throw throwable                    
+    )        
+    ;
+
+testWhichOneWasThatOne =    
+    assert (whichOneWasThatOne 1 ==  "caught a java.lang.NullPointerException")
+    && assert (whichOneWasThatOne 2 ==  "caught a java.lang.IllegalStateException")
+    && assert (whichOneWasThatOne 3 ==  "caught a java.lang.Exception")
+    && assert (whichOneWasThatOne 4 == "it was okey-dokey")       
+    ;
+
+
+
+data MyExceptionType a =
+    MyExceptionType 
+        message :: String
+        someOtherStuff :: a
+        list :: [a]
+    deriving Show
+    ;
+
+instance Exception Double where;
+instance Exception a => Exception (MyExceptionType a) where;
+
+//this is an interesting example because the JNullPointerException is not caught by the JThrowable catch clause.
+//exceptions thrown by CAL (with CAL types) must be caught using their CAL type.
+calThrownException1 :: Int -> String;
+calThrownException1 n =
+    (
+        if n < 0 then
+            throw (MyExceptionType "spinach salad" 10.0 [20, 30, 40])
+        else if n > 0 then
+            throw (nullPointerException_make "a new NullPointerException")
+        else
+            "all OK"
+            
+    )
+    `catch`
+    (\ex -> "caught MyExceptionType: " ++ show (ex :: MyExceptionType Double))
+    `catch`
+    (\ex -> "caught Throwable: " ++ show (ex :: JThrowable))
+    `catch`
+    (\ex -> "caught NullPointerException: " ++ show (ex :: JNullPointerException))
+    ;
+
+testCalThrownException1 =
+    assert (calThrownException1 (-1)
+            == "caught MyExceptionType: (Cal.Test.Core.Exception_Tests.MyExceptionType \"spinach salad\" 10.0 [20.0, 30.0, 40.0])")
+    && assert (calThrownException1 1
+            == "caught NullPointerException: java.lang.NullPointerException: a new NullPointerException")
+    && assert (calThrownException1 0
+            == "all OK")
+    ;
+
+giraffe x = List.head [x];
+rhino = giraffe (Left 0 :: Either Int Int).Right.value;
+
+/////////////////////////////////////////////////////////////////////////
+
+data foreign unsafe import jvm "java.lang.Error"
+    JError deriving Inputable, Outputable, Show;
+
+instance Exception JError where;
+
+
+data foreign unsafe import jvm "java.lang.Exception"
+    JException deriving Inputable, Outputable, Show;
+
+instance Exception JException where;
+
+
+data foreign unsafe import jvm "java.lang.RuntimeException"
+    JRuntimeException deriving Inputable, Outputable, Show;
+
+instance Exception JRuntimeException where;
+
+data foreign unsafe import jvm "java.lang.NullPointerException"
+    private JNullPointerException deriving Inputable, Outputable, Show;
+
+instance Exception JNullPointerException where;
+
+foreign unsafe import jvm "constructor" 
+    private nullPointerException_make :: String -> JNullPointerException;
+
+
+//the same underlying Java type as JNullPointerException, but a different CAL type
+data foreign unsafe import jvm "java.lang.NullPointerException"
+    private JNullPointerException2 deriving Inputable, Outputable, Show;
+
+instance Exception JNullPointerException2 where;
+
+foreign unsafe import jvm "constructor" 
+    private nullPointerException2_make :: String -> JNullPointerException2;
+
+
+data foreign unsafe import jvm "java.lang.IllegalStateException"
+    private JIllegalStateException deriving Inputable, Outputable, Show;
+
+instance Exception JIllegalStateException where;
+
+foreign unsafe import jvm "constructor" 
+    private illegalStateException_make :: String -> JIllegalStateException;
+
+
+
+data foreign unsafe import jvm "java.lang.IllegalArgumentException"
+    private JIllegalArgumentException deriving Inputable, Outputable, Show;
+
+instance Exception JIllegalArgumentException where;
+
+foreign unsafe import jvm "constructor" 
+    private illegalArgumentException_make :: String -> JIllegalArgumentException;
+
+/**
+ * An exception class in the test hierarchy for testing exception handling when
+ * running in standalone JAR mode, and the calPlatform.jar is loaded by a different class loader
+ * from the one loading calPlatform_test.jar - useful for testing standalone JARs with the quarklaunch script.
+ */
+data foreign unsafe import jvm "org.openquark.cal.foreignsupport.module.Exception_Tests.TestException"
+    private JTestException deriving Inputable, Outputable, Show;
+
+instance Exception JTestException where;
+
+foreign unsafe import jvm "constructor"
+    public testException_make :: String -> JTestException;
+
+/////////////////////////////////////////////////////////////////////////
+
+//a Cal thrown NPE is caught by a NPE handler
+calThrownException2 =
+    throw (nullPointerException_make "hi, I'm a NullPointerException")
+    `catch`
+    (
+        let
+            handleNPE :: JNullPointerException -> String;
+            handleNPE !npe = "npe: " ++ show npe;
+        in
+            handleNPE
+    );
+
+testCalThrownException2 =
+    (calThrownException2 == "npe: java.lang.NullPointerException: hi, I'm a NullPointerException");
+
+
+//a Cal thrown ISE is caught by the ISE handler, and not the earlier NPE handler
+calThrownException3 =
+    throw (illegalStateException_make "hello, my name is IllegalStateException")
+    `catch`
+    (
+        let
+            handleNPE :: JNullPointerException -> String;
+            handleNPE !npe = "npe: " ++ show npe;
+        in
+            handleNPE
+    )  
+    `catch`
+    (
+        let
+            handleISE :: JIllegalStateException -> String;
+            handleISE !npe = "ise: " ++ show npe;
+        in
+            handleISE
+    );
+
+testCalThrownException3 = 
+    calThrownException3 == "ise: java.lang.IllegalStateException: hello, my name is IllegalStateException";
+
+
+//a Cal thrown NPE2 is caught by the NPE2 handler, and not the earlier NPE handler
+//this shows that it is the CAL type that counts, and not the implementing foreign type
+calThrownException4 =
+    throw (nullPointerException2_make "hello, my name is NullPointerException2")
+    `catch`
+    (
+        let
+            handleNPE :: JNullPointerException -> String;
+            handleNPE !npe = "npe: " ++ show npe;
+        in
+            handleNPE
+    )  
+    `catch`
+    (
+        let
+            handleNPE2 :: JNullPointerException2 -> String;
+            handleNPE2 !npe2 = "npe2: " ++ show npe2;
+        in
+            handleNPE2
+    );
+
+testCalThrownException4 =
+    calThrownException4 == "npe2: java.lang.NullPointerException: hello, my name is NullPointerException2";
+
+//the foreign thrown exception (throwException throws the named exception from a Java foreign function)
+//maps the java.lang.NullPointerException to the first handler that can match. In this case, the one for
+//JNullPointerException
+foreignThrownException1 =
+    throwException "java.lang.NullPointerException" "olive pizza"
+    `catch`
+    (
+        let
+            handleISE :: JIllegalStateException -> String;
+            handleISE !npe = "ise: " ++ show npe;
+        in
+            handleISE
+    )
+    `catch`
+    (
+        let
+            handleNPE :: JNullPointerException -> String;
+            handleNPE !npe = "npe: " ++ show npe;
+        in
+            handleNPE
+    );
+
+testForeignThrownException1 =
+    foreignThrownException1 == "npe: java.lang.NullPointerException: olive pizza";
+
+foreignThrownException2 =
+    throwException "java.lang.NullPointerException" "olive pizza"
+    `catch`
+    (
+        let
+            handle :: JError -> String;
+            handle !err = "err: " ++ show err;
+        in
+            handle
+    )
+    `catch`
+    (
+        let
+            handle :: JRuntimeException -> String;
+            handle !rte = "runtimeException: " ++ show rte;
+        in
+            handle
+    )    
+    `catch`
+    (
+        let
+            handleNPE :: JNullPointerException -> String;
+            handleNPE !npe = "npe: " ++ show npe;
+        in
+            handleNPE
+    );  
+
+testForeignThrownException2 =
+    foreignThrownException2 == "runtimeException: java.lang.NullPointerException: olive pizza";
+
+
+instance Exception String where;
+instance Exception Int where;
+instance Exception Integer where;
+instance Exception a => Exception (Maybe a) where;
+instance Exception a => Exception [a] where;
+instance Exception r => Exception {r} where;
+
+//tests using various Cal types as Exception types, including the interesting case of records
+calThrownException5 =
+    throw ("abc", 1 :: Int, 2 :: Integer, ["abc", "def"], Just (20 :: Int))
+    `catch`
+    (
+        let
+            handler :: (String, Int, Integer, [String], Maybe Int) -> String;
+            handler r = show (r.#5, r.#4, r.#3, r.#2, r.#1);
+        in
+            handler
+    );
+
+testCalThrownException5 =
+    calThrownException5 == "(Cal.Core.Prelude.Just 20, [\"abc\", \"def\"], 2, 1, \"abc\")";
+            
+
+//tests catching an exception that is not defined in the source side of CAL Platform (deployed as calPlatform.jar) - useful for testing standalone JARs with the quarklaunch script
+calThrownException6 =
+    throw (testException_make "this is a TestException, a class in the test hierarchy")
+    `catch`
+    (
+        let
+            handleTestException :: JTestException -> String;
+            handleTestException !te = "TestException: " ++ show te;
+        in
+            handleTestException
+    );
+
+testCalThrownException6 =
+    (calThrownException6 == "TestException: org.openquark.cal.foreignsupport.module.Exception_Tests.TestException: this is a TestException, a class in the test hierarchy");
+
+
+testModule :: Boolean;
+public testModule =
+    assert patternMatchingFailureTest1
+    && assert patternMatchingFailureTest2
+    && assert patternMatchingFailureTest3
+    && assert patternMatchingFailureTest4
+    && assert patternMatchingFailureTest5    
+    && assert errorTest1
+    && assert errorTest2
+    && assert errorTest3
+    && assert exceptionTest1
+    && assert (haveSomeMoreFun2 10 6 == 60)
+    && assert (haveSomeMoreFun2 0 6 == -777)
+    && assert (haveSomeMoreFun2 6 0 == -555)   
+    && assert testCalThrownException1
+    && assert testCalThrownException2
+    && assert testCalThrownException3
+    && assert testCalThrownException4
+    && assert testCalThrownException5
+    && assert testCalThrownException6
+    && assert testForeignThrownException1
+    && assert testForeignThrownException2
+    && assert testWhichOneWasThatOne
+    ;
+
+
+

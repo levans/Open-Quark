@@ -1,0 +1,296 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Decimal.cal
+ * Created: Nov 25/2005
+ * By: James Wright
+ */
+
+/**
+ * Defines many useful functions for the {@link Prelude.Decimal@} type. Note that the {@link typeConstructor = Decimal@}
+ * type itself is defined in the {@link Prelude@} module to make it available to Prelude functions.
+ * 
+ * @author James Wright
+ */
+module Cal.Utilities.Decimal;
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Boolean, Decimal, Double, Int, JObject, String;
+    function = 
+        assert, error, input, negativeInfinity, notANumber, output, positiveInfinity, 
+        unsafeCoerce;
+    ;
+import Cal.Core.Debug;
+    
+/**
+ * An enumeration representing the different rounding modes.  The standard
+ * arithmetic divide operator uses {@link ROUND_HALF_UP@}.
+ */
+/*
+ * @implementation The order is important, because it guarantees that the ordinal
+ *                 values will equal the corresponding Java constants.  
+ */   
+data public RoundingMode =
+    /** Always round up (away from zero) */
+    public ROUND_UP |
+    
+    /** Always round down (toward zero) */
+    public ROUND_DOWN |
+    
+    /** Round towards positive infinity */
+    public ROUND_CEILING |
+    
+    /** Round toward negative infinity */
+    public ROUND_FLOOR |
+    
+    /** Round towards "nearest neighbor" unless both neighbors are equidistant, 
+     *  in which case round up. */
+    public ROUND_HALF_UP |
+
+    /** Round towards "nearest neighbor" unless both neighbors are equidistant, 
+     *  in which case round down. */
+    public ROUND_HALF_DOWN |
+
+    /** Round towards the "nearest neighbor" unless both neighbors are equidistant, 
+     *  in which case, round towards the even neighbor. */
+    public ROUND_HALF_EVEN |
+    
+    /** Indicate that rounding is unnecessary.  An error will be signalled if this
+     *  rounding mode is signalled for an operation in which rounding is necessary. */
+    public ROUND_UNNECESSARY
+    
+    deriving Eq, Debug.Show;
+
+/**
+ * The {@code Inputable@} instance for {@code RoundingMode@} accepts a java.lang.Integer containing
+ * one of the rounding-mode Java int constants in java.math.BigDecimal and returns
+ * the corresponding CAL value of the {@code RoundingMode@} enumeration.
+ */
+instance Inputable RoundingMode where
+    input = inputRoundingMode;
+    ;
+    
+/**
+ * The {@code Outputable@} instance for {@code RoundingMode@} accepts a member of the {@code RoundingMode@}
+ * enumeration and returns a java.lang.Integer containing
+ * one of the rounding-mode Java int constants in java.math.BigDecimal.
+ */
+instance Outputable RoundingMode where
+    output = outputRoundingMode;
+    ;
+ 
+//outputRoundingMode will be an alias of Prelude.outputInt    
+outputRoundingMode :: RoundingMode -> JObject;
+private outputRoundingMode !roundingMode = output (unsafeCoerce roundingMode :: Int);
+    
+inputRoundingMode :: JObject -> RoundingMode;
+private inputRoundingMode !objectValue =
+    case (input objectValue :: Int) of
+    0 -> ROUND_UP;
+    1 -> ROUND_DOWN;
+    2 -> ROUND_CEILING;
+    3 -> ROUND_FLOOR;
+    4 -> ROUND_HALF_UP;
+    5 -> ROUND_HALF_DOWN;
+    6 -> ROUND_HALF_EVEN;
+    7 -> ROUND_UNNECESSARY;
+    _ -> error "Invalid integer value for RoundingMode";
+    ;
+
+foreign unsafe import jvm "method setScale"
+    private jSetScaleWithRounding :: Decimal -> Int -> Int -> Decimal;
+
+/**
+ * Returns a new {@link typeConstructor = Decimal@} value with the specified scale.
+ *  
+ * A {@code Decimal@} value consists of an arbitrary-precision Integer value plus a
+ * 32-bit unsigned "scale", which represents the number of digits to the
+ * right of the decimal place.  So, for example:
+ * {@unorderedList
+ * {@item -3.00 has a scale of 2@}
+ * {@item 123.11 has a scale of 2@}
+ * {@item -1.0609 has a scale of 4@}
+ * {@item 876134 has a scale of 0@}
+ * @}
+ * 
+ * @return A {@code Decimal@} value that represents {@code decimalValue@} with the specified scale.
+ *          The value will be rounded according to the specified mode if the new
+ *          scale is smaller than the old one.
+ * @arg decimalValue Value to duplicate with a new scale
+ * @arg newScale Scale for the new {@code Decimal@} value
+ * @arg roundingMode {@code RoundingMode@} specifying how to do any required rounding.
+ *                   An error will be signalled if {@link ROUND_UNNECESSARY@} is specified 
+ *                   for an operation that requires rounding.
+ */
+setScaleWithRounding :: Decimal -> Int -> RoundingMode -> Decimal;
+public setScaleWithRounding !decimalValue !newScale !roundingMode =
+    jSetScaleWithRounding decimalValue newScale (unsafeCoerce roundingMode);
+
+/* @example */
+setScaleWithRoundingExamples :: Boolean;
+setScaleWithRoundingExamples =
+    assert (setScaleWithRounding (fromString "4.888") 1 ROUND_UP == (fromString "4.9")) &&
+    assert (setScaleWithRounding (fromString "4.888") 1 ROUND_DOWN == (fromString "4.8")) &&
+    assert (setScaleWithRounding (fromString "5.999") 4 ROUND_UNNECESSARY == (fromString "5.9990"));
+    
+    
+/**
+ * Parses a string (eg. {@code "34.33"@}, {@code "1.0e50000"@}) into a {@link typeConstructor = Decimal@}.
+ * An error (specifically, a NumberFormatException) will be signalled for invalid strings.
+ * 
+ * @arg stringValue string to parse into a {@code Decimal@}
+ * @return {@code Decimal@} value represented by {@code stringValue@} 
+ */
+foreign unsafe import jvm "constructor"
+    public fromString :: String -> Decimal;
+
+/**
+ * Converts a {@link typeConstructor = Decimal@} value to a string representation.
+ * 
+ * @arg decimalValue {@code Decimal@} value to convert
+ * @return the string representation of a {@code Decimal@} value
+ */
+foreign unsafe import jvm "method toString"
+    public toString :: Decimal -> String;
+
+/**
+ * Converts a {@link Double@} value to the equivalent {@link typeConstructor = Decimal@} value.
+ * An error is signalled if {@code doubleValue@} is {@link notANumber@}, {@link positiveInfinity@},
+ * or {@link negativeInfinity@}.
+ * 
+ * @arg doubleValue {@code Double@} value to convert to a {@code Decimal@}.  This should
+ *      not be {@link notANumber@}, {@link positiveInfinity@}, or {@link negativeInfinity@}. 
+ * @return the equivalent {@code Decimal@} value to {@code doubleToDouble@}
+ */
+foreign unsafe import jvm "constructor"
+    public fromDouble :: Double -> Decimal;
+
+/**
+ * @return the scale (ie, number of digits after the decimal point) of the
+ *          specified decimal value.
+ * @arg decimalValue {@code Decimal@} value to return the scale for
+ */
+foreign unsafe import jvm "method scale"
+    public scale :: Decimal -> Int;
+
+/* @example */
+scaleExamples :: Boolean;
+scaleExamples =
+    assert (scale (fromString "1.0") == 1) &&
+    assert (scale (fromString "1.00") == 2) &&
+    assert (scale (fromString "17.0") == 1) &&
+    assert (scale (fromString "-1.00000") == 5) &&
+    assert (scale (fromString "8") == 0) &&
+    assert (scale (fromString "81") == 0);
+
+foreign unsafe import jvm "method divide"
+    private jDivideWithScaleAndRounding :: Decimal -> Decimal -> Int -> Int -> Decimal;
+
+foreign unsafe import jvm "method divide"
+    private jDivideWithRounding :: Decimal -> Decimal -> Int -> Decimal;
+
+/**
+ * A version of divide that allows the user to specify the scale of the result
+ * and the rounding mode to use if rounding is necessary.
+ * @return the result of dividing {@code decimalValue1@} by {@code decimalValue2@}.  This result will
+ *          have the specified scale, and any rounding required to fit the result into
+ *          the result's scale will by done in the specified rounding mode.
+ * @arg scale Scale of the result
+ * @arg roundingMode {@code RoundingMode@} specifying how to do any required rounding.
+ *                   An error will be signalled if {@link ROUND_UNNECESSARY@} is specified 
+ *                   for an operation that requires rounding.
+ * @arg decimalValue1 {@code Decimal@} value to divide 
+ * @arg decimalValue2 {@code Decimal@} value to divide by
+ */
+divideWithScaleAndRounding :: Int -> RoundingMode -> Decimal -> Decimal -> Decimal;
+public divideWithScaleAndRounding !scale !roundingMode !decimalValue1 !decimalValue2 =
+    jDivideWithScaleAndRounding decimalValue1 decimalValue2 scale (unsafeCoerce roundingMode);
+
+/* @example */
+divideWithScaleAndRoundingExamples :: Boolean;
+divideWithScaleAndRoundingExamples =
+    assert (toString (divideWithScaleAndRounding 4 ROUND_UP 1 3) == "0.3334") &&
+    assert (toString (divideWithScaleAndRounding 4 ROUND_DOWN 1 3) == "0.3333") &&
+    assert (toString (divideWithScaleAndRounding 2 ROUND_HALF_UP 1 3) == "0.33") &&
+    assert (toString (divideWithScaleAndRounding 2 ROUND_HALF_UP 2 3) == "0.67") &&
+    assert (toString (divideWithScaleAndRounding 2 ROUND_HALF_UP 20 3) == "6.67");
+
+/**
+ * A version of divide that allows the user to specify the rounding mode to
+ * use if rounding is required.
+ * @return the result of dividing {@code decimalValue1@} by {@code decimalValue2@}.  Any rounding 
+ *          required to fit the result into the result's scale will by done in 
+ *          the specified rounding mode.
+ * @arg roundingMode {@code RoundingMode@} specifying how to do any required rounding.
+ *                   An error will be signalled if {@link ROUND_UNNECESSARY@} is specified 
+ *                   for an operation that requires rounding.
+ * @arg decimalValue1 {@code Decimal@} value to divide 
+ * @arg decimalValue2 {@code Decimal@} value to divide by
+ */
+divideWithRounding :: RoundingMode -> Decimal -> Decimal -> Decimal;
+public divideWithRounding !roundingMode !decimalValue1 !decimalValue2 =
+    jDivideWithRounding decimalValue1 decimalValue2 (unsafeCoerce roundingMode);
+
+/* @example */
+divideWithRoundingExamples :: Boolean;
+divideWithRoundingExamples =
+    assert (toString (divideWithRounding ROUND_UP (fromString "1.0000") 3) == "0.3334") &&
+    assert (toString (divideWithRounding ROUND_DOWN (fromString "1.0000") 3) == "0.3333") &&
+    assert (toString (divideWithRounding ROUND_HALF_UP (fromString "1.00") 3) == "0.33") &&
+    assert (toString (divideWithRounding ROUND_HALF_UP (fromString "2.00") (fromString "3.0000000000")) == "0.67") &&
+    assert (toString (divideWithRounding ROUND_HALF_UP (fromString "20.00") (fromString "3.0000000000")) == "6.67");
+
+/* @example */
+roundingModeExamples :: Boolean;
+roundingModeExamples =
+    assert (divideWithRounding ROUND_HALF_UP 1 2 == 1) &&
+    assert (divideWithRounding ROUND_HALF_DOWN 1 2 == 0) &&
+    assert (divideWithRounding ROUND_HALF_EVEN 1 2 == 0) &&
+    assert (divideWithRounding ROUND_HALF_EVEN 3 2 == 2) &&
+    assert (divideWithRounding ROUND_UP 1 3 == 1) &&
+    assert (divideWithRounding ROUND_UP (-1) 3 == (-1)) &&
+    assert (divideWithRounding ROUND_DOWN 1 3 == 0) &&
+    assert (divideWithRounding ROUND_DOWN (-1) 3 == 0) &&
+    assert (divideWithRounding ROUND_CEILING 1 3 == 1) &&
+    assert (divideWithRounding ROUND_CEILING (-1) 3 == 0) &&
+    assert (divideWithRounding ROUND_FLOOR 1 3 == 0) &&
+    assert (divideWithRounding ROUND_FLOOR (-1) 3 == (-1));
+
+/* @test */
+testModule :: Boolean;
+public testModule = 
+    assert divideWithRoundingExamples &&
+    assert divideWithScaleAndRoundingExamples &&
+    assert roundingModeExamples &&
+    assert scaleExamples &&
+    assert setScaleWithRoundingExamples;

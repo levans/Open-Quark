@@ -1,0 +1,557 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Queue.cal
+ * Creation date: Dec 2, 2003.
+ * By: Bo Ilic
+ */
+
+/**
+ * An efficient first-in-first-out Queue data type.
+ * In practice, this data type can easily cause space leaks, which is why it is in the "test" modules for now.
+ * 
+ * This module is an adaptation of functionality from Daan Leijen's DData collections library for Haskell.
+ * The library was obtained from {@url http://www.cs.uu.nl/~daan/ddata.html@}.
+ * See the file {@code ThirdPartyComponents/ThirdPartyComponents.txt@} for the DData license.
+ * 
+ * @author Bo Ilic
+ */
+ 
+/* 
+Daan's license:
+
+--------------------------------------------------------------------------------------------
+Copyright (c) 2003, Daan Leijen, All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1) Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2) Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+   in the documentation and/or other materials provided with the distribution.
+
+3) Neither the name of the Universiteit Utrecht nor the names of its contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+THE POSSIBILITY OF SUCH DAMAGE.
+--------------------------------------------------------------------------------------------
+*/   
+ 
+//--------------------------------------------------------------------------------
+//{-| Module      :  Queue
+//    Copyright   :  (c) Daan Leijen 2002
+//    License     :  BSD-style
+//
+//    Maintainer  :  daan@cs.uu.nl
+//    Stability   :  provisional
+//    Portability :  portable
+//
+//  An efficient implementation of queues (FIFO buffers). Based on:
+//
+//  * Chris Okasaki, \"/Simple and Efficient Purely Functional Queues and Deques/\",
+//    Journal of Functional Programming 5(4):583-592, October 1995.
+//-}
+//---------------------------------------------------------------------------------}
+//module Queue ( 
+//            -- * Queue type
+//              Queue          -- instance Eq,Show
+//
+//            -- * Operators
+//            , (<>)
+//            
+//            -- * Query
+//            , isEmpty
+//            , length
+//            , head
+//            , tail
+//            , front
+//
+//            -- * Construction
+//            , empty
+//            , single
+//            , insert
+//            , append
+//            
+//            -- * Filter
+//            , filter
+//            , partition
+//
+//            -- * Fold
+//            , foldL
+//            , foldR
+//           
+//            -- * Conversion
+//            , elems
+//
+//            -- ** List
+//            , toList
+//            , fromList
+//            ) where
+//
+//import qualified Prelude as P (length,filter)
+//import Prelude   hiding       (length,head,tail,filter)
+//import qualified List
+
+module Cal.Collections.Queue;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Appendable;
+    //function = clause not used for code clarity reasons since there are a large number
+    //of functions defined in this module with the same name as the corresponding functions for lists.
+    ;
+import Cal.Collections.List;
+
+//
+//-- just for testing
+//-- import QuickCheck 
+//
+//{--------------------------------------------------------------------
+//  Operators
+//--------------------------------------------------------------------}
+//infixr 5 <>
+//
+//-- | /O(n)/. Append two queues, see 'append'.
+//(<>) :: Queue a -> Queue a -> Queue a
+//s <> t
+//  = append s t
+//
+//{--------------------------------------------------------------------
+//  Queue.
+//  Invariants for @(Queue xs ys zs)@:
+//  * @length ys <= length xs@
+//  * @length zs == length xs - length ys@
+//--------------------------------------------------------------------}
+//-- A queue of elements @a@.
+//data Queue a  = Queue [a] [a] [a]
+
+data public Queue a = 
+    private Queue 
+        xs      :: [a] 
+        ys      :: [a] 
+        zs      :: [a];
+
+//
+//{--------------------------------------------------------------------
+//  Query
+//--------------------------------------------------------------------}
+//
+//-- | /O(1)/. Is the queue empty?
+//isEmpty :: Queue a -> Bool
+//isEmpty (Queue xs ys zs)
+//  = null xs
+
+isEmptyQueue :: Queue a -> Boolean;
+private isEmptyQueue !q = 
+    Prelude.isEmpty (q.Queue.xs);
+
+//
+//-- | /O(n)/. The number of elements in the queue.
+//length :: Queue a -> Int
+//length (Queue xs ys zs)
+//  = P.length xs + P.length ys
+
+length :: Queue a -> Int;
+public length q =
+    case q of
+    Queue xs ys zs ->
+        List.length xs + List.length ys;
+    ;
+
+//
+//-- | /O(1)/. The element in front of the queue. Raises an error
+//-- when the queue is empty.
+//head :: Queue a -> a
+//head (Queue xs ys zs)
+//  = case xs of
+//      (x:xx)  -> x
+//      []      -> error "Queue.head: empty queue"
+
+head :: Queue a -> a;
+public head !q = List.head (q.Queue.xs);
+
+//
+//-- | /O(1)/. The tail of the queue.
+//-- Raises an error when the queue is empty.
+//tail :: Queue a -> Queue a
+//tail (Queue xs ys zs)
+//  = case xs of
+//      (x:xx)  -> queue xx ys zs
+//      []      -> error "Queue.tail: empty queue"
+
+tail :: Queue a -> Queue a;
+public tail !q =
+    case q of
+    Queue xs ys zs -> queue (List.tail xs) ys zs;
+    ;
+
+//
+//-- | /O(1)/. The head and tail of the queue.
+//front :: Queue a -> Maybe (a,Queue a)
+//front (Queue xs ys zs)
+//  = case xs of
+//      (x:xx)  -> Just (x,queue xx ys zs)
+//      []      -> Nothing
+
+front :: Queue a -> Maybe (a, Queue a);
+public front !q =
+    case q of
+    Queue xs ys zs ->
+        case xs of
+        x : xx -> Just (x, queue xx ys zs);
+        []     -> Nothing;
+        ;
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Construction  
+//--------------------------------------------------------------------}
+//-- | /O(1)/. The empty queue.
+//empty :: Queue a
+//empty 
+//  = Queue [] [] []
+
+emptyQueue :: Queue a;
+public emptyQueue = Queue [] [] [];
+
+//
+//-- | /O(1)/. A queue of one element.
+//single :: a -> Queue a
+//single x
+//  = Queue [x] [] [x]
+
+single :: a -> Queue a;
+public single x = Queue [x] [] [x];
+
+//
+//-- | /O(1)/. Insert an element at the back of a queue.
+//insert :: a -> Queue a -> Queue a
+//insert x (Queue xs ys zs)
+//  = queue xs (x:ys) zs
+
+insert :: a -> Queue a -> Queue a;
+public insert x q =
+    case q of
+    Queue xs ys zs -> queue xs (x:ys) zs;
+    ;
+
+//
+//
+//-- | /O(n)/. Append two queues.
+//append :: Queue a -> Queue a -> Queue a
+//append (Queue xs1 ys1 zs1) (Queue xs2 ys2 zs2)
+//  = Queue (xs1++xs2) (ys1++ys2) (zs1++zs2)
+
+appendQueue :: Queue a -> Queue a -> Queue a;
+private appendQueue q1 q2 =
+    case q1 of
+    Queue xs1 ys1 zs1 ->
+        case q2 of
+        Queue xs2 ys2 zs2 ->        
+            Queue (xs1 ++ xs2) (ys1 ++ ys2) (zs1 ++ zs2);
+        ;
+    ;
+    
+instance Appendable (Queue a) where
+    empty = emptyQueue;
+    isEmpty = isEmptyQueue;
+    append = appendQueue;
+    concat = concatQueue;
+    ;
+
+concatQueue :: [Queue a] -> Queue a;
+private concatQueue = List.foldRight Prelude.append Prelude.empty;
+
+
+//
+//{--------------------------------------------------------------------
+//  Filter
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Filter elements according to some predicate.
+//filter :: (a -> Bool) -> Queue a -> Queue a
+//filter pred (Queue xs ys zs)
+//  = balance xs' ys'
+//  where
+//    xs' = P.filter pred xs
+//    ys' = P.filter pred ys
+
+filter :: (a -> Boolean) -> Queue a -> Queue a;
+public filter pred q =
+    case q of
+    Queue xs ys zs ->
+        let
+            xsNew = List.filter pred xs;
+            ysNew = List.filter pred ys;        
+        in
+             balance xsNew ysNew;
+    ;
+
+//
+//-- | /O(n)/. Partition the elements according to some predicate.
+//partition :: (a -> Bool) -> Queue a -> (Queue a,Queue a)
+//partition pred (Queue xs ys zs)
+//  = (balance xs1 ys1, balance xs2 ys2)
+//  where
+//    (xs1,xs2) = List.partition pred xs
+//    (ys1,ys2) = List.partition pred ys
+
+partition :: (a -> Boolean) -> Queue a -> (Queue a, Queue a);
+public partition pred q =
+    case q of
+    Queue xs ys zs ->
+        let
+            px = List.partition pred xs;
+            xs1 = Prelude.fst px;
+            xs2 = Prelude.snd px;
+            py = List.partition pred ys;
+            ys1 = Prelude.fst py;
+            ys2 = Prelude.snd py;         
+        in                
+            (balance xs1 ys1, balance xs2 ys2);
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Fold
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Fold over the elements from left to right (ie. head to tail).
+//foldL :: (b -> a -> b) -> b -> Queue a -> b
+//foldL f z (Queue xs ys zs)
+//  = foldr (flip f) (foldl f z xs) ys
+
+foldL :: (b -> a -> b) -> b -> Queue a -> b;
+public foldL f z q =
+    case q of
+    Queue xs ys zs ->
+        List.foldRight (Prelude.flip f) (List.foldLeft f z xs) ys;
+    ;
+
+//
+//-- | /O(n)/. Fold over the elements from right to left (ie. tail to head).
+//foldR :: (a -> b -> b) -> b -> Queue a -> b
+//foldR f z (Queue xs ys zs)
+//  = foldr f (foldl (flip f) z ys) xs
+
+foldR :: (a -> b -> b) -> b -> Queue a -> b;
+public foldR f z q =
+    case q of
+    Queue xs ys zs ->
+        List.foldRight f (List.foldLeft (Prelude.flip f) z ys) xs;
+    ;
+
+//
+//
+//{--------------------------------------------------------------------
+//  Conversion
+//--------------------------------------------------------------------}
+//-- | /O(n)/. The elements of a queue.
+//elems :: Queue a -> [a]
+//elems q
+//  = toList q
+
+elems :: Queue a -> [a];
+public elems = toList;
+
+//
+//-- | /O(n)/. Convert to a list.
+//toList :: Queue a -> [a]
+//toList (Queue xs ys zs)
+//  = xs ++ reverse ys
+
+toList :: Queue a -> [a];
+public toList q =
+    case q of
+    Queue xs ys zs ->
+        xs ++ List.reverse ys;
+    ;
+
+//
+//-- | /O(n)/. Convert from a list.
+//fromList :: [a] -> Queue a
+//fromList xs
+//  = Queue xs [] xs
+
+fromList :: [a] -> Queue a;
+public fromList xs = Queue xs [] xs;
+
+//
+//
+//{--------------------------------------------------------------------
+//  instance Eq, Show
+//--------------------------------------------------------------------}
+//instance Eq a => Eq (Queue a) where
+//  q1 == q2  = toList q1 == toList q2
+
+instance Eq a => Eq (Queue a) where
+    equals = equalsQueue;
+    notEquals = notEqualsQueue;
+    ;
+
+equalsQueue :: Eq a => Queue a -> Queue a -> Boolean;
+private equalsQueue q1 q2 = toList q1 == toList q2;
+
+notEqualsQueue :: Eq a => Queue a -> Queue a -> Boolean;
+private notEqualsQueue q1 q2 = Prelude.not (Prelude.equals q1 q2);
+
+//
+//instance Show a => Show (Queue a) where
+//  showsPrec d q  = showsPrec d (toList q)
+//
+//
+//{--------------------------------------------------------------------
+//  Smart constructor:
+//  Note that @(queue xs ys zs)@ is always called with 
+//    @(length zs == length xs - length ys + 1)@. and thus
+//  @rotate@ is always called when @(length xs == length ys+1)@.
+//--------------------------------------------------------------------}
+//balance :: [a] -> [a] -> Queue a
+//balance xs ys
+//  = Queue qs [] qs
+//  where
+//    qs = xs ++ reverse ys
+
+balance :: [a] -> [a] -> Queue a;
+private balance xs ys =
+    let  
+        qs = xs ++ List.reverse ys;
+    in
+        Queue qs [] qs;
+
+
+//
+//queue :: [a] -> [a] -> [a] -> Queue a
+//queue xs ys (z:zs) = Queue xs ys zs
+//queue xs ys []     = Queue qs [] qs
+//                   where
+//                     qs = rotate xs ys []
+
+queue :: [a] -> [a] -> [a] -> Queue a;
+private queue xs ys zs =
+    if (Prelude.isEmpty zs) then
+        let
+            qs = rotate xs ys [];
+        in
+            Queue qs [] qs                   
+    else
+        Queue xs ys (List.tail zs);
+
+//
+//-- @(rotate xs ys []) == xs ++ reverse ys)@ 
+//rotate :: [a] -> [a] -> [a] -> [a]
+//rotate []     [y]    zs  = y:zs
+//rotate (x:xs) (y:ys) zs  = x:rotate xs ys (y:zs) 
+//rotate xs     ys     zs  = error "Queue.rotate: unbalanced queue"
+
+rotate :: [a] -> [a] -> [a] -> [a];
+private rotate list1 list2 zs =
+    let
+        y:ys = list2;
+    in
+        if (Prelude.isEmpty list1 && Prelude.isEmpty ys) then
+            y : zs
+        else
+            let
+                x:xs = list1;
+            in
+                x : (rotate xs ys (y : zs));         
+//
+//
+//valid :: Queue a -> Bool
+//valid (Queue xs ys zs)
+//  = (P.length zs == P.length xs - P.length ys) && (P.length ys <= P.length xs)
+
+valid :: Queue a -> Boolean;
+private valid q =
+    case q of
+    Queue xs ys zs ->    
+        (List.length zs == List.length xs - List.length ys) && (List.length ys <= List.length xs);
+    ;
+
+//
+//{-
+//{--------------------------------------------------------------------
+//  QuickCheck
+//--------------------------------------------------------------------}
+//qcheck prop
+//  = check config prop
+//  where
+//    config = Config
+//      { configMaxTest = 500
+//      , configMaxFail = 10000
+//      , configSize    = \n -> (div n 2 + 3)
+//      , configEvery   = \n args -> let s = show n in s ++ [ '\b' | _ <- s ]
+//      }
+//
+//
+//{--------------------------------------------------------------------
+//  Arbitrary, reasonably balanced queues
+//--------------------------------------------------------------------}
+//instance Arbitrary a => Arbitrary (Queue a) where
+//  arbitrary = do{ qs <- arbitrary
+//                ; let (ys,xs) = splitAt (P.length qs `div` 2) qs
+//                ; return (Queue xs ys (xs ++ reverse ys))
+//                }
+//
+//
+//prop_Valid :: Queue Int -> Bool
+//prop_Valid q
+//  = valid q
+//
+//prop_InsertLast :: [Int] -> Property
+//prop_InsertLast xs
+//  = not (null xs) ==> head (foldr insert empty xs) == last xs
+//
+//prop_InsertValid :: [Int] -> Bool
+//prop_InsertValid xs
+//  = valid (foldr insert empty xs)
+//
+//prop_Queue :: [Int] -> Bool
+//prop_Queue xs
+//  = toList (foldl (flip insert) empty xs) == foldr (:) [] xs
+//  
+//prop_List :: [Int] -> Bool
+//prop_List xs
+//  = toList (fromList xs) == xs
+//
+//prop_TailValid :: [Int] -> Bool
+//prop_TailValid xs
+//  = valid (tail (foldr insert empty (1:xs)))
+//-}

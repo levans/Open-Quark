@@ -1,0 +1,191 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * GemCutterTestModule.cal
+ * Creation date: Apr 13, 2005.
+ * By: Edward Lam
+ */
+
+/**
+ * This is the default working module into which gems are saved from the GemCutter.
+ * Import any modules that you want to work with in the GemCutter.
+ * Saved gems will be available from this module for use on the TableTop.
+ * 
+ * @author Bo Ilic
+ * @author Edward Lam 
+ */
+module GemCutterTestModule;
+
+//////////////////////////////////////////////////////
+//modules from CAL_Platform/src
+import Cal.Core.Prelude using
+    typeConstructor = 
+        Byte, Short, Int, Float, Double, String, Boolean, Char, Integer, Decimal, JObject, JList, Maybe,
+        Ordering, Either;
+    ;
+import Cal.Collections.Array;
+import Cal.Collections.ArrayPrimitives;
+import Cal.Core.Bits;
+import Cal.Core.Char;
+import Cal.Core.Debug;
+import Cal.Utilities.Decimal;
+import Cal.Core.Dynamic;
+import Cal.Core.Exception;
+import Cal.Collections.IntMap;
+import Cal.Collections.List;
+import Cal.Collections.LongMap;
+import Cal.Utilities.Math;
+import Cal.Collections.Map;
+import Cal.Core.Memoize;
+import Cal.Utilities.QuickCheck;
+import Cal.Utilities.Random;
+import Cal.Collections.Set;
+import Cal.Core.String;
+import Cal.Utilities.StringNoCase;
+import Cal.Core.System;
+import Cal.Core.Resource;
+import Cal.Utilities.Locale;
+import Cal.Utilities.TimeZone;
+import Cal.Utilities.StringProperties;
+import Cal.Utilities.MessageFormat;
+
+//////////////////////////////////////////////////////
+//modules from CAL_Platform/test
+import Cal.Test.Core.Prelude_Tests;
+import Cal.Test.Core.Array_Tests;
+import Cal.Test.Core.Bits_Tests;
+import Cal.Test.JUnitSupport.CALRenaming_Test_Support1;
+import Cal.Test.JUnitSupport.CALRenaming_Test_Support2;
+import Cal.Test.Core.Char_Tests;
+import Cal.Test.Core.Dynamic_Tests;
+import Cal.Test.Core.Debug_Tests;
+import Cal.Test.Utilities.Decimal_Tests;
+import Cal.Test.JUnitSupport.ImportCleaner_Test_Support1;
+import Cal.Test.JUnitSupport.ImportCleaner_Test_Support2;
+import Cal.Test.Collections.List_Tests;
+import Cal.Test.Core.String_Tests;
+import Cal.Test.Utilities.Random_Tests;
+import Cal.Test.General.GemScopeTestModule;
+import Cal.Test.General.GetNthPrime;
+import Cal.Test.General.LegacyTuple;
+import Cal.Test.General.M1;
+import Cal.Test.General.M2;
+import Cal.Test.General.M3;
+import Cal.Test.General.Nofib;
+import Cal.Collections.Queue;
+import Cal.Test.General.RecordTests;
+import Cal.Test.General.RefactoringTests;
+import Cal.Test.General.InliningTests;
+import Cal.Test.General.Regression;
+import Cal.Collections.Sequence;
+import Cal.Test.General.RuntimeRegression;
+import Cal.Test.General.Shape;
+import Cal.Test.General.Circle;
+import Cal.Test.General.Rectangle;
+import Cal.Test.General.Shape_Tests;
+import Cal.Test.General.Shapes;
+import Cal.Test.JUnitSupport.SourceMetricFinder_Test_Support;
+import Cal.Test.JUnitSupport.TypeDeclarationInserter_Test_Support;
+import Cal.Test.JUnitSupport.ErrorTest;
+import Cal.Test.General.CALDocTest;
+import Cal.Test.Core.Memoize_Tests;
+import Cal.Test.JUnitSupport.DerivedInstanceFunctionGenerator_Test_Support;
+import UserGuide;
+import Cal.Test.Collections.IntMap_Tests;
+import Cal.Test.Collections.LongMap_Tests;
+import Cal.Test.Collections.Map_Tests;
+import Cal.Test.Collections.Set_Tests;
+import Cal.Core.Functor;
+import Cal.Core.Monad;
+import Cal.Test.Core.Functor_Tests;
+import Cal.Test.Core.Monad_Tests;
+import Cal.Test.Core.System_Tests;
+import Cal.Test.Utilities.Locale_Tests;
+import Cal.Test.Utilities.MessageFormat_Tests;
+import Cal.Test.Core.Exception_Tests;
+import Cal.Test.Utilities.QuickCheck_Tests;
+import Cal.Test.Utilities.MessageFormat_TestSupport;
+import Cal.Test.General.HierarchicalModuleName.Test.Alpha;
+import Cal.Test.General.HierarchicalModuleName.Test.Beta;
+import Cal.Test.General.HierarchicalModuleName.Test.Alpha.Beta;
+
+//////////////////////////////////////////////////////
+//modules from CAL_Libraries/src
+import Cal.Utilities.Accumulate;
+import Cal.Utilities.RelativeTime;
+import Cal.Graphics.Color;
+import Cal.Data.DatabaseMetadata;
+import Cal.Data.DataGems;
+import Cal.Utilities.PrettyPrinter;
+import Cal.Utilities.Range;
+import Cal.Utilities.Summary;
+import Cal.Data.Sql;
+import Cal.Data.SqlBuilder;
+import Cal.Utilities.Time;
+import Cal.Utilities.UniqueIdentifier;
+import Cal.Utilities.ValueType;
+import Cal.Utilities.XmlBuilder;
+import Cal.Utilities.Parser;
+import Cal.Utilities.ExpressionLexer;
+import Cal.Data.SqlParser;
+import Cal.IO.File;
+import Cal.Utilities.Format;
+
+//////////////////////////////////////////////////////
+//modules from CAL_Libraries/test
+import Cal.Test.Data.DataGems_Tests;
+import Cal.Test.IO.File_Tests;
+import Cal.Test.Utilities.PrettyPrinter_Tests;
+import Cal.Test.Utilities.RangeTests;
+import Cal.Test.Data.Sql_Tests;
+import Cal.Test.Utilities.Summary_Tests;
+import Cal.Test.Data.SqlParser_Tests;
+import Cal.Test.Utilities.Parser_Tests;
+import Cal.Test.Utilities.ExpressionLexer_Tests;
+import Cal.Test.Utilities.RelativeTime_Tests;
+import Cal.Test.Utilities.Accumulate_Tests;
+
+//////////////////////////////////////////////////////
+//modules from GemCutter/test
+
+
+
+//Here are some data types primarily meant to test the value entry system in the GemCutter.
+
+//tests value entry for a variety of types for which we have special handling
+valueEntryTest1 :: Boolean -> Prelude.Char -> Double -> Int -> String -> Prelude.Ordering -> RelativeTime.RelativeDate -> RelativeTime.RelativeTime -> RelativeTime.RelativeDateTime -> Color.Color -> File.FileName -> String;
+public valueEntryTest1 boolean char double int string ordering date time dateTime colour fileName = "We made it!";
+
+valueEntryTest2 :: [Prelude.Char] -> [Prelude.Ordering] -> (Boolean, String) -> (Color.Color, RelativeTime.RelativeDateTime, File.FileName) -> Maybe [Prelude.Char] -> Prelude.Either [Int] Double -> String;
+public valueEntryTest2 listOfChar listOfOrdering pairBooleanString tripleColourDateTimeFileName maybeChar eitherListIntDouble = "We made it!";
+

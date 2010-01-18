@@ -1,0 +1,476 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Monad_Tests.cal
+ * Creation date: May 11, 2006.
+ * By: Bo Ilic
+ */
+
+/**
+ * Test module for the {@link typeClass = Monad@} type class.
+ * In particular, this module tests higher-kinded type variables. 
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.Core.Monad_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Int, List, Maybe, String, Function, Either, Char;
+    dataConstructor = Nothing, Just;
+    function = assert, add, undefined;
+    typeClass = Eq;
+    ;
+import Cal.Collections.List using
+    function = concatMap;
+    ;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+import Cal.Collections.Map;
+import Cal.Collections.IntMap;
+import Cal.Core.String;
+import Cal.Core.Monad using
+    typeClass = Monad;
+    function = bind, anonymousBind, return, sequence, lift, lift2;
+    ;
+import Cal.Core.Functor using
+    typeClass = Functor;
+    ;
+
+data public State s a = 
+    public State runState :: (s -> (a, s));
+
+instance Functor.Functor (State s) where
+    map = mapStateInstance;
+    ;
+
+/*
+ * @example
+ */
+bindExamples :: Boolean;
+bindExamples =
+    assert
+        ([10 :: Int, 20, 30] `bind` (\x -> [x, x + 1])
+         == [10, 11, 20, 21, 30, 31])
+    
+    && assert
+        (Array.fromList [10 :: Int, 20, 30] `bind` (\x -> Array.fromList [x, x + 1])
+         == Array.fromList [10, 11, 20, 21, 30, 31])
+    
+    && assert 
+        ([10 :: Int, 20, 30] `bind` 
+         (\x -> [x, x + 1] `bind` 
+         (\y -> if y > 20 then [] else [y, y]))
+         == [10, 10, 11, 11, 20, 20])
+        
+    && assert 
+        (Array.fromList [10 :: Int, 20, 30] `bind` 
+         (\x -> Array.fromList [x, x + 1] `bind` 
+         (\y -> if y > 20 then Array.array0 else Array.fromList [y, y]))
+         == Array.fromList [10, 10, 11, 11, 20, 20]) 
+    &&
+    (
+        //a 'fractal' building example
+        let
+            f !x = String.toList (if x == '#' then "# #" else "   ");            
+        in
+            assert
+                (String.fromList (['#'] `bind` f `bind` f `bind` f `bind` f)
+                 == "# #   # #         # #   # #                           # #   # #         # #   # #")                                                               
+    ) 
+    &&
+    (
+        //a 'fractal' building example
+        let
+            f !x = Array.fromString (if x == '#' then "# #" else "   ");            
+        in
+            assert
+                (Array.toString (Array.array1 '#' `bind` f `bind` f `bind` f `bind` f)
+                 == "# #   # #         # #   # #                           # #   # #         # #   # #")                                                               
+    ) 
+    && assert   
+        ([3 :: Int, 1, 4] `bind` (\n -> (List.replicate n 'c' ++ [' '] ))
+         == String.toList "ccc c cccc ")    
+    && assert   
+        (Array.fromList [3 :: Int, 1, 4] `bind` (\n -> (Array.replicate n 'c' ++ (Array.array1 ' ') ))
+         == Array.fromString "ccc c cccc ")    
+    ;
+
+/*
+ * @example
+ */
+liftExamples =
+    assert
+        (lift String.length ["apple", "pear", "banana", "fig"]
+         == [5, 4, 6, 3])
+    && assert
+        (lift String.length (Array.fromList ["apple", "pear", "banana", "fig"])
+         == Array.fromList [5, 4, 6, 3])
+    && assert
+        (lift String.reverse (Just "apple")
+         == Just "elppa")
+    && assert
+        (lift String.reverse Nothing
+         == Nothing)
+    ;
+
+/*
+ * @example
+ */
+private lift2Examples =
+    assert 
+        (lift2 Prelude.add [2.0, 10, 20] [3.0, 1, 4, 7] 
+         == [5, 3, 6, 9, 13, 11, 14, 17, 23, 21, 24, 27])
+    && assert 
+        (lift2 Prelude.add (Array.fromList [2.0, 10, 20]) (Array.fromList [3.0, 1, 4, 7]) 
+         == Array.fromList [5, 3, 6, 9, 13, 11, 14, 17, 23, 21, 24, 27])
+    && assert
+        (lift2 List.take [1, 2, 3] [String.toList "Anton", String.toList "Fred"]
+         == List.map String.toList ["A", "F", "An", "Fr", "Ant", "Fre"])
+    && assert
+        (lift2 Array.take (Array.fromList [1, 2, 3]) (Array.fromList [Array.fromString "Anton", Array.fromString "Fred"])
+         == Array.map Array.fromString (Array.fromList ["A", "F", "An", "Fr", "Ant", "Fre"]))
+    && assert
+        (lift2 Prelude.add (Just 10.0) Nothing
+         == Nothing)
+    && assert
+        (lift2 Prelude.add (Just 10.0) (Just 15)
+         == Just 25)
+    && assert
+        (lift2 Prelude.add Nothing (Just 15.0)
+         == Nothing)
+    && assert
+        (lift2 (lift2 Prelude.add) [Just 2.0, Nothing, Just 20] [Just 3.0, Just 1, Just 4, Nothing] 
+         == [Just 5, Just 3, Just 6, Nothing, Nothing, Nothing, Nothing, Nothing, Just 23, Just 21.0, Just 24, Nothing])         
+    ;
+
+mapStateInstance :: (a -> b) -> (State s a -> State s b);
+private mapStateInstance f m =
+    let
+        newRunState s =           
+            case m.State.runState s of
+            (value, newState) -> (f value, newState);
+            ;
+    in
+        State newRunState;
+
+instance Monad (State s) where
+    bind = bindState;
+    anonymousBind = anonymousBindState;
+    return = returnState;
+    ;
+
+returnState :: a -> State s a;
+private returnState a = State (\s -> (a, s));
+
+bindState :: State s a -> (a -> State s b) -> State s b;
+private bindState m f =
+    let
+        newRunState s =
+            case m.State.runState s of
+            (value, newState) -> (f value).State.runState newState;
+            ;
+    in
+        State newRunState;
+
+anonymousBindState :: State s a -> State s b -> State s b;
+private anonymousBindState m n =
+    let
+        newRunState s =
+            case m.State.runState s of
+            (_, newState) -> n.State.runState newState;
+            ;
+    in
+        State newRunState;
+
+//get an put are defined in Haskell as class methods of the MonadState type class. However, this is a multi-parameter type
+//class with functional dependencies i.e. class (Monad m) => MonadState s m | m -> s where
+//In particular, the pair of types (s, State s a) are an instance of this type.
+
+getState :: State s s;
+public getState = State (\s -> (s, s));
+
+putState :: s -> State s ();
+public putState x = State (\s -> ((), x));
+
+//-- |Evaluate this state monad with the given initial state,throwing
+//-- away the final state.  Very much like @fst@ composed with
+//-- @runstate@.
+
+evalState :: State s a -> s -> a;     
+public evalState m s = (m.State.runState s).#1;
+
+execState :: State s a -> s -> s;
+public execState m s = (m.State.runState s).#2;
+
+//-- |Map a stateful computation from one (return value, state) pair to
+//-- another.  For instance, to convert numberTree from a function that
+//-- returns a tree to a function that returns the sum of the numbered
+//-- tree (see the Examples section for numberTree and sumTree) you may
+//-- write:
+//--
+//-- > sumNumberedTree :: (Eq a) => Tree a -> State (Table a) Int
+//-- > sumNumberedTree = mapState (\ (t, tab) -> (sumTree t, tab))  . numberTree
+
+mapState :: ((a, s) -> (b, s)) -> State s a -> State s b;
+public mapState f m = State $ f # m.State.runState;
+
+//-- |Apply this function to this state and return the resulting state.
+withState :: (s -> s) -> State s a -> State s a;
+public withState f m = State $ m.State.runState # f;
+  
+
+tick :: State Int Int;
+tick = 
+    getState `bind`
+    (\n -> putState (n + 1)
+     `anonymousBind`
+     return n);
+
+//Add one to the given number using the state monad: 
+plusOne :: Int -> Int;
+plusOne n = execState tick n;
+
+plusTest :: Int -> Int -> Int;
+plusTest n x = execState (sequence $ List.replicate n tick) x;
+
+  
+////////////////////////////////////////////////////////////////////////////        
+
+data Type1 a b = MakeType1 field :: (a b);
+
+type1Value :: Type1 (Function String) Int;
+type1Value = MakeType1 String.length;
+
+useType1Value :: String -> Int;
+useType1Value x = 
+    case type1Value of
+    MakeType1 {field} -> field x;
+    ;
+
+type1Value_ex2 :: Type1 Maybe String;
+type1Value_ex2 = MakeType1 (Just "zaphod");
+
+useType1Value_ex2 x = x.MakeType1.field;
+
+
+data Type2 a b c = MakeType2 field :: (c a b);
+
+type2Value :: Type2 (a -> b) ([a] -> [b]) Function;
+type2Value = MakeType2 List.map;
+
+type2Value_ex2 :: Functor f => Type2 (a -> b) (f a -> f b) Function;
+type2Value_ex2 = MakeType2 Functor.map;
+
+applyLength :: Functor f => f String -> f Int; 
+applyLength = Functor.map String.length;
+
+instance Functor (Function a) where
+    map = Prelude.compose;
+    ;
+
+//todoBI
+//Initially, calling :t in ICE on this would produce "Prelude.Function Prelude.String Prelude.String"
+//It now correctly produces:
+//Prelude.String -> Prelude.String
+take3Reverse :: String -> String;
+take3Reverse = (Functor.map (\s -> String.substring s 0 3) String.reverse);
+
+//Initially, calling :t in ICE on this would produce "Prelude.List Prelude.Int"
+//It now correctly produces: [Prelude.Int]
+listLengths :: [Int];
+listLengths = Functor.map List.length [[10.0, 20.0], [40, 50, 60]];
+
+//Initially, calling :t in ICE on this would produce "
+//Functor.Functor a => a Prelude.Maybe Prelude.Int -> a Prelude.Either Prelude.Char Prelude.String
+//It now correctly produces: Functor.Functor a => a (Prelude.Maybe Prelude.Int) -> a (Prelude.Either Prelude.Char Prelude.String)
+//
+typeStringTest :: Functor a => a (Maybe Int) -> a (Either Char String);
+typeStringTest = Functor.map (Prelude.undefined :: Maybe Int -> Either Char String); 
+
+//a :: *
+//b :: *->*
+//c :: (*->*)->*
+//d :: ((*->*)->*)->*
+data KindTest a b c d =
+    KindTest
+        f1 :: (b a)
+        f2 :: (c b)
+        f3 :: (d c)       
+        ;
+
+foo :: KindTest Int List c d;
+foo = undefined;
+
+
+testHigherKindedTypeVars =
+    assert (useType1Value "frog" == 4)
+    && assert (useType1Value_ex2 type1Value_ex2 == Just "zaphod")
+    && assert ((useType1Value_ex2 (MakeType1 String.length)) "abc" == 3)
+    && assert (type2Value_ex2.MakeType2.field (add 1.0) [10, 20] == [11, 21])
+    && assert (type2Value_ex2.MakeType2.field (add 1.0) (Just 5.0) == Just 6.0)
+    && assert (applyLength ["abc", "frog", "z"] == [3, 4, 1])
+    && assert (applyLength (Just "frog") == Just 4)
+    && assert ((Functor.map (\s -> String.substring s 0 3) String.reverse) "grapefruit" == "tiu")
+    && assert (take3Reverse "grapefruitz" == "zti")
+    && assert (listLengths == [2, 3])   
+    ;
+
+
+//Prelude.typeRepToString (Prelude.typeOf type1Value)
+//doesn't return "Monad_Tests.Type1 (Prelude.Function Prelude.String) Prelude.Int"
+//instead it gives a compilation error:
+//Type Error during an application. Caused by: Type clash: type Monad_Tests.Type1 (Prelude.Function Prelude.String) Prelude.Int is not a member of type class Prelude.Typeable.
+//This is correct, since Type1 has arguments of kinds != *, and hence is not made an instance of Typeable automatically.
+
+//this instance declaration represents a security violation. For the types that are not automatically instances of Typeable, 
+//such as Type1, we need to ban creation of explicit instances.
+//instance Prelude.Typeable (Type1 a b) where
+//    typeOf = typeOfType1;
+//    ;
+//
+//typeOfType1 :: Type1 a b -> Prelude.TypeRep;
+//typeOfType1 x = (Prelude.typeOf (Prelude.undefined :: Int));
+    
+
+
+//should get a kinding error
+//testType1 :: Either Int;
+//testType1 = Prelude.undefined;
+
+//should get a kinding error at field #2
+//testType2 :: (Char, Either Int);
+//testType2 = Prelude.undefined;
+
+//GHC:
+//Kind error: `a' is not applied to enough type arguments
+//In an expression type signature: (Functor a, Eq a) => a
+//In the expression: undefined :: (Functor a, Eq a) => a
+//CAL:
+//The kinds of all classes constraining the type variable 'a' must be the same. Class Functor.Functor has kind * -> * while class Prelude.Eq has kind *.
+//Kind error in the type declaration for the function testType3. Caused by: The type (Functor.Functor a, Prelude.Eq a) => a must have kind * but actually has kind * -> *. Kinding clash
+//CAL: Finished compiling in 234ms
+//testType3 :: (Functor a, Prelude.Eq a) => a;
+//testType3 = Prelude.undefined;
+
+data App f a = MakeApp field1::(f a);
+data Tree a = Leaf | Fork left::(Tree a) right::(Tree a);
+
+//The kinds of all classes constraining the type variable 'a' must be the same. Class Functor.Functor has kind * -> * while class Prelude.Eq has kind *.
+//class (Functor a, Prelude.Eq a) => Foo a where
+//    isFoo :: a -> Boolean;
+//    ;
+
+
+//Error: Monad_Tests: (line 730 column 34): The kinds of all classes constraining the type variable 'b' must be the same. Class Prelude.Eq has kind * while class Functor.Functor has kind * -> *.
+//Error: Monad_Tests: (line 730 column 45): The kinds of all classes constraining the type variable 'a' must be the same. Class Functor.Functor has kind * -> * while class Prelude.Eq has kind *.
+//Error: Monad_Tests: (line 730 column 56): Kind error in the type declaration for the function foo. Caused by: Kinding clash
+//foo :: (Functor a, Prelude.Eq b, Functor b, Eq a) => a -> b -> Int;
+//foo = undefined;
+
+//Error: Monad_Tests: (line 740 column 23): Kind error in the type declaration for the function foo. Caused by: Kinding clash
+//foo :: Functor f => f -> [f];
+//foo x = [x, x];
+
+data T f = MakeT field :: (f List);
+
+//should fail in a kinding error
+//Error: Monad_Tests: (line 732 column 18): Invalid instance declaration; the kind of the type class Functor.Functor (i.e. * -> *) is not the same as the kind of the application of the type constructor Prelude.Either to 0 type arguments (i.e. * -> * -> *).
+//instance Functor Either where
+//    map = mapEither;
+//    ;
+
+//should fail in a kinding error
+//Error: Monad_Tests: (line 738 column 18): Invalid instance declaration; the kind of the type class Functor.Functor (i.e. * -> *) is not the same as the kind of the application of the type constructor Prelude.Either to 2 type arguments (i.e. *).
+//instance Functor (Either a b) where
+//    map = mapEither;
+//    ;
+
+mapEither = undefined;
+
+//gives a kind error
+//data T2 f = MakeT2 field :: (f List) field2 :: f;
+
+
+//Error: Monad_Tests: (line 749 column 19): Invalid instance declaration; the kind of the type variable a (i.e. *) is not the same as the kind of the constraining type class Functor.Functor (i.e. * -> *).
+//Error: Monad_Tests: (line 749 column 28): Invalid instance declaration; the kind of the type variable b (i.e. *) is not the same as the kind of the constraining type class Monad_Tests.Monad (i.e. * -> *).
+//data MyEither a b = MyLeft left::a | MyRight right::b;
+//instance (Functor a, Monad b) => Eq (MyEither a b) where 
+//    equals = undefined;
+//    notEquals = undefined;
+//    ;
+
+// Error: Monad_Tests: (line 754 column 18): Invalid record instance declaration; the kind of the type class Functor.Functor (i.e. * -> *) is not equal to the kind *.
+//instance Functor {r} where
+//    map = undefined;
+//    ;
+
+//a record instance declaration where the constraining type class Functor does not have the required kind
+//Error: Monad_Tests: (line 766 column 19): Invalid instance declaration; the kind of the type variable r (i.e. *) is not the same as the kind of the constraining type class Functor.Functor (i.e. * -> *).
+//class MyEq a where
+//    myEq :: a -> a -> Boolean;
+//    ;
+//instance (Functor r, Eq r) => MyEq {r} where
+//    myEq = undefined;
+//    ;
+
+//This example is from section 4.5.3 of the Haskell report
+//Consider the function:
+//strangeContext1 x y = return x == y; 
+//then, return x :: Monad m => m a
+//So we want the resulting type to be:
+//strangeContext1 :: (Monad m, Eq (m a)) => a -> m a -> Boolean
+//In CAL this produces a compilation error saying:
+///Type error applying the operator "==" to its first argument. Caused by: Type clash: a constrained type variable cannot unify with a type application not rooted in a type constructor.
+
+////////////////////////////////////////////////////////////////////////
+
+data ListFunctor f a = LFNil | LFCons head::a tail::(f a);
+
+lfTail :: ListFunctor f a -> f a;
+lfTail v = v.LFCons.tail;
+
+class BiFunctor f where
+    map1 :: (a -> b) -> f a c -> f b c;
+    map2 :: (c -> d) -> f a c -> f a d;
+    ;
+
+////////////////////////////////////////////////////////////////////////
+        
+testModule :: Boolean;
+public testModule =  
+    assert bindExamples
+    && assert liftExamples
+    && assert lift2Examples  
+    && assert testHigherKindedTypeVars
+    ;
+    

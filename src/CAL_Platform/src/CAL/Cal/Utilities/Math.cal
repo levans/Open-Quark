@@ -1,0 +1,487 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Math.cal
+ * Created: Dec 16, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines many useful math functions. For example, trigonometric, logarithmic and exponential functions.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Utilities.Math;
+import Cal.Core.Prelude using
+    typeConstructor = Double, Float, Int, Long;
+    function = eager, negativeInfinity, notANumber, positiveInfinity, toDouble;
+    ;
+//we want to maintain the generality and functional independence of the Math module.
+//Please do not add more imports.
+    
+//Basic trigonometric, logarithmic and exponential functions.
+//The trig functions work with radian angle measures.
+
+/**
+ * The {@link Double@} value that is closer than any other to {@em pi@}, the mathematical constant
+ * representing the ratio of a circle's circumference to its diameter.
+ */
+foreign unsafe import jvm "static field java.lang.Math.PI"
+    public pi :: Double;
+
+/**
+ * The {@link Double@} value that is closer than any other to {@em e@}, the base of the natural
+ * logarithm.
+ */
+foreign unsafe import jvm "static field java.lang.Math.E"
+    public e :: Double;
+
+/**
+ * Returns Euler's number {@em e@} raised to the power of the specified {@link Double@} value.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, the result is {@link notANumber@}.@}
+ * {@item if the argument is {@link positiveInfinity@}, then the result is {@link positiveInfinity@}.@}
+ * {@item if the argument is {@link negativeInfinity@}, then the result is positive zero.@}
+ * @}
+ * 
+ * @arg x the exponent to raise {@em e@} to.
+ * @return the value {@em e@}{@sup {@code x@}@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.exp"
+    public exp :: Double -> Double;
+
+/**
+ * Returns the natural logarithm (base {@em e@}) of the specified {@link Double@} value.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@} or less than zero, then the result is {@link notANumber@}.@}
+ * {@item if the argument is {@link positiveInfinity@}, then the result is {@link positiveInfinity@}.@}
+ * {@item if the argument is positive zero or negative zero, then the result is {@link negativeInfinity@}.@}
+ * @}
+ * 
+ * @arg x the value whose natural logarithm is to be returned.
+ * @return the value {@strong ln@} {@code x@}, the natural logarithm of {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.log"
+    public log :: Double -> Double;
+
+/**
+ * Returns the base 10 logarithm of the specified {@link Double@} value.
+ *
+ * @arg x the value whose base 10 logarithm is to be returned.
+ * @return the base 10 logarithm of {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.log10"
+    public log10 :: Double -> Double;
+
+/**
+ * Returns the positive square root of the specified {@link Double@} value.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@} or less than zero, then the result is {@link notANumber@}.@}
+ * {@item if the argument is {@link positiveInfinity@}, then the result is {@link positiveInfinity@}.@}
+ * {@item if the argument is positive zero or negative zero, then the result is the same as the argument.@}
+ * @}
+ * 
+ * @arg x the value whose positive square root is to be returned.
+ * @return the positive square root of {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.sqrt"
+    public sqrt :: Double -> Double;
+
+/**
+ * Returns the result of raising the first argument to the power specified by the second argument.
+ * 
+ * @arg base the {@code Double@} value whose power is to be taken.
+ * @arg exponent an {@code Double@} value specifying the exponent in the exponentiation.
+ * @return {@code base@}{@sup {@code exponent@}@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.pow"
+    public power :: Double -> Double -> Double;
+
+/**
+ * Returns the logarithm of the first argument in the base of the second argument.
+ * 
+ * @arg x the value whose logarithm is to be returned.
+ * @arg base the base of the logarithm.
+ * @return ({@strong ln@} {@code x@}) / ({@strong ln@} {@code base@}).
+ */
+logBase :: Double -> Double -> Double;
+public logBase !x !base = log x / log base;
+
+/**
+ * Converts an angle measure in radians to an angle measure in degrees.
+ * 
+ * @arg angleInRadians angle measure in radians.
+ * @return angle measure in radians.
+ */    
+foreign unsafe import jvm "static method java.lang.Math.toDegrees"
+    public radiansToDegrees :: Double -> Double;
+  
+/**
+ * Converts an angle measure in degrees to an angle measure in radians.
+ * 
+ * @arg angleInDegrees angle measure in degrees.
+ * @return angle measure in radians.
+ */      
+foreign unsafe import jvm "static method java.lang.Math.toRadians"
+    public degreesToRadians :: Double -> Double;
+
+/**
+ * Returns the trigonometric sine of an angle.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, {@link positiveInfinity@} or {@link negativeInfinity@},
+ *        then the result is {@link notANumber@}.@}
+ * {@item if the argument is zero, then the result is a zero with the same sign as the argument.@}
+ * @}
+ * 
+ * @arg x the angle, in radians.
+ * @return the sine of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.sin"
+    public sin :: Double -> Double;
+
+/**
+ * Returns the trigonometric cosine of an angle.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, {@link positiveInfinity@} or {@link negativeInfinity@},
+ *        then the result is {@link notANumber@}.@}
+ * @}
+ * 
+ * @arg x the angle, in radians.
+ * @return the cosine of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.cos"
+    public cos :: Double -> Double;
+
+/**
+ * Returns the trigonometric tangent of an angle.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, {@link positiveInfinity@} or {@link negativeInfinity@},
+ *        then the result is {@link notANumber@}.@}
+ * {@item if the argument is zero, then the result is a zero with the same sign as the argument.@}
+ * @}
+ * 
+ * @arg x the angle, in radians.
+ * @return the tangent of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.tan"
+    public tan :: Double -> Double;
+
+/**
+ * Returns the arc sine of an angle, in the range of {@em -pi/2@} through {@em pi/2@}.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@} or its absolute value is greater than 1, then the result is {@link notANumber@}.@}
+ * {@item if the argument is zero, then the result is a zero with the same sign as the argument.@}
+ * @}
+ * 
+ * @arg x the value whose arc sine is to be returned.
+ * @return the arc sine of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.asin"
+    public asin :: Double -> Double;
+
+/**
+ * Returns the arc cosine of an angle, in the range of 0.0 through {@em pi@}.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@} or its absolute value is greater than 1, then the result is {@link notANumber@}.@}
+ * @}
+ * 
+ * @arg x the value whose arc cosine is to be returned.
+ * @return the arc cosine of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.acos" 
+    public acos :: Double -> Double;
+
+/**
+ * Returns the arc tangent of an angle, in the range of {@em -pi/2@} through {@em pi/2@}.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, then the result is {@link notANumber@}.@}
+ * {@item if the argument is zero, then the result is a zero with the same sign as the argument.@}
+ * @}
+ * 
+ * @arg x the value whose arc tangent is to be returned.
+ * @return the arc tangent of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.atan"
+    public atan :: Double -> Double;
+
+/**
+ * Converts rectangular coordinates (x, y) to polar (r, theta). This function computes the
+ * phase theta by computing an arc tangent of y/x in the range of {@em -pi@} to {@em pi@}.
+ * 
+ * @arg y the ordinate coordinate
+ * @arg x the abscissa coordinate
+ * @return the theta component of the point (r, theta) in polar coordinates
+ *         that corresponds to the point (x, y) in Cartesian coordinates.
+ */
+foreign unsafe import jvm "static method java.lang.Math.atan2"
+    public atan2 :: Double -> Double -> Double;
+
+/**
+ * Returns the hyperbolic sine of the specified {@link Double@} value. The hyperbolic sine of x is defined to be
+ * (e{@sup x@} - e{@sup -x@})/2 where {@em e@} is Euler's number.
+ * 
+ * @arg x the number whose hyperbolic sine is to be returned.
+ * @return the hyperbolic sine of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.sinh"
+    public sinh :: Double -> Double;
+ 
+ 
+/**
+ * Returns the hyperbolic cosine of the specified {@link Double@} value. The hyperbolic cosine of x is defined to be
+ * (e{@sup x@} + e{@sup -x@})/2 where {@em e@} is Euler's number.
+ * 
+ * @arg x the number whose hyperbolic cosine is to be returned.
+ * @return the hyperbolic cosine of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.cosh"
+    public cosh :: Double -> Double;   
+
+/**
+ * Returns the hyperbolic tangent of the specified {@link Double@} value. The hyperbolic tangent of x is defined to be
+ * (e{@sup x@} - e{@sup -x@})/(e{@sup x@} + e{@sup -x@}), in other words, sinh(x)/cosh(x).
+ * Note that the absolute value of the exact tanh is always less than 1.
+ * 
+ * @arg x the number whose hyperbolic tangent is to be returned.
+ * @return the hyperbolic tangent of the argument.
+ */
+foreign unsafe import jvm "static method java.lang.Math.tanh"
+    public tanh :: Double -> Double; 
+
+/**
+ * Returns the inverse hyperbolic sine of the specified {@link Double@} value.
+ * 
+ * @arg x the number whose inverse hyperbolic sine is to be returned.
+ * @return the inverse hyperbolic sine of the argument.
+ */
+asinh :: Double -> Double;
+public asinh !x =
+    log (x + sqrt (x * x + 1.0));
+ 
+
+/**
+ * Returns the inverse hyperbolic cosine of the specified {@link Double@} value.
+ * 
+ * @arg x the number whose inverse hyperbolic cosine is to be returned.
+ * @return the inverse hyperbolic cosine of the argument.
+ */
+acosh :: Double -> Double;
+public acosh !x =
+    log (x + sqrt (x * x - 1.0));    
+
+/**
+ * Returns the inverse hyperbolic tangent of the specified {@link Double@} value.
+ * 
+ * @arg x the number whose inverse hyperbolic tangent is to be returned.
+ * @return the inverse hyperbolic tangent of the argument.
+ */
+atanh :: Double -> Double;
+public atanh !x =
+    (log (x + 1.0) + log (1.0 - x)) / 2.0;
+       
+/////////////////////////////////////////////////////////////////////////////////////
+//rounding functions
+    
+/**
+ * Returns the largest integral value that is less than or equal to the argument.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, positive zero or negative zero, then the result is the same
+ *        as the argument.@}
+ * @}
+ * 
+ * @arg x the number whose floor is to be returned.
+ * @return the largest integral {@code Double@} value less than or equal to {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.floor"
+    public floor :: Double -> Double;    
+    
+/**
+ * Returns the smallest integral value that is greater than or equal to the argument.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, {@link positiveInfinity@}, {@link negativeInfinity@},
+ *        positive zero or negative zero, then the result is the same as the argument.@}
+ * {@item if the argument value is less than zero but greater than -1.0, then the result is negative zero.@}
+ * @}
+ * 
+ * @arg x the number whose ceiling is to be returned.
+ * @return the smallest integral {@code Double@} value greater than or equal to {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.ceil"
+    public ceiling :: Double -> Double;    
+    
+/**
+ * Returns the integral value that is closest in value to the argument. If there is a tie between
+ * two values that are equally close to the argument, then the returned result is the {@em even@} value.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, positive zero or negative zero, then the result is the same
+ *        as the argument.@}
+ * @}
+ * 
+ * @arg x the number to be rounded.
+ * @return the integral {@code Double@} value closest to {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.rint"
+    public round :: Double -> Double;      
+    
+/**
+ * Returns the {@link Long@} value that is closest in value to the argument, calculated as {@em floor(x + 0.5)@}.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, the result is 0.@}
+ * {@item if the argument is {@link negativeInfinity@} or has a value less than or equal to
+ *        {@code {@link Prelude.minBound@} :: {@link Long@}@}, the result is
+ *        {@code {@link Prelude.minBound@} :: {@link Long@}@}.@}
+ * {@item if the argument is {@link positiveInfinity@} or has a value greater than or equal to
+ *        {@code {@link Prelude.maxBound@} :: {@link Long@}@}, the result is
+ *        {@code {@link Prelude.maxBound@} :: {@link Long@}@}.@}
+ * @}
+ * 
+ * @arg x the number to be rounded.
+ * @return the {@code Long@} value closest to {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.round"
+    public roundDoubleToLong :: Double -> Long;   
+    
+/**
+ * Returns the {@link Int@} value that is closest in value to the argument, calculated as {@em floor(x + 0.5)@}.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if the argument is {@link notANumber@}, the result is 0.@}
+ * {@item if the argument is {@link negativeInfinity@} or has a value less than or equal to
+ *        {@code {@link Prelude.minBound@} :: {@link Int@}@}, the result is
+ *        {@code {@link Prelude.minBound@} :: {@link Int@}@}.@}
+ * {@item if the argument is {@link positiveInfinity@} or has a value greater than or equal to
+ *        {@code {@link Prelude.maxBound@} :: {@link Int@}@}, the result is
+ *        {@code {@link Prelude.maxBound@} :: {@link Int@}@}.@}
+ * @}
+ * 
+ * @arg x the number to be rounded.
+ * @return the {@code Long@} value closest to {@code x@}.
+ */
+foreign unsafe import jvm "static method java.lang.Math.round"
+    public roundFloatToInt :: Float -> Int;     
+               
+/**
+ * Computes the remainder from a rounding division as prescribed by the IEEE 754 standard.
+ * 
+ * {@code ieeeRemainder x y@} returns a value equal to {@code x - y*({@link round@} (x/y))@}.
+ * 
+ * Special cases:
+ * {@unorderedList
+ * {@item if either argument is {@link notANumber@}, or the first argument is infinite, or
+ *        the second argument is positive zero or negative zero, then the result is
+ *        {@link notANumber@}.@}
+ * {@item if the first argument is finite and the second argument is infinite, then the
+ *        result is the same as the first argument.@}
+ * @}
+ * 
+ * @arg x the dividend.
+ * @arg y the divisor.
+ * @return the remainder when {@code x@} is divided by {@code y@} by a rounding division.
+ */
+foreign unsafe import jvm "static method java.lang.Math.IEEEremainder"
+    public ieeeRemainder :: Double -> Double -> Double;    
+
+/**
+ * Truncates the {@link Double@} value towards zero, dropping the fractional part.
+ * 
+ * Note that, for finite values of {@code x@}:
+ * {@code
+ *   (truncate x) + ({@link fractionalPart@} x) == x
+ * @}
+ * 
+ * @arg value the value whose fractional part is to be dropped.
+ * @return {@code value@} truncated towards zero.
+ */
+truncate :: Double -> Double;
+public truncate !value =
+    if value > 0.0 then
+        floor value
+    else
+        ceiling value;
+
+/**
+ * Computes the fractional part of a {@link Double@} value.
+ * 
+ * Note that, for finite values of {@code x@}:
+ * {@code
+ *   ({@link truncate@} x) + (fractionalPart x) == x
+ * @}
+ * 
+ * @arg value the value whose fractional part is to be returned.
+ * @return the fractional part of {@code value@}.
+ */
+fractionalPart :: Double -> Double;
+public fractionalPart !value = value - (truncate value);         
+    
+/**
+ * Rounds a number to N decimal places.
+ * 
+ * @arg val the value to be rounded.
+ * @arg nDecimalPlaces the number of decimal places to keep.
+ * @return {@code val@}, rounded to N decimal places.
+ */
+roundToNPlaces :: Double -> Int -> Double;
+public roundToNPlaces !val !nDecimalPlaces = 
+    let
+        scaleAmt :: Double;
+        scaleAmt = eager (power 10.0 (toDouble nDecimalPlaces));
+    in
+        (round (val * scaleAmt)) / scaleAmt;    
+    

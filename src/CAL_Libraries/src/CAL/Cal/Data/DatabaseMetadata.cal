@@ -1,0 +1,730 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * DatabaseMetadata.cal
+ * Creation date: Jun 8, 2005.
+ * By: Kevin Sit
+ */
+
+/**
+ * This module provides types that model the metadata of a relational database.
+ * 
+ * A {@link typeConstructor = TableDescription@} holds information about the columns and constraints on a table.
+ * 
+ * A {@link typeConstructor = FieldDescription@} holds the properties of a single column, such as name, data type and whether values can be null.
+ * 
+ * A {@link typeConstructor = TableConstraint@} can specify the primary keys, foreign keys or unique-value columns of a table. 
+ * 
+ * @author Kevin Sit
+ */
+module Cal.Data.DatabaseMetadata;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Inputable, Outputable;
+    typeConstructor = Boolean, Either, Int, JList, JObject, Maybe, String;
+    dataConstructor = False, True, Just, Nothing;
+    function =
+        error, field1, field2, fromJust, fromMaybe, input, intToString, isJust, 
+        output, stringToInt;
+    ;
+import Cal.Collections.List using
+    function = concatMap, elemIndex, filter, join, map, outputList;
+    ;      
+import Cal.Core.Debug using
+    function = show;
+    ;
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeClass =
+        XmlElementInputable, XmlElementOutputable, XmlInputable, XmlOutputable;
+    typeConstructor = XmlAttribute, XmlNode;
+    function =
+        attributeLocalName, elementAttributes, elementChildElementByName, 
+        elementChildText, fromXmlAttribute, inputFromXmlElementInputable, 
+        makeXmlElement, makeXmlTextElement, outputFromXmlElementOutputable, 
+        toXmlAttribute;
+    ;
+import Cal.Utilities.Format;
+
+
+/**
+ * This function attempts to locate a child element under the given XML element
+ * which has the same name as the specified element name.  If such child element
+ * can be found, then return the child text stored under this element.  Otherwise,
+ * throw an error.  
+ */
+elementGrandChildText :: XmlNode -> String -> String;
+public elementGrandChildText xmlElement childElemName =
+    let
+        maybeChildElement = elementChildElementByName xmlElement childElemName;   
+    in
+        if (isJust maybeChildElement) then elementChildText (fromJust maybeChildElement)
+        else error ("The child element " ++ childElemName ++ " does not exist.");
+
+/**
+ * This type constructor allows the developer to uniquely identify a database
+ * on a server.
+ */
+data public DatabaseReference =
+    private DatabaseReference
+        databaseName :: String
+    deriving Eq;
+
+/**
+ * Makes a new database reference
+ */
+makeDatabaseReference :: String -> DatabaseReference;
+public makeDatabaseReference databaseName = DatabaseReference databaseName;
+
+/**
+ * Returns the database name portion from the reference
+ */
+public getDatabaseNameFromReference !ref = ref.DatabaseReference.databaseName;
+    
+/**
+ * This type constructor allows the developer to uniquely identify a table
+ * in a database.
+ */
+data public TableReference =
+    private TableReference 
+        tableName :: String
+    deriving Eq;
+
+/**
+ * Makes a new table reference
+ */
+makeTableReference :: String -> TableReference;
+public makeTableReference tableName = TableReference tableName;
+
+/**
+ * Returns the table name portion from the reference
+ */
+getTableNameFromReference :: TableReference -> String;
+public getTableNameFromReference !ref = ref.TableReference.tableName;
+
+// TODO getSchemaNameFromReference?
+    
+/**
+ * Supports the {@code Show@} type interface for debugging purposes
+ */
+instance Debug.Show TableReference where
+    show = showTableReference;
+    ;
+
+/**
+ * Outputs a {@link typeConstructor = TableReference@} as a string
+ */
+showTableReference :: TableReference -> String;
+private showTableReference !ref = ref.TableReference.tableName;
+
+/**
+ * {@code TableReference@} implements the {@code XmlSerializable@} type class
+ */
+instance XmlElementOutputable TableReference where
+    toXmlElement = buildXmlForTableReferenceWithName;
+    ;
+
+instance XmlOutputable TableReference where
+    toXml = outputTableReferenceXml;
+    ;
+
+outputTableReferenceXml :: String -> TableReference -> Either XmlAttribute XmlNode;
+outputTableReferenceXml name table =
+    outputFromXmlElementOutputable name table ;
+
+buildXmlForTableReferenceWithName :: String -> TableReference -> XmlNode;
+private buildXmlForTableReferenceWithName elemName ref =
+    case ref of
+    TableReference {tableName} ->
+        makeXmlElement Nothing elemName [] [makeXmlTextElement Nothing "TableName" tableName];
+    ;
+    
+buildXmlAttrForTableReference :: TableReference -> (Maybe XmlAttribute);
+private buildXmlAttrForTableReference ref = Nothing;
+
+buildXmlAttrForTableReferenceWithName :: TableReference -> String -> (Maybe XmlAttribute);
+private buildXmlAttrForTableReferenceWithName ref attrName = Nothing;
+
+/**
+ * {@code TableReference@} implements the {@code XmlDeserializable@} type class.
+ */
+instance XmlElementInputable TableReference where
+    fromXmlElement = buildTableReferenceFromXml;
+    ;
+
+instance XmlInputable TableReference where
+    fromXml = inputTableReferenceXml;
+    ;
+
+inputTableReferenceXml :: Either XmlAttribute XmlNode -> TableReference;
+inputTableReferenceXml nodeOrAttribute =
+    inputFromXmlElementInputable nodeOrAttribute;
+
+buildTableReferenceFromXml :: XmlNode -> TableReference;
+private buildTableReferenceFromXml node =
+    TableReference (elementGrandChildText node "TableName"); 
+
+buildTableReferenceFromXmlAttribute :: XmlAttribute -> TableReference;
+private buildTableReferenceFromXmlAttribute = error "Unsupported operation!";
+
+
+/** Allow a TableReference to be output to Java. */
+data foreign unsafe import jvm public "org.openquark.util.database.TableReference" 
+    private JTableReference deriving Inputable, Outputable;
+foreign unsafe import jvm "constructor" private makeJTableReference :: String -> JTableReference;
+
+instance Outputable TableReference where
+    output = outputTableReference;
+    ;
+outputTableReference :: TableReference -> JObject;
+outputTableReference !tableRef = 
+    case tableRef of
+    TableReference {tableName} -> 
+        output $ makeJTableReference tableName;
+    ;
+
+/** Allow a TableReference to be input from Java. */
+foreign unsafe import jvm "method getTableName" private jGetTableName :: JTableReference -> String;
+
+instance Inputable TableReference where
+    input = inputTableReference;
+    ;
+inputTableReference :: JObject -> TableReference;
+inputTableReference !obj = 
+    let
+        jTableRef :: JTableReference;
+        jTableRef = input obj;
+    in
+        makeTableReference $ jGetTableName jTableRef;
+
+
+/**
+ * Stores essential information about a table in the database.
+ */
+data public TableDescription =
+    private TableDescription 
+        tableRef    :: TableReference 
+        fields      :: [FieldDescription] 
+        constraints :: [TableConstraint] 
+    deriving Eq;
+
+/**
+ * Constructor function
+ */
+makeTableDescription :: TableReference -> [FieldDescription] -> [TableConstraint] -> TableDescription;
+public makeTableDescription tableRef fields constraints = TableDescription tableRef fields constraints;
+
+/**
+ * Returns the {@link typeConstructor = TableReference@} that can be used to reference this table
+ */
+getTableReference :: TableDescription -> TableReference;
+public getTableReference !td = td.TableDescription.tableRef;
+
+/**
+ * Returns the field contained in the given table
+ */
+getTableFields :: TableDescription -> [FieldDescription];
+public getTableFields !td = td.TableDescription.fields;
+
+/**
+ * Returns the table constraints applied to the given table
+ */
+getTableConstraints :: TableDescription -> [TableConstraint];
+public getTableConstraints !td = td.TableDescription.constraints;
+    
+/**
+ * A convenience function for getting the table name of the given table
+ */
+getTableName :: TableDescription -> String;
+public getTableName td = getTableNameFromReference (getTableReference td);
+    
+/**
+ * A convenience function for returning the key fields in the given table
+ */
+getTableKeyFields :: TableDescription -> [FieldDescription];
+public getTableKeyFields td =
+    let
+        /** Compute a list of PK columns in the table */
+        pkFieldNames :: [String];
+        pkFieldNames =
+            concatMap getPrimaryKeyFieldNames (filter isPrimaryKeyConstraint (getTableConstraints td));
+        
+        /** Check to see a field is a primary key, as defined in the table constraint list */
+        checkPrimaryKeyFn :: FieldDescription -> Boolean;
+        checkPrimaryKeyFn fd = isJust (elemIndex (getFieldName fd) pkFieldNames);
+    in
+        filter checkPrimaryKeyFn (getTableFields td);
+
+/**
+ * Supports the {@code Show@} type interface for debugging purposes
+ */
+instance Debug.Show TableDescription where
+    show = showTableDescription;
+    ;
+
+showTableDescription :: TableDescription -> String;
+private showTableDescription !td = 
+    let
+        fieldDescHeadings :: [String];
+        fieldDescHeadings = ["  NAME", "TYPE", "NULLABLE"];
+
+        fieldDescItems :: FieldDescription -> [String];
+        fieldDescItems !fieldDesc = 
+            case fieldDesc of
+            FieldDescription {fieldName, dataType, nullable} -> 
+                ["  " ++ fieldName, Debug.show dataType, if nullable then "true" else "false"];
+            ;
+    in
+        case td of
+        TableDescription {tableRef, fields, constraints} -> 
+            "Table: " ++ Debug.show tableRef
+                ++ "\nFields:\n" ++ Format.formatTable 2 (fieldDescHeadings : map fieldDescItems fields)
+                ++ "Constraints:\n  "
+                ++ join "\n  " (map Debug.show constraints);
+        ;
+
+/** Allow a TableDescription to be output to Java. */
+data foreign unsafe import jvm public "org.openquark.util.database.TableDescription" private JTableDescription deriving Outputable;
+foreign unsafe import jvm "constructor" 
+    private makeJTableDescription :: JTableReference -> JList -> JList -> JTableDescription;
+
+instance Outputable TableDescription where
+    output = outputTableDescription;
+    ;
+outputTableDescription :: TableDescription -> JObject;
+outputTableDescription !tableDescription = 
+    case tableDescription of
+    TableDescription {tableRef, fields, constraints} -> 
+        output $ makeJTableDescription (makeJTableReference $ getTableNameFromReference tableRef)
+                                       (outputList fields) (outputList constraints);
+    ;
+
+
+/**
+ * Stores essential information about a field (i.e. a column) in a table.
+ */
+data public FieldDescription =
+    private FieldDescription 
+        fieldName   :: String 
+        dataType    :: SqlType
+        nullable    :: Boolean 
+        comment     :: String
+    deriving Eq
+    ;
+
+/**
+ * Constructor function
+ */
+makeFieldDescription :: String -> SqlType -> Boolean -> FieldDescription;
+public makeFieldDescription fieldName dataType nullable =
+    makeFieldDescriptionWithComment fieldName dataType nullable "";
+
+/**
+ * Constructor function
+ */
+makeFieldDescriptionWithComment :: String -> SqlType -> Boolean -> String -> FieldDescription;
+public makeFieldDescriptionWithComment fieldName dataType nullable comment =
+    FieldDescription fieldName dataType nullable comment;
+
+/**
+ * Returns the name of the given field
+ */
+getFieldName :: FieldDescription -> String;
+public getFieldName !fd = fd.FieldDescription.fieldName;
+
+/**
+ * Returns the SQL data type of the given field.
+ */
+getFieldDataType :: FieldDescription -> SqlType;
+public getFieldDataType !fieldDescription = 
+    fieldDescription.FieldDescription.dataType;
+
+/**
+ * Returns true if the given field is nullable
+ */
+isFieldNullable :: FieldDescription -> Boolean;
+public isFieldNullable !fd = fd.FieldDescription.nullable;
+
+/**
+ * Returns the comment for a field description.
+ */
+getFieldComment :: FieldDescription -> String;
+public getFieldComment !fieldDescription = 
+    fieldDescription.FieldDescription.comment;
+
+/**
+ * Supports the Show type interface for debugging purposes
+ */
+instance Debug.Show FieldDescription where
+    show = getFieldName;
+    ;
+
+/** Allow a FieldDescription to be output to Java. */
+data foreign unsafe import jvm public "org.openquark.util.database.FieldDescription" private JFieldDescription deriving Outputable;
+foreign unsafe import jvm "constructor" 
+    private makeJFieldDescription :: String -> SqlType.JSqlType -> Boolean -> String -> JFieldDescription;
+
+instance Outputable FieldDescription where
+    output = outputFieldDescription;
+    ;
+outputFieldDescription :: FieldDescription -> JObject;
+outputFieldDescription !fieldDescription = 
+    case fieldDescription of
+    FieldDescription {fieldName, dataType, nullable, comment} -> 
+        output $ makeJFieldDescription fieldName (SqlType.outputSqlType dataType) nullable comment;
+    ;
+
+/**
+ * {@code FieldDescription@} implements the {@code XmlSerializable@} type class
+ */
+instance XmlElementOutputable FieldDescription where
+    toXmlElement = buildXmlForFieldDescriptionWithName;
+    ;
+
+
+instance XmlOutputable FieldDescription where
+    toXml = outputFieldDescriptionXml;
+    ;
+
+outputFieldDescriptionXml :: String -> FieldDescription -> Either XmlAttribute XmlNode;
+outputFieldDescriptionXml name table =
+    outputFromXmlElementOutputable name table;
+
+/**
+ * {@code FieldDescription@} implements the {@code XmlDeserializable@} type class
+ */
+instance XmlElementInputable FieldDescription where
+    fromXmlElement = buildFieldDescriptionFromXml;
+    ;
+
+instance XmlInputable FieldDescription where
+    fromXml = inputFieldDescriptionXml;
+    ;
+
+inputFieldDescriptionXml :: Either XmlAttribute XmlNode -> FieldDescription;
+inputFieldDescriptionXml nodeOrAttribute =
+    inputFromXmlElementInputable nodeOrAttribute;
+
+//private buildXmlForFieldDescription fieldDescription = buildXmlForFieldDescriptionWithName fieldDescription "FieldDescription";
+private buildXmlForFieldDescriptionWithName elementName fieldDescription =
+    case fieldDescription of
+        FieldDescription {fieldName, dataType, nullable, comment} ->
+            let
+                fieldNameAttr = toXmlAttribute "fieldName" fieldName;
+                sqlTypeAttr   = toXmlAttribute "dataType" dataType;
+                nullableAttr  = toXmlAttribute "nullable" nullable;
+                commentAttr   = toXmlAttribute "comment" comment;
+            in
+                makeXmlElement Nothing elementName [fieldNameAttr, sqlTypeAttr, nullableAttr, commentAttr] [];
+    ;
+private noXmlAttrForFieldDescription fieldDescription = error "not supported";
+private noXmlAttrForFieldDescriptionWithName fieldDescription name = error "not supported"; 
+
+private buildFieldDescriptionFromXml xmlNode =
+    let
+        xmlAttrs = elementAttributes xmlNode;
+
+        getMaybeAttr attrName = List.find (\attr -> (attributeLocalName attr) == attrName) xmlAttrs;
+
+        getAttr attrName =
+            fromMaybe (error ("Missing attribute: " ++ attrName))
+                      (getMaybeAttr attrName);
+
+        fieldName = fromXmlAttribute (getAttr "fieldName");
+        dataType  = fromXmlAttribute (getAttr "dataType");
+        nullable  = fromXmlAttribute (getAttr "nullable");
+        
+        // The comment attribute is optional.
+        comment   = 
+            case getMaybeAttr "comment" of
+            Nothing -> "";
+            Just commentAttr -> fromXmlAttribute commentAttr;
+            ;
+    in
+        FieldDescription fieldName dataType nullable comment;
+
+private noFieldDescriptionFromXmlAttribute = error "not supported";
+
+    
+/**
+ * Different types of constraints that can be applied to a table
+ */
+data public TableConstraint =
+    public PrimaryKeyConstraint 
+        primaryKeyFieldNames :: [String] |
+    
+    // TODO: rename this to UniquenessConstraint...
+    public UniqueConstraint 
+        uniqueFieldNames     :: [String] |
+    
+    public ForeignKeyConstraint 
+        foreignTableRef      :: TableReference      // TODO: should this be primaryKeyTableRef?
+        referencedFields     :: [(String, String)]  // First name is column name in foreign key table, 2nd name is column in primary key table.
+    
+    deriving Eq;
+
+isPrimaryKeyConstraint :: TableConstraint -> Boolean;
+public isPrimaryKeyConstraint constraint =
+    case constraint of
+    PrimaryKeyConstraint {} -> True;
+    _ -> False;
+    ;
+    
+isUniqueConstraint :: TableConstraint -> Boolean;
+public isUniqueConstraint constraint =
+    case constraint of
+    UniqueConstraint {} -> True;
+    _ -> False;
+    ;
+    
+isForeignKeyConstraint :: TableConstraint -> Boolean;
+public isForeignKeyConstraint constraint =
+    case constraint of
+    ForeignKeyConstraint {} -> True;
+    _ -> False;
+    ;
+    
+getPrimaryKeyFieldNames :: TableConstraint -> [String];
+public getPrimaryKeyFieldNames constraint =
+    case constraint of
+    PrimaryKeyConstraint primaryKeyFieldNames -> primaryKeyFieldNames;
+    _ -> error "The given constraint is not a PK constraint";
+    ;
+
+/**
+ * Supports the {@code Show@} type interface for debugging purposes
+ */
+instance Debug.Show TableConstraint where
+    show = showTableConstraint;
+    ;
+
+showTableConstraint :: TableConstraint -> String;
+showTableConstraint !constraint = 
+    case constraint of
+    PrimaryKeyConstraint {primaryKeyFieldNames} -> 
+        "Primary Key: " ++ join ", " primaryKeyFieldNames;
+    UniqueConstraint {uniqueFieldNames} -> 
+        "Unique: " ++ join ", " uniqueFieldNames;
+    ForeignKeyConstraint {foreignTableRef, referencedFields} -> 
+        "Foreign Key: foreignTable = " ++ show foreignTableRef ++ ": " 
+            ++ join ", " (map (\pr -> field1 pr ++ " -> " ++ field2 pr) referencedFields);
+    ;
+
+/** Allow a TableConstraint to be output to Java. */
+data foreign unsafe import jvm public "org.openquark.util.database.TableConstraint$PrimaryKeyConstraint"
+    private JPrimaryKeyConstraint deriving Outputable;
+foreign unsafe import jvm "constructor" private makeJPrimaryKeyConstraint :: JList -> JPrimaryKeyConstraint;
+
+data foreign unsafe import jvm public "org.openquark.util.database.TableConstraint$UniquenessConstraint"
+    private JUniquenessConstraint deriving Outputable;
+foreign unsafe import jvm "constructor" private makeJUniquenessConstraint :: JList -> JUniquenessConstraint;
+
+data foreign unsafe import jvm public "org.openquark.util.database.TableConstraint$ForeignKeyConstraint"
+    private JForeignKeyConstraint deriving Outputable;
+foreign unsafe import jvm "constructor" private makeJForeignKeyConstraint :: JTableReference -> JList -> JList -> JForeignKeyConstraint;
+
+instance Outputable TableConstraint where
+    output = outputTableConstraint;
+    ;
+outputTableConstraint :: TableConstraint -> JObject;
+outputTableConstraint !tableConstraint = 
+    case tableConstraint of
+    PrimaryKeyConstraint {primaryKeyFieldNames} -> 
+        output $ makeJPrimaryKeyConstraint (outputList primaryKeyFieldNames);
+    UniqueConstraint {uniqueFieldNames} -> 
+        output $ makeJUniquenessConstraint (outputList uniqueFieldNames);
+    ForeignKeyConstraint {foreignTableRef, referencedFields} -> 
+        output $ makeJForeignKeyConstraint (makeJTableReference $ getTableNameFromReference foreignTableRef) 
+                                           (outputList $ map field1 referencedFields) 
+                                           (outputList $ map field2 referencedFields);
+    ;
+
+
+/**
+ * ConnectionSettings
+ */
+data public ConnectionSettings =
+    public ConnectionSettings 
+        server   :: String 
+        port     :: Int 
+        database :: String 
+        username :: String 
+        password :: String
+    deriving Eq;
+
+makeConnectionSettings :: String -> Int -> String -> String -> String -> ConnectionSettings;
+public makeConnectionSettings server port database username password =
+    ConnectionSettings server port database username password;
+
+/**
+ * JConnectionSettings
+ */
+data foreign unsafe import jvm public "org.openquark.cal.foreignsupport.module.DatabaseMetadata.ConnectionSettings"
+    public JConnectionSettings deriving Inputable, Outputable;
+
+foreign unsafe import jvm "constructor"
+    private jConnectionSettings_new :: String -> Int -> String -> String -> String -> JConnectionSettings;
+foreign unsafe import jvm "field server"
+    private jConnectionSettings_server :: JConnectionSettings -> String;
+foreign unsafe import jvm "field port"
+    private jConnectionSettings_port :: JConnectionSettings -> Int;
+foreign unsafe import jvm "field database"
+    private jConnectionSettings_database :: JConnectionSettings -> String;
+foreign unsafe import jvm "field username"
+    private jConnectionSettings_username :: JConnectionSettings -> String;
+foreign unsafe import jvm "field password"
+    private jConnectionSettings_password :: JConnectionSettings -> String;
+
+/**
+ * Implements the {@code Outputable@} type class
+ */
+instance Outputable ConnectionSettings where
+    output = outputConnectionSettings;
+    ;
+
+outputConnectionSettings :: ConnectionSettings -> JObject;
+outputConnectionSettings !settings =
+    case settings of
+    ConnectionSettings {server, port, database, username, password} ->
+        output $ jConnectionSettings_new server port database username password;
+    ;
+
+/**
+ * Implements the {@code Inputable@} type class
+ */
+instance Inputable ConnectionSettings where
+    input = inputConnectionSettings;
+    ;
+
+inputConnectionSettings :: JObject -> ConnectionSettings;
+inputConnectionSettings !settings = jConnectionSettingsToConnectionSettings (input settings);
+
+jConnectionSettingsToConnectionSettings :: JConnectionSettings -> ConnectionSettings;
+jConnectionSettingsToConnectionSettings !jSettings =
+    ConnectionSettings (jConnectionSettings_server jSettings)
+                       (jConnectionSettings_port jSettings)
+                       (jConnectionSettings_database jSettings)
+                       (jConnectionSettings_username jSettings)
+                       (jConnectionSettings_password jSettings);
+
+/**
+ * Implements the {@code XmlSerializable@} type class
+ */
+instance XmlElementOutputable ConnectionSettings where
+    toXmlElement = buildXmlForConnectionSettingsWithName;
+    ;
+
+
+instance XmlOutputable ConnectionSettings where
+    toXml = outputConnectionSettingsXml;
+    ;
+
+outputConnectionSettingsXml :: String -> ConnectionSettings -> Either XmlAttribute XmlNode;
+outputConnectionSettingsXml name cs =
+    outputFromXmlElementOutputable name cs;
+
+//buildXmlForConnectionSettings :: ConnectionSettings -> XmlNode;
+//private buildXmlForConnectionSettings cs = buildXmlForConnectionSettingsWithName cs "ConnectionSettings";  
+    
+buildXmlForConnectionSettingsWithName :: String -> ConnectionSettings -> XmlNode;
+private buildXmlForConnectionSettingsWithName elemName cs =
+    case cs of
+    ConnectionSettings {server, port, database, username, password} ->
+        makeXmlElement Nothing elemName [] 
+                       [makeXmlTextElement Nothing "Server" server,
+                        makeXmlTextElement Nothing "Port" (intToString port),
+                        makeXmlTextElement Nothing "Database" database,
+                        makeXmlTextElement Nothing "Username" username,
+                        makeXmlTextElement Nothing "Password" password]; // TODO unencrypted?
+    ;
+    
+buildXmlAttrForConnectionSettings :: ConnectionSettings -> (Maybe XmlAttribute);
+private buildXmlAttrForConnectionSettings cs = Nothing;
+
+buildXmlAttrForConnectionSettingsWithName :: ConnectionSettings -> String -> (Maybe XmlAttribute);
+private buildXmlAttrForConnectionSettingsWithName cs attrName = Nothing;
+
+/**
+ * {@code ConnectionSettings@} supports the {@code XmlDeserializable@} type class.
+ */
+instance XmlElementInputable ConnectionSettings where
+    fromXmlElement = buildConnectionSettingsFromXml;
+    ;
+
+instance XmlInputable ConnectionSettings where
+    fromXml = inputConnectionSettingsXml;
+    ;
+
+inputConnectionSettingsXml :: Either XmlAttribute XmlNode -> ConnectionSettings;
+inputConnectionSettingsXml nodeOrAttribute =
+    inputFromXmlElementInputable nodeOrAttribute;
+
+buildConnectionSettingsFromXml :: XmlNode -> ConnectionSettings;
+private buildConnectionSettingsFromXml node =
+    let
+        server   = elementGrandChildText node "Server";
+        port     = stringToInt (elementGrandChildText node "Port");
+        database = elementGrandChildText node "Database";
+        username = elementGrandChildText node "Username";
+        password = elementGrandChildText node "Password";
+    in
+        ConnectionSettings server port database username password;
+
+buildConnectionSettingsFromXmlAttribute :: XmlAttribute -> ConnectionSettings;
+private buildConnectionSettingsFromXmlAttribute = error "Unsupported operation!";
+
+///////////////////////////////////////////////////////////////////////////////
+// Unit tests
+//
+
+factsTableRef = makeTableReference "Facts";
+regionTableRef = makeTableReference "Region";
+businessOrgTableRef = makeTableReference "BusinessOrg";
+
+factsTableFields = [makeFieldDescription "NumEmployees" SqlType.SqlType_Integer True,
+                    makeFieldDescription "NetSales" SqlType.SqlType_Double True,
+                    makeFieldDescription "CostOfGoodsSold" SqlType.SqlType_Double True,
+                    makeFieldDescription "TaxExpenses" SqlType.SqlType_Double True,
+                    makeFieldDescription "SGAExpenses" SqlType.SqlType_Double True];
+
+regionTableFields = [makeFieldDescription "RegionID" SqlType.SqlType_Integer False,
+                     makeFieldDescription "Country" (SqlType.SqlType_VarChar 255) False,
+                     makeFieldDescription "State" (SqlType.SqlType_VarChar 255) False,
+                     makeFieldDescription "City" (SqlType.SqlType_VarChar 255) False];
+
+regionTableConstraints = [PrimaryKeyConstraint ["RegionID"]];
+
+factsTable = makeTableDescription factsTableRef factsTableFields [];
+regionTable = makeTableDescription regionTableRef regionTableFields regionTableConstraints;

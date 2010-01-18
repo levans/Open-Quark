@@ -1,0 +1,1310 @@
+<address>
+	<strong>
+		[<a href="http://labs.businessobjects.com/cal/#Samples">See some code!</a>]&nbsp;
+		[<a href="http://labs.businessobjects.com/cal/#News">News</a>]&nbsp; 
+		[<a href="http://labs.businessobjects.com/cal/#Software">Download Software</a>]&nbsp; 
+		[<a href="http://groups.google.com/group/cal_language">Forum</a>]&nbsp; 
+		[<a href="http://www.quarkframework.blogspot.com/">Blog</a>]
+	</strong>
+</address>
+
+<h3><strong><a href="http://labs.businessobjects.com/cal/#News">Latest news</a>: 15 November 2007 - Open Quark Framework 1.7.1_0 Available for Download</strong></h3>
+
+<h2><strong>Introducing&nbsp;The Open Quark Framework for Java</strong></h2>
+
+<p>The Quark Framework was conceived as a&nbsp;suite of technologies&nbsp;to allow&nbsp;the&nbsp;representation of&nbsp;certain kinds of business logic as reusable, composable pieces.&nbsp; One of the primary requirements was that a general runtime for such objects be embeddable within the Java environment (i.e. pure Java).&nbsp; These pieces of business logic, which we called "Gems" to give them a nice friendly face, are declarative 'functional' objects.&nbsp; So, the side effect of focusing on our goals was the creation of <strong>a high performance, general purpose functional language and runtime for the Java platform</strong>.&nbsp; A critical feature is tight integration with the Java language to enable logic best expressed in more algebraic forms (especially data treatments and transformations) to be integrated with regular OO application logic.</p>
+
+<p>As Business Objects is not a general development tools vendor, we have decided to release the foundational&nbsp;technology openly to the wider community interested in its capabilities.&nbsp; The framework and core tooling has therefore been badged as Open Quark and is released with sources under a&nbsp;<a href="http://resources.businessobjects.com/labs/cal/open_quark_license.txt">flexible BSD-style license</a>.</p>
+
+<p>Development of Open Quark continues apace and we are eager&nbsp;to hear from organizations and individuals who may be interested in using Open Quark; whether for research, teaching or commercial purposes.&nbsp; We are also getting set up to accommodate code contributions from those wishing to assist with the ongoing evolution of the framework and tools.</p>
+
+<p>Here are a few 'highlights' from our feature list:<br>
+</p>
+
+<ul>
+	<li>A lazily evaluated, strictly-typed language called CAL, with many similarities to Haskell</li>
+	
+	<li>Full, dynamic, control of function composition from pure Java (without using CAL)</li>
+	
+	<li>A compiler capable of generating Java bytecode with efficient schemes</li>
+	
+	<li>Many optimizations specific to targeting a dynamic, OO language platform, such as the JVM</li>
+	
+	<li>A graphical language and tooling for interactively developing and testing Gems (also a good teaching tool)</li>
+	
+	<li>Debugging features, with value inspection that doesn't force evaluation</li>
+	
+	<li>Eclipse integration</li>
+	
+	<li>Metadata on CAL entities</li>
+	
+	<li>CALDoc (source embedded documentation)</li>
+	
+	<li>Fully multithreaded compiler and runtime</li>
+	
+	<li>Control of evaluation from Java, if required (suspension, resumption, exploring different parts of the result with just-in-time evaluation)</li>
+	
+	<li>Dynamic compilation - use SDK to create Gems at runtime, or create ad hoc compositions that might represent specific data flows in an application</li>
+	
+	<li>Easy integration to use Java types in CAL and to call regular Java logic</li>
+	
+	<li>Exception support</li>
+	
+	<li>Localization and Internationalization support</li>
+</ul>
+
+<h3><a name="Samples"/>Code Samples</h3>
+
+<p>If you want to see a parade of many of the features of the CAL language&nbsp;<a href="http://resources.businessobjects.com/labs/cal/tutorial_calintro.html" target="_blank">click here</a>.&nbsp; This a great place to start if you would like to see a summary of syntactic features and especially if you are new to functional programming languages.</p>
+
+<p>If you would like to see an example of a real library module&nbsp;<a href="http://resources.businessobjects.com/labs/cal/sql.html" target="_blank">click here</a>.&nbsp; This will open the source of the Sql module, which provides a way to compose abstract relational queries that can later be rendered as actual SQL syntax in any of the supported dialects.</p>
+
+<p>&nbsp;</p>
+
+<h3><a name="Software"></a>Software</h3>
+
+<address><strong>[<a href="http://labs.businessobjects.com/cal/#Downloads">Download Summary</a>]</strong></address>
+
+<br>
+<p>The Open Quark Framework and tools are available as a binary distribution, or as sources.&nbsp; No registration with Business Objects is required to download either, though we welcome feedback&nbsp;and community involvement&nbsp;via&nbsp;<a href="http://groups.google.com/group/cal_language">our forum on Google Groups</a>.&nbsp;&nbsp;Open Quark is made available under a&nbsp;<a href="http://resources.businessobjects.com/labs/cal/open_quark_license.txt">BSD-style license</a>.&nbsp; Choose from the following options to&nbsp;fetch the complete&nbsp;Open Quark package:</p>
+
+<p><a href="http://resources.businessobjects.com/labs/cal/open_quark_platform.zip">Open Quark Framework, tools and documentation - binaries only</a><br>
+<a href="http://resources.businessobjects.com/labs/cal/open_quark_platform_src.zip">Open Quark Framework, tools and documentation - sources</a>&nbsp;</p>
+
+<p>This software is delivered as a ZIP file,&nbsp; extract this to your hard drive.&nbsp; In&nbsp;the binary distribution&nbsp;you will find a number of batch files to start the provided tools, as well as a number of documents to help you get started.&nbsp;</p>
+
+<p>The <a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes for this release</a> are also available without downloading the ZIP.&nbsp; Check for announcements at the bottom of this page or on the&nbsp;<a href="http://groups.google.com/group/cal_language">discussion forum</a>&nbsp;for software updates, as well as new samples, documents and videos.</p>
+
+<p>There is an Eclipse plug-in that provides support for the CAL language.&nbsp; This is made available under the&nbsp;<a href="http://www.eclipse.org/legal/epl-v10.html">Eclipse Public License v1.0</a>, with most component plug-ins licensed under the BSD license of Open Quark.&nbsp; The plug-in&nbsp;provides various edit, navigation, and error-checking functionality, including editor enhancements, builder, quick fixes, refactoring support, and a CAL-specific perspective and views.&nbsp; An Eclipse update site is available&nbsp;<HERE>at: <a href="http://resources.businessobjects.com/labs/cal/cal_eclipse_update/site.xml">http://resources.businessobjects.com/labs/cal/cal_eclipse_update/site.xml</a><br>
+You may also <a href="http://resources.businessobjects.com/labs/cal/cal_eclipse_update.zip">download a ZIP containing the Eclipse update site</a>&nbsp;for offline installation.&nbsp; The source distribution is available&nbsp;<a href="http://resources.businessobjects.com/labs/cal/cal_eclipse_update_src.zip">here</a>.<br>
+Please see the <a href="http://resources.businessobjects.com/labs/cal/CAL_Eclipse_Plug-in_Release_Notes.html">release notes</a> for details.&nbsp;</p>
+
+
+<p>There is also an experimental add-on to the Eclipse plug-in: Embedded CAL.	This allows CAL 
+	  expressions and modules to be embedded directly into Java Editors in Eclipse, providing 
+	  a very natural way to combine CAL and Java. This is made available under the 
+	  <a href="http://www.eclipse.org/legal/epl-v10.html">Eclipse Public License v1.0</a></p>
+
+<p>Embedded CAL is available in 
+	  <a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/CAL_Eclipse_Embedded_Editor-1.7.0_0-src.zip">source</a> and 
+	  <a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/CAL_Eclipse_Embedded_Editor-1.7.0_0.zip">binary</a>
+	  forms, and the <a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/CAL_Eclipse_Embedded_Editor_Samples-1.7.0_0-src.zip">samples</a> demonstrate its use.
+    The <a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/Embedded%20CAL%20User.pdf">user guide</a> explains how to install and use the plugin.
+	  For more information read the <a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/Embedded%20Editor%20Release%20Notes.html">release notes</a> or 
+	  check out <a href="http://groups.google.com/group/cal_language/web/embedded-cal?hl=en">the page on our Google Group</a>.
+
+</p>
+
+
+<p>Aside from the preferred methods of contacting us via the forum, if necessary, you can use&nbsp;<a href="mailto:luke.evans@businessobjects.com">private mail</a>.</p>
+
+<p>&nbsp;</p>
+
+<h3>Documents and Videos</h3>
+
+<p>The following documents are included in the downloadable software archive:</p>
+
+<ul>
+	<p>User documents:</p>
+	<ul>
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/getting_started_with_open_quark.pdf">Getting Started with Open Quark</a> provides an introduction to Open Quark for new users.  It includes an overview of the other documents and resources available for learning more.</div>
+		</li>
+
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/cal_users_guide.pdf">CAL User's Guide</a> provides information on the CAL language.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/cal_for_haskell_programmers.pdf">CAL for Haskell Programmers</a> summarizes the differences between CAL and the Haskell language.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/effective_cal.pdf">Effective CAL</a>&nbsp;is a series of essays designed to inform CAL developers of best coding practices.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/using_cal_with_eclipse.pdf">Using CAL with Eclipse</a>&nbsp;describes how to set up import the platform into Eclipse, and how to install and use the Eclipse Plug-in.&nbsp; There is also a brief tutorial on&nbsp;CAL development using Eclipse.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/ice_manual.pdf">Interactive CAL Environment (ICE) Manual</a> shows how to use the text-based interactive environment to help explore and develop with CAL.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/gem_cutter_manual.pdf">Business Objects Gem Cutter Manual</a>&nbsp;provides a beginners guide to using the graphical language tool.</div>
+		</li>
+
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/cal_and_shootout_benchmarks.pdf">CAL and the Computer Language Shootout Benchmarks</a>&nbsp;describes the results of implementing the Computer Language Shootout Benchmarks (<a href="http://shootout.alioth.debian.org/">http://shootout.alioth.debian.org/</a>) in CAL.&nbsp; It demonstrates that the performance of CAL is similar to that of Java for this benchmark suite.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/java_meets_quark.pdf">Java Meets Quark</a>&nbsp;is a document that introduces the Framework SDK and illustrates API use with examples.&nbsp; This document will continue to evolve to deal with more SDK concepts.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/caldoc_crib_sheet.pdf">CALDoc Crib Sheet</a>&nbsp;is a short reference document on the syntax and recommended usage guidelines for CALDoc.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/using_car_files.pdf">Using CAL Archives (Car files)</a>&nbsp;shows how a CAL program can be deployed as part of a Java application using JARs.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/using_standalone_jars.pdf">Using Quark with Standalone JARs</a>&nbsp;describes how to create and use minimal deployments optimized for running user-selected CAL functions.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/developing_eclipse_plug-ins_that_make_use_of_cal_workspaces.pdf">Developing Eclipse Plug-ins that make use of CAL Workspaces</a> describes how to set up the Quark Platform to use CAL workspaces within the context of an Eclipse plugin.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/input_output_source_generation_tool.pdf">Input Output Source Generation Tool</a>&nbsp;describes the use of the bundled code generation tool to streamline the process of making Inputable and Outputable type class instances.</div>
+		</li>
+
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/using_jfit.pdf">The Java Foreign Import Tool (JFit)</a>&nbsp;explains how to use the Java Foreign Import Tool.&nbsp; This allows the batch creation of CAL interfaces to Java code for convenience.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/using_caldoctool.pdf">Using the Command Line Interface for the Documentation Generator</a>&nbsp;shows how to use the CALDocTool from the command line to generate html documentation from CALDoc and metadata for the various entities in a CAL workspace.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/business_activity_monitor_overview.pdf">Business Activity Monitor Overview</a>&nbsp;is a document that discusses the sample of a complete Java application included in the Quark Framework download.&nbsp;</div>
+		</li>
+
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/development_history_of_quark.pdf">The Development History of Quark</a> is a short history of the CAL Language and the Quark project from its inception through to the release of Open Quark 1.7.1_0.</div>
+		</li>
+	</ul>
+	<p>Implementation documents:</p>
+	<ul>
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/cal_benchmarking.pdf">CAL Benchmarking</a> summarizes most of the development of the CAL runtime and the benchmarks we used to measure its performance.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/cal_global_optimizer.pdf">CAL Global Optimizer</a> describes the transformations performed by the CAL Global Optimizer during an optimization pass written in CAL.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/cal_runtime_internals.pdf">CAL Runtime Internals</a> describes the internals of CAL's LECC runtime.  This document is a work in progress.</div>
+		</li>
+		
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/generating_docbook_documentation.pdf">Generating DocBook Documentation</a> describes how documents are generated from our DocBook source files.</div>
+		</li>
+
+		<li>
+		<div><a href="http://resources.businessobjects.com/labs/cal/how_to_build_open_quark.pdf">How to Build Open Quark</a> describes how to build the Open Quark distributions from the source distributions.</div>
+		</li>
+	</ul>
+	<p>Library and SDK documentation:</p>
+	<ul>
+		<li>
+		<div>The current CAL library documentation is&nbsp;<a href="http://resources.businessobjects.com/labs/cal/open_quark_cal_doc.zip">downloadable</a>&nbsp;and <a href="http://resources.businessobjects.com/labs/cal/open_quark_cal_doc/index.html" target="_blank">browsable</a>.&nbsp;&nbsp;&nbsp;</div>
+		</li>
+		
+		<li>
+		<div>The current Java SDK library&nbsp;documentation is&nbsp;<a href="http://resources.businessobjects.com/labs/cal/open_quark_javadoc.zip">downloadable</a>&nbsp;and&nbsp;<a href="http://resources.businessobjects.com/labs/cal/open_quark_javadoc/index.html" target="_blank">browsable</a>.&nbsp;</div>
+		</li>
+	</ul>
+</ul>
+
+<p>The following technical reports are available:</p>
+<ul>
+<li>
+<div><a href="http://resources.businessobjects.com/labs/cal/gemcutter-techpaper.pdf">The Gem Cutter - A Graphical Tool for Creating Functions in the Strongly-typed Lazy Functional Language CAL</a></div>
+
+explains what is new about the Gem Cutter for people already knowledgeable about functional programming.<br>
+It digs under the surface to explain the elements that make the Gem Cutter work as a simple and yet expressive visual programming language. 
+</li>
+</ul>
+
+<p>The following streaming videos are available for viewing:</p>
+
+<ul>
+<li>
+<div><a href="mms://stream.businessobjects.com/vid/labs/cal/gem_part_1.wmv">Introduction to Gems and the Gem Cutter (Part 1)</a></div>
+
+Introduces the basics of the Gem Cutter and the graphical language.&nbsp; This is a nice place to start if you are new to functional programming concepts.&nbsp;&nbsp;Some people may prefer to&nbsp;download a <a href="http://resources.businessobjects.com/labs/cal/gem_part_1_divx.zip">DivX</a> version, or&nbsp;a <a href="http://resources.businessobjects.com/labs/cal/gem_part_1_mov.zip">QuickTime</a> version.&nbsp;</li>
+
+<li>
+<div><a href="mms://stream.businessobjects.com/vid/labs/cal/gem_part_2.wmv">Introduction to Gems and the Gem Cutter (Part 2)</a></div>
+
+The final part of the introduction to the Gem Cutter.&nbsp;&nbsp;Download <a href="http://resources.businessobjects.com/labs/cal/gem_part_2_divx.zip">DivX</a>, or&nbsp;<a href="http://resources.businessobjects.com/labs/cal/gem_part_2_mov.zip">QuickTime</a> versions.</li>
+
+<li>
+<div><a href="mms://stream.businessobjects.com/vid/labs/cal/ice.wmv">CAL and the Interactive CAL Environment (ICE) Shell</a></div>
+
+This video demonstrates a number of features of the CAL language itself, as well as some development tool capabilities.&nbsp;&nbsp;Download <a href="http://resources.businessobjects.com/labs/cal/ice_divx.zip">DivX</a>, or&nbsp;<a href="http://resources.businessobjects.com/labs/cal/ice_mov.zip">QuickTime</a>&nbsp;versions.</li>
+
+<li>
+<div><a href="mms://stream.businessobjects.com/vid/labs/cal/quark_tooling.wmv">Walkthrough of some Developer Tool Features</a></div>
+
+More developer tool features.&nbsp;&nbsp;Download <a href="http://resources.businessobjects.com/labs/cal/quark_tooling_divx.zip">DivX</a>, or&nbsp;<a href="http://resources.businessobjects.com/labs/cal/quark_tooling_mov.zip">QuickTime</a>&nbsp;versions.</li>
+
+<li><a href="mms://stream.businessobjects.com/vid/labs/cal/eclipse_plugin.wmv">A Tour of the Eclipse Plug-in features</a><br>
+This video showcases the features of the CAL tooling in the Eclipse&nbsp;Plug-in as they exist&nbsp;in release 1.4.0.&nbsp; Download&nbsp;<a href="http://resources.businessobjects.com/labs/cal/eclipse_plugin_divx.zip">DivX</a>, or&nbsp;<a href="http://resources.businessobjects.com/labs/cal/eclipse_plugin_mov.zip">QuickTime</a>&nbsp;versions.&nbsp;</li>
+</ul>
+
+<p>&nbsp;</p>
+
+<h3>As Seen In...<a name="SneakPeek"></a></h3>
+
+<p>The Quark Framework for Java is deployed in the&nbsp;Business Objects Labs project, Sapphire.&nbsp;&nbsp;&nbsp;This&nbsp;is an interactive data visualization client and&nbsp;is based on the Quark Framework in terms of its data stack, which is capable of addressing different kinds of data sources, doing complex dimensional calculations across them and projecting the results in a suitable way for this kind of Java application.</p>
+
+<p>For more details on Sapphire, including a number of videos that illustrate its functionality, please see the&nbsp;<a href="http://labs.businessobjects.com/sapphire">Sapphire Labs Page</a>.</p>
+
+<p>&nbsp;</p>
+
+<h3><a name="Downloads"></a>Download Summary</h3>
+
+<p><strong>Distributions</strong></p>
+
+<!--
+<style type="text/css">
+	div#mainbody table { padding-left: 0px; padding-right: 0px; } 
+	div#mainbody th { font-size: 11px; }
+</style> 
+-->
+
+<table cellspacing="0" width="100%" border="1" rules="rows" padding-left="0px" padding-right="0px" class="dummy">
+<thead>
+	<tr align="left" bgcolor="#d3d3d3">
+		<th width="45%">Release</th>
+		<th width="40%">File</th>
+		<th width="15%">Size</th>
+	</tr>
+</thead>
+
+<tbody>
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Open Quark Platform - 1.7.1_0 (15 Nov 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+    (<a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">Release Notes</a>)
+	</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/open_quark_platform.zip">open_quark_platform.zip</a></td>
+<td>42.7 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/open_quark_platform_src.zip">open_quark_platform_src.zip</a></td>
+<td>30.0 MB</td>
+</tr>
+
+<tr bgcolor="lightblue">
+	<td colspan="4">&nbsp;&nbsp;&nbsp;&nbsp;
+                  Eclipse Integration - 1.7.1_0 (15 Nov 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+    (<a href="http://resources.businessobjects.com/labs/cal/CAL_Eclipse_Plug-in_Release_Notes.html">Release Notes</a>)
+
+  </td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Eclipse Integration</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_eclipse_update.zip">cal_eclipse_update.zip</a></td>
+<td>11.1 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Eclipse Integration Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_eclipse_update_src.zip">cal_eclipse_update_src.zip</a></td>
+<td>2.0 MB</td>
+</tr>
+
+</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<p><strong>User Documents (also included in Platform Binary distribution)</strong></p>
+
+<table cellspacing="0" width="100%" border="1" rules="rows">
+<thead>
+	<tr align="left" bgcolor="#d3d3d3">
+		<th width="35%">Document</th>
+		<th width="40%">File</th>
+    <th width="10%">Size</th>
+    <th width="15%">Last Updated</th>
+	</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Getting Started with Open Quark</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/getting_started_with_open_quark.pdf">
+	  getting_started_with_open_quark.pdf</a></td>
+<td>193 KB</td>
+<td>21 Sep 2007</td>
+</tr>
+
+<tr>
+<td>CAL User's Guide</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_users_guide.pdf">cal_users_guide.pdf</a></td>
+<td>810 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>CAL for Haskell Programmers</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_for_haskell_programmers.pdf">
+	  cal_for_haskell_programmers.pdf</a></td>
+<td>198 KB</td>
+<td>15 Jun 2007</td>
+</tr>
+
+<tr>
+<td>Effective CAL</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/effective_cal.pdf">effective_cal.pdf</a></td>
+<td>265 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>Using CAL with Eclipse</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/using_cal_with_eclipse.pdf">
+	  using_cal_with_eclipse.pdf</a></td>
+<td>478 KB</td>
+<td>21 Sep 2007</td>
+</tr>
+
+<tr>
+<td>Interactive CAL Environment (ICE) Manual</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/ice_manual.pdf">
+	  ice_manual.pdf</a></td>
+<td>387 KB</td>
+<td>15 Nov 2007</td>
+</tr>
+
+<tr>
+<td>Business Objects Gem Cutter Manual</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/gem_cutter_manual.pdf">gem_cutter_manual.pdf</a></td>
+<td>1.5 MB</td>
+<td>26 Oct 2007</td>
+</tr>
+
+<tr>
+<td>CAL and the Computer Language Shootout Benchmarks</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_and_shootout_benchmarks.pdf">
+	  cal_and_shootout_benchmarks.pdf</a></td>
+<td>135 KB</td>
+<td>21 Sep 2007</td>
+</tr>
+
+<tr>
+<td>Java Meets Quark</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/java_meets_quark.pdf">java_meets_quark.pdf</a></td>
+<td>354 KB</td>
+<td>26 Oct 2007</td>
+</tr>
+
+<tr>
+<td>CALDoc Crib Sheet</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/caldoc_crib_sheet.pdf">caldoc_crib_sheet.pdf</a></td>
+<td>149 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>CALDoc archive for libraries 1.7.0_0</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/open_quark_cal_doc.zip">open_quark_cal_doc.zip</a></td>
+<td>3.2 MB</td>
+<td>26 Oct 2007</td>
+</tr>
+
+<tr>
+<td>Javadoc archive for SDKs 1.7.0_0</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/open_quark_javadoc.zip">open_quark_javadoc.zip</a></td>
+<td>10.1 MB</td>
+<td>26 Oct 2007</td>
+</tr>
+
+<tr>
+<td>Using CAL Archives (Car files)</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/using_car_files.pdf">using_car_files.pdf</a></td>
+<td>820 KB</td>
+<td>15 Jun 2007</td>
+</tr>
+
+<tr>
+<td>Using Quark with Standalone JARs</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/using_standalone_jars.pdf">using_standalone_jars.pdf</a></td>
+<td>36 KB</td>
+<td>15 Nov 2007</td>
+</tr>
+
+<tr>
+<td>Developing Eclipse Plug-ins that make use of CAL Workspaces</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/developing_eclipse_plug-ins_that_make_use_of_cal_workspaces.pdf">
+	developing_eclipse_plug-ins_that<br/>_make_use_of_cal_workspaces.pdf</a></td>
+<td>121 KB</td>
+<td>26 Oct 2007</td>
+</tr>
+
+<tr>
+<td>Input Output Source Generation Tool</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/input_output_source_generation_tool.pdf">
+	  input_output_source_generation_tool.pdf</a></td>
+<td>132 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>The Java Foreign Import Tool (JFit)</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/using_jfit.pdf">using_jfit.pdf</a></td>
+<td>36 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>Using the Command Line Interface for the Documentation Generator</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/using_caldoctool.pdf">using_caldoctool.pdf</a></td>
+<td>140 KB</td>
+<td>15 Jun 2007</td>
+</tr>
+
+<tr>
+<td>Business Activity Monitor Overview</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/business_activity_monitor_overview.pdf">
+	  business_activity_monitor_overview.pdf</a></td>
+<td>515 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>The Development History of Quark</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/development_history_of_quark.pdf">
+	  development_history_of_quark.pdf</a></td>
+<td>113 KB</td>
+<td>15 Nov 2007</td>
+</tr>
+</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<p><strong>Implementation Documents (also included in Platform Binary distribution)</strong></p>
+
+<table cellspacing="0" width="100%" border="1" rules="rows">
+<thead>
+	<tr align="left" bgcolor="#d3d3d3">
+		<th width="35%">Document</th>
+		<th width="40%">File</th>
+    <th width="10%">Size</th>
+    <th width="15%">Last Updated</th>
+	</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>CAL Benchmarking</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_benchmarking.pdf">cal_benchmarking.pdf</a></td>
+<td>704 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>CAL Global Optimizer</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_global_optimizer.pdf">cal_global_optimizer.pdf</a></td>
+<td>209 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>CAL Runtime Internals</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/cal_runtime_internals.pdf">cal_runtime_internals.pdf</a></td>
+<td>361 KB</td>
+<td>29 Aug 2007</td>
+</tr>
+
+<tr>
+<td>Generating DocBook Documentation</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/generating_docbook_documentation.pdf">generating_docbook_documentation.pdf</a></td>
+<td>26 KB</td>
+<td>26 Oct 2007</td>
+</tr>
+
+<tr>
+<td>How to Build Open Quark</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/how_to_build_open_quark.pdf">how_to_build_open_quark.pdf</a></td>
+<td>94 KB</td>
+<td>26 Oct 2007</td>
+</tr>
+</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<p><strong>Technical Reports</strong></p>
+
+<table cellspacing="0" width="100%" border="1" rules="rows">
+<thead>
+	<tr align="left" bgcolor="#d3d3d3">
+		<th width="35%">Document</th>
+		<th width="40%">File</th>
+    <th width="10%">Size</th>
+    <th width="15%">Last Updated</th>
+	</tr>
+</thead>
+
+<tr>
+<td>The Gem Cutter - A Graphical Tool for Creating Functions in
+	  the Strongly-typed Lazy Functional Language CAL</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/gemcutter-techpaper.pdf">gemcutter-techpaper.pdf</a></td>
+<td>478 KB</td>
+<td>15 Jun 2007</td>
+</tr>
+</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<p><strong>Videos</strong></p>
+
+<table cellspacing="0" width="100%" border="1" rules="rows">
+<thead>
+	<tr align="left" bgcolor="#d3d3d3">
+		<th width="35%">Title</th>
+		<th width="40%">File</th>
+    <th width="10%">Size</th>
+    <th width="15%">Last Updated</th>
+	</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Gem Intro, Part 1 DivX</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/gem_part_1_divx.zip">gem_part_1_divx.zip</a></td>
+<td>24.7 MB</td>
+<td>12 Oct 2006</td>
+</tr>
+
+<tr>
+<td>Gem Intro, Part 2 DivX</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/gem_part_2_divx.zip">gem_part_2_divx.zip</a></td>
+<td>32.3 MB</td>
+<td>12 Oct 2006</td>
+</tr>
+
+<tr>
+<td>ICE and CAL Intro DivX</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/ice_divx.zip">ice_divx.zip</a></td>
+<td>72.1 MB</td>
+<td>12 Oct 2006</td>
+</tr>
+
+<tr>
+<td>Tool Walkthrough DivX</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/quark_tooling_divx.zip">quark_tooling_divx.zip</a></td>
+<td>39.4 MB</td>
+<td>12 Oct 2006</td>
+</tr>
+
+<tr>
+<td>Eclipse Plug-in DivX</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/eclipse_plugin_divx.zip">eclipse_plugin_divx.zip</a></td>
+<td>14.6 MB</td>
+<td>26 Apr 2007</td>
+</tr>
+
+<tr>
+<td>Gem Intro, Part 1 QuickTime</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/gem_part_1_mov.zip">gem_part_1_mov.zip</a></td>
+<td>59.3 MB</td>
+<td>19 Nov 2006</td>
+</tr>
+
+<tr>
+<td>Gem Intro, Part 2 QuickTime</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/gem_part_2_mov.zip">gem_part_2_mov.zip</a></td>
+<td>75.1 MB</td>
+<td>19 Nov 2006</td>
+</tr>
+
+<tr>
+<td>ICE and CAL Intro QuickTime</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/ice_mov.zip">ice_mov.zip</a></td>
+<td>185.7 MB</td>
+<td>19 Nov 2006</td>
+</tr>
+
+<tr>
+<td>Tool Walkthrough QuickTime</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/quark_tooling_mov.zip">quark_tooling_mov.zip</a></td>
+<td>86.9 MB</td>
+<td>19 Nov 2006</td>
+</tr>
+
+<tr>
+<td>Eclipse Plug-in QuickTime</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/eclipse_plugin_mov.zip">eclipse_plugin_mov.zip</a></td>
+<td>23.5 MB</td>
+<td>26 Apr 2007</td>
+</tr>
+
+</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<p><a name="Embedded CAL"><strong>Embedded CAL</strong></a></p>
+
+<table cellspacing="0" width="100%" border="1" rules="rows">
+<thead>
+	<tr align="left" bgcolor="#d3d3d3">
+		<th width="45%">Release</th>
+		<th width="40%">File</th>
+		<th width="15%">Size</th>
+	</tr>
+</thead>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Embedded CAL - 1.7.0_0 (26 Oct 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+    (<a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/Embedded%20Editor%20Release%20Notes.html">Release Notes</a>)
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Embedded CAL Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/CAL_Eclipse_Embedded_Editor-1.7.0_0.zip">CAL_Eclipse_Embedded_Editor-1.7.0_0.zip</a></td>
+<td>507 KB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Embedded CAL Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/CAL_Eclipse_Embedded_Editor-1.7.0_0-src.zip">CAL_Eclipse_Embedded_Editor-1.7.0_0-src.zip</a></td>
+<td>803 KB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  	Samples</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/CAL_Eclipse_Embedded_Editor_Samples-1.7.0_0-src.zip">CAL_Eclipse_Embedded_Editor_Samples-1.7.0_0-src.zip</a></td>
+<td>2.7 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    User Guide</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.7.0_0/Embedded%20CAL%20User.pdf">Embedded CAL User.pdf</a> </td>
+<td>324 KB</td>
+</tr>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Embedded CAL Videos
+	</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  	Demo video 1</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/Embedded-CAL-Demo1.zip">Embedded-CAL-Demo1.zip</a></td>
+<td>23.1 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  	Demo video 2</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/Embedded-CAL-Demo2.zip">Embedded-CAL-Demo2.zip</a></td>
+<td>8.9 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  	Demo video 3</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/Embedded-CAL-Demo3.zip">Embedded-CAL-Demo3.zip</a></td>
+<td>10.9 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  	Demo video 4</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/Embedded-CAL-Demo4.zip">Embedded-CAL-Demo4.zip</a></td>
+<td>18.7 MB</td>
+</tr>
+
+</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<p><a name="Previous Releases"><strong>Previous Releases</strong></a></p>
+
+<table cellspacing="0" width="100%" border="1" rules="rows">
+<thead>
+	<tr align="left" bgcolor="#d3d3d3">
+		<th width="45%">Release</th>
+		<th width="40%">File</th>
+		<th width="15%">Size</th>
+	</tr>
+</thead>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Quark Platform - 1.7.0_0 (26 Oct 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.7.0_0/QuarkPlatform-1.7.0_0.zip">QuarkPlatform-1.7.0_0.zip</a></td>
+<td>42.7 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.7.0_0/QuarkPlatform-1.7.0_0-src.zip">QuarkPlatform-1.7.0_0-src.zip</a></td>
+<td>30.0 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Eclipse Integration</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.7.0_0/CAL_Eclipse_Plug-in_Archived_Update_Site-1.7.0_0.zip">CAL_Eclipse_Plug-in_Archived_Update_Site-1.7.0_0.zip</a></td>
+<td>11.1 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Eclipse Integration Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.7.0_0/CAL_Eclipse_Plug-in-1.7.0_0-src.zip">CAL_Eclipse_Plug-in-1.7.0_0-src.zip</a></td>
+<td>2.0 MB</td>
+</tr>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Embedded CAL - 1.6.1_0 (28 Sep 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Embedded CAL Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.6.1_0/CAL_Eclipse_Embedded_Editor-1.6.1_0.zip">CAL_Eclipse_Embedded_Editor-1.6.1_0.zip</a></td>
+<td>507 KB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Embedded CAL Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.6.1_0/CAL_Eclipse_Embedded_Editor-1.6.1_0-src.zip">CAL_Eclipse_Embedded_Editor-1.6.1_0-src.zip</a></td>
+<td>804 KB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  	Samples</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/embedded_cal/1.6.1_0/CAL_Eclipse_Embedded_Editor_Samples-1.6.1_0-src.zip">CAL_Eclipse_Embedded_Editor_Samples-1.6.1_0-src.zip</a></td>
+<td>2.7 MB</td>
+</tr>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Quark Platform - 1.6.1_0 (21 Sep 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.1_0/QuarkPlatform-1.6.1_0.zip">QuarkPlatform-1.6.1_0.zip</a></td>
+<td>39.0 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.1_0/QuarkPlatform-1.6.1_0-src.zip">QuarkPlatform-1.6.1_0-src.zip</a></td>
+<td>26.7 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Eclipse Integration</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.1_0/CAL_Eclipse_Plug-in_Archived_Update_Site-1.6.1_0.zip">CAL_Eclipse_Plug-in_Archived_Update_Site-1.6.1_0.zip</a></td>
+<td>10.9 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Eclipse Integration Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.1_0/CAL_Eclipse_Plug-in-1.6.1_0-src.zip">CAL_Eclipse_Plug-in-1.6.1_0-src.zip</a></td>
+<td>1.9 MB</td>
+</tr>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Quark Platform - 1.6.0_0 (29 Aug 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.0_0/QuarkPlatform-1.6.0_0.zip">QuarkPlatform-1.6.0_0.zip</a></td>
+<td>38.6 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.0_0/QuarkPlatform-1.6.0_0-src.zip">QuarkPlatform-1.6.0_0-src.zip</a></td>
+<td>26.4 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Eclipse Integration</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.0_0/CAL_Eclipse_Plug-in_Archived_Update_Site-1.6.0_0.zip">CAL_Eclipse_Plug-in_Archived_Update_Site-1.6.0_0.zip</a></td>
+<td>10.8 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Eclipse Integration Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.6.0_0/CAL_Eclipse_Plug-in-1.6.0_0-src.zip">CAL_Eclipse_Plug-in-1.6.0_0-src.zip</a></td>
+<td>1.9 MB</td>
+</tr>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Quark Platform - 1.5.1_0 (19 Jul 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.1_0/QuarkPlatform-1.5.1_0.zip">QuarkPlatform-1.5.1_0.zip</a></td>
+<td>35.5 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.1_0/QuarkPlatform-1.5.1_0-src.zip">QuarkPlatform-1.5.1_0-src.zip</a></td>
+<td>16.2 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Eclipse Integration</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.1_0/CAL_Eclipse_Plug-in_Archived_Update_Site-1.5.1_0.zip">CAL_Eclipse_Plug-in_Archived_Update_Site-1.5.1_0.zip</a></td>
+<td>10.6 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Eclipse Integration Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.1_0/CAL_Eclipse_Plug-in-1.5.1_0-src.zip">CAL_Eclipse_Plug-in-1.5.1_0-src.zip</a></td>
+<td>1.8 MB</td>
+</tr>
+
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Quark Platform - 1.5.0_0 (15 Jun 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.0_0/QuarkPlatform-1.5.0_0.zip">QuarkPlatform-1.5.0_0.zip</a></td>
+<td>35.3 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.0_0/QuarkPlatform-1.5.0_0-src.zip">QuarkPlatform-1.5.0_0-src.zip</a></td>
+<td>16.2 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Eclipse Integration</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.0_0/CAL_Eclipse_Plug-in_Archived_Update_Site-1.5.0_0.zip">CAL_Eclipse_Plug-in_Archived_Update_Site-1.5.0_0.zip</a></td>
+<td>10.5 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Eclipse Integration Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.5.0_0/CAL_Eclipse_Plug-in-1.5.0_0-src.zip">CAL_Eclipse_Plug-in-1.5.0_0-src.zip</a></td>
+<td>1.7 MB</td>
+</tr>
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Quark Platform - 1.4.0_0 (12 Apr 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.4.0_0/QuarkPlatform-1.4.0_0.zip">QuarkPlatform-1.4.0_0.zip</a></td>
+<td>33.7 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.4.0_0/QuarkPlatform-1.4.0_0-src.zip">QuarkPlatform-1.4.0_0-src.zip</a></td>
+<td>19.8 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    Eclipse Integration</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.4.0_0/CAL_Eclipse_Plug-in_Archived_Update_Site-1.4.0_0.zip">CAL_Eclipse_Plug-in_Archived_Update_Site-1.4.0_0.zip</a></td>
+<td>9.1 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Eclipse Integration Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.4.0_0/CAL_Eclipse_Plug-in-1.4.0_0-src.zip">CAL_Eclipse_Plug-in-1.4.0_0-src.zip</a></td>
+<td>0.7 MB</td>
+</tr>
+<tr bgcolor="lightblue">
+	<td colspan="3">&nbsp;&nbsp;&nbsp;&nbsp;
+		              Quark Platform - 1.3.0-0 (25 Jan 2007)
+		              &nbsp;&nbsp;&nbsp;&nbsp;
+	</td>
+</tr>
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Binaries</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.3.0-0/QuarkPlatform-1.3.0_0.zip">QuarkPlatform-1.3.0_0.zip</a></td>
+<td>32.0 MB</td>
+</tr>
+
+<tr>
+<td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+	  Platform Sources</td>
+<td><a href="http://resources.businessobjects.com/labs/cal/downloads/1.3.0-0/QuarkPlatform-1.3.0_0-src.zip">QuarkPlatform-1.3.0_0-src.zip</a></td>
+<td>18.8 MB</td>
+</tr>
+
+</tbody>
+</table>
+
+<p>&nbsp;</p>
+
+<h3><a name="News"></a>News</h3>
+
+<p><strong>15 November 2007 - Open Quark Framework 1.7.1_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+
+	<p>The Open Quark team is proud to announce the availability of the Open Quark Framework 1.7.1_0.</p>
+	
+	<p>This is a point release upgrade from 1.7.0_0.  Highlights include: 
+	<ul>
+		<li>New document <i>History of CAL and Quark</i>.</li>
+		<li>ICE manual now contains new tutorials on single- and multi-threaded debugging, using :find</li>
+		<li>Experimental memory-use optimizations in the CAL runtime.</li>
+		<li>Various bug fixes and smaller enhancements.</li>
+	</ul>
+	</p>
+
+	<p>For the complete list of new features, see the <a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>. Comments and suggestions are welcome via our <a href="http://groups.google.com/group/cal_language">discussion forum</a>.</p>
+	
+</blockquote>
+
+<p><strong>26 October 2007 - Open Quark Framework 1.7.0_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+
+	<p>The Open Quark team is proud to announce the release of the Open Quark Framework 1.7.0_0.</p>
+
+	<p>This major release includes a number of significant and exciting new features:
+		<ul>
+			<li>New Record Creation special Gem in the Gem Cutter.</li>
+			
+			<li>Ability to create record instance functions without adding new compiler primitives.</li>
+
+			<li>Deployment improvements:
+				<ul>
+					<li>Standalone JAR builder tool for creating minimal CAL deployments with quick start-up time upgraded to create entire CAL libraries.</li>
+					<li>Smaller-footprint deployment options with new CAL runtime JAR.</li>
+				</ul>
+			<li>Improved refactoring and symbol identification support in the CAL Eclipse Plug-in, as well as the CAL services layer.</li>
+
+			<li>CAL library improvements:</li>
+			<ul>
+				<li>New modules: RegEx for regular expressions, FormatRecord for formatting record 
+					values, BoundedParallel for parallel computations using a bounded number of 
+					threads, Encoding for string encoding.</li>
+					
+				<li>XML parser is now fully XML 1.0 conformant.</li>
+				
+				<li>Parallel module enhancements to control thread usage.</li>
+
+				<li>CAL values can now registered as cleanable using a CAL function.</li>
+				
+			</ul>
+
+			<li>Memory-use improvements in the CAL runtime.</li>
+			
+			<li>Tracing, statistics gathering, and interactive debugging are thread-safe and 
+				work in concurrent mode, as well as in standalone libraries.</li>
+			
+			<li>New SourceModelVisualizer tool for inspecting the structure of source models.</li>
+				
+			<li>Documentation updates:
+				<ul>
+					<li>New document <i>Interactive CAL Environment (ICE) Manual</i></li>
+					
+					<li>New document <i>Developing Eclipse Plug-ins that make use of CAL Workspaces</i></li>
+
+					<li><i>How to Build Open Quark</i> now explains building of 
+						various collaterals (such as generating PDFs, DocBook, ANTLR grammars etc)
+					</li>
+					
+				</ul>
+			</li>
+		</ul>
+	</p>
+
+	<p>For the complete list of new features, see the <a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>. Comments and suggestions are welcome via our <a href="http://groups.google.com/group/cal_language">discussion forum</a>.</p>
+
+</blockquote>
+
+<p><strong>22 October 2007 - Videos now available under a BSD-style license</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+	<p>All videos posted on this page are now available under the terms of a <a href="http://resources.businessobjects.com/labs/cal/open_quark_license.txt">BSD-style license</a>.</p>
+
+</blockquote>
+
+<p><strong>28 September 2007&nbsp;- Embedded CAL 1.6.1_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+	<p>Hot on the heels of Open Quark 1.6.1, we're pleased to announce the first release of Embedded CAL. 
+		  Embedded CAL is an experimental/early-adopter add-on to the CAL Eclipse Plug-in that allows CAL 
+		  expressions and modules to be embedded directly into Java Editors in Eclipse. 
+		  This provides a very natural way to combine CAL and Java.</p>
+		  
+	<p>Embedded CAL downloads are <a href="http://labs.businessobjects.com/cal/#Embedded CAL">here</a>.</p>
+	<p>A great place to learn more about Embedded CAL is 
+		<a href="http://groups.google.com/group/cal_language/web/embedded-cal?hl=en">here</a>.</p>
+
+	<p>Embedded CAL is released under the 
+		<a href="http://www.eclipse.org/legal/epl-v10.html">Eclipse Public License v1.0</a>
+		and has both a source and binary distribution.</p>
+
+</blockquote>
+
+<p><strong>21 September 2007&nbsp;- Open Quark Framework 1.6.1_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+	<p>The Open Quark team is very pleased to announce the release of the Open Quark Framework 1.6.1_0.</p>
+	<p>This is a point release upgrade from 1.6.0_0. &nbsp;Highlights include:
+		<ul>
+			<li>New document <i>Getting Started with Open Quark</i> to orient users who are new to the platform.</li>
+			<li>New CAL modules for concurrency:
+				<ul>
+					<li><i>Parallel</i> for various parallel evaluation functions such as par, parallelTuple2 and parallelMap.</li>
+					<li><i>BlockingQueue</i> for a CAL implementation of a blocking queue.</li>
+				</ul>
+			</li>
+			<li>Open Quark build process now available.
+				<ul>
+					<li>Includes build scripts for building the various Open Quark distributions from 
+						unzipped source distributions.</li>
+				</ul>
+			</li>
+			<li>For the CAL Eclipse Plug-in:
+				<ul>
+					<li>New Quick Outline view.</li>
+					<li>CAL Console enhancements to make the console more similar to ICE.</li>
+					<li>Rename refactoring can now rename entire modules.</li>
+				</ul>
+			</li>
+		</ul>
+	</p>
+
+	<p>For the complete list of new features, see the <a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>. Comments and suggestions are welcome via our <a href="http://groups.google.com/group/cal_language">discussion forum</a>.</p>
+
+</blockquote>
+
+
+<p><strong>29 August 2007&nbsp;- Open Quark Framework 1.6.0_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+	<p>The Open Quark team has been hard at work to release Open Quark Framework 1.6.0_0.</p>
+	<p>This new version of Open Quark and the CAL Programming Language comes with many new and exciting features including:</p>
+	<ul>
+		<li>New CAL modules that are provided as utilities and are usable in your own code.  Highlights:
+			<ul>
+				<li>The DataDictionary type class, which exposes a simplified view of a database and can be queried more simply than constructing SQL.</li>
+				<li>The new BusinessCalendar type, with implementations for Gregorian and fiscal calendars.</li>
+				<li>An XML parser, a Java2D compatibility library, and a directed graph data type.</li>
+			</ul>
+	  </li>
+		
+		<li>The Input Output Source Generation Tool, a utility to help marshalling data to/from Java.</li>
+		<li>Connections in the Gem Cutter can now be automatically split to form a collector/emitter pair.</li>
+		<li>For the CAL Eclipse Plug-in:
+			<ul>
+				<li>A new CAL Console that is similar to ICE, but is more flexible.</li>
+				<li>Support for CAL modules packaged in JARs.</li>
+			</ul>
+		<li><a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">And much more</a></li>
+	</ul>
+	<p>Please note, that CAL now requires Java 5.  The implementation and Java API have been updated to use Java 5 features such as generics.</p>
+	<p>For the complete list of new features, see the <a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>. Comments and suggestions are welcome via our <a href="http://groups.google.com/group/cal_language">discussion forum</a>.</p>
+</blockquote>
+
+
+<p><strong>19 July 2007&nbsp;- Open Quark Framework 1.5.1_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+	<p>Business Objects is proud to announce the release of the Open Quark Framework 1.5.1_0.</p>
+	<p>This is a point release upgrade from 1.5.0 which includes these exciting new features:
+	<ul>
+		<li>Lazy loading of foreign entities from compiled CAL modules, this allows for more flexible deployment of CAL-generated JARs.</li>
+		<li>Startup time improvements for stand-alone JARs.</li>
+		<li>Scope icons (public/protected/private) used in the Gem Cutter and CAL Eclipse plug-in.</li>
+		<li>Enhanced search in both the CAL Eclipse plug-in and the Gem Cutter.</li>
+		<li>Concurrent evaluation of CAL functions on a single execution context, this allows concurrent programs to be written entirely in CAL, instead of having the concurrency instrumented by Java (this feature is experimental and meant for those wanting to experiment with writing concurrent libraries in CAL).</li>
+		<li>Also, various bug fixes and smaller enhancements that make using CAL and the Gem Cutter more enjoyable experiences</li>
+	</ul>
+</p>
+
+<p>For the complete list of new features, see the <a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>.  As always, comments and suggestions are welcome via our <a href="http://groups.google.com/group/cal_language">discussion forum</a>.</p>
+</blockquote>
+
+
+<p><strong>15 June 2007&nbsp;- Open Quark Framework 1.5.0_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+	<p>Business Objects is proud to announce the release of the Open Quark Framework 1.5.0_0.</p>
+	
+	<p>This release includes a number of significant and exciting new features:
+	
+	<ul>
+		<li>Faster startup time is now possible through the creation of standalone utility jars of minimal size.</li>
+	
+		<li>The usability of ICE help has been greatly improved.</li>
+	
+		<li>A new CAL source code pretty printer is included, which can be used to format existing modules from ICE.</li>	
+		
+		<li>The Eclipse Plug-in contains new dialogs and wizards that facilitate the creation of CAL projects.</li>
+	
+		<li>Documentation is now readily accessible through Eclipse help.</li>
+	
+		<li>Also, many improvements will be found in tooltips, code completion, error messages, and existing views.</li>
+		
+		<li>And much, much more!</li>
+	</ul>
+	
+	<p>For the complete list of new features, see the <a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>.  As always, comments and suggestions are welcome via our <a href="http://groups.google.com/group/cal_language">discussion forum</a>.</p>
+
+</blockquote>
+
+<p><strong>26 April 2007&nbsp;- Eclipse Plug-in Video</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>A new video has been posted to the video section of this page.  It highlights the features of the CAL tooling provided by the Eclipse Plug-in (1.4.0 release).</p>
+</blockquote>
+
+<p><strong>12 April 2007&nbsp;- Open Quark Framework 1.4.0_0 Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>Business Objects is very pleased to announce the availability of the Open Quark Framework 1.4.0_0.&nbsp; In this release the CAL Eclipse Plug-in is now available under the&nbsp;<a href="http://www.eclipse.org/legal/epl-v10.html">Eclipse Public License v1.0</a>, with most component plug-ins licensed under the BSD license of Open Quark.&nbsp; The source distribution is available as a separate download.</p>
+
+<p>There are also a number of significant improvements in the Framework.&nbsp; The CAL Eclipse Plug-in has added new workspace and outline views, a metadata editor, auto-complete, refactoring support and quick fixes.&nbsp; In the CAL platform, there is a new syntax for lazy pattern matching, and the readability of generated Java sources has been improved.&nbsp; Documentation updates include new documents on using CAL with Eclipse, and an analysis of&nbsp;CAL's performance on a popular set of benchmarks.</p>
+
+<p>See the&nbsp;<a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>&nbsp;for details.&nbsp; As always, comments and suggestions are welcome via our&nbsp;<a href="http://groups.google.com/group/cal_language">discussion forum</a>.</p>
+</blockquote>
+
+<p><strong>5 March 2007&nbsp;- Wikipedia Article</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>Giving a slightly different perspective on the Quark Framework and the CAL language, a new&nbsp;<a href="http://en.wikipedia.org/wiki/Quark_Framework" target="_blank">Wikipedia article</a>&nbsp;aims to introduce the project and provide some summary material for those with a casual interest.</p>
+</blockquote>
+
+<p><strong>25 January 2007&nbsp;- Open Quark Framework Available for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>Business Objects is proud to announce the Open Quark Framework 1.3.0, the first version available with sources, released under a&nbsp;<a href="http://resources.businessobjects.com/labs/cal/open_quark_license.txt">BSD-style license</a>.&nbsp; This is now available for download as a binary or source distribution.&nbsp; We chose the license with a view to appealing to the broadest possible audience.&nbsp;</p>
+
+<p>Business Objects remains committed to the framework and development will continue as before.&nbsp; In the meantime, we will be working on the practicalities necessary to support collaborative development with the community, including a Contributor Agreement for those wishing to donate code/resources.&nbsp; We will also be seeking to discuss the hosting of Open Quark with a number of established open source foundations.&nbsp; While this is being set up, comments and suggestions are very welcome, and we encourage people to use the available forum to discuss topics relating to the framework, its use and its ongoing development.</p>
+
+<p>Aside from the major event of open sourcing the project, there are a number of new features including hierarchical module names and some improvements to the foreign function interface.&nbsp; See the&nbsp;<a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a>&nbsp;for details.&nbsp;<br>
+</p>
+</blockquote>
+
+<p><strong>18 January 2007&nbsp;- <em>Open</em> Quark Framework!</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>We are now ready to offer the Business Objects Quark Framework with sources under the BSD license, and are making final preparations for an imminent new release of the framework, with sources available for everything except the Eclipse Plug-in (for the time being).&nbsp; This is a major step for the project, and we are very excited about the prospects of being able to work with others outside of Business Objects who should now be free to deploy the Quark Framework in their own solutions, as well as providing help in moving the project forward.&nbsp; In terms of the latter, we anticipate being able to offer a Contributors Agreement shortly that will enable us to accept proposals of fixes and features into the project from outside of Business Objects.&nbsp; We will continue to actively maintain and develop the project while we seek the right external foundation to host it in the future.</p>
+
+<p>Look for a refresh of the downloadable&nbsp;software, with an option to download sources, in the next few days.&nbsp;&nbsp;<br>
+</p>
+</blockquote>
+
+<p><strong>5 December 2006&nbsp;- Framework refresh 1.2.0_140</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>The framework has been updated to build 140. Most of the content has been updated. See the table of individual downloads for details, and the release notes for technical information. Included in this release is a major new sample called "Business Activity Monitor Overview".&nbsp; This is designed to show a number of aspects of the Java&nbsp;SDK being used together.&nbsp; There&nbsp;is a new document that describes this sample.&nbsp; Another new sample demonstrates how to connect to a relational database and perform&nbsp;some data processing.&nbsp;&nbsp;New functionality in this release allows simple casting functions to be easily declared as CAL foreign functions (absolving the need to create specific, trivial Java methods for this purpose that are addressed as normal foreign function bindings).&nbsp; There is also a way to easily convert between CAL lists and Java data structures addressed by iterators.&nbsp; This can make certain kinds of Java-CAL interfacing very easy to set up.<br>
+</p>
+</blockquote>
+
+<p><strong>19 November 2006&nbsp;- QuickTime Videos for Download</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>As requested, we have added QuickTime versions of the videos for download.&nbsp;<br>
+</p>
+</blockquote>
+
+<p><strong>27 October 2006&nbsp;- Full Java SDKs</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>A major update is now downloadable in the&nbsp;<a href="http://labs.businessobjects.com/cal/#Software">Software Section</a>.&nbsp; See the&nbsp;<a href="http://resources.businessobjects.com/labs/cal/Quark_Platform_Release_Notes.html">release notes</a> for&nbsp;details.&nbsp;<br>
+Most of the documentation has been refreshed, and so has the Eclipse plug-in.<br>
+This purpose of this update is primarily to share public Java APIs that allow the full range of options for embedding the Quark Framework in arbitrary Java applications, and accessing functional logic from regular Java code. The SDKs allow simple or controlled evaluation of functions, dynamic function composition, full programmatic creation of CAL entities, metadata manipulation, function look-up by type or metadata, (de)persistence to/from a repository etc.<br>
+This update allows those reviewing the Quark Framework to use it in keeping with the original motivation for its creation; namely, the ability to describe some kinds of logic in a functional style, to take advantage of the compositional (more algebraic) style, improved validation and concision afforded by non-strict functional programming paradigm, while keeping the majority of more stateful application logic expressed in regular Java code.<br>
+Further documents and samples are included in this update to illustrate the embedding of the Quark Framework and the use of APIs. We are working on a full case-study sample that will be posted at a later date.&nbsp; This aims to illustrate a complete range of SDK features required to create a real application. Look for an announcement here when it is ready and made available.</p>
+</blockquote>
+
+<p><strong>19 October 2006&nbsp;- CAL Eclipse Plug-in Available</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>The CAL Eclipse Plug-in is now available in the&nbsp;<a href="http://labs.businessobjects.com/cal/#Software">Software Section</a>.&nbsp; See the&nbsp;<a href="http://resources.businessobjects.com/labs/cal/CAL_Eclipse_Plug-in_Release_Notes.html">release notes</a> for&nbsp;installation and usage instructions.&nbsp;</p>
+</blockquote>
+
+<p><strong>18 October 2006&nbsp;- Some samples available in the forum</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>A couple of initial samples have been made available in&nbsp;our old&nbsp;<a href="http://diamond.businessobjects.com/forum/274">discussion forum on the Business Objects Diamond site</a>. A Sudoku example is a pure CAL sample that implements a simple solver of Sudoku puzzles. Also available is a hybrid CAL/Java example that demonstrates how to call regular Java logic from CAL.</p>
+</blockquote>
+
+<p><strong>12 October 2006&nbsp;- Initial Quark Framework Software Downloadable</strong></p>
+
+<blockquote dir="ltr" style="MARGIN-RIGHT: 0px">
+<p>We are very pleased to announce the availability of the first downloadable version of the Business Objects Quark Framework for Java.&nbsp; We expect to be updating this a over subsequent days and weeks, so check back to see if a new version becomes available.&nbsp; This initial release is designed to get people access to the CAL language and tools.&nbsp; In the subsequent release, we will disclose the&nbsp;Java SDK for&nbsp;full control of compilation and evaluation&nbsp;embedded within&nbsp;a Java application.&nbsp; We will&nbsp;also be publishing samples&nbsp;and further documents at that time.</p>
+
+<p>&nbsp;</p>
+</blockquote>

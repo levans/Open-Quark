@@ -1,0 +1,2203 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * M1.cal
+ * Creation date: Feb 28, 2003.
+ * By: Edward Lam
+ */
+
+/**
+ * This module contains test cases for CAL. It was one of the first modules written
+ * in CAL, hence its name M1.
+ * 
+ * Note: it is not intended to be "model" CAL code. In particular, there are many pathological examples
+ * here mainly intended to test boundary cases, and a variety of commented out examples intended to test
+ * that errors are caught and properly reported.
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Test.General.M1;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JObject, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, remainder, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    typeConstructor = Either;
+    dataConstructor = Left, Right;
+    function = compose;
+    ;
+import Cal.Core.Char using
+    function = toLowerCase, isLowerCase;
+    ;
+import Cal.Core.Dynamic using
+    typeConstructor = Dynamic;
+    function = fromDynamic, toDynamic;
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    ;      
+import Cal.Core.String using  
+    function = toList;
+    ;        
+
+import Cal.Core.Debug using
+    function = show;
+    typeClass = Show;
+    ;
+import Cal.Utilities.Math;   
+import Cal.Core.Record;
+    
+//////////////////////////////////////////////////////////////////////
+// Test supercombinators
+
+public addThree x = x + 3;
+
+private hiddenLogic = \x y z -> (\x y-> x + y) x z + (\y z ->2 * y + z) (y + 3 *z) (x * y);
+public testLambda4 = \x y z -> (\x y-> x + y) x z + (\y z ->2 * y + z) (y + 3 *z) (x * y);
+public testLambda5 = hiddenLogic;
+
+public mainM2 = "this does not interfere with mainM2 in module M2";
+
+
+boTest x = x + 2.0;
+/*
+main = case True of
+    True -> 100;
+    False -> 200;
+    ;
+*/
+
+//main = inStr Nothing "abcdefg" "bcd" Nothing == 2;
+
+//main = 2.0 == 3.0; //works
+//main = max 2.0 5.0; //works
+
+//main = inStr Nothing "abcdefg" "bcd" Nothing; -does not
+
+//main = testPreludeFunctions;
+
+/*
+main = 
+    let
+        f x = x + 1.0;
+    in
+        f 2.0;
+*/
+
+/*
+main =
+    let
+        f x =
+        case x of
+        Just y -> 5.0;
+        ;
+    in
+        f (Just 2.0); 
+                    
+*/
+/*
+main = 
+    case (Just 2.0) of
+    Just y -> 5.0;
+    ;
+*/       
+
+//main = or True False;
+//main = truncate 17.8;
+//main = subscript (reverse test2) 8; //b
+//main = test4;
+//main = sum (take 8 allPrimes);
+
+//myError = True + False;
+
+double f x = f (f x);
+
+it2 f x = it2 f (f x);
+
+applyn n f x = if n == 0 then x else applyn (n - 1) f (f x);
+
+//The following example shows that the length of a type expression can grow exponentially as the length
+//of the function definition text increases. In fact, the length of the type expression for xn is proportional
+//to 2^(2^n).
+pairUp x y z = z x y;
+x1 y = pairUp y y;
+x2 y = x1 (x1 y);
+x3 y = x2 (x2 y);
+//x4 y = x3 (x3 y); //type tree contains thousands of nodes.
+//Hugs will not type x5. The type expression contains on the order of one million nodes!
+//x5 y = x4 (x4 y);
+
+test1 = '\n';
+test2 = ['q','u','i','c','k','\n',' ','b','r','o','w','n','\u0001',' ','f','o','x'];
+test3 = 'v';
+test4 = (List.length test2) + (List.length [test5, test6, test7]);
+test5 = '\247';
+test6 = '\65';
+test7 = '\u1234';
+
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.M1.ThrowException.throwException"
+    jThrowException_throwException :: Prelude.String -> Prelude.String -> Prelude.Boolean;
+    
+//a function whose sole purpose is to test the handling of exceptions generated in foreign functions by 
+//the GemCutter, CAL etc.
+throwException :: Prelude.String -> Prelude.String -> Prelude.String;
+public throwException exceptionName message =
+    if jThrowException_throwException exceptionName message then
+        "exception " ++ exceptionName ++ " with message '" ++ message ++ "' thrown successfully"
+    else
+        "could not throw exception " ++ exceptionName ++ " with message '" ++ message ++ "'";
+
+
+//////////////////////////////////////////////////////////////////////
+//make the list of all prime numbers [2, 3, 5, 7, 11, 13, ...]
+
+allPrimes :: [Prelude.Int];
+public allPrimes = sieve (Prelude.upFrom 2);
+
+nonMultiple :: Prelude.Int -> Prelude.Int -> Prelude.Boolean;
+nonMultiple p n = (Prelude.remainder n p) != 0;
+
+//the sieve of Eratosthenes
+sieve :: [Prelude.Int] -> [Prelude.Int];
+public sieve xs = case xs of 
+    []          -> [];
+    p : ps    -> p : sieve (List.filter (nonMultiple p) ps);
+;
+
+
+//////////////////////////////////////////////////////////////////////
+//Michael Cheng's test cases for value entry
+
+testListList :: [[Prelude.Int]] -> Prelude.Int;
+public testListList x = List.sum (Prelude.concat x);
+
+testPair :: (Prelude.Double, Prelude.Boolean) -> Prelude.Double;
+public testPair p = case p of
+             (a, b) -> case b of 
+                       Prelude.True -> a;
+                       Prelude.False -> Prelude.negate a;
+                       ;    
+             ;
+
+testTriple :: (Prelude.Double, Prelude.Boolean, Prelude.Double) -> Prelude.Double;
+public testTriple t = case t of
+               (a, b, c) -> case b of
+                            Prelude.True -> a - c;
+                            Prelude.False -> c - a;
+                            ;
+               ;
+
+testListPair :: [(Prelude.Boolean, Prelude.Double)] -> Prelude.Double;
+public testListPair ps = case ps of
+                  [] -> 0.0;
+                  x : xs -> case Prelude.fst x of
+                            Prelude.True -> (testListPair xs) + (Prelude.snd x);
+                            Prelude.False -> (testListPair xs) - (Prelude.snd x);
+                            ;
+                  ;
+
+testListTriple :: [(Prelude.Boolean, Prelude.Double, Prelude.Boolean)] -> Prelude.Double;
+public testListTriple ts =
+    case ts of
+    [] -> 0.0;
+    x : xs -> case x of
+              (a, b, c) -> case a of
+                           Prelude.True -> case c of
+                                   Prelude.True -> (testListTriple xs) + b;
+                                   Prelude.False -> (testListTriple xs) - b;
+                                   ;
+                           Prelude.False -> (testListTriple xs) - b;
+                           ;
+              ;
+    ;
+
+testListPairList :: [(Prelude.Boolean, [Prelude.Double])] -> Prelude.Double;
+public testListPairList lpl =
+    case lpl of
+    [] -> 0.0;
+    x : xs -> case x of
+              (a, b) -> case a of
+                        Prelude.True -> (testListPairList xs) + List.sum b;
+                        Prelude.False -> (testListPairList xs) - List.sum b;
+                        ;
+              ;
+    ;
+
+//////////////////////////////////////////////////////////////////////
+//data declaration test cases
+//
+//Many of these examples are derived from Simon Thompson's book.
+//There are also a bunch of artificial examples in order to get kind errors.
+
+//type constructors and data constructors occupy a separate namespace
+data TestNames1 = TestNames2; // TestNames2 :: TestNames1
+data TestNames2 = TestNames1; // TestNames1 :: TestNames2
+data TestNames3 = TestNames3; // TestNames3 :: TestNames3
+
+
+
+//product types
+data People = 
+    Person 
+        name    :: [Prelude.Char] 
+        age     :: Prelude.Double;
+data Age = 
+    Years 
+        years   :: Prelude.Double;
+
+//alternatives (combines product and enumerated types)
+data Shape = 
+    Circle 
+        radius  :: Prelude.Double | 
+    Rectange 
+        height  :: Prelude.Double       // p.246 uses "h" rather than "l" for length.
+        width   :: Prelude.Double;
+
+//recursive algebraic data types
+data Expr = 
+    Literal 
+        value   :: Prelude.Double | 
+    Add 
+        expr1   :: Expr 
+        expr2   :: Expr | 
+    Sub 
+        expr1   :: Expr 
+        expr2   :: Expr;
+data NTree = 
+    NilT | 
+    Node 
+        nodeVal         :: Prelude.Double 
+        subTree1        :: NTree 
+        subTree2        :: NTree;
+// Node :: Double -> NTree -> NTree -> NTree
+//mutual recursion
+data Person = 
+    Adult 
+        name            :: [Prelude.Char] 
+        address         :: [Prelude.Char] 
+        biog            :: Biog;                // biographical detail
+data Biog = 
+    Parent 
+        info            :: [Prelude.Char] 
+        children        :: [Person] | 
+    NonParent 
+        info            :: [Prelude.Char];
+//see the example of boolean expression pg256 to get a mutually recursive datatype with expr
+
+//data List a = Nil | Cons a (List a)
+//data Tree a = Nil | Node a (Tree a) (Tree a)
+//data Either a b = Left a | Right b
+
+//data App f a = A (f a);
+
+data TestAlg a1 a2 a3 = 
+    TestAlgDataCons 
+        a1      :: a1 
+        a2      :: a2 
+        a3      :: a3; // TestAlgDataCons :: a -> b -> c -> TestAlgDataCons a b c
+//data TestAlg1 a1 a2 a3 = TestAlgDataCons1 (a1 a2 a3); 
+//Hugs gives
+//TestAlgDataCons1 :: a b c -> TestAlg1 a b c
+//in other words, there are no arrows between a b and c. What does this mean? See below
+//TestAlgDataCons1 :: ((a b) c) -> (TestAlg1 a b c)
+
+//data TestAlg2 a1 a2 = TestAlgDataCons2 (a1 a2); 
+//Hugs gives TestAlgDataCons2 :: a b -> TestAlg2 a b
+//in other words a must be a type that makes sense to apply to the type b
+//TestAlgDataCons2 is a constructor taking 1 argument
+//(TestAlgDataCons "ab") :: TestAlg2 List Char
+//TestAlgDataCons2 (2,3) :: TestAlg2 ((,) Integer) Integer
+//TestAlgDataCons2 Nothing :: TestAlg2 Maybe a
+//TestAlgDataCons (Just 3) :: TestAlg2 Maybe Integer
+
+data TestAlg3 a1 a2 = 
+    TestAlgDataCons3 
+        f       :: (a1->a2);
+//TestAlgDataCons3 length :: TestAlg3 [a] Int
+//TestAlgDataCons3 2 //gives a type error
+//TestAlgDataCons3 map :: TestAlg3 (a->b) ([a]->[b])
+//TestAlgDataCons3 :: (a->b) -> TestAlg3 a b
+
+//Error: repeated defininition for constructor function TestRepeated1
+//data TestRepeatedCons1 = TestRepeated1 | TestRepeated1
+//Error: repeated defininition for constructor function TestRepeated
+//data TestRepeatedCons2 = TestRepeated
+//data TestRepeatedCons3 = TestRepeated
+
+//Error: undefined type variable "b"
+//data TestUnspecifiedVar a = TUV a b
+
+//Error: repeated variable "a" on LHS
+//data TestRepeatedVar a a = TUV a
+
+//it is ok not to use a type variable.
+data TestUnusedVar a = TUV;
+//TUV :: TestUnusedVar a
+
+//kind errors. Note that hugs has an option :set +k to display kind errors in full.
+
+//Error: illegal type "a a" in constructor application
+//data TestKind1 a = TK1 (a a)
+//this does not give a kinding error, which was initially suprising to me, but makes sense
+//data TestKind2 a = TK2a (a Double) | TK2b (a Char);
+//TK2a length //ok, the type variable a is instantiated to (->) [a]
+//TK2b length //not ok
+
+//Error: illegal type "Int a" in constructor application
+//data TestKind3 a = TK3 (Int a)
+
+//ERROR "d:\testprojects\testcal\types1.hl" (line 113): Kind error in constructor application
+//*** expression     : b a
+//*** constructor    : a
+//*** kind           : (a -> b) -> *
+//*** does not match : a
+//*** because        : unification would give infinite kind
+//data TestKind4 a b = TK4a (a b) | TK4b (b a)
+
+//Question: do type expressions when occurring in type declarations need to be kinded? Answer: yes.
+testDecl1 = testDecl1;
+testDecl2 x = testDecl1; //testDecl2 :: a -> b
+//testDecl2 :: (a b) -> (b a) //produces a kinding error
+//testDecl1 :: (a->b) -> (b->a) //no problem
+
+//this is a less artificial sort of kinding error.
+//data TestKind5 a = TK5 (Ordering a)
+
+//this is also a natural error to make: Maybe has kind *->* and it cannot match *
+//data TestKind6 a = TK6 (Maybe -> Maybe)
+//data TestKind6 a = TK6 (Maybe a -> Maybe a) //this is OK however
+
+/////////////////////////////////
+//now check for simple errors
+
+//repeated defn of data constructor Medium
+//data Size = Small | Medium | Large;
+//data EggSize = Medium | XLarge;
+
+//repeated type variable b
+data GoodType a b c = 
+    VeryGood 
+        #1      ::a | 
+    Good 
+        #1      :: b | 
+    Fair 
+        #1      ::a 
+        #2      ::b 
+        #3      ::c;
+//data BadType a b b = VeryGoodBad a | GoodBad b | FairBad a b c;
+
+//unbound type variable c
+//data NotSoGoodType a b = NotVeryGood a c | NotGood b;
+
+//use of undefined data constructor Zap
+//badZap x = Zap x;
+
+sumNPrimes n = List.sum (List.take n allPrimes);
+
+//test some kinding failure cases
+//this is a typical case where too many arguments are supplied for the Maybe type
+//data Failure1 a b = MakeFailure1 (Maybe a b);
+
+//this should fail, because Prelude.Maybe does not have enough type arguments
+//data NoFailure1 a b = MakeNoFailure1 (Prelude.Maybe) a b;
+
+//the problem here is that what appear to the left of -> should have kind *.
+//data Failure2 a b = MakeFailure2 (Tree -> Maybe a);
+
+///////////////////////
+//lambda lifting tests
+
+//main = testLet2;
+
+//here is an very simple test. Answer is 16
+// lambda1 x = x + 7;
+// main = lambda1 9;
+//main = (\x -> x + 7) 9;
+
+//here is something more complicated. Answer is 33
+//There are 2 different variables x here
+//main = testLambda1 5;
+//testLambda1 x = 2 + x + (\x -> x + 10 + x) (x + 3);
+
+//another test, this time also conflict with a global symbol
+//main = testLambda2 5;
+//testLambda2 map = 2 + map + (\map -> map + 10 + map) (map + 3);
+
+//simple let test. Should lift 2 lets. Answer is 50
+//main = testLet1;
+//testLet1 = let f = 2; g x = x + 1; h x y = x + y; in (h 2 3) * (g 4) * f; 
+
+//Answer is 34
+//main :: Int;
+//main = testLet2;
+testLet2 = 
+    let
+        mySum xs = case xs of
+            []     -> 0;
+            y : ys -> y + mySum ys;;
+        myProd xs = case xs of
+            []     -> 1;
+            y : ys -> y * myProd ys;;
+        oneToFour = List.take 4 (Prelude.upFrom 1);
+    in (mySum oneToFour) + (myProd oneToFour);
+
+//main = testLet2;
+
+//A rewriting of the code to sum the first n primes to use lets, letrecs and lambdas
+//Answer is 77
+//main2 :: Int;
+public main2 = sumFirstNPrimes 8;
+sumFirstNPrimes = \n -> 
+    let
+        nonMultiple2 p n = (Prelude.remainder n p :: Int) != 0;
+    in
+    let
+        sieve2 xs =  case xs of 
+                        []     -> [];
+                        p : ps -> p : sieve2 (List.filter (nonMultiple2 p) ps);;
+    in
+    let
+        allPrimes2 = sieve2 ((\n -> Prelude.upFrom n) 2);
+    in
+        List.sum (List.take n allPrimes2);
+
+//A rewriting of the above example, adding a local defn of filter
+//Answer is 100
+//main = sumFirstNPrimes2 9;
+
+sumFirstNPrimes2 = \n -> 
+    let
+        filter2 p xs = case xs of
+                            []     -> [];
+                            y : ys -> (let rest = filter2 p ys;
+                                       in if p y then y : rest else rest);;
+    in
+    let
+        nonMultiple2 p n = Prelude.notEquals (Prelude.remainder n p :: Int) 0;
+    in
+    let
+        sieve2 xs =  case xs of 
+                        []     -> [];
+                        p : ps -> p : sieve2 (filter2 (nonMultiple2 p) ps);;
+    in
+    let
+        allPrimes2 = sieve2 ((\n -> Prelude.upFrom n) 2);
+    in
+        List.sum (List.take n allPrimes2);
+
+//Answer is 28
+//testLambda4 = \x y z -> (\x y-> x + y) x z + (\y z ->2 * y + z) (y + 3 *z) (x * y);
+//main = testLambda4 1 2 3;
+
+//main = sin 2.0; //ok
+//main = sin (toDouble 2);  //ok
+//main = 2.0 + 3.0; //not ok can't find addDouble
+//main = addDouble 2.0 3.0; //ok
+
+//is the problem with partial application of built-in functions?
+mySin = Math.sin;
+//main = mySin 2.0; //not ok;
+
+//built-in logical operators are lazy
+unbounded = unbounded;
+//main = True || unbounded;
+
+//main = 2.0 + 3.0;  -ok
+
+//main = sum (map sin [2.0, 3.0]); //another example that doesn't work because of partial application of built-ins
+
+//main = if False then True else error "zap";
+
+// main = let x = 2 in x + let y = x in y //gives 4 in Hugs.
+//main = let x = 2; in x + let y = 3; in y;
+//works, answer = 5
+//main = let x = 2.0; in x + 3.0;
+//unexpected token let
+//main = let x = 2.0; in x + let x = x; in x;
+//unexpected token let
+//main = let x = 2.0; in (x + let x = x; in x);
+//This works, and gives an answer of 4
+//main = let x = 2.0; in x + (let x = x; in x);
+//Conclusion: the place of let, case, if and lambdas in the grammar of Haskell is different from that of CAL
+//For example, after the + symbol in the example above, we cannot have an arbitrary expression, while in Haskell this is OK
+//In CAL an expression in parentheses is OK however.
+//If I rearrange the grammar to be like Haskell's, then antlr gives ambiguity warning. These are removed if we
+//add end tokens after if, case, let and lambdas. However, the solution is uglier than the problem. 
+
+//test of the cycle function. cycle has a nice use of let. answer is 45
+//main = sum (take 10 (cycle [3, 6]));
+
+//answer is 9
+//main = fst (2.0, 3.0) + snd (10.0, 4.0) + toDouble (length [2, 3, 4]);
+
+//answer is 3
+//main = length (lines "this is\na test of\nthe lines function");
+
+//this is an interesting example, since it requires defaulting. In other words, sort [70, 20, 100, 30] is of Num a
+//it is also unsupported since it requires Eq [a], which we currently don't support.
+//main = sort [70, 20, 100, 30] == [20, 30, 70, 100];
+//main = head (sort [70.0, 20.0, 100.0, 30.0]) == 20.0;
+
+//this passes the typechecker just fine (but not code generation yet)
+//testListInstance = [1.0, 2.0] == [1.2, 2.2];
+
+//this should not pass the type checker. and it does not!
+//testListInstance2 = [[1.0], [2.0]] == [1.2, 2.2];
+
+//testListInstance3 = sort ["hello", "are", "you", "there"];
+
+//testPairInstance1 = sort [("hello", 1.0), ("zap", 2.0), ("hello", 0.5), ("zap", 1.5)];
+
+//this should fail since Boolean is not in Ord at the present time. It does!
+//testPairInstance2 = sort [("hello", True), ("zap", False)];
+
+public testOverloading =    
+    overloadingTest1 == 25 &&
+    overloadingTest2 == 36 &&
+    overloadingTest3 == 49 &&
+    overloadingTest3b == 400 &&
+    overloadingTest4 == 64 &&
+    overloadingTest5 == 5 &&
+    overloadingTest6 == 25 &&
+    overloadingTest7 == 3125 &&
+    overloadingTest8 == 5 &&
+    overloadingTest9 == 25 &&
+    overloadingTest10 == 12 &&
+    overloadingTest11 == 10001 &&
+    overloadingTest12 == 14 &&
+    overloadingTest13 == (2.0, 3 :: Int) &&
+    overloadingTest14 == (10.0, 12.0) &&
+    overloadingTest15 &&
+    overloadingTest16 &&
+    overloadingTest17 &&
+    overloadingTest18 &&
+    overloadingTest19 &&
+    overloadingTest20 &&
+    overloadingTest21 &&
+    overloadingTest22 &&
+    overloadingTest23 &&
+    overloadingTest24 &&
+    overloadingTest25 &&
+    testQualification
+    || Prelude.error "Prelude.testOverloading failed.";    
+
+
+overloadingTest1 =  (\w -> let z =  w; in Prelude.multiply z z) (5.0); 
+
+overloadingTest2 =  (\w -> let z =  w; in z * z) (6.0); 
+
+
+overloadingTest3Helper :: Prelude.Num a => a -> a; 
+overloadingTest3Helper walrus = let zebra = walrus; in zebra * zebra;
+
+/*
+overloadingTest3Helper d walrus =
+    let
+        zebra = walrus;
+    in
+        multiply d zebra zebra
+        
+*/
+
+overloadingTest3 :: Prelude.Double;
+overloadingTest3 = overloadingTest3Helper 7.0;
+
+
+overloadingTest3bHelper :: Prelude.Num a => a -> a;
+overloadingTest3bHelper w = let z = if w < 1 then w else w; in Prelude.multiply z z;
+
+overloadingTest3b :: Prelude.Double;
+overloadingTest3b = overloadingTest3bHelper 20.0;
+
+//result = 64
+multiplyDouble :: Prelude.Double -> Prelude.Double -> Prelude.Double;
+private multiplyDouble = Prelude.multiply;
+overloadingTest4 =  (\w -> let z =  w; in multiplyDouble z z) (8.0);
+
+//result = 5
+overloadingTest5 =  (\w -> let z =  w; in z) (5.0); 
+
+//result = 25
+overloadingTest6 = (\w -> w * w) (5.0); 
+
+//result = 3125
+overloadingTest7 =  (\w -> let z =  w; in Math.power z z) (5.0);  
+
+//result = 5
+overloadingTest8 =  (\w -> let z =  w; in overloadingTest8Helper z z) (5.0); 
+overloadingTest8Helper :: Prelude.Num a => a -> a -> a;
+overloadingTest8Helper x y = x;
+
+//result = 25
+overloadingTest9 = overloadingTest9Helper 5.0;
+overloadingTest9Helper :: Prelude.Num a => a -> a;
+overloadingTest9Helper w = w * w;
+
+overloadingTest10 =
+    let
+        x1 = 10;
+        x2 = x1 * x1;
+        x3 = x2 + 44;
+    in
+        Math.sqrt x3;
+    
+overloadingTest11 =
+    let
+        sq x = x * x;
+        y = sq 10;        
+        z = sq y;
+    in
+        z + (1 :: Int);
+    
+overloadingTest12 =
+    let
+        g x =
+            (
+            let
+                f y = x * y;
+            in
+                f 2 + 4
+            );
+    in
+        g (5 :: Int);    
+
+//in this test, notice that the dictionary argument must be added to f, since f is used polymorphically below in 2 different ways
+overloadingTest13 =
+    let
+        f x = x + 1;
+    in
+        (f 1.0, f (2 :: Int));
+        
+/*        
+public overloadingTest13resolved =
+    let
+        f d x = add d x 1;
+    in
+        (f dictNumDouble 1.0, f dictNumInt (2 :: Int));        
+*/
+                                
+//in this example, f cannot be used polymorphically in the "in" part. For example, replacing
+//the call to f 5.0 by f (5 :: Int) results in a type checking error.
+overloadingTest14 = overloadingTest14Helper 7.0;
+overloadingTest14Helper x =
+    let
+        f y = x + y;
+    in
+        (f 3.0, f 5.0);    
+        
+/*
+overloadingTest14HelperResolved d x =
+    let
+        f y = add d x y;
+    in
+        (f 3.0, f 5.0);    
+
+*/    
+
+// helper function translate from different maps in the dictionary
+translateAliasSimple :: Prelude.String -> [(Prelude.String,Prelude.String)] -> Prelude.String;
+private translateAliasSimple alias aliasNameMap = 
+    let
+    matchingItem = List.find (\entry -> Prelude.equals (Prelude.fst entry) alias) aliasNameMap;
+    in
+    if ((Prelude.isNothing matchingItem)) then         
+        Prelude.error ("Alias not found in " ++ (List.foldLeft Prelude.append "" (List.intersperse " " (List.map Prelude.fst aliasNameMap))))            
+    else Prelude.snd (Prelude.fromJust matchingItem);                
+        
+
+private tTest = translateAliasSimple "Canada" [("Canada", "Hello")];
+
+private overloadingTest15 = tTest == "Hello";                        
+
+private mtest = "a" ++ "b";
+
+public exceptionTest1 = throwException "java.lang.IllegalStateException" "hello, I am thrown by exceptionTest1";
+
+public exceptionTest2 =
+    let
+        e = exceptionTest1;
+    in
+        e;
+        
+public exceptionTest3 =
+    let
+        e = exceptionTest1;
+    in
+        ('a', e);
+        
+
+//the interesting point here is that the overloading at equals must be resolved by adding
+//a dictionary argument to equalsTest and not to result.
+equalsTest :: Prelude.Eq a => a -> a -> Prelude.Boolean;
+equalsTest x y =   
+  let
+    result = Prelude.equals x y;
+  in
+    result;  
+      
+//this is an interesting example since the overload resolution in the body of result must
+//occur on 2 different levels
+equalsTest2 :: Prelude.Eq a => a -> a -> ((Prelude . Boolean, Prelude.Double), (Prelude.Boolean, Prelude.Int));
+equalsTest2 x y =
+    let
+        result z w = (Prelude.equals x y, z + w);
+    in
+        (result 2.0 4.0, result (5 :: Int) (7 :: Int));
+                
+/*    
+equalsTest2resolved d1 x y = 
+    let
+        result d2 z w = (equals d1 x y, add d2 z w);
+    in
+        (result dictNumDbl 2.0 4.0, result dictNumInt (5 :: Int) (7 :: Int));
+*/    
+
+overloadingTest16 =
+    equalsTest 'a' 'a' &&
+    (Prelude.not (equalsTest 'a' 'b')) &&
+    equalsTest "abc" "abc" &&
+    (Prelude.not (equalsTest "abc" "def")) &&
+    equalsTest 20.0 20.0 &&
+    Prelude.fst (Prelude.fst (equalsTest2 10.0 10.0)) &&
+    Prelude.fst (Prelude.fst (equalsTest2 'z' 'z')) &&
+    Prelude.snd (Prelude.fst (equalsTest2 'a' 'b')) == 6.0 &&
+    Prelude.snd (Prelude.snd (equalsTest2 'a' 'b')) == (12 :: Int);
+
+overloadingTest17 = (overloadingTest17Helper 23.0) == 24;
+overloadingTest17Helper x =
+    let
+        f y = [x, y];
+    in
+        let
+            g z = z : f x;
+        in
+            List.head (g x) + 1;
+
+overloadingTest18 =
+    overloadingTest18Helper 'j' &&
+    Prelude.not (overloadingTest18Helper 'a');
+overloadingTest18Helper x =
+    let
+        y1 = let
+                y2 =
+                     let
+                         y3 = x;
+                     in
+                         y3;
+             in
+                 y2;
+    in
+        y1 == 'j';
+
+overloadingTest19 =
+    overloadingTest19Helper 0.0 == 1 &&
+    overloadingTest19Helper 5.0 == 7;
+overloadingTest19Helper y =        
+    let
+        f x = x > y;
+    in 
+        if (f 1) then y + 1 else y + 2;
+
+overloadingTest20 =
+    overloadingTest20Helper 0.0 == 1 &&
+    overloadingTest20Helper 5.0 == 7;        
+overloadingTest20Helper =
+    \y ->        
+    let
+        f x = x > y;
+    in 
+        if (f 1) then y + 1 else y + 2;    
+        
+//This is an interesting example. The most general type of overloadingTest21Helper is (Num a, Num b) => a -> b
+//so we really need the type specialization here to run this properly, since otherwise there is no way
+//to properly specify what the output type actually is. Note that Hugs doesn't forbid these declarations
+//even though this is effectively an unresolvable top level overloading.
+overloadingTest21 = overloadingTest21Helper1 (9 :: Int) == 32;
+overloadingTest21Helper1 :: (Prelude.Num a) => a -> a;
+overloadingTest21Helper1 x = if x == 0 then 1 else overloadingTest21Helper2 (x - 1) * 2;
+overloadingTest21Helper2 x = if x == 0 then 1 else overloadingTest21Helper1 (x - 1);            
+
+beeble1 :: Prelude.Num a => a -> a;
+private beeble1 x =
+    let
+        y = x; 
+        z = y * y;
+    in
+        z;    
+        
+overloadingTest22 = beeble1 5.0 == 25.0;
+            
+beeble2 :: Prelude.Num a => a -> a;
+private beeble2 x =
+    let
+        y = x + 1; 
+        z = y * y;
+    in
+        z;
+        
+overloadingTest23 = beeble2 9.0 == 100.0;                
+
+beeble3 :: Prelude.Num a => a -> a;
+private beeble3 x =
+    let
+        y = x;
+    in
+        let
+            z = y * y;
+        in
+            z;
+    
+overloadingTest24 = beeble3 6.0 == 36.0;
+
+ot25HelperHelper :: Prelude.Num a => a;
+ot25HelperHelper = 1000;
+ot25Helper :: Prelude.Num a => a;
+ot25Helper = ot25HelperHelper;
+overloadingTest25 = ot25Helper == (1000 :: Int);
+        
+        
+//In addThree1, the built-in function sqrt is called each time addThree1 is called.
+//In addThree2, the built-in function sqrt is called only the first time addThree2 is called.
+//This example illustrates the difference between a constant applicative form, which is cached,
+//and a local function that looks like a CAF, which is not cached.    
+addThree1 x =
+    let
+        sqrt9 = Math.sqrt 9;
+    in
+        x + sqrt9;
+        
+private sqrt9 = Math.sqrt 9;
+
+addThree2 x =
+    x + sqrt9;
+    
+//test of a case within a local function with an arg        
+liftTest1 =
+    let
+        f x =
+            case x of
+            MakeColour r g b -> b;
+            ;
+    in
+        f blue;
+        
+//test of mutually recursive local functions that must be lifted
+liftTest2 :: (Prelude.Num a) => a -> a;
+liftTest2 x =
+    let
+        f x = if x == 0 then 1 else g (x - 1) * 2;
+        g x = if x == 0 then 1 else f (x - 1);
+    in
+        f x;        
+        
+//this used to fail to compile. The problem is with pattern bound variables that occur within the body of something that
+//needs lambda lifting. In this case it is with the 'r' in the body of 'funny'.
+data private Colour = 
+    private MakeColour 
+        red     :: Prelude.Int 
+        green   :: Prelude.Int 
+        blue    :: Prelude.Int;
+
+private blue    = MakeColour 0   0   255;
+liftTest3 c =
+    case c of
+    MakeColour r g b ->
+        let
+            funny x = (x, r);
+        in
+            funny 2.0;
+    ;    
+    
+singleUseTest1 =
+    let
+        f :: Prelude.Double -> Prelude.Double;
+        f x = List.sum [x, x + 2, x*x + 4];
+    in
+        List.map f [1.0, 2.0];
+
+getUnificationType t f x = f (List.head [x, t]);
+                
+singleUseTest2 t =
+    let        
+        f x = List.sum [x, x + 2, x*x + 4];
+    in
+        List.map (getUnificationType t f) [1.0, 2.0];
+        
+
+public singleUseTest3 xs =
+    let
+        f :: Prelude.Double -> Prelude.Double;
+        f x = List.sum [x, x + 2, x*x + 4];
+    in
+        List.map f xs;
+
+//local type declarations can involve constrained type variables        
+testLocalDecl1 x =
+    let
+        f :: Prelude.Num a => a -> a;
+        f y = 2 + y;
+    in
+        f x;
+
+//type error if the local type declaration is uncommented.    
+testLocalDecl2 x =
+    let
+        //f :: Num a => a -> a;
+        f y = x + y;
+    in
+        f x;        
+                
+//the ordering of the declarations is not important
+testLocalDecl3 =
+    let
+        x :: Prelude.Int;
+        y :: Prelude.Double;
+        x = 1;
+        y = 2;
+    in (x, y);    
+
+//the ordering of the declarations is not important    
+testLocalDecl4 =
+    let
+        y = 20;
+        x :: Prelude.Int;
+        y :: Prelude.Double;
+        x = 10;        
+    in (x, y);    
+    
+testLocalDecl5 x =    
+    let
+        f :: Prelude.Num a => a -> a;
+        f x = if x == 0 then 1 else g (x - 1) * 2;
+        g :: Prelude.Num a => a -> a;
+        g x = if x == 0 then 1 else f (x - 1);
+    in
+        f x;
+
+//this is really the same as testLocalDecl5. The "a" and "b" are not in the same scope.        
+testLocalDecl6 x =    
+    let
+        f :: Prelude.Num a => a -> a;
+        f x = if x == 0 then 1 else g (x - 1) * 2;
+        g :: Prelude.Num b => b -> b;
+        g x = if x == 0 then 1 else f (x - 1);
+    in
+        f x;    
+
+//this example illustrates that the type variables such as "a" and "b" are not identified
+//between the separate declarations. i.e. the top level a is not the same as the a in make.
+testLocalDecl7 :: a -> a -> b -> (a, a, b);
+testLocalDecl7 x y z =
+    let
+        make :: b -> b -> a -> (b, b, a);
+        make x y z = (x, y, z);
+    in
+        make x y z;    
+
+//this test intentionally omits the type signature        
+//testLocalDecl8 :: [Int] -> [Int];    
+testLocalDecl8 x =
+    let
+        //y :: [a]; //not allowed. Instantiating a non-generic type variable to a type involving type variables    
+        y :: [Prelude.Int]; //this is OK, and influences the type of testLocalDecl8
+        y = x;
+    in
+        y;    
+
+testLocalDecl8Helper = testLocalDecl8 [1,2,3] == [1,2,3];            
+
+//this example type checks in Haskell but not in CAL. In Haskell, it requires a type signature.    
+//This is called "enhanced polymorphic recursion".    
+//p :: Eq a => a -> Boolean;
+//p x = x==x && p [x];
+
+        
+// some temporary functions to test ongoing work with compiled i/o.
+rac1 :: Prelude.String -> Prelude.Int;
+public rac1 x = 1;
+
+rac2 :: Prelude.Double -> Prelude.String -> Prelude.Double;
+public rac2 x y = x;
+
+rac3 :: Prelude.Int -> [Prelude.Int];
+public rac3 x = [x];
+
+rac4 :: Prelude.String -> Prelude.String;
+public rac4 x = x ++ "abc";
+
+rac6 :: Prelude.String -> Prelude.String -> Prelude.String;
+public rac6 x y = x ++ y;
+
+rac7 :: [Prelude.String] -> Prelude.String -> [Prelude.String];
+public rac7 x y = List.map (rac6 y) x;
+  
+//////////////////////////////////////////////////////////////////////
+// test foreign functions
+//todoBI some sample foreign function declarations for test purposes
+
+foreign unsafe import jvm "static method java.lang.Math.sqrt" sqrtForeign :: Double -> Double;
+
+//illustrates how to handle overloads
+foreign unsafe import jvm "static method java.lang.Math.max" public maxDoubleForeign :: Double -> Double -> Double;
+foreign unsafe import jvm "static method java.lang.Math.max" private maxIntForeign :: Int -> Int -> Int;
+
+foreign unsafe import jvm "static method java.lang.Character.isLowerCase" private isLowerCaseForeign :: Char -> Boolean;
+foreign unsafe import jvm "static method java.lang.Character.toLowerCase" private toLowerCaseForeign :: Char -> Char;
+
+//foreign fields
+foreign unsafe import jvm "static field java.lang.Math.PI" private piForeign :: Double;
+
+//tests accessing a static method of a static inner class.
+//note the use of the dollar sign. 
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.M1.Add3Doubles.add3Doubles"
+    private add3Doubles :: Double -> Double -> Double -> Double;
+
+    
+  
+testSqrtForeign =
+    sqrtForeign 9.0 == 3.0 
+    //tests hiding foreign scs by a local sc of the same name
+    && (((let sqrtForeign x = x + 2; in sqrtForeign 9.0) + sqrtForeign 25.0) == 16.0)
+    && ((sqrtForeign 25.0 + (let sqrtForeign x = x + 2; in sqrtForeign 9.0)) == 16.0)
+    || error "Prelude.testSqrtForeign failed.";
+    
+testMaxDoubleForeign =
+    maxDoubleForeign 5.0 7.5 == 7.5 ||
+    error "Prelude.testMaxDoubleForeign failed.";
+    
+testMaxIntForeign =
+    maxIntForeign 20 10 == 20
+    || error "Prelude.testMaxIntForeign failed.";
+    
+testIsLowerCase =
+    isLowerCase 'a'
+    && not (isLowerCase 'A')
+     && equals (map isLowerCase (toList "AbcD")) [False, True, True, False]
+     || error "Prelude.testIsLowerCase failed.";
+    
+testToLowerCase =
+    (toLowerCase 'Z' == 'z')
+    //tests partial application of foreign functions
+    && equals (map toLowerCase ['A','B','C','D','E','F','G','h','i','j','k']) ['a','b','c','d','e','f','g','h','i','j','k']
+    || error "Prelude.testToLowerCase failed.";
+    
+testPiForeign =
+    piForeign > 3.1415
+    && piForeign < 3.1416
+    || error "Prelude.testPiForeign failed.";
+    
+testAdd3Doubles = 
+    add3Doubles 20.0 50.0 60.5 == 130.5
+    || error "Prelude.testAdd3Doubles failed.";
+
+public testForeignFunctions =
+    testSqrtForeign
+    && testMaxDoubleForeign
+    && testMaxIntForeign
+    && testIsLowerCase
+    && testToLowerCase
+    && testPiForeign
+    && testAdd3Doubles
+    && testLocalDep 
+    || error "Prelude.testForeignFunctions failed.";
+
+//tests partial application of foreign functions    
+//testForeignFunctions = map isLowerCase "AbcD";
+
+//tests hiding foreign scs by a local sc of the same name
+//testForeignFunctions = ((let sqrtForeign x = x + 2; in sqrtForeign 9.0) + sqrtForeign 25.0);
+
+//test incorrect return type. Caught at run-time.
+//foreign unsafe import jvm "java.lang.Character.toLowerCase" public isLowerCase :: Char -> Boolean;
+
+testAdd3DoublesDirectly = add3Doubles 20 40 60;
+
+add3Doubles2 :: Double -> Double -> Double -> Double;
+add3Doubles2 x y z = x + y + z;
+
+data foreign unsafe import jvm "java.lang.String" public JString;
+foreign unsafe import jvm "method charAt" private jString_charAt :: JString -> Int -> Char;
+foreign unsafe import jvm "method length" private jString_length :: JString -> Int;
+
+data foreign unsafe import jvm "java.lang.StringBuilder" private JStringBuilder;
+foreign unsafe import jvm "constructor" private jStringBuilder_new :: JStringBuilder;
+foreign unsafe import jvm "method append" private jStringBuilder_append2 :: JStringBuilder -> String -> JStringBuilder;
+foreign unsafe import jvm "method append" private jStringBuilder_append :: JStringBuilder -> Char -> JStringBuilder;
+foreign unsafe import jvm "method toString" jStringBuilder_toString :: JStringBuilder -> JString;
+foreign unsafe import jvm "method toString" jStringBuilder_toString2 :: JStringBuilder -> String;
+
+charactersToJString :: [Char] -> JString;
+public charactersToJString xs = jStringBuilder_toString (foldLeftStrict jStringBuilder_append jStringBuilder_new xs);
+
+jStringToCharacters :: JString -> [Char];
+public jStringToCharacters jString = map (jString_charAt jString) (take (jString_length jString) (upFrom 0));  
+
+testJAppend2 :: Double -> Double -> Double -> Double;
+testJAppend2 x y z = x + y + z;
+testJAppend = testJAppend2 2.0 3.0 4.0;
+
+
+testza =
+    equals (jStringToCharacters (jStringBuilder_toString (jStringBuilder_append jStringBuilder_new 'a'))) ['a']
+    &&
+    equals (jStringToCharacters (jStringBuilder_toString (jStringBuilder_append jStringBuilder_new 'b'))) ['b']
+    ;
+    
+//some tests of local dependendency transforms. These are just the ordering and grouping of 
+//bindings within a single let block in order to maximize polymorphism.
+
+testLocalDep =
+    testLocalDep1 &&
+    testLocalDep2 &&
+    testLocalDep3 &&
+    testLocalDep4 &&
+    testLocalDep5 &&
+    testLocalDep6 ||
+    error "Cal.Test.General.M1.testLocalDep failed.";
+
+//the local function addOne is used polymorphically within the same let group
+localDep1 =
+    let
+        addOne x  = x + 1;
+        y = (addOne 10.0, addOne (2 :: Int));
+    in
+        y;
+        
+testLocalDep1 = localDep1 == (11.0, 3 :: Int);        
+
+//the local function addOne is used polymorphically within the same let group
+//in a definition occurring before the definition of addOne        
+localDep2 =
+    let
+        y = (addOne 5.0, addOne (9 :: Int));
+        addOne x  = x + 1;        
+    in
+        y;    
+        
+testLocalDep2 = localDep2 == (6.0, 10 :: Int);
+
+//combination of recursive and non-recursive local definitions with type declarations
+testLocalDep3 = 
+    let
+        isNull :: [a] -> Boolean;
+        isNull x = 
+            case x of
+            [] -> True;
+            y : ys -> False;
+            ;
+            
+        equalsList :: Eq a => [a] -> [a] -> Boolean;
+        equalsList xs ys =
+            case xs of
+            [] -> isNull ys;                
+            xs_head : xs_tail ->
+                case ys of
+                [] -> False;
+                ys_head : ys_tail -> xs_head == ys_head && equalsList xs_tail ys_tail;
+                ;
+            ; 
+        
+        equalsListExamples =
+            equalsList ["abc", "def"] ["abc", "def"] &&
+            equalsList ['a','b','\t','c'] ['a','b','\t','c'] &&
+            not (equalsList ['a','b','c'] ['A','B','C']) &&
+            equalsList [] (head [[], [1.0]]) &&
+            notEqualsList [2.0] [] ||
+            error "Prelude.equalsListExamples failed.";
+                                     
+        notEqualsList :: Eq a => [a] -> [a] -> Boolean;
+        notEqualsList x y = not (equalsList x y);
+    in
+        equalsListExamples;    
+        
+//as testLocalDep3, but the order of the type declarations is scrambled        
+testLocalDep4 = 
+    let        
+        isNull x = 
+            case x of
+            [] -> True;
+            y : ys -> False;
+            ;
+                    
+        equalsList xs ys =
+            case xs of
+            [] -> isNull ys;                
+            xs_head : xs_tail ->
+                case ys of
+                [] -> False;
+                ys_head : ys_tail -> xs_head == ys_head && equalsList xs_tail ys_tail;
+                ;
+            ; 
+        
+        notEqualsList :: Eq a => [a] -> [a] -> Boolean;
+        
+        equalsListExamples =
+            equalsList ["abc", "def"] ["abc", "def"] &&
+            equalsList ['a','b','\t','c'] ['a','b','\t','c'] &&
+            not (equalsList ['a','b','c'] ['A','B','C']) &&
+            equalsList [] (head [[], [1.0]]) &&
+            notEqualsList [2.0] [] ||
+            error "Prelude.equalsListExamples failed.";
+                                             
+        notEqualsList x y = not (equalsList x y);
+        
+        equalsList :: Eq a => [a] -> [a] -> Boolean;
+        isNull :: [a] -> Boolean;
+    in
+        equalsListExamples;    
+
+//testLocalDep5 is an interesting example. The content of RecordTests.cal was put into
+//the body of a let, with the 2 data declarations for Point and WeirdType moved to the top
+//level, and a few "public" keywords taken out. It all still works now because of 
+//the local dependency analysis transforms, even though there are many polymorphic and
+//record polymorphic functions defined and used below.    
+data private Point = 
+    private Point 
+        coordinates     :: {x :: Prelude.Double, y :: Prelude.Double};
+data WeirdType a = 
+    StopTheWeirdness | 
+    ContinueTheWeirdness 
+        weirdRec        :: {x :: a, rest :: WeirdType a};
+        
+testLocalDep5 =
+    let
+            
+        //some tests on parsing records
+        
+        
+        //3 fields: x, y and colour
+        r1 :: {x :: Prelude.Int, y :: Prelude.Int, colour :: Prelude.String};
+        r1 = {x = 20, y = 30, colour = "red"};
+        
+        //the ordering of the fields in the record value and the record type do not need to match
+        r2 :: {name :: Prelude.String, height :: Prelude.Double};
+        r2 = {height = 5.0, name = "Linda"};
+        
+        //the empty record and its type
+        r3 :: {};
+        r3 = {};
+        
+        //a record containing 3 fields, one of which has a record type
+        //note there is no naming conflict between the labels in the inner record and those in the outer record even though e.g. "field1" is reused.
+        r4 :: {field1 :: [a] -> a, field2 :: {field1 :: Prelude.Char, field2 :: Prelude.Double}, field3 :: a -> a};
+        r4 = {field1 = List.head, field2 = {field1 = 'a', field2 = 20.0}, field3 = Prelude.id};
+        
+        //records and type classes mix well
+        r5 :: Prelude.Num a => {list :: [Prelude.Double], func :: a -> a};
+        r5 = {list = [10.0, 20.0], func = Prelude.add 2};
+        
+        rt1 = {field1 = "abc", field2 = 3.0};
+        
+        rt2 = {};
+        
+        rt3 = {{} | };
+        
+        rt4 = {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT};
+        
+        rt5 = {{} | name="Fred"};
+        
+        addColour point = {point | colour = "red"};
+        
+        
+        first x = x.field1;
+        
+        
+        testFirst =
+            first {field1 = "abc", field2 = 10.0} == "abc" &&
+            first {field1 = Prelude.True, field2 = Prelude.GT, field3 = "def"} &&
+            first {field2 = "abc", field1 = 20.0} == 20.0
+            || Prelude.error "RecordTests.testFirst failed.";
+        
+        testRecordSelection =
+            {field1 = "abc", field2 = 10.0}.field2 == 10.0 &&
+            {x = Prelude.GT, y = Prelude.True}.y == Prelude.True &&
+            {x = {y = {z = "abc"}}}.x.y.z == "abc" //selection is left associative
+            || Prelude.error "RecordTests.testRecordSelection failed.";    
+        
+        
+        extension1 = {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}; // = (10.0, True, GT) = {field1 = 10, field2 = True, field3 = GT}
+        
+        extension2 = {{} | name = "Fred"}; // = {name = "Fred"}
+        
+        extension3 = {{x = 10.0, y = 20.0} | colour = "blue"}; // = {x = 10.0, y = 20.0, colour = blue}
+        
+        
+        tripleFields x = (x.field1, x.field2, x.field3);
+        
+        
+        //Record extension also works where the record to be extended is a variable:
+        redPoint :: {x :: Prelude.Double, y :: Prelude.Double} -> {x :: Prelude.Double, y :: Prelude.Double, colour :: Prelude.String};
+        redPoint point = {point | colour = "red"};
+        
+        //Record extension, like field selection, can also be a polymorphic operation:
+        redRecord :: r\colour => {r | } -> {r | colour :: Prelude.String};
+        redRecord r = {r | colour = "red"};
+        
+        tripleFun x = ({x | bo = 6.0}, {x | anton = "Anton"}, {x | linda = Prelude.Just "Linda"});
+        
+        tripleFun2 x y z = [{x | bo = 6.0}, {y | anton = "Anton"}, {z | linda = Prelude.Just "Linda"}];
+        
+        
+        recordCase1 =
+            case {x = 10.0, y = 20.0, z = 15.0} of
+            {x = xValue, y = yValue, z = zValue} -> xValue;
+            ;
+        
+        testRecordCase1 =
+            recordCase1 == 10
+            || Prelude.error "RecordTests.testRecordCase1 failed.";
+        
+        recordCase2 :: (r\x, r\y, Prelude.Num a) => {r | x :: a, y :: a} -> a;
+        //recordCase2 r = r.x + r.y;
+        recordCase2 r =
+            case r of
+            {r_rest | x = xValue, y = yValue} -> xValue + yValue;
+            ;
+            
+        testRecordCase2 =
+            recordCase2 {x = 2.0, y = 3.0} == 5 &&
+            recordCase2    {y = 10.0, x = 2.0, z = 3.0} == 12 &&
+            recordCase2 {x = 2.0, y = 5.0, z = Prelude.error "this is bad!"} == 7
+            || Prelude.error "RecordTests.testRecordCase2 failed.";
+        
+        //remove the field colour from a record:
+        removeColour :: (r\colour) => {r | colour :: a} -> {r | };
+        removeColour r =
+            case r of
+            {r_rest | colour} -> r_rest;
+            ;
+            
+        testRemoveColour =
+            {removeColour {field1 = 20.0, colour = ["green"]} | colour = "Anton"}.colour == "Anton"
+            || Prelude.error "RecordTests.testRemoveColour failed.";
+        
+        //differs from removeColour by the use of the {r} syntax instead of {r | } for a record-polymorphic
+        //record with no has fields.    
+        removeColour2 :: (r\colour) => {r | colour :: a} -> {r};
+        removeColour2 r =
+            case r of
+            {r_rest | colour} -> r_rest;
+            ;
+            
+        testRemoveColour2 =
+            {removeColour2 {field1 = 20.0, colour = ["green"]} | colour = "Anton"}.colour == "Anton"
+            || Prelude.error "RecordTests.testRemoveColour2 failed.";    
+        
+        //rename the field colour to hue:
+        //in words, the type is "a function that takes a record with a field label colour, and without a field label hue, and returns a record with a field label hue, and without a field label colour"
+        renameColourToHue :: (r\colour, r\hue) => {r | colour :: a} -> {r | hue :: a};
+        renameColourToHue r = case r of {r_rest | colour = colourValue} -> {r_rest | hue = colourValue};;
+        renameColourToHue2 r = case r of {r_rest | colour} -> {r_rest | hue = colour};; //using punning
+        
+        //update the colour.
+        updateColour :: (r\colour) => Prelude.String -> {r | colour :: Prelude.String} -> {r | colour :: Prelude.String};
+        updateColour newColourValue r = case r of {r_rest | colour = oldColourValue} -> {r_rest | colour = newColourValue};;
+        
+        
+        recordTest1 = {field1 = "Anton", field2 = 2.0};
+        
+        //the same variable x occurs in 2 different scopes
+        recordTest2 = {fieldDouble = let x = Math.sin 1; in x, fieldChar = let x = List.head ['a', 'b']; in x};
+        
+        recordTest3 = {fieldDouble = let x = "ab\n\tc"; in x, fieldChar = let x = List.head ['a', 'b']; in x};
+        
+        recordTest4 = recordTest1.field1;
+        
+        recordTest5 =
+            let
+                f x = x.field1;
+            in
+                (f {field2 = 2.0, field1 = 'a'}, f recordTest1, f {field1 = "this is a string"});
+        
+        recordTestSimilar = 
+            let
+                field1 = "Anton";
+                field2 = 2.0;
+            in
+                (field1, field2);
+        
+        
+        recordTestSimilar2 = 
+            let
+                field1 = String.fromList ['a', 'n', 't'];
+                field2 = 2.0 + 4.0;
+            in
+                (field1, field2);
+                
+        testLets1 = (let x = Math.sin 0; in x, let x = Math.sin 0; in x, let x = Math.sin 0; in x);
+        
+        testLets2 = [let x = Math.sin 0; in x, let x = Math.sin 0; in x, let x = Math.sin 0; in x];    
+        
+        testEval1 =
+            case (List.head [Prelude.Just 'a', Prelude.Nothing]) of
+            Prelude.Just x -> x;
+            ;
+        
+        //f xs = (List.head xs, List.map List.head xs, List.map Math.sin xs);
+        //f x = ([x, Prelude.Tuple2], x 2.0 'a', x 'a' 2.0);
+        //f x = ([x, Prelude.Tuple2], [x, Prelude.flip x], x 'a' 2.0);
+        
+        //f :: [[[[a]]]] -> ([[[[[a]]]]], [[[[[a]]]]], [[[[[a]]]]], [[[[[a]]]]]);
+        //f x = ([x, []], [x, [[]]], [x, [[[]]]], [x, [[[[]]]]]);
+        
+        //f x = ([x, [[[[]]]]], [x, [[[]]]], [x, [[]]], [x, []]);
+        
+        testVarClash letVar_RecordTests_x =
+            let
+                x = Math.sin 2.0;
+            in
+                x;
+                
+        errorRecord :: Prelude.String -> {field1 :: Prelude.Int, field2 :: Prelude.Char};        
+        errorRecord x = Prelude.error x;
+        
+        projection x y = y;
+        
+        //this tests the lazyness of the record selection operator. The expression that is selected is not evaluated
+        //to a record form unless needed.
+        testLazyRecordSelection = projection (errorRecord "this should not be evaluated.").field1 Prelude.True;
+        
+        //this tests the lazyness of the record extension operator.
+        testLazyRecordExtension = projection {Prelude.error "this should not be evaluated" | field1 = 10.0} Prelude.True;
+        
+        //this tests the lazyness of the record case expression. The condition expression should not be evaluated
+        //since it is not needed by the function projection.
+        testLazyRecordCase = projection (case (errorRecord "this should not be evaluated.") of {r | field1} -> field1;) Prelude.True;
+        
+        testLazyIf = projection (if Prelude.error "this should not be evaluated." then 100.0 else 200.0) Prelude.True;
+        
+        testRecordExpressions =
+            (({{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}.field1) == 10)
+            &&
+            (let redPoint point = {point | colour = "red"}; in (redPoint {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}).field1) == 10
+            &&
+            (let redPoint point = {point | colour = "red"}; in (redPoint {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}).colour) == "red"
+            || Prelude.error "RecordTests.testRecordExpressions failed.";
+            
+        funnyFunction x y =
+            let
+               r1 = {field1 = x, field2 = \z -> z + y + z};
+               r2 = {r1 | field3 = "abc", field4 = r1};
+            in
+               (r1.field1 + r1.field2 3.0, r2.field3, r2.field4.field2 5.0);
+            
+        testFunnyFunction =
+            funnyFunction 5 12 == (23, "abc", 22) &&
+            funnyFunction 20 2 == (28, "abc", 12)
+            || Prelude.error "RecordTests.testFunnyFunction failed.";
+            
+        addAnton x =
+            if x.linda > 5 then
+                {x | anton = x.linda}
+            else
+                {x | anton = 3.0};
+                
+        testAddAnton =
+            ((case addAnton {linda = 4, computers = (Math.sin, "I like computers")} of {_ | anton = antonValue, linda = lindaValue} -> antonValue * lindaValue;) == 12) &&
+            ((case addAnton {linda = 6, computers = (Math.sin, "I like computers")} of {rest | anton = antonValue, linda = lindaValue} -> antonValue * lindaValue;) == 36)
+            ;
+            
+        //some functions for converting back and forth between tuples and special records with the field names
+        //field1, field2, ...    
+            
+        field1 r = r.field1;
+        field2 r = r.field2;
+        field3 r = r.field3;
+        field4 r = r.field4;
+        field5 r = r.field5;
+        field6 r = r.field6;
+        field7 r = r.field7;
+        
+        toTuple2 :: (r\field1, r\field2) => {r | field1 :: a, field2 :: b} -> (a, b);
+        toTuple2 r =
+            case r of
+            {_ | field1, field2} -> (field1, field2);
+            ;
+        
+        toTuple3 :: (r\field1, r\field2, r\field3) => {r | field1 :: a, field2 :: b, field3 :: c} -> (a, b, c);
+        toTuple3 r =
+            case r of
+            {_ | field1, field2, field3} -> (field1, field2, field3);
+            ;
+        
+        toTuple4 :: (r\field1, r\field2, r\field3, r\field4) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d} -> (a, b, c, d);
+        toTuple4 r =
+            case r of
+            {_ | field1, field2, field3, field4} -> (field1, field2, field3, field4);
+            ;
+        
+        toTuple5 :: (r\field1, r\field2, r\field3, r\field4, r\field5) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d, field5 :: e} -> (a, b, c, d, e);
+        toTuple5 r =
+            case r of
+            {_ | field1, field2, field3, field4, field5} -> (field1, field2, field3, field4, field5);
+            ;
+        
+        toTuple6 :: (r\field1, r\field2, r\field3, r\field4, r\field5, r\field6) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d, field5 :: e, field6 :: f} -> (a, b, c, d, e, f);
+        toTuple6 r =
+            case r of {_ | field1, field2, field3, field4, field5, field6} -> (field1, field2, field3, field4, field5, field6);
+            ;
+            
+        toTuple7 :: (r\field1, r\field2, r\field3, r\field4, r\field5, r\field6, r\field7) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d, field5 :: e, field6 :: f, field7 :: g} -> (a, b, c, d, e, f, g);
+        toTuple7 r =
+            case r of {_ | field1, field2, field3, field4, field5, field6, field7} -> (field1, field2, field3, field4, field5, field6, field7);
+            ;    
+                
+                    
+            
+        testToTuple =
+            toTuple2 recordTest1 == ("Anton", 2.0) &&
+            toTuple2 extension1 == (10, Prelude.True) &&
+            toTuple3 extension1 == (10, Prelude.True, Prelude.GT)
+            || Prelude.error "RecordTests.testToTuple failed.";
+        
+        
+        getPointRec p = case p of Point pointRec -> pointRec;;    
+        
+        pointToPair :: Point -> (Double, Double);
+        pointToPair p =
+            let
+                r = getPointRec p;
+            in
+                (r.x, r.y);
+        
+        //this function illustrates why one might want to use records- to update the x field,
+        //we don't have to deal with any of the other fields of the record. This is not a savings
+        //deal in the case of Point, which only has 2 fields, but if there are many fields it
+        //can be quite convenient.
+        translatePointHorizontally :: Point -> Double -> Point;
+        translatePointHorizontally p t =
+            let
+                r = getPointRec p;
+            in
+                case r of
+                {rec | x} -> Point {rec | x = x + t};
+                ;
+        
+        testPoint =
+            (pointToPair (Point {x = 5.0, y = 2.0})) == (5, 2) &&
+            pointToPair (translatePointHorizontally (Point {x = 5, y = 2}) (-1)) == (4, 2) ||
+            Prelude.error "RecordTests.testPoint failed.";
+            
+
+        weirdTypeToList :: WeirdType a -> [a];
+        weirdTypeToList w =
+            case w of
+            StopTheWeirdness -> [];
+            ContinueTheWeirdness r ->
+                r.x : (weirdTypeToList r.rest);
+            ;
+            
+        listToWeirdType :: [a] -> WeirdType a;
+        listToWeirdType xs =
+            case xs of
+            [] -> StopTheWeirdness;
+            x : xss -> ContinueTheWeirdness {x = x, rest = (listToWeirdType xss)};
+            ;
+            
+        testWeirdType = weirdTypeToList (listToWeirdType [(1 :: Int), 5, 7, 3]) == [(1 :: Int), 5, 7, 3];
+        
+        testStrictSelection = 
+        let
+            l = 1.0 + 2.0;
+            r = { linda =  l};
+            s = addAnton r;
+        in 
+            s.anton;
+            
+        //some tests of the built-in hasField and fieldNames functions
+        hasNameField r = Record.hasField r "name";
+        hasFieldNField r n = Record.hasField r ("field" ++ Prelude.intToString n);
+        
+        testHasField =
+            [hasNameField r1, hasNameField r2, hasNameField {name = "Fred"}, hasNameField {}] == [False, True, True, False] &&
+            [hasFieldNField rt1 1, hasFieldNField rt1 2, hasFieldNField rt1 3] == [True, True, False] &&
+            [hasFieldNField extension1 3, hasFieldNField extension1 4] == [True, False] &&
+            hasFieldNField (redRecord {field1 = "Zaphod"}) 1 &&
+            (Prelude.flip Record.hasField) "bar" {bar = "bar"};
+            
+        testFieldNames =
+            Record.fieldNames extension1 == ["field1", "field2", "field3"] &&
+            Record.fieldNames {town = "Vancouver", country = "Canada", province = "BC"} == ["country", "province", "town"] &&
+            Record.fieldNames (redRecord {}) == ["colour"] &&
+            Record.fieldNames {} == [];    
+                
+        testRecords =
+            testFirst &&
+            testRecordSelection &&
+            testRecordCase1 &&
+            testRecordCase2 &&
+            testRemoveColour &&
+            testRemoveColour2 &&
+            testLazyRecordSelection &&
+            testLazyRecordCase &&
+            testLazyIf &&
+            testLazyRecordExtension &&
+            testFunnyFunction &&
+            testAddAnton &&
+            testToTuple &&
+            testPoint &&
+            testWeirdType &&
+            (testStrictSelection == 3.0) &&
+            testHasField &&
+            testFieldNames
+            || Prelude.error "RecordTests.testRecords failed.";
+    in
+        testRecords;
+        
+//the local function addOne is used polymorphically within the same let group
+//in a definition occurring before the definition of addOne    
+//addOne is not at the top level    
+localDep6 =
+    let
+        z = let
+                y = (addOne 5.0, addOne (9 :: Int));
+                addOne x  = x + 1;        
+            in
+                (y, addOne 2.0, addOne (7 :: Int));
+    in
+        z;
+
+testLocalDep6 =
+    localDep6 == ((6, 10), 3.0, 8 :: Int);
+
+
+//tests of converting unused variables into wildcard pattern
+
+//Note for the example below on wildcards: the compiler now converts unused pattern
+//variables to wildcards, and so performance differences should not be seen.    
+
+/*
+convertWildcard1&2 5000000 was used to see if the use of wildcards for field1 .. field7 in the case extraction below
+would improve performance since the generated Java code for myTuple7Field4 includes unneeded calls to getNthMember
+which field4 does not.
+    RTValue field1 = $case.getNthMember(0);
+    RTValue field2 = $case.getNthMember(1);
+    RTValue field3 = $case.getNthMember(2);
+    RTValue x = $case.getNthMember(3);
+    RTValue field5 = $case.getNthMember(4);
+    RTValue field6 = $case.getNthMember(5);
+    RTValue field7 = $case.getNthMember(6);
+it turns out there was no measurable difference.
+*/    
+
+myTuple7Field4 :: (a, b, c, d, e, f, g) -> d;
+myTuple7Field4 t = 
+    case t of
+    (field1, field2, field3, x, field5, field6, field7) -> x;
+    ;
+    
+convertWildcard1 ::    Int -> Int;
+convertWildcard1 n = List.sum (List.map myTuple7Field4 (List.replicate n ("field1", "field2", "field3", 1, "field5", "field6", "field7")));
+
+convertWildcard2 ::    Int -> Int;
+convertWildcard2 n = List.sum (List.map Prelude.field4 (List.replicate n ("field1", "field2", "field3", 1, "field5", "field6", "field7")));
+
+/*
+convertRecWildcard1&2 1000000 was used to see if the use of wildcards for the polymorphic
+record variable in the record case extraction below would improve performance since the
+generated Java code for myRecField4 includes unneeded call to initialize s which
+involves copying a Java map.
+    RTRecordValue s = RTRecordValue.makeAsExtension($recordCase).removeField("field4");
+    RTValue field4 = $recordCase.getValue("field4");
+
+40% improvement in using the wildcard.
+*/
+
+myRecField4 :: r\field4 => {r | field4 :: a} -> a;
+myRecField4 r =
+    case r of
+    {s | field4} -> field4;
+    ;
+
+anotherMyRecField4 :: r\field4 => {r | field4 :: a} -> a;
+anotherMyRecField4 r =
+    case r of
+    {_ | field4} -> field4;
+    ;
+    
+convertRecWildcard1 ::    Int -> Int;
+convertRecWildcard1 n = List.sum (List.map myRecField4 (List.replicate n
+    {field1 = "field1", field2 = "field2", field3 = "field3", field4 = 1, field5 = "field5", field6 = "field6", field7 = "field7"}));
+
+convertRecWildcard2 ::    Int -> Int;
+convertRecWildcard2 n = List.sum (List.map anotherMyRecField4 (List.replicate n
+    {field1 = "field1", field2 = "field2", field3 = "field3", field4 = 1, field5 = "field5", field6 = "field6", field7 = "field7"}));
+        
+// This function can't actually be run, since it is non-terminating, but is here too make sure
+// that the compiler will succesfully compile it.  Please do not remove it, or attempt to run it.        
+recursiveLetExample = 
+    let
+        yyy = 
+            let
+                zzz = 5.0 + yyy + zzz;
+            in
+                let 
+                    qqq = zzz  + qqq;
+                in
+                   let 
+                       rrr  = 1.0 + qqq;
+                   in
+                       rrr + rrr;
+    in
+        yyy;
+
+// A sample function that takes a LOT of arguments
+public list50 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20 x21 x22 x23 x24 x25 x26 x27 x28 x29 x30 x31 x32 x33 x34 
+       x35 x36 x37 x38 x39 x40 x41 x42 x43 x44 x45 x46 x47 x48 x49 x50 = 
+    [x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15, x16, x17, x18, x19, x20, x21, x22, x23, x24, x25, x26, x27, x28, 
+     x29, x30, x31, x32, x33, x34, x35, x36, x37, x38, x39, x40, x41, x42, x43, x44, x45, x46, x47, x48, x49, x50];
+
+
+//local variables (argument, local functions, pattern bound variables, can't be qualified). The qualified
+//symbol always refers to the top level symbol.
+
+x = 5.0;
+addFive x = x + M1.x;
+
+subtractFive y =
+    let
+        x = y + 1;
+    in
+        -1 - M1.x + x;
+    
+multiplyFive p =
+    case p of
+    (x, y) -> x * M1.x;
+    ;
+    
+testQualification =
+    addFive 10 == 15
+    && subtractFive 100 == 95
+    && multiplyFive (10, 'a') == 50
+    || error "Cal.Test.General.M1.testQualification failed."
+    ;
+
+//////////////////////////////////////////////////////////////////////
+//the Tree type and its instances
+
+//todoBI replace this with an n-way tree (i.e. a rose) and add instances of Eq and Ord
+data Tree a =  
+    Leaf 
+        value   :: a | 
+    Branch 
+        tree1   :: (Tree a) 
+        tree2   :: (Tree a); 
+
+
+//////////////////////////////////////////////////////////////////////
+// Test supercombinators
+//
+// try to avoid adding public test supercombinators to the Prelude module 
+
+//enumerated types
+//todoBI Temp and Season are being used for testing purposes of Enum data types in the GemCutter.
+//Eventually they will be removed as publics.
+data public Temp = public Cold | public Hot; // Hot :: Temp
+data public Season = public Spring | public Summer | public Autumn | public Winter;
+        
+        
+// Tests for checking the code generated for various combinations of &&/||.        
+opTestExAnd x y =  (x && y);
+
+opTestExOr x y =  (x || y);
+
+opTestExNot x =  (not x);
+
+opTestExNotAnd x y =  (not (x && y));
+
+opTestExNotOr x y =  (not (x || y));
+
+opTestExNotNot x =  (not (not x));
+
+
+opTestExEquals :: Int -> Int -> Boolean;
+opTestExEquals x y =  (x == y);
+
+opTestExEquals2 :: Int -> Int -> Boolean;
+opTestExEquals2 x y =  (not (x != y));
+
+
+opTestExNotEquals :: Int -> Int -> Boolean;
+opTestExNotEquals x y =  (x != y);
+
+opTestExNotEquals2 :: Int -> Int -> Boolean;
+opTestExNotEquals2 x y =  (not (x == y));
+
+
+opTestExLessThan :: Int -> Int -> Boolean;
+opTestExLessThan x y =  (x < y);
+
+opTestExLessThan2 :: Int -> Int -> Boolean;
+opTestExLessThan2 x y =  (not (x >= y));
+
+
+opTestExLessThanEquals :: Int -> Int -> Boolean;
+opTestExLessThanEquals x y =  (x <= y);
+
+opTestExLessThanEquals2 :: Int -> Int -> Boolean;
+opTestExLessThanEquals2 x y =  (not (x > y));
+
+
+opTestExGreaterThan :: Int -> Int -> Boolean;
+opTestExGreaterThan x y =  (x > y);
+
+opTestExGreaterThan2 :: Int -> Int -> Boolean;
+opTestExGreaterThan2 x y =  (not (x <= y));
+
+
+opTestExGreaterThanEquals :: Int -> Int -> Boolean;
+opTestExGreaterThanEquals x y =  (x >= y);
+
+opTestExGreaterThanEquals2 :: Int -> Int -> Boolean;
+opTestExGreaterThanEquals2 x y =  (not (x < y));
+
+
+
+
+opTestExDoubleEquals :: Double -> Double -> Boolean;
+opTestExDoubleEquals x y =  (x == y);
+
+opTestExDoubleEquals2 :: Double -> Double -> Boolean;
+opTestExDoubleEquals2 x y =  (not (x != y));
+
+
+opTestExDoubleNotEquals :: Double -> Double -> Boolean;
+opTestExDoubleNotEquals x y =  (x != y);
+
+opTestExDoubleNotEquals2 :: Double -> Double -> Boolean;
+opTestExDoubleNotEquals2 x y =  (not (x == y));
+
+
+opTestExDoubleLessThan :: Double -> Double -> Boolean;
+opTestExDoubleLessThan x y =  (x < y);
+
+opTestExDoubleLessThan2 :: Double -> Double -> Boolean;
+opTestExDoubleLessThan2 x y =  (not (x >= y));
+
+
+opTestExDoubleLessThanEquals :: Double -> Double -> Boolean;
+opTestExDoubleLessThanEquals x y =  (x <= y);
+
+opTestExDoubleLessThanEquals2 :: Double -> Double -> Boolean;
+opTestExDoubleLessThanEquals2 x y =  (not (x > y));
+
+
+opTestExDoubleGreaterThan :: Double -> Double -> Boolean;
+opTestExDoubleGreaterThan x y =  (x > y);
+
+opTestExDoubleGreaterThan2 :: Double -> Double -> Boolean;
+opTestExDoubleGreaterThan2 x y =  (not (x <= y));
+
+
+opTestExDoubleGreaterThanEquals :: Double -> Double -> Boolean;
+opTestExDoubleGreaterThanEquals x y =  (x >= y);
+
+opTestExDoubleGreaterThanEquals2 :: Double -> Double -> Boolean;
+opTestExDoubleGreaterThanEquals2 x y =  (not (x < y));
+
+
+opTestExCompareOr1 :: Int -> Int -> Boolean;
+opTestExCompareOr1 x y =  (x < 1 || y < 5);
+
+opTestExCompareOr2 :: Int -> Int -> Int -> Boolean;
+opTestExCompareOr2 x y z =  (x < 1 || y < 5 || z < 10);
+
+
+opTestExCompareOrStrict1 :: Int -> Int -> Boolean;
+opTestExCompareOrStrict1 !x !y =  (x < 1 || y < 5);
+
+opTestExCompareOrStrict2 :: Int -> Int -> Int -> Boolean;
+opTestExCompareOrStrict2 !x !y !z =  (x < 1 || y < 5 || z < 10);
+
+opTestExParenAndOr x y z =  ((x && y) || z);
+opTestExNotParenAndOr x y z =  (not (x && y) || z);
+opTestExParenAndNotOr x y z =  ((x && y) || not z);
+opTestExNotParenAndNotOr x y z =  (not (x && y) || not z);
+
+opTestExAndParenOr x y z =  (x && (y || z));
+opTestExNotAndParenOr x y z =  (not x && (y || z));
+opTestExAndNotParenOr x y z =  (x && not (y || z)); 
+opTestExNotAndNotParenOr x y z =  (not x && not (y || z));
+
+opTestExParenOrAnd x y z =  ((x || y) && z);
+opTestExNotParenOrAnd x y z =  (not (x || y) && z);
+opTestExParenOrNotAnd x y z =  ((x || y) && not z);
+opTestExNotParenOrNotAnd x y z =  (not (x || y) && not z);
+
+opTestExOrParenAnd x y z =  (x || (y && z));
+opTestExNotOrParenAnd x y z =  (not x || (y && z));
+opTestExOrNotParenAnd x y z =  (x || not (y && z));
+opTestExNotOrNotParenAnd x y z =  (not x || not (y && z));
+opTestExNotOrNotParenAnd2 !x !y !z =  (not x || not (y && z));
+opTestExNotOrNotParenAnd3 x y z =  (not x || not (y && (opTestExNotOrNotParenAnd3 x y z)));
+
+opTestExAndAnd x y z =  ((x && y) && z);
+opTestExNotAndAnd x y z =  (not (x && y) && z);
+opTestExAndNotAnd x y z =  ((x && y) && not z);
+opTestExNotAndNotAnd x y z =  (not (x && y) && not z);
+
+opTestExAndAnd2 x y z =  (x && (y && z));
+opTestExNotAndAnd2 x y z =  (not x && (y && z));
+opTestExAndNotAnd2 x y z =  (x && not (y && z));
+opTestExNotAndNotAnd2 x y z =  (not x && not (y && z));
+
+opTestExOrOr x y z =  ((x || y) || z);
+opTestExNotOrOr x y z =  (not (x || y) || z);
+opTestExOrNotOr x y z =  ((x || y) || not z);
+opTestExNotOrNotOr x y z =  (not (x || y) || not z);
+
+opTestExOrOr2 x y z =  (x || (y || z));
+opTestExNotOrOr2 x y z =  (not x || (y || z));
+opTestExOrNotOr2 x y z =  (x || not (y || z));
+opTestExNotOrNotOr2 x y z =  (not x || not (y || z));
+
+opTestExExtendedTests1 x1 x2 x3 x4 x5 =  ((((x1 || x2) || x3) || x4) || x5);
+
+opTestExExtendedTests2 x1 x2 x3 x4 x5 =  ((((x1 && x2) && x3) && x4) && x5);
+
+opTestExExtendedTests3 x1 x2 x3 x4 x5 =  (x1 || (x2 || (x3 || (x4 || x5))));
+
+opTestExExtendedTests4 x1 x2 x3 x4 x5 =  (x1 && (x2 && (x3 && (x4 && x5))));
+
+opTestExExtendedTests5 x1 x2 x3 x4 x5 =  (not (not (not (not (x1 || x2) || x3) || x4) || x5));
+
+opTestExExtendedTests6 x1 x2 x3 x4 x5 =  (not (not (not (not (x1 && x2) && x3) && x4) && x5));
+
+opTestExExtendedTests7 x1 x2 x3 x4 x5 =  (not (x1 || not (x2 || not (x3 || not (x4 || x5)))));
+
+opTestExExtendedTests8 x1 x2 x3 x4 x5 =  (not (x1 && not (x2 && not (x3 && not (x4 && x5)))));
+
+opTestExExtendedTests7b x2 x3 x4 x5 =  (not (x2 || not (x3 || not (x4 || x5))));
+
+opTestExExtendedTests8b x2 x3 x4 x5 =  (not (x2 && not (x3 && not (x4 && x5))));
+
+
+opTestExExtendedTests9 x1 x2 x3 x4 x5 y2 y4 =  (((((Math.sin x1 < Math.sin y2) || x2) || (Math.cos x3 != Math.cos y4)) || x4) || x5);
+
+opTestExExtendedTests10 x1 x2 x3 x4 x5 y2 y4 =  (((((Math.sin x1 < Math.sin y2) && x2) && (Math.cos x3 != Math.cos y4)) && x4) && x5);
+
+opTestExExtendedTests11 x1 x2 x3 x4 x5 y2 y4 =  ((Math.sin x1 < Math.sin y2) || (x2 || ((Math.cos x3 != Math.cos y4) || (x4 || x5))));
+
+opTestExExtendedTests12 x1 x2 x3 x4 x5 y2 y4 =  ((Math.sin x1 < Math.sin y2) && (x2 && ((Math.cos x3 != Math.cos y4) && (x4 && x5))));
+
+opTestExExtendedTests13 x1 x2 x3 x4 x5 y2 y4 =  (not (not (not (not ((Math.sin x1 < Math.sin y2) || x2) || (Math.cos x3 != Math.cos y4)) || x4) || x5));
+
+opTestExExtendedTests14 x1 x2 x3 x4 x5 y2 y4 =  (not (not (not (not ((Math.sin x1 < Math.sin y2) && x2) && (Math.cos x3 != Math.cos y4)) && x4) && x5));
+
+opTestExExtendedTests15 x1 x2 x3 x4 x5 y2 y4 =  (not ((Math.sin x1 < Math.sin y2) || not (x2 || not ((Math.cos x3 != Math.cos y4) || not (x4 || x5)))));
+
+opTestExExtendedTests16 x1 x2 x3 x4 x5 y2 y4 =  (not ((Math.sin x1 < Math.sin y2) && not (x2 && not ((Math.cos x3 != Math.cos y4) && not (x4 && x5)))));
+
+
+opTestExExtendedTests17 x1 x2 x3 x4 x5 x6 x7 x8 =  ( ((x1 && x2) && (x3 && x4)) && ((x5 && x6) && (x7 && x8)));
+
+opTestExExtendedTests18 x1 x2 x3 x4 x5 x6 x7 x8 =  ( ((x1 || x2) || (x3 || x4)) || ((x5 || x6) || (x7 || x8)));
+
+opTestExExtendedTests19 x1 x2 x3 x4 x5 x6 x7 x8 =  ( ((x1 || x2) || (x3 || x4)) && ((x5 || x6) || (x7 || x8)));
+
+opTestExExtendedTests20 x1 x2 x3 x4 x5 x6 x7 x8 =  ( ((x1 && x2) || (x3 && x4)) || ((x5 && x6) || (x7 && x8)));
+
+opTestExExtendedTests21 x1 x2 x3 x4 x5 x6 x7 x8 =  ( ((x1 && x2) || (x3 && x4)) && ((x5 && x6) || (x7 && x8)));
+
+opTestExExtendedTests22 x1 x2 x3 x4 x5 x6 x7 x8 =  ( ((x1 || x2) && (x3 || x4)) || ((x5 || x6) && (x7 || x8)));
+
+
+opTestExExtendedTests23 x1 x2 x3 x4 x5 x6 x7 x8 =  (not (not (not (not x1 && not x2) && not (not x3 && not x4)) &&
+        not (not (not x5 && not x6) && not (not x7 && not x8))));
+
+opTestExExtendedTests24 x1 x2 x3 x4 x5 x6 x7 x8 =  (not (not (not (not x1 || not x2) || not (not x3 || not x4)) ||
+        not (not (not x5 || not x6) || not (not x7 || not x8))));
+
+opTestExExtendedTests25 x1 x2 x3 x4 x5 x6 x7 x8 =  (not (not (not (not x1 || not x2) || not (not x3 || not x4)) &&
+        not (not (not x5 || not x6) || not (not x7 || not x8))));
+
+opTestExExtendedTests26 x1 x2 x3 x4 x5 x6 x7 x8 =  (not (not (not (not x1 && not x2) || not (not x3 && not x4)) ||
+        not (not (not x5 && not x6) || not (not x7 && not x8))));
+
+opTestExExtendedTests27 x1 x2 x3 x4 x5 x6 x7 x8 =  (not (not (not (not x1 && not x2) || not (not x3 && not x4)) &&
+        not (not (not x5 && not x6) || not (not x7 && not x8))));
+
+opTestExExtendedTests28 x1 x2 x3 x4 x5 x6 x7 x8 =  (not (not (not (not x1 || not x2) && not (not x3 || not x4)) ||
+        not (not (not x5 || not x6) && not (not x7 || not x8))));
+
+
+opTestExExtendedTests29 x1 x2 x3 x4 x5 y2 y4 =  (not (not (not (not (not (Math.sin x1 < Math.sin y2) || x2) || not (Math.cos x3 != Math.cos y4)) || x4) || x5));
+
+opTestExExtendedTests30 x1 x2 x3 x4 x5 y2 y4 =  (not (not (not (not (not (Math.sin x1 < Math.sin y2) && x2) && not (Math.cos x3 != Math.cos y4)) && x4) && x5));
+
+opTestExExtendedTests31 x1 x2 x3 x4 x5 y2 y4 =  (not (not (Math.sin x1 < Math.sin y2) || not (x2 || not (not (Math.cos x3 != Math.cos y4) || not (x4 || x5)))));
+
+opTestExExtendedTests32 x1 x2 x3 x4 x5 y2 y4 =  (not (not (Math.sin x1 < Math.sin y2) && not (x2 && not (not (Math.cos x3 != Math.cos y4) && not (x4 && x5)))));
+
+
+
+opTestExExtendedTests33 x1 x2 x3 x4 x5 y2 y4 =  (not (not (not (not (not ((Prelude.abs x1 :: Int) < Prelude.abs y2) || x2) || not ((Prelude.abs x3 :: Int) != Prelude.abs y4)) || x4) || x5));
+
+opTestExExtendedTests34 x1 x2 x3 x4 x5 y2 y4 =  (not (not (not (not (not ((Prelude.abs x1 :: Int) < Prelude.abs y2) && x2) && not ((Prelude.abs x3 :: Int) != Prelude.abs y4)) && x4) && x5));
+
+opTestExExtendedTests35 x1 x2 x3 x4 x5 y2 y4 =  (not (not ((Prelude.abs x1 :: Int) < Prelude.abs y2) || not (x2 || not (not ((Prelude.abs x3 :: Int) != Prelude.abs y4) || not (x4 || x5)))));
+
+opTestExExtendedTests36 x1 x2 x3 x4 x5 y2 y4 =  (not (not ((Prelude.abs x1 :: Int) < Prelude.abs y2) && not (x2 && not (not ((Prelude.abs x3 :: Int) != Prelude.abs y4) && not (x4 && x5)))));
+
+
+
+// This function is included to make sure that there is a function that exercises the compilation of nested record cases.  
+// It was added in response to bugs fixed on April 19, 2005 by Raymond Cypher for the lecc and g machines.
+testNestedRecordCases :: {f1 :: Prelude.Double, f2 :: Prelude.Double} -> {f1 :: Prelude.Double, f2 :: Prelude.Double} -> Prelude.Double;
+private testNestedRecordCases r1 r2 =
+        case r1 of  {f1 = v1, f2 = v2} ->
+            case r2 of
+                {f1 = v3, f2 = v4} -> v1 + v2 + v3 + v4;
+                ;
+            ;
+
+//////////////////////////////////////////////////////////////////////
+// A TestTypeShadowing type is declared here to allow the M3 module to explicitly shadow this type.
+// This is for unit testing the TypeExpr feature of generating type expression
+// strings with unqualified names unless there is an ambiguity, which in this case
+// would be the ambiguity of the unqualified name TestTypeShadowing.
+data public TestTypeShadowing = TestTypeShadowingDC;                       
+
+//////////////////////////////////////////////////////////////////////
+// A function which depends on a function in the Prelude.
+//   This is for unit testing the CALClassLoader..
+//   The ClassLoaders for the classes for callNot and Prelude.not should be module classloaders
+//     but for adjuncts it should be an adjunct classloader.
+callNot :: Boolean -> Boolean;
+public callNot x = Prelude.not x || False;
+
+
+//////////////////////////////////////////////////////////////////////
+//tests of error messages- this should eventually be done within the unit tests...
+
+//ConstructorMustHaveExactlyNArgsInPattern
+/*
+incorrectNOfPatternVariables x =
+    case x of
+    Just v w -> v + 2.0;
+    Nothing -> 1.0;
+    ;
+*/  
+
+//TypeConstructorExpectsNTypeArguments
+/*
+incorrectNTypeConsArgs :: Prelude.Either Int -> Boolean;
+incorrectNTypeConsArgs x = True;
+*/
+
+//RepeatedClassConstraintOnTypeVariable
+/*
+incorrectClassConstraintOnTypeVar :: (Eq a, Eq b, Eq a) => a -> b -> Int;
+incorrectClassConstraintOnTypeVar = Prelude.undefined;    
+*/
+
+// Returns the moduleName field of a record
+moduleNameField :: a\moduleName => {a | moduleName :: b} -> b;
+public moduleNameField item = item.moduleName;
+
+// Returns the gemName field of a record
+gemNameField :: a\gemName => {a | gemName :: b} -> b;
+gemNameField item = item.gemName;
+
+// Returns the frequency field of a record
+frequencyField :: a\frequency => {a | frequency :: b} -> b;
+public frequencyField item = item.frequency;
+
+// Returns true if record1 and record2 have the same value in the
+// field extracted by fieldExtractor.
+fieldsEqual :: Prelude.Eq b => a -> a -> (a -> b) -> Prelude.Boolean;
+fieldsEqual record1 record2 fieldExtractor = 
+    (fieldExtractor record1) == (fieldExtractor record2);
+
+// Compares record1 and record2 based on the values each has in the
+// field extracted by fieldExtractor.
+fieldsCompare :: Ord b => a -> a -> (a -> b) -> Ordering;
+fieldsCompare record1 record2 fieldExtractor = 
+    compare (fieldExtractor record1) (fieldExtractor record2);
+
+// Sorts the records of list based on the field extracted by fieldExtractor
+sortByField :: Ord b => (a -> b) -> [a] -> [a];
+sortByField fieldExtractor list = 
+    List.sortBy (\record1 record2 -> M1.fieldsCompare record1 record2 fieldExtractor) list;
+
+// Groups the records of list based on the field extracted by fieldExtractor
+// The list need not be sorted before it is passed in.
+groupByField :: Ord b => [a] -> (a -> b) -> [[a]];
+public groupByField list fieldExtractor = 
+    List.groupBy (\record1 record2 -> M1.fieldsEqual record1 record2 fieldExtractor) (M1.sortByField fieldExtractor list);
+
+// Takes a list of records containing a frequency field and returns the n records
+// with the highest frequency
+topNFunctionsByFrequency :: (a\frequency, Ord b) => Int -> [{a | frequency :: b}] -> [{a | frequency :: b}];
+topNFunctionsByFrequency n lst = List.take n (List.sortBy (Prelude.reverseComparator (\x_1 x_2 -> M1.fieldsCompare x_1 x_2 M1.frequencyField)) lst);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// The following tests were moved from M2, because M2 is involved in a whole-module renaming test (CALRenaming_DeepTest),
+// and the consequence of renaming every type and data constructor in the module is that
+// the string comparison checks would no longer pass.
+
+
+//tests of inputting and outputting foreign types mapped to primitive java types
+
+data Triple a b c = 
+    Zero | 
+    One 
+        #1      :: a | 
+    Two 
+        #1      :: a 
+        #2      :: b | 
+    Three 
+        #1      :: a 
+        #2      :: b 
+        #3      :: c 
+    deriving Debug.Show;
+
+public testTripleDerivedInstances =
+    show (Zero :: Triple Int Char Boolean) == "Cal.Test.General.M1.Zero"
+    && show (One 20 :: Triple Int Char Boolean) == "(Cal.Test.General.M1.One 20)"
+    && show (Two 30 'b' :: Triple Int Char Boolean) == "(Cal.Test.General.M1.Two 30 'b')"       
+    && show (Three 40 'c' True :: Triple Int Char Boolean) == "(Cal.Test.General.M1.Three 40 'c' Cal.Core.Prelude.True)"
+    && show ([Two 30 'b', One 20] :: [Triple Int Char Boolean]) == "[(Cal.Test.General.M1.Two 30 'b'), (Cal.Test.General.M1.One 20)]"  
+    && show (Three (One 20 :: Triple Int Char Boolean) (Two 30 'b' :: Triple Int Char Boolean) (Three 40 'c' True :: Triple Int Char Boolean))
+           == "(Cal.Test.General.M1.Three (Cal.Test.General.M1.One 20) (Cal.Test.General.M1.Two 30 'b') (Cal.Test.General.M1.Three 40 'c' Cal.Core.Prelude.True))"
+    || error "Cal.Test.General.M1.testTripleDerivedInstances failed.";
+
+
+//
+// End of section transplanted from M2
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

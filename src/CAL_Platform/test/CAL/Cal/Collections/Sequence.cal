@@ -1,0 +1,266 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Sequence.cal
+ * Creation date: Dec 2, 2003.
+ * By: Bo Ilic
+ */
+
+/* 
+Daan's license:
+
+--------------------------------------------------------------------------------------------
+Copyright (c) 2003, Daan Leijen, All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1) Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2) Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+   in the documentation and/or other materials provided with the distribution.
+
+3) Neither the name of the Universiteit Utrecht nor the names of its contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+THE POSSIBILITY OF SUCH DAMAGE.
+--------------------------------------------------------------------------------------------
+*/  
+
+//--------------------------------------------------------------------------------
+//{-| Module      :  Seq
+//    Copyright   :  (c) Daan Leijen 2002
+//    License     :  BSD-style
+//
+//    Maintainer  :  daan@cs.uu.nl
+//    Stability   :  provisional
+//    Portability :  portable
+//
+//  An implementation of John Hughes's efficient catenable sequence type. A lazy sequence
+//  @Seq a@ can be concatenated in /O(1)/ time. After
+//  construction, the sequence in converted in /O(n)/ time into a list.
+//-}
+//---------------------------------------------------------------------------------}
+//
+//module Seq( -- * Type
+//            Seq
+//            -- * Operators
+//          , (<>)
+//
+//            -- * Construction
+//          , empty
+//          , single
+//          , cons
+//          , append
+//
+//            -- * Conversion
+//          , toList
+//          , fromList
+//          ) where
+//
+//
+
+/**
+ * An efficient catenable sequence type originally based.
+ * 
+ * An implementation of John Hughes's efficient catenable sequence type. A lazy sequence
+ * Seq a can be concatenated in O(1) time. After
+ * construction, the sequence in converted in O(n) time into a list.
+ * 
+ * This module is an adaptation of functionality from Daan Leijen's DData collections library for Haskell.
+ * The library was obtained from {@url http://www.cs.uu.nl/~daan/ddata.html@}.
+ * See the file {@code ThirdPartyComponents/ThirdPartyComponents.txt@} for the DData license.
+ * 
+ * @author Bo Ilic
+ */ 
+module Cal.Collections.Sequence;
+import Cal.Core.Prelude;
+import Cal.Collections.List;
+
+
+//{--------------------------------------------------------------------
+//  Operators
+//--------------------------------------------------------------------}
+//infixr 5 <>
+//
+//-- | /O(1)/. Append two sequences, see 'append'.
+//(<>) :: Seq a -> Seq a -> Seq a
+//s <> t
+//  = append s t
+//
+//{--------------------------------------------------------------------
+//  Type
+//--------------------------------------------------------------------}
+//-- | Sequences of values @a@.
+//newtype Seq a = Seq ([a] -> [a])
+
+/** A Sequence of values. */
+data public Seq a = 
+    private Seq 
+        f       :: ([a] -> [a]);
+
+getSeqFunction :: Seq a -> ([a] -> [a]);
+private getSeqFunction !seq = seq.Seq.f;
+
+//
+//{--------------------------------------------------------------------
+//  Construction
+//--------------------------------------------------------------------}
+//-- | /O(1)/. Create an empty sequence.
+//empty :: Seq a
+//empty
+//  = Seq (\ts -> ts)
+
+/**
+ * Creates an empty sequence.
+ * 
+ * Complexity: O(1)
+ * 
+ * @return a Seq value representing an empty sequence.
+ */
+emptySeq :: Seq a;
+private emptySeq = Seq Prelude.id;
+
+/**
+ * Returns whether a Seq value represents an empty sequence.
+ * @arg x the sequence.
+ * @return True if the sequence is empty; False otherwise.
+ */
+isEmptySeq :: Seq a -> Prelude.Boolean;
+private isEmptySeq x = Prelude.isEmpty (getSeqFunction x []);
+
+//
+//-- | /O(1)/. Create a sequence of one element.
+//single :: a -> Seq a
+//single x
+//  = Seq (\ts -> x:ts)
+
+/**
+ * Creates a sequence of one element.
+ * 
+ * Complexity: O(1)
+ * 
+ * @arg x the single element.
+ * @return a sequence containing the single element.
+ */
+single :: a -> Seq a;
+public single x = Seq (Prelude.Cons x);
+
+//-- | /O(1)/. Put a value in front of a sequence.
+//cons :: a -> Seq a -> Seq a
+//cons x (Seq f)
+//  = Seq (\ts -> x:f ts)
+
+/**
+ * Puts a value in front of a sequence.
+ * 
+ * Complexity: O(1)
+ * 
+ * @arg x the value to put in front.
+ * @arg seq the existing sequence.
+ * @return a new sequence with x at the front followed by the elements of seq.
+ */
+cons :: a -> Seq a -> Seq a;
+public cons x seq = Seq (Prelude.compose (Prelude.Cons x) (getSeqFunction seq));
+
+//
+//-- | /O(1)/. Append two sequences.
+//append :: Seq a -> Seq a -> Seq a
+//append (Seq f) (Seq g)
+//  = Seq (\ts -> f (g ts))
+
+/**
+ * Appends two sequences.
+ * 
+ * Complexity: O(1)
+ * 
+ * @arg seq1 the first sequence.
+ * @arg seq2 the second sequence.
+ * @return the concatenation of the two sequences.
+ */
+appendSeq :: Seq a -> Seq a -> Seq a;
+private appendSeq seq1 seq2 = Seq (Prelude.compose (getSeqFunction seq1) (getSeqFunction seq2));
+
+//
+//
+//{--------------------------------------------------------------------
+//  Conversion
+//--------------------------------------------------------------------}
+//-- | /O(n)/. Convert a sequence to a list.
+//toList :: Seq a -> [a]
+//toList (Seq f)
+//  = f []
+
+/**
+ * Converts a sequence to a list.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg seq the sequence to be converted.
+ * @return a list containing the elements of the sequence.
+ */
+toList :: Seq a -> [a];
+public toList seq = (getSeqFunction seq) [];
+
+//
+//-- | /O(n)/. Create a sequence from a list.
+//fromList :: [a] -> Seq a
+//fromList xs
+//  = Seq (\ts -> xs++ts)
+
+/**
+ * Converts a list to a sequence.
+ * 
+ * Complexity: O(n)
+ * 
+ * @arg xs the list to be converted.
+ * @return a sequence containing the elements of the list.
+ */
+fromList :: [a] -> Seq a;
+public fromList xs = Seq (Prelude.append xs);
+
+
+instance Prelude.Appendable (Seq a) where
+    empty = emptySeq;
+    isEmpty = isEmptySeq;
+    append = appendSeq;
+    concat = concatSeq;
+    ;
+
+concatSeq :: [Seq a] -> Seq a;    
+private concatSeq = List.foldRight Prelude.append Prelude.empty;
+

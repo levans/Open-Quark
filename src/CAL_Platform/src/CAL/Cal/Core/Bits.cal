@@ -1,0 +1,208 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Bits.cal
+ * Created: 17 Nov 2004
+ * By: Peter Cardwell
+ */
+
+/**
+ * Defines the type class and operations for bitwise operations.
+ * @author Peter Cardwell
+ */
+module Cal.Core.Bits;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Long;  
+    ;
+//we want to maintain the generality and functional independence of the Bits module.
+//Please do not add more imports.    
+ 
+    
+/** A class for data types that support bitwise operations. */
+public class Bits a where
+
+    /**
+     * Combines its two arguments by performing a boolean AND operation on
+     * their individual bits. The results has a bit set only if the corresponding
+     * bit is set in both arguments.
+     * For example, {@code bitwiseAnd(00001010, 00000111) => 00000010@}
+     * 
+     * @arg x the first value to be bitwise ANDed.
+     * @arg y the second value to be bitwise ANDed.
+     * @return the bitwise AND of {@code x@} and {@code y@}.
+     */ 
+    public bitwiseAnd :: a -> a -> a;
+
+    /**
+     * Combines its two arguments by performing a boolean OR operation on their 
+     * individual bits. The result has a bit set if the corresponding bit is
+     * set in either or both of the arguments. It has a zero bit only where both
+     * corresponding argument bits are zero.
+     * For example, {@code bitwiseOr(00001010, 00000111) => 00001111@}
+     * 
+     * @arg x the first value to be bitwise ORed.
+     * @arg y the second value to be bitwise ORed.
+     * @return the bitwise OR of {@code x@} and {@code y@}.
+     */
+    public bitwiseOr :: a -> a -> a;
+    
+    /**
+     * Combines its two arguments by performing a boolean XOR operation on their
+     * individual bits. The result has a bit set if the corresponding bits in the
+     * two arguments are different. If the corresponding argument bits are both ones
+     * or both zeros, the result bit is a zero. 
+     * For example, {@code bitwiseXor (00001010, 00000111) => 00001101@}
+     * 
+     * @arg x the first value to be bitwise XORed.
+     * @arg y the second value to be bitwise XORed.
+     * @return the bitwise XOR of {@code x@} and {@code y@}.
+     */
+    public bitwiseXor :: a -> a -> a;
+    
+    /**
+     * Inverts each bit of its input, converting ones to zeros and zeros to ones.
+     * For example, {@code complement(00001100) => 11110011@}
+     * 
+     * @arg x the value to be complemented bitwise.
+     * @return the bitwise complement of {@code x@}.
+     */
+    public complement :: a -> a;
+    
+    /**
+     * Clears all but the highest 1-bit of the input.
+     * For example,
+     * {@unorderedList
+     * {@item {@code highestBitMask (00101101) => 00100000@}@}
+     * {@item {@code highestBitMask (11111111) => 10000000@}@}
+     * {@item {@code highestBitMask (00000000) => 00000000@}@}
+     * @}
+     * 
+     * @arg x the value whose bits except for its highest 1-bit is to be cleared.
+     * @return a value whose bits are all zero except for the bit corresponding to {@code x@}'s highest 1-bit.
+     */
+    public highestBitMask :: a -> a;
+    
+    /**
+     * Shifts the bits of the first argument left by the number of places specified
+     * by the second argument. High-order bits of the first argument are lost, and
+     * zero bits are shifted in from the right.
+     * For example, 
+     * {@unorderedList
+     * {@item {@code shiftL(00001010, 1) => 00010100@}@}
+     * {@item {@code shiftL(00000111, 3) => 00111000@}@}
+     * @}
+     *      
+     * @arg x the value to be left-shifted.
+     * @arg numPlaces the number of places by which x is left-shifted.
+     * @return {@code x@} left-shifted by {@code numPlaces@} places. 
+     */
+    public shiftL :: a -> a -> a;
+    
+    /**
+     * Shifts the bits of the first argument to the right by the number of places
+     * specified by the second argument. The low-order bits of the first argument
+     * are shifted away and are lost. The high-order bits shifted in are the same
+     * as the original high-order bits of the first argument. In other words,
+     * if the first argument is positive, zeros are shifted into the high-order bits.
+     * If the first argument is negative, ones are shifted in instead.
+     * For example,
+     * {@unorderedList
+     * {@item {@code shiftR(00001010, 1) => 00000101@}@}
+     * {@item {@code shiftR(00011011, 3) => 00000011@}@}
+     * {@item {@code shiftR(11001110, 2) => 11110011@}@}
+     * @} 
+     *      
+     * @arg x the value to be right-shifted.
+     * @arg numPlaces the number of places by which x is right-shifted.
+     * @return {@code x@} right-shifted by {@code numPlaces@} places.
+     * @see shiftRUnsigned
+     */
+    public shiftR :: a -> a -> a;
+    
+    /**
+     * Works like {@link shiftR@}, but always shifts zeros into the high-order bits of
+     * the result, regardless of the sign of the first argument.
+     * For example, {@code shiftRUnsigned(11111111, 4) => 00001111@}
+     *      
+     * @arg x the value to be right-shifted.
+     * @arg numPlaces the number of places by which x is right-shifted.
+     * @return {@code x@} right-shifted by {@code numPlaces@} places.
+     * @see shiftR
+     */
+    public shiftRUnsigned :: a -> a -> a;
+    ;
+
+instance Bits Int where
+    bitwiseAnd = bitwiseAndInt;
+    bitwiseOr = bitwiseOrInt;
+    bitwiseXor = bitwiseXorInt;
+    complement = complementInt;
+    highestBitMask = highestBitMaskInt;
+    shiftL = shiftLInt;
+    shiftR = shiftRInt;
+    shiftRUnsigned = shiftRUnsignedInt;
+    ;
+     
+instance Bits Long where
+    bitwiseAnd = bitwiseAndLong;
+    bitwiseOr = bitwiseOrLong;
+    bitwiseXor = bitwiseXorLong;
+    complement = complementLong;
+    highestBitMask = highestBitMaskLong;
+    shiftL = shiftLLong;
+    shiftR = shiftRLong;
+    shiftRUnsigned = shiftRUnsignedLong;
+;
+ 
+// Bit operations on Int values
+primitive private bitwiseAndInt :: Int -> Int -> Int;
+primitive private bitwiseOrInt :: Int -> Int -> Int;
+primitive private bitwiseXorInt :: Int -> Int -> Int;
+primitive private complementInt :: Int -> Int;
+primitive private shiftLInt :: Int -> Int -> Int;
+primitive private shiftRInt :: Int -> Int -> Int;
+primitive private shiftRUnsignedInt :: Int -> Int -> Int;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Bits.Bits.highestBitMask" private highestBitMaskInt :: Int -> Int;
+   
+// Bit operations on Long values
+primitive private bitwiseAndLong :: Long -> Long -> Long;
+primitive private bitwiseOrLong :: Long -> Long -> Long;
+primitive private bitwiseXorLong :: Long -> Long -> Long;
+primitive private complementLong :: Long -> Long;
+primitive private shiftLLong :: Long -> Long -> Long;
+primitive private shiftRLong :: Long -> Long -> Long;
+primitive private shiftRUnsignedLong :: Long -> Long -> Long;
+foreign unsafe import jvm "static method org.openquark.cal.internal.foreignsupport.module.Bits.Bits.highestBitMask" private highestBitMaskLong :: Long -> Long;
+ 
+
+ 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry excluding="lecc_runtime/" kind="src" path=""/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="/Quark_Gems"/>
+	<classpathentry kind="src" path="/Utilities"/>
+	<classpathentry kind="src" path="/CAL_Libraries"/>
+	<classpathentry kind="src" path="/CAL_Platform"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/CAL_Runtime"/>
+	<classpathentry kind="output" path=""/>
+</classpath>

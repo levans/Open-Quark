@@ -1,0 +1,670 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * BusinessCalendar.cal
+ * Creation date: Mar 30, 2004.
+ * By: Richard Webster
+ */
+
+/**
+ * This module contains the {@link typeConstructor = BusinessCalendar@} type
+ * which provides information about valid period values, display names, etc...
+ * for period types (Year, Quarter, Month, etc...) in the calendar. There are
+ * also functions to build database expressions for extracting period values
+ * (relative to the calendar) from a database date/time field.
+ *
+ * Actual implementations of BusinessCalendars can be found in {@link module =
+ * "Cal.Data.GregorianBusinessCalendar"@} and {@link module =
+ * "Cal.Data.FiscalBusinessCalendar"@}. Other implementations are possible as
+ * well.
+ *
+ * @author Richard Webster
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+module Cal.Data.BusinessCalendar;
+
+import Cal.Core.Prelude using
+    typeClass = Eq, Ord;
+    typeConstructor = Boolean, Int, Maybe, String;
+    dataConstructor = False, Nothing, True;
+    function =
+        error, fromMaybe, fst, intToString, isEmpty, max, min, not, snd, 
+        upFromTo;
+    ;
+import Cal.Collections.List using
+    function =
+        drop, foldLeftStrict, head, init, isElem, join, last, lookup, map, tail;
+    ;      
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Utilities.Range using
+    typeConstructor = Range;
+    ;
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+import Cal.Data.DictionaryQuery using
+    typeConstructor = Expr;
+    ;
+
+friend Cal.Data.FiscalBusinessCalendar;
+
+
+/**
+ * An enumeration of the various types of time periods recognized by business
+ * calendars.
+ */
+data public PeriodType =
+    public NoPeriod |
+    public YearPeriod |
+    public QuarterPeriod |
+    public MonthPeriod |
+    public WeekOfYearPeriod |
+    public DayOfYearPeriod |
+    public DayOfMonthPeriod |
+    public DayOfWeekPeriod
+    deriving Eq, Ord;
+
+/**
+ * A map associating an ordinal with each  {@link typeConstructor=PeriodType @}.
+ * 
+ * @see function = periodTypeToIntMap
+ */
+intToPeriodTypeMap :: [(Int, PeriodType)];
+private intToPeriodTypeMap = [(0, NoPeriod), 
+                              (1, YearPeriod), 
+                              (2, QuarterPeriod), 
+                              (3, MonthPeriod), 
+                              (4, WeekOfYearPeriod), 
+                              (5, DayOfYearPeriod), 
+                              (6, DayOfMonthPeriod), 
+                              (7, DayOfWeekPeriod)];
+
+/**
+ * A map associating each  {@link typeConstructor=PeriodType @} with its ordinal.
+ * 
+ * @see function = intToPeriodTypeMap
+ */
+periodTypeToIntMap :: [(PeriodType, Int)];
+private periodTypeToIntMap = map (\pr -> (snd pr, fst pr)) intToPeriodTypeMap;
+
+/**
+ * Retrieves the ordinal corresponding to a given {@link typeConstructor=PeriodType @}.
+ * 
+ * @return The corresponding ordinal.
+ */
+periodTypeToInt :: PeriodType -> Int;
+public periodTypeToInt !periodType = 
+    fromMaybe 0 (lookup periodType periodTypeToIntMap);
+
+/**
+ * Retrieves the {@link typeConstructor=PeriodType @} corresponding to a given ordinal.
+ * 
+ * @return The corresponding {@link typeConstructor=PeriodType @} if one exists, or
+ * {@link dataConstructor=NoPeriod @} otherwise.
+ */
+intToPeriodType :: Int -> PeriodType;
+public intToPeriodType !intVal =
+    fromMaybe NoPeriod (lookup intVal intToPeriodTypeMap);
+
+/**
+ * Make {@link typeConstructor=PeriodType @} showable.
+ */
+instance Show PeriodType where
+    show = getPeriodTypeName;
+    ;
+
+/**
+ * Returns whether the specified child {@link typeConstructor=PeriodType @} can
+ * roll up into the parent {@link typeConstructor=PeriodType @}.
+ * 
+ * @see function=getValidParentTimePeriods
+ */
+canRollUpTimePeriod :: PeriodType -> PeriodType -> Boolean;
+public canRollUpTimePeriod !childPeriod !parentPeriod = 
+    isElem childPeriod (getValidChildTimePeriods parentPeriod);
+
+/**
+ * Returns a list of the valid parent {@link typeConstructor=PeriodType @} values
+ * into which a child {@link typeConstructor=PeriodType @} can roll up.
+ * 
+ * @see function=getValidChildTimePeriods
+ */
+getValidParentTimePeriods :: PeriodType -> [PeriodType];
+public getValidParentTimePeriods !childPeriod = 
+    case childPeriod of
+    NoPeriod         -> [];
+    YearPeriod       -> [];
+    QuarterPeriod    -> [YearPeriod];
+    MonthPeriod      -> [YearPeriod, QuarterPeriod];
+    WeekOfYearPeriod -> [YearPeriod, QuarterPeriod, MonthPeriod];
+    DayOfYearPeriod  -> [YearPeriod, QuarterPeriod, MonthPeriod, WeekOfYearPeriod];
+    DayOfMonthPeriod -> [MonthPeriod, WeekOfYearPeriod];
+    DayOfWeekPeriod  -> [WeekOfYearPeriod];
+    _ -> error "Unexpected period type";
+    ;
+
+/**
+ * Returns a list of the valid child {@link typeConstructor=PeriodType @} values
+ * which can roll up into the specified parent {@link typeConstructor=PeriodType @}.
+ * 
+ * @see function=getValidParentTimePeriods
+ */
+getValidChildTimePeriods :: PeriodType -> [PeriodType];
+public getValidChildTimePeriods !parentPeriod = 
+    case parentPeriod of
+    NoPeriod         -> [];
+    YearPeriod       -> [QuarterPeriod, MonthPeriod, WeekOfYearPeriod, DayOfYearPeriod];
+    QuarterPeriod    -> [MonthPeriod, WeekOfYearPeriod, DayOfYearPeriod];
+    MonthPeriod      -> [WeekOfYearPeriod, DayOfYearPeriod, DayOfMonthPeriod];
+    WeekOfYearPeriod -> [DayOfYearPeriod, DayOfMonthPeriod, DayOfWeekPeriod];
+    DayOfYearPeriod  -> [];
+    DayOfMonthPeriod -> [];
+    DayOfWeekPeriod  -> [];
+    _ -> error "Unexpected period type";
+    ;
+
+/**
+ * Returns a descriptive name for the {@link typeConstructor=PeriodType @}.
+ */
+getPeriodTypeName :: PeriodType -> String;
+public getPeriodTypeName !periodType = 
+    case periodType of
+    NoPeriod         -> "None";
+    YearPeriod       -> "Year";
+    QuarterPeriod    -> "Quarter";
+    MonthPeriod      -> "Month";
+    WeekOfYearPeriod -> "WeekOfYear";
+    DayOfYearPeriod  -> "DayOfYear";
+    DayOfMonthPeriod -> "DayOfMonth";
+    DayOfWeekPeriod  -> "DayOfWeek";
+    _ -> "Unknown";
+    ;
+
+/**
+ * A {@link typeConstructor=Period @} is defined by one or more nested
+ * {@link typeConstructor=PeriodType @}-value pairs.
+ * The pairs are assumed to be in nesting order, with the outermost
+ * {@link typeConstructor=PeriodType @} at the beginning of the list. 
+ * 
+ * TODO: most of the operations seem to access the end of this list so it might
+ * be better to store it in the opposite order.
+ */
+data public Period = 
+    private Period 
+        periodValues :: [(PeriodType, Int)]
+    ;
+
+/**
+ * Constructs a {@link typeConstructor=Period @} from its
+ * {@link typeConstructor=Period @} values.
+ * The pairs are assumed to be in nesting order, with the outermost
+ * {@link typeConstructor=PeriodType @} at the beginning of the list. 
+ * 
+ * TODO: validate period nesting (i.e. order)?
+ */
+makePeriod :: [(PeriodType, Int)] -> Period;
+public makePeriod periodValues = 
+    Period periodValues;
+
+/**
+ * Constructs a {@link typeConstructor=Period @} from a containing
+ * {@link typeConstructor=Period @} value.
+ * The {@link typeConstructor=PeriodType @} is assumed to be able to nest
+ * within the innermost {@link typeConstructor=PeriodType @} of the parent.
+ * 
+ * TODO: validate period nesting (i.e. order)?
+ */
+makeChildPeriod :: Period -> PeriodType -> Int -> Period;
+public makeChildPeriod parentPeriod childPeriodType childPeriodValue = 
+    case parentPeriod of
+    Period {periodValues} -> Period (periodValues ++ [(childPeriodType, childPeriodValue)]);
+    ;
+
+/**
+ * Returns a list {@link typeConstructor=PeriodType @}-value pairs for the
+ * {@link typeConstructor=Period @}.
+ * The pairs are in nesting order, with the outermost
+ * {@link typeConstructor=PeriodType @} at the beginning of the list. 
+ */
+getPeriodValues :: Period -> [(PeriodType, Int)];
+public getPeriodValues !period = period.Period.periodValues;
+
+/**
+ * Returns the lowest level {@link typeConstructor=PeriodType @} in the
+ * {@link typeConstructor=Period @} and the corresponding value.
+ * {@link dataConstructor=NoPeriod @} and an error are returned if there are no
+ * values in the {@link typeConstructor=Period @}.
+ */
+getBasePeriod :: Period -> (PeriodType, Int);
+public getBasePeriod period = 
+    case period of
+    Period {periodValues} -> 
+        case List.reverse periodValues of
+        [] -> (NoPeriod, error "The period contains no period values");
+        p : ps -> p;
+        ;
+    ;
+
+/**
+ * Returns the lowest level {@link typeConstructor=PeriodType @} in the
+ * {@link typeConstructor=Period @}.
+ * {@link dataConstructor=NoPeriod @} is returned if there are no values in the
+ * {@link typeConstructor=Period @}.
+ */
+getBasePeriodType :: Period -> PeriodType;
+public getBasePeriodType = fst # getBasePeriod;
+
+/**
+ * Returns the value for the lowest level {@link typeConstructor=PeriodType @}
+ * in the {@link typeConstructor=Period @}.
+ * Throws an error if there are no values in the {@link typeConstructor=Period @}.
+ */
+getBasePeriodValue :: Period -> Int;
+public getBasePeriodValue = snd # getBasePeriod;
+
+/**
+ * Sets the value for the lowest level {@link typeConstructor=PeriodType @}
+ * in the {@link typeConstructor=Period @}.
+ * Throws an error if there are no values in the {@link typeConstructor=Period @}.
+ */
+setBasePeriodValue :: Period -> Int -> Period;
+public setBasePeriodValue period newBasePeriodValue = 
+    case period of
+    Period {periodValues} -> 
+        case List.reverse periodValues of
+        [] -> error "The period contains no period values";
+        p : ps -> makePeriod $ List.reverse $ (fst p, newBasePeriodValue) : ps;
+        ;
+    ;
+
+/**
+ * Make {@link typeConstructor=Period @} showable.
+ */
+instance Show Period where
+    show = showPeriod;
+    ;
+
+/**
+ * Returns a string representation of a {@link typeConstructor=Period @} for
+ * debugging purposes (format not guaranteed).
+ */
+showPeriod :: Period -> String;
+private showPeriod period = 
+    case period of
+    Period {periodValues} -> 
+        "Period [" ++ join ", " (map (\pv -> show (fst pv) ++ " " ++ intToString (snd pv)) periodValues) ++ "]";
+    ;
+
+/**
+ * A business calendar provides information about valid period values, display names, etc... 
+ * for period types (Year, Quarter, Month, etc...) in the calendar.
+ * The business calendar also contains logic to build database expressions for extracting
+ * period values (relative to the calendar) from a database date/time field. 
+ */
+data public BusinessCalendar = 
+    /**
+     * The BusinessCalendar data constructor holds the functions necessary to extract the calendar information.
+     * @arg periodValueRangeFn     a function to get the range of valid values for a specified period, given the parent period
+     * @arg periodDisplayNameFn    a function to get the display name for a period value
+     * @arg periodTimeRangeFn      a function to get the start and end time for for a specified period
+     * @arg periodValueFromTimeFn  a function to get the value of the specified period for a time value
+     * @arg timePartExprFn         a function to build a database expression to extract the appropriate time part from a time value
+    */
+    private BusinessCalendar
+        periodValueRangeFn    :: (Period -> PeriodType -> (Int, Int))     // periodValueRange(parentPeriod, periodType)
+        periodDisplayNameFn   :: (Period -> PeriodType -> Int -> String)  // periodDisplayName(parentPeriod, periodType, periodValue)
+        periodTimeRangeFn     :: (Period -> Range Time)                   // periodTimeRange(period)
+        periodValueFromTimeFn :: (Time -> PeriodType -> Int)              // periodValueFromTime(time, periodType)
+        timePartExprFn        :: (Expr -> PeriodType -> Expr)             // timePartExpr(baseTimeExpr, periodType)
+    ;
+
+//TODO: look into adding additional information to a BusinessCalendar:
+//       fiscal year start date
+//       weekday start
+//       business day/holiday info
+//       period display format patterns
+//       period consolidation info (how weeks roll up into quarters, etc...)
+
+/**
+ * Construct a new {@link typeConstructor=BusinessCalendar @} with the specified behavior.
+ * @arg periodValueRangeFn     a function to get the range of valid values for a specified period, given the parent period
+ * @arg periodDisplayNameFn    a function to get the display name for a period value
+ * @arg periodTimeRangeFn      a function to get the start and end time for for a specified period
+ * @arg periodValueFromTimeFn  a function to get the value of the specified period for a time value
+ * @arg timePartExprFn         a function to build a database expression to extract the appropriate time part from a time value
+ */
+makeBusinessCalendar :: (Period -> PeriodType -> (Int, Int)) 
+                         -> (Period -> PeriodType -> Int -> String) 
+                         -> (Period -> Range Time) 
+                         -> (Time -> PeriodType -> Int) 
+                         -> (Expr -> PeriodType -> Expr) 
+                         -> BusinessCalendar;
+public makeBusinessCalendar = BusinessCalendar; 
+
+
+/**
+ * Queries a given {@link typeConstructor=BusinessCalendar @} to determine
+ * what range of values are possible for a specified {@link typeConstructor=PeriodType @}
+ * within a specified {@link typeConstructor=Period @}.
+ */
+getPeriodValueRange :: BusinessCalendar -> Period -> PeriodType -> (Int, Int);
+public getPeriodValueRange !businessCalendar parentPeriod !periodType = 
+    case businessCalendar of
+    BusinessCalendar {periodValueRangeFn} -> periodValueRangeFn parentPeriod periodType;
+    ;
+
+/**
+ * Queries a given {@link typeConstructor=BusinessCalendar @} to determine the
+ * display string of a given {@link typeConstructor=PeriodType @} and value
+ * with a specified {@link typeConstructor=Period @} as context.
+ * 
+ * For example, depending on the {@link dataConstructor=BusinessCalendar @},
+ * for the {@link dataConstructor=DayOfWeekPeriod @} period type, this might return
+ * {@code "Monday"@}.  Similarly, for the {@link dataConstructor=QuarterPeriod @}
+ * period type, this might return {@code "Q1 98"@}.
+ */
+periodDisplayName :: BusinessCalendar -> Period -> PeriodType -> Int -> String;
+public periodDisplayName !businessCalendar parentPeriod !periodType !periodValue = 
+    case businessCalendar of
+    BusinessCalendar {periodDisplayNameFn} -> periodDisplayNameFn parentPeriod periodType periodValue;
+    ;
+
+/**
+ * Queries a given {@link typeConstructor=BusinessCalendar @} to determine the
+ * time range corresponding to the given {@link typeConstructor=Period @}.
+ * This is only possible if the {@link dataConstructor=YearPeriod @} period is
+ * included in the period.
+ * If the info cannot be determined for this period, then the range returned
+ * will not be bounded on either end.
+ */
+getPeriodTimeRange :: BusinessCalendar -> Period -> Range Time;
+public getPeriodTimeRange businessCalendar period = 
+    case businessCalendar of
+    BusinessCalendar {periodTimeRangeFn} -> periodTimeRangeFn period;
+    ;
+
+/**
+ * Queries a given {@link typeConstructor=BusinessCalendar @} to determine the
+ * value of a given {@link typeConstructor=PeriodType @} for the specified time.
+ */
+getPeriodValueFromTime :: BusinessCalendar -> Time -> PeriodType -> Int;
+public getPeriodValueFromTime !businessCalendar time !periodType = 
+    case businessCalendar of
+    BusinessCalendar {periodValueFromTimeFn} -> periodValueFromTimeFn time periodType;
+    ;
+
+/**
+ * Queries a given {@link typeConstructor=BusinessCalendar @} to determine the
+ * database expression to extract the value of the {@link typeConstructor=PeriodType @}
+ * from the specified time expression. 
+ */
+getTimePartExpr :: BusinessCalendar -> Expr -> PeriodType -> Expr;
+public getTimePartExpr !businessCalendar baseTimeExpr !periodType =
+    case businessCalendar of
+    BusinessCalendar {timePartExprFn} -> timePartExprFn baseTimeExpr periodType;
+    ;
+
+/**
+ * Queries a given {@link typeConstructor=BusinessCalendar @} to convert a time
+ * value into a {@link typeConstructor=Period @} with the specified
+ * {@link typeConstructor=PeriodType @}s.
+ */
+getPeriodFromTime :: BusinessCalendar -> Time -> [PeriodType] -> Period;
+public getPeriodFromTime !businessCalendar !time !periodTypes = 
+    let
+        orderedPeriodTypes :: [PeriodType];
+        orderedPeriodTypes = List.sort $ List.removeDuplicates periodTypes;
+    in
+        makePeriod $ map (\!pt -> (pt, getPeriodValueFromTime businessCalendar time pt)) orderedPeriodTypes;
+
+/**
+ * Queries a given {@link typeConstructor=BusinessCalendar @} to determine the
+ * range of possible values for the base {@link typeConstructor=PeriodType @}
+ * of a {@link typeConstructor=Period @}.
+ */
+getValidBasePeriodValues :: BusinessCalendar -> Period -> (Int, Int);
+public getValidBasePeriodValues businessCalendar !period = 
+    case period of
+    Period {periodValues} -> 
+        if isEmpty periodValues then error "The period contains no period values"
+        else getPeriodValueRange businessCalendar (makePeriod (init periodValues)) (getBasePeriodType period);
+    ;
+
+/**
+ * Returns the value of the specified {@link typeConstructor=PeriodType @} in
+ * the {@link typeConstructor=Period @}.
+ * If the {@link typeConstructor=Period @} does not include this
+ * {@link typeConstructor=PeriodType @}, then {@link dataConstructor=Nothing@}
+ * will be returned.
+ * 
+ * TODO: should this function attempt to calculate the value if it is not
+ * available? (e.g. Quarter if Year and Month are present.)
+ */
+getPeriodValue :: Period -> PeriodType -> Maybe Int;
+public getPeriodValue !period !periodType = 
+    lookup periodType (period.Period.periodValues);
+
+/**
+ * Returns the list of valid values (and the corresponding string representations)
+ * for the specified {@link typeConstructor=PeriodType @} in the given
+ * {@link typeConstructor=Period @}.  Optionally, endpoints may be specified to
+ * limit the range.
+ * 
+ * For example, for the {@link dataConstructor=DayOfWeekPeriod @} period type,
+ * this might return {@code [(2, "Monday"), (4, "Wednesday"), (6, "Friday")]@}.
+ * 
+ * For example, for the {@link dataConstructor=QuarterPeriod @} period type, 
+ * this might return {@code [(1, "Q1 98"), (2, "Q2 98"), (3, "Q3 98"), (4, "Q4 98")]@}.
+ */
+getChildPeriodValues :: BusinessCalendar -> Period -> PeriodType -> Maybe Int -> Maybe Int -> [(Int, String)];
+public getChildPeriodValues !businessCalendar parentPeriod !periodType maybeMinValue maybeMaxValue = 
+    let
+        periodRange :: (Int, Int);
+        periodRange = getPeriodValueRange businessCalendar parentPeriod periodType;
+
+        startValue :: Int;
+        startValue = fromMaybe (fst periodRange) maybeMinValue;
+            
+        endValue :: Int;
+        endValue = fromMaybe (snd periodRange) maybeMaxValue;
+    in
+        map (\v -> (v, periodDisplayName businessCalendar parentPeriod periodType v)) (upFromTo startValue endValue);
+
+/**
+ * Returns the start (or end, depending on the value of wantStart) of the 
+ * {@link typeConstructor=Period @} obtained by shifting the specified
+ * {@link typeConstructor=Period @} (with respect to a given
+ * {@link typeConstructor=PeriodType @}).
+ * 
+ * Helper function for {@link function=makeStartOfNextPeriod @} and 
+ * {@link function=makeEndOfPreviousPeriod @}. 
+ */
+periodBoundaryHelper :: Int -> Boolean -> BusinessCalendar -> Period -> PeriodType -> Period;
+private periodBoundaryHelper !shiftAmount !wantStart businessCalendar !period periodType =
+    case period of
+    Period {periodValues} -> 
+        let
+            (parentPeriodValues, childPeriodValues) = List.breakAfter (\prdVal -> fst prdVal == periodType) periodValues;
+
+            shiftedParentPeriod = shiftByNPeriods businessCalendar (makePeriod parentPeriodValues) periodType shiftAmount;
+
+            endPointChoiceFn = if wantStart then fst else snd;
+            
+            addFirstChildPeriod !curPeriod !childPeriodType = 
+                let
+                    validChildRange = getPeriodValueRange businessCalendar curPeriod childPeriodType;
+                in
+                    makeChildPeriod curPeriod childPeriodType (endPointChoiceFn validChildRange);
+        in
+            if List.isElemBy (\pt pv -> pt == fst pv) periodType periodValues then 
+                foldLeftStrict addFirstChildPeriod shiftedParentPeriod (map fst childPeriodValues)
+            else 
+                error ("The period type " ++ show periodType ++ " is not part of the period " ++ show period);
+    ;
+
+/**
+ * Returns the start of the next {@link typeConstructor=Period @} (with respect
+ * to a given {@link typeConstructor=PeriodType @}).
+ */
+makeStartOfNextPeriod :: BusinessCalendar -> Period -> PeriodType -> Period;
+private makeStartOfNextPeriod = periodBoundaryHelper 1 True;
+
+/**
+ * Returns the start of the previous {@link typeConstructor=Period @} (with
+ * respect to a given {@link typeConstructor=PeriodType @}).
+ */
+makeEndOfPreviousPeriod :: BusinessCalendar -> Period -> PeriodType -> Period;
+private makeEndOfPreviousPeriod = periodBoundaryHelper (-1) False;
+
+/**
+ * Adds an offset to the specified period type of the period.
+ *
+ * If this would cause the root period type in the period to go out of bounds, 
+ * then an error will be thrown.  For example, for the period {@code [Month, 10]@}
+ * adding 5 to the Month period type would result in a month value of 15, which
+ * is not possible.
+ * 
+ * If the root period type is Year, then this error should not occur.
+ *
+ * If not shifting the base (lowest) period type in the period, then it is
+ * possible that the lower-level values could become out of range.  In this case,
+ * they will be set to the nearest in-range value.  For example, adding 1 Year
+ * to {@code [(Year 2004, Month 2(Feb), Day 29)]@} would give
+ * {@code [(Year 2005, Month 2(Feb), Day 28)]@}.
+ *
+ * Currently, this function will only work with period types explicitly included
+ * in the period.
+ * 
+ * TODO: it would probably be nice to handle ones which can be determined from
+ * lower level ones (quarters from months, etc...)...
+ * 
+ * TODO: does this handle the case where the child values need to change
+ * depending on the parent values?  For example, for Year/Month/DayOfYear,
+ * shifting the month value should update the DayOfYear value as well.
+ */
+shiftByNPeriods :: BusinessCalendar -> Period -> PeriodType -> Int -> Period;
+public shiftByNPeriods businessCalendar !origPeriod periodType shiftAmount = 
+    case origPeriod of
+    Period {periodValues} -> 
+        let
+            (parentPeriodValues, specifiedAndChildPeriodValues) = 
+                List.break (\prdVal -> fst prdVal == periodType) periodValues;
+            specifiedPeriodValue : childPeriodValues = specifiedAndChildPeriodValues;
+            
+            shiftPeriodValue =
+                if isEmpty specifiedAndChildPeriodValues then 
+                    error ("The period type " ++ show periodType ++ " is not part of the period " ++ show origPeriod)
+                else 
+                    specifiedPeriodValue;
+
+            lacksParentPeriod = isEmpty parentPeriodValues;
+            parentPeriodType = fst (last parentPeriodValues);
+            
+            shiftHelper :: Period -> Int -> Period;
+            shiftHelper period remainingShift = 
+                let
+                    basePeriodValue = getBasePeriodValue period;
+                    validBasePeriodValues = getValidBasePeriodValues businessCalendar period;
+                    (minBaseValue, maxBaseValue) = validBasePeriodValues;
+
+                    shiftedBaseValue = basePeriodValue + remainingShift;
+                in
+                    if remainingShift == 0 then 
+                        period
+                    else if shiftedBaseValue >= minBaseValue && shiftedBaseValue <= maxBaseValue then 
+                        setBasePeriodValue period shiftedBaseValue
+                    else if lacksParentPeriod then
+                        setBasePeriodValue period $ wrapPeriodValue validBasePeriodValues shiftedBaseValue
+                    else if remainingShift > 0 then
+                        shiftHelper 
+                            (makeStartOfNextPeriod businessCalendar period parentPeriodType)
+                            (remainingShift - (1 + maxBaseValue - basePeriodValue))
+                    else
+                        shiftHelper
+                            (makeEndOfPreviousPeriod businessCalendar period parentPeriodType)
+                            (remainingShift + (1 + basePeriodValue - minBaseValue));
+
+            shiftedPeriod = shiftHelper (makePeriod (parentPeriodValues ++ [shiftPeriodValue])) shiftAmount;
+            newPeriodValues = truncatePeriodValues businessCalendar (getPeriodValues shiftedPeriod ++ childPeriodValues);
+        in
+            Period newPeriodValues;
+    ;
+
+/**
+ * If the value is not in the range, then adds the multiple (possibly negative) 
+ * of the length of the range that puts the sum in the range and returns the sum.
+ */
+wrapPeriodValue :: (Int, Int) -> Int -> Int;
+protected wrapPeriodValue !valueRange !periodValue = 
+    case valueRange of
+    (minValue, maxValue) -> 
+        let
+            rangeLength :: Int;
+            rangeLength = maxValue - minValue + 1;
+        in
+            if periodValue < minValue then 
+                periodValue + ((maxValue - periodValue) / rangeLength) * rangeLength
+            else if periodValue > maxValue then 
+                periodValue - ((periodValue - minValue) / rangeLength) * rangeLength
+            else 
+                periodValue;
+    ;
+
+/**
+ * Updates a list of period values to satisfy the constraints of a given
+ * {@link typeConstructor=BusinessCalendar @}.  That is, if a value is outside
+ * of the valid range, it will be changed to the closest valid value.
+ */
+truncatePeriodValues :: BusinessCalendar -> [(PeriodType, Int)] -> [(PeriodType, Int)];
+private truncatePeriodValues businessCalendar periodValues = 
+    let
+        truncateHelper :: Period -> [(PeriodType, Int)] -> [(PeriodType, Int)];
+        truncateHelper parentPeriod !childPeriodValues = 
+            case childPeriodValues of
+            [] -> [];
+            pv : pvs -> 
+                let
+                    (periodType, periodValue) = pv;
+                    (minChildValue, maxChildValue) = getPeriodValueRange businessCalendar parentPeriod periodType;
+
+                    updateChildValue = max minChildValue (min periodValue maxChildValue);
+                in
+                    (periodType, updateChildValue) : truncateHelper (makeChildPeriod parentPeriod periodType updateChildValue) pvs;
+            ;
+    in
+        truncateHelper (makePeriod []) periodValues;
+

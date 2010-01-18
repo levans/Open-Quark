@@ -1,0 +1,234 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Memoize_Tests.cal
+ * Creation date: Dec 13, 2005.
+ * By: Raymond Cypher
+ */
+
+/**
+ * This module contains test cases for the {@link module = Memoize@} module.
+ *
+ * Note that *examples functions can and should still go into the Memoize module itself. This is a place
+ * for more involved and QA style tests that can not reasonably be considered "examples".
+ * 
+ * @author Raymond Cypher
+ */
+module Cal.Test.Core.Memoize_Tests;
+import Cal.Core.Prelude using
+    typeConstructor = Double, Int, String;
+    function = assert;
+    ;
+import Cal.Core.Memoize using
+    function = memo;
+    ;
+import Cal.Collections.List using
+    function = map;
+    ; 
+import Cal.Utilities.QuickCheck using
+    function = quickCheck;
+    ; 
+/**
+ * A zero argument foreign function which always returns a different value each time it is called.
+ * getCallCount will return the number of times the foreign function has been called.
+ * @return the number of times the foreign function has been called.
+ */
+foreign unsafe import jvm "static method org.openquark.cal.foreignsupport.module.Memoize_Tests.CallCounter.getCallCount"
+getCallCount :: Int;
+
+/**
+ * A non-zero arity function that ignores the argument and calls getCallCount.
+ * @see Memoize_Tests.getCallCount
+ * @return the number of times getCallCount has been called 
+ */
+oneParamCallCounter :: String -> Int;
+oneParamCallCounter x = getCallCount;
+
+/**
+* An example of creating a cache which only exists for the duration of
+* an evaluation.  In this case the second instance of {@code "key1"@} will 
+* retrieve the previously calculated value.  
+*/
+private instanceCacheTest = 
+    let
+       cachedResults = map (memo oneParamCallCounter) ["key1", "key2", "key1"];
+    in
+        (List.head cachedResults) == (List.last cachedResults)
+        &&
+        (List.head cachedResults) != (List.subscript cachedResults 1);
+
+
+/**
+* Test a cache that remains across evaluations.  Running this multiple times
+* with the same input should show a significant performance gain after the
+* first run.
+*/
+multiInstanceCacheTest :: String -> Int;    
+multiInstanceCacheTest = memo oneParamCallCounter;
+
+/** A four argument function will return a different value each time
+ * it is evaluated. 
+ */
+fourParam :: String -> Double -> Int -> String -> Int;
+fourParam a b c d = getCallCount;
+
+/**
+* Create and test instance specific cacheing version of the four argument function.
+* @return true if the test succeeds.
+*/
+private instanceCacheTestForMultipleParams =
+    let 
+        // Memoization is always for one argument so to
+        // memoize a multi argument function we need to
+        // do successive memoizations.
+        f3 a b c = memo (fourParam a b c);
+        f2 a b   = memo (f3 a b);
+        f1 a     = memo (f2 a);
+        memoizedVersionOfFourParam = memo f1;
+    in
+        ((memoizedVersionOfFourParam "a" 1.0 5 "d") == (memoizedVersionOfFourParam "a" 1.0 5 "d"))
+        &&
+        ((memoizedVersionOfFourParam "a" 1.0 4 "d") == (memoizedVersionOfFourParam "a" 1.0 4 "d"))
+        &&
+        ((memoizedVersionOfFourParam "a" 1.0 3 "d") != (memoizedVersionOfFourParam "a" 1.0 7 "d"))
+        &&
+        ((memoizedVersionOfFourParam "a" 1.0 7 "d") == (memoizedVersionOfFourParam "a" 1.0 7 "d"))
+        ;
+
+/**
+* Create a four way cacheing function that exists across evaluations.  Run {@code memoizedVersionOfFourParam@}
+* multiple times.  If the set of parameter values has been encountered before the previously calculated
+* value should be retrieved.
+*/   
+memoizedVersionOfFourParam =
+    let
+        mf3 a b c = memo (fourParam a b c);
+        mf2 a b   = memo (mf3 a b);
+        mf1 a     = memo (mf2 a);
+    in
+        memo mf1;
+
+/**
+ * Test memoization of a four argument function by using a series of 
+ * CAFs.
+ * @return true if the test succeeds, false otherwise.
+ */    
+private multiInstanceCacheTestForFourParams = 
+    assert (memoizedFourParamInstance1 == memoizedFourParamInstance1a)
+    &&
+    assert (memoizedFourParamInstance2 == memoizedFourParamInstance2a)
+    &&
+    assert (memoizedFourParamInstance3 == memoizedFourParamInstance3a)
+    &&
+    assert (memoizedFourParamInstance4 == memoizedFourParamInstance4a)
+    &&
+    assert (memoizedFourParamInstance5 == memoizedFourParamInstance5a)
+    &&
+    assert (memoizedFourParamInstance6 == memoizedFourParamInstance6a)
+    &&
+    assert (memoizedFourParamInstance7 == memoizedFourParamInstance7a)
+    &&
+    assert (memoizedFourParamInstance8 == memoizedFourParamInstance8a)
+    &&
+    assert (memoizedFourParamInstance9 == memoizedFourParamInstance9a)
+    &&
+    assert (memoizedFourParamInstance10 == memoizedFourParamInstance10a)
+    &&
+    assert (memoizedFourParamInstance11 == memoizedFourParamInstance11a)
+    &&
+    assert (memoizedFourParamInstance12 == memoizedFourParamInstance12a)
+    &&
+    assert (memoizedFourParamInstance13 == memoizedFourParamInstance13a)
+    &&
+    assert (memoizedFourParamInstance14 == memoizedFourParamInstance14a)
+    &&
+    assert (memoizedFourParamInstance15 == memoizedFourParamInstance15a)
+    &&
+    assert (memoizedFourParamInstance16 == memoizedFourParamInstance16a)
+    &&
+    assert (memoizedFourParamInstance1 != memoizedFourParamInstance3)
+    &&
+    assert (memoizedFourParamInstance2 != memoizedFourParamInstance4)
+    &&
+    assert (memoizedFourParamInstance3 != memoizedFourParamInstance5)
+    &&
+    assert (memoizedFourParamInstance4 != memoizedFourParamInstance6)
+    ;
+    
+// A series of CAFs which exercise the memoized four argument
+// function.
+memoizedFourParamInstance1 = memoizedVersionOfFourParam "a" 1.0 1 "a";
+memoizedFourParamInstance2 = memoizedVersionOfFourParam "a" 1.0 1 "b";
+memoizedFourParamInstance3 = memoizedVersionOfFourParam "a" 1.0 2 "a";
+memoizedFourParamInstance4 = memoizedVersionOfFourParam "a" 1.0 2 "b";
+memoizedFourParamInstance5 = memoizedVersionOfFourParam "a" 2.0 1 "a";
+memoizedFourParamInstance6 = memoizedVersionOfFourParam "a" 2.0 1 "b";
+memoizedFourParamInstance7 = memoizedVersionOfFourParam "a" 2.0 2 "a";
+memoizedFourParamInstance8 = memoizedVersionOfFourParam "a" 2.0 2 "b";
+memoizedFourParamInstance9 = memoizedVersionOfFourParam "b" 1.0 1 "a";
+memoizedFourParamInstance10 = memoizedVersionOfFourParam "b" 1.0 1 "b";
+memoizedFourParamInstance11 = memoizedVersionOfFourParam "b" 1.0 2 "a";
+memoizedFourParamInstance12 = memoizedVersionOfFourParam "b" 1.0 2 "b";
+memoizedFourParamInstance13 = memoizedVersionOfFourParam "b" 2.0 1 "a";
+memoizedFourParamInstance14 = memoizedVersionOfFourParam "b" 2.0 1 "b";
+memoizedFourParamInstance15 = memoizedVersionOfFourParam "b" 2.0 2 "a";
+memoizedFourParamInstance16 = memoizedVersionOfFourParam "b" 2.0 2 "b";
+memoizedFourParamInstance1a = memoizedVersionOfFourParam "a" 1.0 1 "a";
+memoizedFourParamInstance2a = memoizedVersionOfFourParam "a" 1.0 1 "b";
+memoizedFourParamInstance3a = memoizedVersionOfFourParam "a" 1.0 2 "a";
+memoizedFourParamInstance4a = memoizedVersionOfFourParam "a" 1.0 2 "b";
+memoizedFourParamInstance5a = memoizedVersionOfFourParam "a" 2.0 1 "a";
+memoizedFourParamInstance6a = memoizedVersionOfFourParam "a" 2.0 1 "b";
+memoizedFourParamInstance7a = memoizedVersionOfFourParam "a" 2.0 2 "a";
+memoizedFourParamInstance8a = memoizedVersionOfFourParam "a" 2.0 2 "b";
+memoizedFourParamInstance9a = memoizedVersionOfFourParam "b" 1.0 1 "a";
+memoizedFourParamInstance10a = memoizedVersionOfFourParam "b" 1.0 1 "b";
+memoizedFourParamInstance11a = memoizedVersionOfFourParam "b" 1.0 2 "a";
+memoizedFourParamInstance12a = memoizedVersionOfFourParam "b" 1.0 2 "b";
+memoizedFourParamInstance13a = memoizedVersionOfFourParam "b" 2.0 1 "a";
+memoizedFourParamInstance14a = memoizedVersionOfFourParam "b" 2.0 1 "b";
+memoizedFourParamInstance15a = memoizedVersionOfFourParam "b" 2.0 2 "a";
+memoizedFourParamInstance16a = memoizedVersionOfFourParam "b" 2.0 2 "b";
+
+
+prop_memo :: [Double] -> (Double -> Int) -> Prelude.Boolean;
+prop_memo testArgs tesFunc=
+    List.map tesFunc testArgs == List.map (memo tesFunc) testArgs;
+
+testModule :: Prelude.Boolean;
+public testModule =
+    assert (quickCheck prop_memo) &&
+    assert instanceCacheTest &&
+    assert instanceCacheTestForMultipleParams &&
+    assert multiInstanceCacheTestForFourParams;
+

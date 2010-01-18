@@ -1,0 +1,1133 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * RecordTests.cal
+ * Creation date: March 16, 2004.
+ * By: Bo Ilic
+ */
+
+/**
+ * This module contains test cases for CAL records.
+ * @author Bo Ilic
+ */
+module Cal.Test.General.RecordTests;
+import Cal.Core.Prelude using
+    typeConstructor = Double, Boolean, Int, Char, String;
+    typeClass = Eq, Ord;
+    function = assert, error, not, input, output, compare, eager;
+    dataConstructor = True, False, EQ, GT, Just, LT;
+    ;
+import Cal.Collections.List using
+    function = head, map, sort;
+    ;
+import Cal.Core.String;
+import Cal.Utilities.Math;
+import Cal.Core.Record using
+    function = fieldNames, hasField;
+    ;
+  
+
+//some tests on parsing records
+
+
+//3 fields: x, y and colour
+r1 :: {x :: Prelude.Int, y :: Prelude.Int, colour :: String};
+r1 = {x = 20, y = 30, colour = "red"};
+
+//the ordering of the fields in the record value and the record type do not need to match
+r2 :: {name :: Prelude.String, height :: Prelude.Double};
+r2 = {height = 5.0, name = "Linda"};
+
+//the empty record and its type
+r3 :: {};
+r3 = {};
+
+//a record containing 3 fields, one of which has a record type
+//note there is no naming conflict between the labels in the inner record and those in the outer record even though e.g. "field1" is reused.
+r4 :: {field1 :: [a] -> a, field2 :: {field1 :: Prelude.Char, field2 :: Prelude.Double}, field3 :: a -> a};
+r4 = {field1 = List.head, field2 = {field1 = 'a', field2 = 20.0}, field3 = Prelude.id};
+
+//records and type classes mix well
+r5 :: Prelude.Num a => {list :: [Prelude.Double], func :: a -> a};
+r5 = {list = [10.0, 20.0], func = Prelude.add 2};
+
+rt1 = {field1 = "abc", field2 = 3.0};
+
+rt2 = {};
+
+rt3 = {{} | };
+
+rt4 = {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT};
+
+rt5 = {{} | name="Fred"};
+
+addColour point = {point | colour = "red"};
+
+
+first x = x.field1;
+
+
+testFirst =
+    first {field1 = "abc", field2 = 10.0} == "abc" &&
+    first {field1 = Prelude.True, field2 = Prelude.GT, field3 = "def"} &&
+    first {field2 = "abc", field1 = 20.0} == 20.0
+    || Prelude.error "RecordTests.testFirst failed.";
+
+/**
+ * Test the record field seletion functionality.
+ * For this function all the records are literal
+ * values and as a result we optimize the 
+ * field selections to always immediately extract the 
+ * field value. testRecordSelection2 is written to 
+ * force the generation of lazy field selection
+ * constructs.
+ */
+testRecordSelection =
+    {field1 = "abc", field2 = 10.0}.field2 == 10.0 &&
+    {x = Prelude.GT, y = Prelude.True}.y == Prelude.True &&
+    {x = {y = {z = "abc"}}}.x.y.z == "abc" //selection is left associative
+    || Prelude.error "RecordTests.testRecordSelection failed.";    
+
+testRecordSelection2Helper r1 r2 r3 =
+    assert (r1.field2 == 10.0)
+    && assert (r2.y == Prelude.True)
+    && r3.x.y.z == "abc";
+    
+/**
+ * Test record selection in such a way that code generation will create lazy
+ * record selection constructs.
+ */
+testRecordSelection2 =
+    testRecordSelection2Helper {field1 = "abc", field2 = 10.0} {x = Prelude.GT, y  = Prelude.True} {x = {y = {z = "abc"}}};
+
+
+extension1 = {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}; // = (10.0, True, GT) = {field1 = 10, field2 = True, field3 = GT}
+
+extension2 = {{} | name = "Fred"}; // = {name = "Fred"}
+
+extension3 = {{x = 10.0, y = 20.0} | colour = "blue"}; // = {x = 10.0, y = 20.0, colour = blue}
+
+
+tripleFields x = (x.field1, x.field2, x.field3);
+
+
+//Record extension also works where the record to be extended is a variable:
+redPoint :: {x :: Prelude.Double, y :: Prelude.Double} -> {x :: Prelude.Double, y :: Prelude.Double, colour :: Prelude.String};
+redPoint point = {point | colour = "red"};
+
+//Record extension, like field selection, can also be a polymorphic operation:
+redRecord :: r\colour => {r | } -> {r | colour :: Prelude.String};
+redRecord r = {r | colour = "red"};
+
+tripleFun x = ({x | bo = 6.0}, {x | anton = "Anton"}, {x | linda = Prelude.Just "Linda"});
+
+tripleFun2 x y z = [{x | bo = 6.0}, {y | anton = "Anton"}, {z | linda = Prelude.Just "Linda"}];
+
+
+recordCase1 =
+    case {x = 10.0, y = 20.0, z = 15.0} of
+    {x = xValue, y = yValue, z = zValue} -> xValue;
+    ;
+
+testRecordCase1 =
+    recordCase1 == 10
+    || Prelude.error "RecordTests.testRecordCase1 failed.";
+
+recordCase2 :: (r\x, r\y, Prelude.Num a) => {r | x :: a, y :: a} -> a;
+//recordCase2 r = r.x + r.y;
+recordCase2 r =
+    case r of
+    {r_rest | x = xValue, y = yValue} -> xValue + yValue;
+    ;
+    
+testRecordCase2 =
+    recordCase2 {x = 2.0, y = 3.0} == 5 &&
+    recordCase2    {y = 10.0, x = 2.0, z = 3.0} == 12 &&
+    recordCase2 {x = 2.0, y = 5.0, z = Prelude.error "this is bad!"} == 7
+    || Prelude.error "RecordTests.testRecordCase2 failed.";
+
+//remove the field colour from a record:
+removeColour :: (r\colour) => {r | colour :: a} -> {r | };
+removeColour r =
+    case r of
+    {r_rest | colour} -> r_rest;
+    ;
+    
+testRemoveColour =
+    {removeColour {field1 = 20.0, colour = ["green"]} | colour = "Anton"}.colour == "Anton"
+    || Prelude.error "RecordTests.testRemoveColour failed.";
+
+//differs from removeColour by the use of the {r} syntax instead of {r | } for a record-polymorphic
+//record with no has fields.    
+removeColour2 :: (r\colour) => {r | colour :: a} -> {r};
+removeColour2 r =
+    case r of
+    {r_rest | colour} -> r_rest;
+    ;
+    
+testRemoveColour2 =
+    {removeColour2 {field1 = 20.0, colour = ["green"]} | colour = "Anton"}.colour == "Anton"
+    || Prelude.error "RecordTests.testRemoveColour2 failed.";    
+
+//rename the field colour to hue:
+//in words, the type is "a function that takes a record with a field label colour, and without a field label hue, and returns a record with a field label hue, and without a field label colour"
+renameColourToHue :: (r\colour, r\hue) => {r | colour :: a} -> {r | hue :: a};
+renameColourToHue r = case r of {r_rest | colour = colourValue} -> {r_rest | hue = colourValue};;
+renameColourToHue2 r = case r of {r_rest | colour} -> {r_rest | hue = colour};; //using punning
+
+//update the colour.
+updateColour :: (r\colour) => Prelude.String -> {r | colour :: Prelude.String} -> {r | colour :: Prelude.String};
+updateColour newColourValue r = case r of {r_rest | colour = oldColourValue} -> {r_rest | colour = newColourValue};;
+
+
+recordTest1 = {field1 = "Anton", field2 = 2.0};
+
+//the same variable x occurs in 2 different scopes
+recordTest2 = {fieldDouble = let x = Math.sin 1; in x, fieldChar = let x = List.head ['a', 'b']; in x};
+
+recordTest3 = {fieldDouble = let x = "ab\n\tc"; in x, fieldChar = let x = List.head ['a', 'b']; in x};
+
+recordTest4 = recordTest1.field1;
+
+recordTest5 =
+    let
+        f x = x.field1;
+    in
+        (f {field2 = 2.0, field1 = 'a'}, f recordTest1, f {field1 = "this is a string"});
+
+recordTestSimilar = 
+    let
+        field1 = "Anton";
+        field2 = 2.0;
+    in
+        (field1, field2);
+
+
+recordTestSimilar2 = 
+    let
+        field1 = String.fromList ['a', 'n', 't'];
+        field2 = 2.0 + 4.0;
+    in
+        (field1, field2);
+        
+testLets1 = (let x = Math.sin 0; in x, let x = Math.sin 0; in x, let x = Math.sin 0; in x);
+
+testLets2 = [let x = Math.sin 0; in x, let x = Math.sin 0; in x, let x = Math.sin 0; in x];    
+
+testEval1 =
+    case (List.head [Prelude.Just 'a', Prelude.Nothing]) of
+    Prelude.Just x -> x;
+    ;
+
+//f xs = (List.head xs, List.map List.head xs, List.map Math.sin xs);
+//f x = ([x, Prelude.Tuple2], x 2.0 'a', x 'a' 2.0);
+//f x = ([x, Prelude.Tuple2], [x, Prelude.flip x], x 'a' 2.0);
+
+//f :: [[[[a]]]] -> ([[[[[a]]]]], [[[[[a]]]]], [[[[[a]]]]], [[[[[a]]]]]);
+//f x = ([x, []], [x, [[]]], [x, [[[]]]], [x, [[[[]]]]]);
+
+//f x = ([x, [[[[]]]]], [x, [[[]]]], [x, [[]]], [x, []]);
+
+testVarClash letVar_RecordTests_x =
+    let
+        x = Math.sin 2.0;
+    in
+        x;
+        
+errorRecord :: Prelude.String -> {field1 :: Prelude.Int, field2 :: Prelude.Char};        
+errorRecord x = Prelude.error x;
+
+projection x y = y;
+
+//this tests the lazyness of the record selection operator. The expression that is selected is not evaluated
+//to a record form unless needed.
+testLazyRecordSelection = projection (errorRecord "this should not be evaluated.").field1 Prelude.True;
+
+//this tests the lazyness of the record extension operator.
+testLazyRecordExtension = projection {Prelude.error "this should not be evaluated" | field1 = 10.0} Prelude.True;
+
+testLazyRecordExtension2Helper r1 r2=
+    assert ({r1 | field3 = 10.0} == {field1 = "abc", field2 = Prelude.True, field3 = 10.0})
+    && assert ({{field1 = "abc", field2 = Prelude.True} | field3 = 10.0} == {field1 = "abc", field2 = Prelude.True, field3 = 10.0})
+    && assert ({r2 | #3 = "abc"} == {#1 = 1.0, #3 = "abc", #2 = Prelude.True});
+    
+/**
+ * Test compilation/evaluation of record extensions in a lazy context.
+ * The testing is broken down into {@code testLazyRecordExtension2@} and
+ * {@code testLazyRecordExtension2Helper @} to avoid optimizations that would
+ * remove laziness.
+ * @see testLazyRecordExtension2Helper
+ */
+testLazyRecordExtension2 =
+    testLazyRecordExtension2Helper {field1 = "abc", field2 = Prelude.True} {#1 = 1.0, #2 =  Prelude.True};
+
+
+//this tests the lazyness of the record case expression. The condition expression should not be evaluated
+//since it is not needed by the function projection.
+testLazyRecordCase = projection (case (errorRecord "this should not be evaluated.") of {r | field1} -> field1;) Prelude.True;
+
+testLazyIf = projection (if Prelude.error "this should not be evaluated." then 100.0 else 200.0) Prelude.True;
+
+testRecordExpressions =
+    (({{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}.field1) == 10)
+    &&
+    (let redPoint point = {point | colour = "red"}; in (redPoint {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}).field1) == 10
+    &&
+    (let redPoint point = {point | colour = "red"}; in (redPoint {{field1 = 10.0} | field2 = Prelude.True, field3 = Prelude.GT}).colour) == "red"
+    || Prelude.error "RecordTests.testRecordExpressions failed.";
+    
+funnyFunction x y =
+    let
+       r1 = {field1 = x, field2 = \z -> z + y + z};
+       r2 = {r1 | field3 = "abc", field4 = r1};
+    in
+       (r1.field1 + r1.field2 3.0, r2.field3, r2.field4.field2 5.0);
+    
+testFunnyFunction =
+    funnyFunction 5 12 == (23, "abc", 22) &&
+    funnyFunction 20 2 == (28, "abc", 12)
+    || Prelude.error "RecordTests.testFunnyFunction failed.";
+    
+addAnton x =
+    if x.linda > 5 then
+        {x | anton = x.linda}
+    else
+        {x | anton = 3.0};
+        
+testAddAnton =
+    ((case addAnton {linda = 4, computers = (Math.sin, "I like computers")} of {_ | anton = antonValue, linda = lindaValue} -> antonValue * lindaValue;) == 12) &&
+    ((case addAnton {linda = 6, computers = (Math.sin, "I like computers")} of {rest | anton = antonValue, linda = lindaValue} -> antonValue * lindaValue;) == 36)
+    ;
+    
+//some functions for converting back and forth between tuples and special records with the field names
+//field1, field2, ...    
+    
+field1 r = r.field1;
+field2 r = r.field2;
+field3 r = r.field3;
+field4 r = r.field4;
+field5 r = r.field5;
+field6 r = r.field6;
+field7 r = r.field7;
+
+toTuple2 :: (r\field1, r\field2) => {r | field1 :: a, field2 :: b} -> (a, b);
+toTuple2 r =
+    case r of
+    {_ | field1, field2} -> (field1, field2);
+    ;
+
+toTuple3 :: (r\field1, r\field2, r\field3) => {r | field1 :: a, field2 :: b, field3 :: c} -> (a, b, c);
+toTuple3 r =
+    case r of
+    {_ | field1, field2, field3} -> (field1, field2, field3);
+    ;
+
+toTuple4 :: (r\field1, r\field2, r\field3, r\field4) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d} -> (a, b, c, d);
+toTuple4 r =
+    case r of
+    {_ | field1, field2, field3, field4} -> (field1, field2, field3, field4);
+    ;
+
+toTuple5 :: (r\field1, r\field2, r\field3, r\field4, r\field5) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d, field5 :: e} -> (a, b, c, d, e);
+toTuple5 r =
+    case r of
+    {_ | field1, field2, field3, field4, field5} -> (field1, field2, field3, field4, field5);
+    ;
+
+toTuple6 :: (r\field1, r\field2, r\field3, r\field4, r\field5, r\field6) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d, field5 :: e, field6 :: f} -> (a, b, c, d, e, f);
+toTuple6 r =
+    case r of {_ | field1, field2, field3, field4, field5, field6} -> (field1, field2, field3, field4, field5, field6);
+    ;
+    
+toTuple7 :: (r\field1, r\field2, r\field3, r\field4, r\field5, r\field6, r\field7) => {r | field1 :: a, field2 :: b, field3 :: c, field4 :: d, field5 :: e, field6 :: f, field7 :: g} -> (a, b, c, d, e, f, g);
+toTuple7 r =
+    case r of {_ | field1, field2, field3, field4, field5, field6, field7} -> (field1, field2, field3, field4, field5, field6, field7);
+    ;    
+        
+            
+    
+testToTuple =
+    toTuple2 recordTest1 == ("Anton", 2.0) &&
+    toTuple2 extension1 == (10, Prelude.True) &&
+    toTuple3 extension1 == (10, Prelude.True, Prelude.GT)
+    || Prelude.error "RecordTests.testToTuple failed.";
+
+//an example of how records can be used as types in a data declaration    
+data private Point = 
+    private Point 
+        coordinates     :: {x :: Prelude.Double, y :: Prelude.Double};
+
+getPointRec p = case p of Point pointRec -> pointRec;;    
+
+pointToPair :: Point -> (Double, Double);
+pointToPair p =
+    let
+        r = getPointRec p;
+    in
+        (r.x, r.y);
+
+//this function illustrates why one might want to use records- to update the x field,
+//we don't have to deal with any of the other fields of the record. This is not a savings
+//deal in the case of Point, which only has 2 fields, but if there are many fields it
+//can be quite convenient.
+translatePointHorizontally :: Point -> Double -> Point;
+translatePointHorizontally p t =
+    let
+        r = getPointRec p;
+    in
+        case r of
+        {rec | x} -> Point {rec | x = x + t};
+        ;
+
+testPoint =
+    (pointToPair (Point {x = 5.0, y = 2.0})) == (5, 2) &&
+    pointToPair (translatePointHorizontally (Point {x = 5, y = 2}) (-1)) == (4, 2) ||
+    Prelude.error "RecordTests.testPoint failed.";
+    
+data WeirdType a = 
+    StopTheWeirdness | 
+    ContinueTheWeirdness
+        weirdRec        :: {x :: a, rest :: WeirdType a};
+
+weirdTypeToList :: WeirdType a -> [a];
+weirdTypeToList w =
+    case w of
+    StopTheWeirdness -> [];
+    ContinueTheWeirdness r ->
+        r.x : (weirdTypeToList r.rest);
+    ;
+    
+listToWeirdType :: [a] -> WeirdType a;
+listToWeirdType xs =
+    case xs of
+    [] -> StopTheWeirdness;
+    x : xss -> ContinueTheWeirdness {x = x, rest = (listToWeirdType xss)};
+    ;
+    
+testWeirdType = weirdTypeToList (listToWeirdType [1 :: Int, 5, 7, 3]) == [1 :: Int, 5, 7, 3];
+
+testStrictSelection = 
+let
+    l = 1.0 + 2.0;
+    r = { linda =  l};
+    s = RecordTests.addAnton r;
+in 
+    s.anton;
+    
+//some tests of the built-in hasField and fieldNames functions
+hasNameField r = hasField r "name";
+hasFieldNField r n = hasField r ("field" ++ Prelude.intToString n);
+
+testHasField =
+    [hasNameField r1, hasNameField r2, hasNameField {name = "Fred"}, hasNameField {}] == [False, True, True, False] &&
+    [hasFieldNField rt1 1, hasFieldNField rt1 2, hasFieldNField rt1 3] == [True, True, False] &&
+    [hasFieldNField extension1 3, hasFieldNField extension1 4] == [True, False] &&
+    hasFieldNField (redRecord {field1 = "Zaphod"}) 1 &&
+    (Prelude.flip hasField) "bar" {bar = "bar"};
+    
+testFieldNames =
+    fieldNames extension1 == ["field1", "field2", "field3"] &&
+    fieldNames {town = "Vancouver", country = "Canada", province = "BC"} == ["country", "province", "town"] &&
+    fieldNames (redRecord {}) == ["colour"] &&
+    fieldNames {} == [];    
+    
+//some tests on class instances for records
+
+
+person1 = {name = "Rameau", occupation = "composer", birthYear = 1683 :: Int};
+
+testIORecords1 = Prelude.input (Prelude.output {field1 = "Joe", field2 = 100.0}) == {field1 = "Joe", field2 = 100.0};
+
+//input in this case is inputting to a List value!
+testIORecords2 = Prelude.input (Prelude.output {a = 1.0, b = 2.0, c = 3.0}) == [1.0, 2.0, 3.0];
+
+testIORecords3 = Prelude.input (Prelude.output person1) == {name = "Rameau", occupation = "composer", birthYear = 1683 :: Int};
+
+testIORecords4 = Prelude.input (Prelude.output {z = {z = {z = "abc"}}}) == {z = {z = {z = "abc"}}};
+
+tio1 :: (Prelude.Inputable r, Prelude.Outputable r) => {r} -> ([Prelude.String], {r});
+tio1 x = (fieldNames x, Prelude.input (Prelude.output x));
+
+tio2 :: (r\name, r\birthYear, Prelude.Inputable r, Prelude.Outputable r, Prelude.Outputable a, Prelude.Inputable a, Prelude.Outputable b, Prelude.Inputable b) =>
+    {r | name :: a, birthYear :: b} -> (a, ([Prelude.String], {r | name :: a, birthYear :: b}), b);
+tio2 x = (x.name, tio1 x, x.birthYear);
+
+testIORecords5 =
+    tio1 person1 == (["birthYear", "name", "occupation"], person1) &&
+    tio2 person1 == ("Rameau", (["birthYear", "name", "occupation"], person1), 1683)
+    ;
+
+
+testEqRecords0 =
+    {name = "Fred", age = 10.0} == {age = 10.0, name = "Fred"};
+
+testEqRecords1 =
+    {name = "Rameau", occupation = "composer", birthYear = 1683 :: Int} ==
+    {occupation = "comp" ++ "oser", name = "Rameau", birthYear = (1600 + 83)};
+
+    
+testEqRecords2 =
+    person1 == {name = "Rameau", occupation = "composer", birthYear = 1683};
+    
+testEqRecords3 =
+    {person1 | tupleField = (Prelude.True, 20.0)} == {tupleField = (Prelude.True, 20.0), name = "Rameau", occupation = "composer", birthYear = 1683};
+        
+testEqRecords4 =     
+    person1 != {name = error "shouldn't evaluate this", occupation = "shouldn't evaluate this", birthYear = 2004};    
+        
+testEqRecords5 =
+    List.isElem {colour = "red", v = 20.0} [{v = 20.0, colour = "green"}, {colour = "red", v = 20.0}, {colour = "red", v = error "should not evaluate this"}];
+    
+testEqRecords6 =
+        let
+            f :: Double -> Boolean;
+            f x = List.isElem {colour = "red", v = x} [{v = 20.0, colour = "green"}, {colour = "red", v = 20.0}, {colour = "red", v = error "should not evaluate this"}];
+        in
+            f 20.0;
+    
+testEqRecords7 =
+    let
+        f :: (Eq r, Eq a, r\occupation) => {r | occupation :: a} -> {r} -> a -> Boolean;
+        f x y z = x == {y | occupation = z};
+    in
+        f person1 {name = "Rameau", birthYear = 1683 :: Int} "composer";    
+        
+testEqRecords8 = List.group [{a = "abc"}, {a = "abc"}, {a = "foo"}, {a = "foo"}, {a = "abc"}] ==
+    [[{a = "abc"}, {a = "abc"}], [{a = "foo"}, {a = "foo"}], [{a = "abc"}]];
+
+
+equalsRecord :: (Eq r) => {r} -> {r} -> Boolean;
+equalsRecord = Prelude.equals;
+//equalsRecord rv = equals rv;
+
+ti1 :: Eq r => {r} -> Boolean;        
+ti1 x = equalsRecord x x;        
+//ti1 rv x = equalsRecord rv x x;
+
+ti2 :: Eq r => {r} -> (Boolean, Boolean);
+ti2 x = (equalsRecord x x, equalsRecord x x);
+//ti2 rv x = (equalsRecord rv x x, equalsRecord rv x x);
+
+ti3 :: (Eq r, r\field1) => {r} -> Boolean;
+ti3 x = equalsRecord {x | field1 = 2.0} {x | field1 = 2.0};
+//ti3 rv = (equalsRecord {rv | field1 = dictEqDouble} {x | field1 = 2.0} {x | field1 = 2.0}
+
+ti4 :: Eq r => {r} -> {r} -> ([Prelude.String], Boolean);
+ti4 x y = (fieldNames x, x == y);
+//ti4 rv x y = (fieldNames x, (==) dictEqRecord rv x y);
+
+testEqRecords9 =
+    ti1 {zap = {foo = "abc", bar = {a = 2.0}}}
+    && ti2 person1 == (Prelude.True, Prelude.True)
+    && ti3 {foo = "abc"}
+    && ti3 {foo = 2.0}
+    && ti3 {foo = 'a', bar = "de"}    
+    && ti4 person1 person1 == (["birthYear", "name", "occupation"], Prelude.True)
+    && ti4 {foo = 'a', bar = "de"} {bar = "de", foo = 'a'} == (["bar", "foo"], Prelude.True)
+    ;
+
+        
+testRecordInstances =
+
+    testIORecords1
+    && testIORecords2
+    && testIORecords3
+    && testIORecords4
+    && testIORecords5
+    
+    && testEqRecords1
+    && testEqRecords2
+    && testEqRecords3
+    && testEqRecords4
+    && testEqRecords5
+     && testEqRecords6
+    && testEqRecords7
+    && testEqRecords8
+    && testEqRecords9    
+    
+    || error "RecordTests.testRecordInstances failed.";
+    
+                            
+
+    
+
+// The following are provided for convenience testing of record and record list value editors
+
+inputEmptyRecord r = {} == r;
+outputEmptyRecord = {};
+
+inputEmptyRecordList r = [{}, {}] == r;
+outputEmptyRecordList = [{}, {}];
+
+inputNormalRecord r = (r.firstName ++ " " ++ r.lastName, r.age + r.height, r.address ++ r.postalCode ++ r.country ++ r.city, r.brownHaired && r.hasRecord);
+outputNormalRecord = {firstName = "Iulian", lastName = "Radu", age = 11.0, address = "#191 Monday Ave", postalCode = "V0W", country = "Canbada", city = "Brasov", height = 5.11, brownHaired = True, hasRecord = False};
+
+inputCompoundRecord r = (r.name, r.brownHaired && r.hasRecord, r.innerRecord.age + r.innerRecord.height);
+outputCompoundRecord = {name = "Holly", brownHaired = True, hasRecord = True, innerRecord = {age = 2.0, height = 3.0}};
+
+inputCompoundRecordList rl = let r = (List.subscript rl 1); in (r.name, r.brownHaired && r.hasRecord, r.innerRecord.age + r.innerRecord.height);
+outputCompoundRecordList = [
+    {name = "Holly", brownHaired = True, hasRecord = True, innerRecord = {age = 2.0, height = 3.0}}, 
+    {name = "Molly", brownHaired = False, hasRecord = True, innerRecord = {age = 1.0, height = 1.0}},
+    {name = "Mol", brownHaired = False, hasRecord = False, innerRecord = {age = 3.0, height = 6.0}} 
+    ];
+
+inputNormalRecordList rl = case rl of r : rls -> (r.firstName ++ " " ++ r.lastName, r.age + r.height, r.address ++ r.postalCode ++ r.country ++ r.city, r.brownHaired && r.hasRecord);;
+outputNormalRecordList = [
+    {firstName = "Iulian", lastName = "Radu", age = 11.0, address = "#191 Monday Ave", postalCode = "V0W", country = "Canbada", city = "Brasov", height = 5.11, brownHaired = True, hasRecord = False},
+    {firstName = "Sethi", lastName = "Addison", age = 26.0, address = "#20 Haskell Blv", postalCode = "NyT", country = "Doncestia", city = "New Wing", height = 8.12, brownHaired = False, hasRecord = False},
+    {firstName = "Sabrina", lastName = "Choy", age = 6.0, address = "#10 Kell St", postalCode = "YnT", country = "Doncestia", city = "New Wing", height = 3.1, brownHaired = False, hasRecord = True},
+    {firstName = "Iulian2", lastName = "Radu", age = 11.1, address = "#191 Monday Ave", postalCode = "V0W", country = "Canbada", city = "Brasov", height = 5.11, brownHaired = True, hasRecord = False},
+    {firstName = "Sethi2", lastName = "Addison", age = 26.1, address = "#20 Haskell Blv", postalCode = "NyT", country = "Doncestia", city = "New Wing", height = 8.12, brownHaired = False, hasRecord = False},
+    {firstName = "Sabrina2", lastName = "Choy", age = 6.3, address = "#10 Kell St", postalCode = "YnT", country = "Doncestia", city = "New Wing", height = 3.1, brownHaired = False, hasRecord = True},
+    {firstName = "Iulian3", lastName = "Radu", age = 131.0, address = "#191 Monday Ave", postalCode = "V0W", country = "Canbada", city = "Brasov", height = 5.11, brownHaired = True, hasRecord = False},
+    {firstName = "Sethi3", lastName = "Addison", age = 226.0, address = "#20 Haskell Blv", postalCode = "NyT", country = "Doncestia", city = "New Wing", height = 8.12, brownHaired = False, hasRecord = False},
+    {firstName = "Sabrina3", lastName = "Choy", age = 66.0, address = "#10 Kell St", postalCode = "YnT", country = "Doncestia", city = "New Wing", height = 3.1, brownHaired = False, hasRecord = True}
+    ];
+
+
+//////////////////////////////////////////////////////////////////////////////////
+// some tests of ordinal field names
+
+tupRec1 :: {#1 :: Int, #2 :: Char, #3 :: Boolean};
+tupRec1 = {#1 = 100, #2 = 'b', #3 = True};
+
+tupRec2 :: {#123 :: String, #1 :: Int, #2 :: Char, #3 :: Boolean};
+tupRec2 = {#123 = "hello", #1 = 100, #2 = 'b', #3 = True};
+
+newField1 :: r\#1 => {r | #1 :: a} -> a;
+newField1 r = r.#1;
+
+tupRecordCase1 =
+    case {#1 = 10.0, #2 = 20.0, #3 = 15.0} of
+    {#1 = xValue, #2 = yValue, #3 = zValue} -> xValue;
+    ;
+    
+tupRecordCase2 =
+    case {#1 = 10.0, #2 = 20.0, #3 = 15.0} of
+    {#1 = xValue, #2, #3} -> xValue;
+    ;
+    
+//tupRecordCase2 has the same meaning as tupRecordCase3 i.e. punning for numeric field names is actually equivalent to
+//e.g. saying #2 = _.
+tupRecordCase3 =
+    case {#1 = 10.0, #2 = 20.0, #3 = 15.0} of
+    {#1 = xValue, #2 = _, #3 = _} -> xValue;
+    ; 
+    
+data private OneTwo = 
+    private OneTwo 
+        doubles :: {#1 :: Prelude.Double, #2 :: Prelude.Double};    
+
+ordinalFieldNamesTests =
+    //alphabetic sorting is not in ordinal order 
+    sort ["a23", "a123", "a211", "a1"] == ["a1", "a123", "a211", "a23"] 
+    && sort [21 :: Int, 123, 211, 1] == [1, 21, 123, 211]
+    && fieldNames {#23 = (), #123 = (), #211 = (), #1 = ()} == ["#1", "#23", "#123", "#211"]    
+    && fieldNames {a23 = (), a123 = (), a211 = (), a1 = ()} == ["a1", "a123", "a211", "a23"]
+    //sorting is numeric on ordinal field names and alphabetic on textual field names                                                                    
+    && fieldNames {a23 = (), a123 = (), #23 = (), #123 = (), a211 = (), a1 = (), #211 = (), #1 = ()} ==
+           ["#1", "#23", "#123", "#211", "a1", "a123", "a211", "a23"]
+    && hasField {#23 = (), #123 = (), #211 = (), #1 = ()} "#1" 
+    && not (hasField {#23 = (), #123 = (), #211 = (), #1 = ()} "#2") 
+    && Prelude.input (Prelude.output {#23 = 23.0, #123 = 123.0, #211 = 5.0, #1 = 1.0}) == [1.0, 23.0, 123.0, 5.0]
+    && Prelude.input (Prelude.output {a23 = 23.0, a123 = 123.0, a211 = 5.0, a1 = 1.0}) == [1.0, 123.0, 5.0, 23.0] 
+    //error doesn't get called because != is computed first on #10.                                                                                                                                                                            
+    && {foo = error "don't call this!", #10 = "abc"} != {foo = 2.0, #10 = "def"}
+    && not ({foo = error "don't call this!", #10 = "abc"} == {foo = 2.0, #10 = "def"})
+    || Prelude.error "RecordTests.ordinalFieldNamesTests failed.";
+    
+testEmptyRecords =
+    {} == {}
+    && not ({} != {})
+    && input (output {}) == {}
+    && compare {} {} == EQ
+    || error "RecordTests.testEmptyRecords failed";
+
+testRecordOrdInstances =
+    sort (map tuple2ToRecord [("c", 11), ("b", 10 :: Int), ("b", 12), ("c", 5), ("c", -1), ("a", 0), ("a", -3), ("b", 4)]) ==
+        (map tuple2ToRecord [("a", -3), ("a", 0), ("b", 4), ("b", 10), ("b", 12), ("c", -1), ("c", 5), ("c", 11)])
+    && recOrd1 {#1 = "abc"} {#1 = "abc"} == (False, True)
+    && recOrd1 {def = "def", #2 = 2.0, abc = "abc"} {abc = "abc", #2 = 2.0, def = "def"} == (False, True)
+    && recOrd2 {#1 = "abc", #2 = 10} {#1 = "abc", #2 = 10} == (False, True)
+    && recOrd2 {#1 = "abc", #2 = 9} {#1 = "abc", #2 = 10} == (True, False)
+    && recOrd2 {#1 = "abc", #2 = 12} {#1 = "abc", #2 = 11} == (False, False)
+    && specializedGroup [{a = "A", b = 'B'}, {a = "A", b = 'B'}, {a = "A", b = 'C'}, {a = "A", b = 'B'}] ==
+         [[{a = "A", b = 'B'}, {a = "A", b = 'B'}], [{a = "A", b = 'C'}], [{a = "A", b = 'B'}]]
+    && specializedGroup2 [{a = "A", b = 'B'}, {a = "A", b = 'B'}, {a = "A", b = 'C'}, {a = "A", b = 'B'}] ==
+         [[{a = "A", b = 'B'}, {a = "A", b = 'B'}], [{a = "A", b = 'C'}], [{a = "A", b = 'B'}]]  
+    && Prelude.max {field1 = "abc", field2 = 20.0} {field1 = "abc", field2 = 30} == {field1 = "abc", field2 = 30}
+    && Prelude.max {field1 = "dbc", field2 = 20.0} {field1 = "abc", field2 = Prelude.error "don't call me"} == {field1 = "dbc", field2 = 20.0}             
+    || Prelude.error "RecordTests.testRecordOrdInstances failed.";
+
+//tests dictionary switching: the Ord dictionary must be converted to an Eq dictionary for
+//the equals call site.
+recOrd1 r1 r2 = (r1 < r2, r1 == r2);
+
+recOrd2 :: {#1 :: String, #2 :: Int} -> {#1 :: String, #2 :: Int} -> (Boolean, Boolean);
+recOrd2 r1 r2 = (r1 < r2, r1 == r2);
+
+specializedGroup :: (Ord a) => [a] -> [[a]];
+specializedGroup xs = List.group xs;
+
+specializedGroup2 :: (Ord r) => [{r}] -> [[{r}]];
+specializedGroup2 xs = List.group xs;
+
+//the lecc runtime has special handling for the 6 cases:
+//empty records, tuple records, ordinal records, textual records, tuple-mixed records and mixed records
+//the reaon for this is that various optimizations are available specially for each case. For example, tuple and
+//tuple-mixed records have O(1) field access for their tuple parts. However, it means we need test cases for each
+//case.
+testOptimizedRecords =
+    
+    assert (emptyRecord == emptyRecord)
+    && assert (compare emptyRecord emptyRecord == EQ)
+    && assert (fieldNames emptyRecord == [])                        
+                                  
+    && assert (tupleRecord1 == tupleRecord2)
+    && assert (input (output tupleRecord1) == tupleRecord2)
+    && assert (fieldNames tupleRecord2 == ["#1", "#2", "#3", "#4"]) 
+    && assert (hasField tupleRecord2 "#1")
+    && assert (hasField tupleRecord2 "#2")
+    && assert (hasField tupleRecord2 "#4")
+    && assert (not (hasField tupleRecord2 "name"))
+    && assert (not (hasField tupleRecord2 "#100"))
+    && assert (not (hasField tupleRecord2 "#   12"))
+    && assert (not (hasField tupleRecord2 "case"))
+    && assert (not (hasField tupleRecord2 "   sds+++"))
+        
+    && assert (ordinalRecord1 == ordinalRecord2)
+    && assert (compare ordinalRecord1 ordinalRecord2 == EQ)
+    && assert (input (output ordinalRecord1) == ordinalRecord2)
+    && assert (fieldNames ordinalRecord2 == ["#1", "#3", "#4", "#9999"]) 
+    && assert (hasField ordinalRecord2 "#1")
+    && assert (hasField ordinalRecord2 "#4")
+    && assert (hasField ordinalRecord2 "#9999")
+    && assert (not (hasField ordinalRecord2 "name"))
+    && assert (not (hasField ordinalRecord2 "#2"))
+    && assert (not (hasField ordinalRecord2 "#   12"))
+    && assert (not (hasField ordinalRecord2 "case"))
+    && assert (not (hasField ordinalRecord2 "   sds+++"))  
+    
+    && assert (textualRecord1 == textualRecord2)
+    && assert (input (output textualRecord1) == textualRecord2)
+    && assert (fieldNames textualRecord2 == ["f1", "f2", "f3", "f4", "f5", "f6"])     
+    && assert (hasField textualRecord2 "f2")
+    && assert (hasField textualRecord2 "f4")
+    && assert (hasField textualRecord2 "f1")
+    && assert (hasField textualRecord2 "f6")
+    && assert (not (hasField textualRecord2 ""))
+    && assert (not (hasField textualRecord2 "#100"))
+    && assert (not (hasField textualRecord2 "#   12"))
+    && assert (not (hasField textualRecord2 "case"))
+    && assert (not (hasField textualRecord2 "   sds+++"))     
+        
+    && assert (tupleMixedRecord1 == tupleMixedRecord2)
+    && assert (input (output tupleMixedRecord1) == tupleMixedRecord2)
+    && assert (fieldNames tupleMixedRecord2 == ["#1", "#2", "#3", "#4", "age", "name"])
+    && assert (hasField tupleMixedRecord2 "#1")
+    && assert (hasField tupleMixedRecord2 "#2")
+    && assert (hasField tupleMixedRecord2 "#4")
+    && assert (hasField tupleMixedRecord2 "age")
+    && assert (hasField tupleMixedRecord2 "name")
+    && assert (not (hasField tupleMixedRecord2 "Name"))
+    && assert (not (hasField tupleMixedRecord2 "#100"))
+    && assert (not (hasField tupleMixedRecord2 "#   12"))
+    && assert (not (hasField tupleMixedRecord2 "case"))
+    && assert (not (hasField tupleMixedRecord2 "   sds+++"))
+       
+    && assert (mixedRecord1 == mixedRecord2)
+    && assert (input (output mixedRecord1) == mixedRecord2)
+    && assert (fieldNames mixedRecord2 == ["#2", "#4", "age", "name", "status"])   
+    && assert (hasField mixedRecord2 "#2")
+    && assert (hasField mixedRecord2 "#4")
+    && assert (hasField mixedRecord2 "age")
+    && assert (hasField mixedRecord2 "status")
+    && assert (not (hasField mixedRecord2 ""))
+    && assert (not (hasField mixedRecord2 "#100"))
+    && assert (not (hasField mixedRecord2 "#   12"))
+    && assert (not (hasField mixedRecord2 "case"))
+    && assert (not (hasField mixedRecord2 "   sds+++")) 
+    
+    && assert (extendByEmpty {} == emptyRecord)
+    && assert (extendByTuple {} == tupleRecord2)
+    && assert (extendByOrdinal {} == ordinalRecord3)
+    && assert (extendByTextual {} == textualRecord2)
+    && assert (extendByTupleMixed {} == tupleMixedRecord2)
+    && assert (extendByMixed {} == mixedRecord2)
+    
+    && assert (extendByEmpty mixedRecord2 == mixedRecord2)
+    && assert (extendByTuple textualRecord1 == {f1 = 20.0, f2 = "red", f3 = Prelude.Just 'a', f4 = [100.0, 200.0], f5 = 1.0, f6 = "Anton", #4 = [100.0, 200.0], #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"})
+    && assert (extendByTuple {#99 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #99 = "hello"})
+    && assert (extendByTuple {#5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello"})
+    && assert (extendByOrdinal {#5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton"})
+    && assert (extendByOrdinal {name = "anton", #5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton", name = "anton"})
+    && assert (extendByOrdinal {#911 = "help", name = "anton", #5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton", name = "anton", #911 = "help"})
+    && assert (extendByTextual {goo = "Goo"} == {f1 = 20.0, f4 = [100.0, 200.0], f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton", goo = "Goo"})
+    && assert (extendByTextual {goo = "Goo", #3 = [1.0]} == {#3 = [1.0], f1 = 20.0, f4 = [100.0, 200.0], f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton", goo = "Goo"})
+    && assert (extendByTupleMixed {zap = "Zaphod", #5 = 1000.0} == {zap = "Zaphod", #5 = 1000.0, #4 = [100.0, 200.0], name = "Anton", age = 1.0, #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"})
+    && assert (extendByTupleMixed {zap = "Zaphod", #67 = 1000.0} == {zap = "Zaphod", #67 = 1000.0, #4 = [100.0, 200.0], name = "Anton", age = 1.0, #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"})
+    && assert (extendByMixed {#1 = "one", #3 = "three", #5 = "five"} ==  {#1 = "one", #3 = "three", #5 = "five", name = "Anton", #2 = "red", age = 1.0, status = True, #4 = [100.0, 200.0]})
+    && assert (extendByMixed {happy = True, #1 = "one", #3 = "three", #5 = "five"} ==  {happy = True, #1 = "one", #3 = "three", #5 = "five", name = "Anton", #2 = "red", age = 1.0, status = True, #4 = [100.0, 200.0]})
+    
+    && assert ({ordinalRecord3 | #5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton"})
+    && assert ({ordinalRecord3 | name = "anton", #5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton", name = "anton"})
+    && assert ({ordinalRecord3 | #911 = "help", name = "anton", #5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton", name = "anton", #911 = "help"})
+    
+    && assert (lazyExtendByEmpty mixedRecord2 == mixedRecord2)
+    && assert (lazyExtendByTuple textualRecord1 == {f1 = 20.0, f2 = "red", f3 = Prelude.Just 'a', f4 = [100.0, 200.0], f5 = 1.0, f6 = "Anton", #4 = [100.0, 200.0], #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"})
+    && assert (lazyExtendByTuple {#99 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #99 = "hello"})
+    && assert (lazyExtendByTuple {#5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello"})
+    && assert (lazyExtendByOrdinal {#5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton"})
+    && assert (lazyExtendByOrdinal {name = "anton", #5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton", name = "anton"}) 
+    && assert (lazyExtendByOrdinal {#911 = "help", name = "anton", #5 = "hello"} == {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #5 = "hello", #6 = "Anton", name = "anton", #911 = "help"})
+    && assert (lazyExtendByTextual {goo = "Goo"} == {f1 = 20.0, f4 = [100.0, 200.0], f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton", goo = "Goo"})
+    && assert (lazyExtendByTextual {goo = "Goo", #3 = [1.0]} == {#3 = [1.0], f1 = 20.0, f4 = [100.0, 200.0], f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton", goo = "Goo"})
+    && assert (lazyExtendByTupleMixed {zap = "Zaphod", #5 = 1000.0} == {zap = "Zaphod", #5 = 1000.0, #4 = [100.0, 200.0], name = "Anton", age = 1.0, #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"})
+    && assert (lazyExtendByTupleMixed {zap = "Zaphod", #67 = 1000.0} == {zap = "Zaphod", #67 = 1000.0, #4 = [100.0, 200.0], name = "Anton", age = 1.0, #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"})
+    && assert (lazyExtendByMixed {#1 = "one", #3 = "three", #5 = "five"} ==  {#1 = "one", #3 = "three", #5 = "five", name = "Anton", #2 = "red", age = 1.0, status = True, #4 = [100.0, 200.0]})
+    && assert (lazyExtendByMixed {happy = True, #1 = "one", #3 = "three", #5 = "five"} ==  {happy = True, #1 = "one", #3 = "three", #5 = "five", name = "Anton", #2 = "red", age = 1.0, status = True, #4 = [100.0, 200.0]})
+
+    && assert (testRetraction)
+    ; 
+   
+
+emptyRecord = {};
+
+tupleRecord1 = {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0]}; 
+tupleRecord2 = {#4 = [100.0, 200.0], #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"};
+
+ordinalRecord1 = {#1 = 20.0, #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #9999 = "Zaphod"}; 
+ordinalRecord2 = {#9999 = "Zaphod", #4 = [100.0, 200.0], #3 = Prelude.Just 'a', #1 = 20.0};
+ordinalRecord3 = {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #6 = "Anton"};
+
+textualRecord1 = {f1 = 20.0, f2 = "red", f3 = Prelude.Just 'a', f4 = [100.0, 200.0], f5 = 1.0, f6 = "Anton"};
+textualRecord2 = {f1 = 20.0, f4 = [100.0, 200.0], f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton"};
+
+tupleMixedRecord1 = {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], name = "Anton", age = 1.0}; 
+tupleMixedRecord2 = {#4 = [100.0, 200.0], name = "Anton", age = 1.0, #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"};
+
+mixedRecord1 = {#2 = "red", #4 = [100.0, 200.0], name = "Anton", age = 1.0, status = True};
+mixedRecord2 = {name = "Anton", #2 = "red", age = 1.0, status = True, #4 = [100.0, 200.0]};
+
+tupleMixedTuple = (20.0, "red", Prelude.Just 'a', [100.0, 200.0], 1.0, "Anton");
+
+//the following are examples of strict record extension
+extendByEmpty r = {r | };
+extendByTuple r = {r | #4 = [100.0, 200.0], #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"};
+extendByOrdinal r = {r | #1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #6 = "Anton"};
+extendByTextual r = {r | f1 = 20.0, f4 = [100.0, 200.0], f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton"};
+extendByTupleMixed r = {r | #4 = [100.0, 200.0], name = "Anton", age = 1.0, #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"};
+extendByMixed r = {r | name = "Anton", #2 = "red", age = 1.0, status = True, #4 = [100.0, 200.0]};
+
+//the following are examples of lazy record extension
+lazyExtendByEmpty r = head [{r | }];
+lazyExtendByTuple r = head [{r | #4 = [100.0, 200.0], #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"}];
+lazyExtendByOrdinal r = head [{r | #1 = 20.0, #2 = "red", #3 = Prelude.Just 'a', #4 = [100.0, 200.0], #6 = "Anton"}];
+lazyExtendByTextual r = head [{r | f1 = 20.0, f4 = [100.0, 200.0], f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton"}];
+lazyExtendByTupleMixed r = head [{r | #4 = [100.0, 200.0], name = "Anton", age = 1.0, #3 = Prelude.Just 'a', #1 = 20.0, #2 = "red"}];
+lazyExtendByMixed r = head [{r | name = "Anton", #2 = "red", age = 1.0, status = True, #4 = [100.0, 200.0]}];
+
+testRetraction = 
+    retractEmpty emptyRecord == emptyRecord
+    && retractEmpty ordinalRecord1 == ordinalRecord1
+    && retractTuple tupleRecord2 == (retractTuple2 tupleRecord2, {#4 = [100.0, 200.0]})
+    && retractOrdinal ordinalRecord3 == (retractOrdinal2 ordinalRecord3, {#1 = 20.0, #2 = "red", #4 = [100.0, 200.0], #6 = "Anton"})
+    && retractTextual textualRecord2 == (retractTextual2 textualRecord2, {f2 = "red", f3 = Prelude.Just 'a', f5 = 1.0, f6 = "Anton"})
+    && retractTupleMixed tupleMixedRecord2 == (retractTupleMixed2 tupleMixedRecord2, {#3 = Prelude.Just 'a', #4 = [100.0, 200.0], age = 1.0})
+    && retractMixed mixedRecord2 == (retractMixed2 mixedRecord2, {#4 = [100.0, 200.0], status = True})
+    && retractOrdinal {#1 = 20.0, #2 = "red", #3 = Prelude.Just 'a'} == ({#3 = Prelude.Just 'a'}, {#1 = 20.0, #2 = "red"})
+    && (case {#1 = 10.0, #2= 20.0, #3 = 30.0, #4 = 40.0} of {r | #1, #2} -> r;) == {#3 = 30.0, #4 = 40.0}
+    && (case {#1 = 10.0, #2= 20.0, #3 = 30.0, #4 = 40.0} of {r | #3, #4} -> r;) == {#1 = 10.0, #2 = 20.0}
+    && (case {#1 = 10.0, #2= 20.0, #3 = 30.0, #4 = 40.0} of {r | #3, #2} -> r;) == {#1 = 10.0, #4 = 40.0}
+    && (case {field1 = 10.0, field2= 20.0, field3 = 30.0, field4 = 40.0} of {r | field1, field2} -> r;) == {field3 = 30.0, field4 = 40.0}
+    && (case {field1 = 10.0, field2= 20.0, field3 = 30.0, field4 = 40.0} of {r | field3, field4} -> r;) == {field1 = 10.0, field2 = 20.0}
+    && (case {field1 = 10.0, field2= 20.0, field3 = 30.0, field4 = 40.0} of {r | field3, field2} -> r;) == {field1 = 10.0, field4 = 40.0}    
+    ;
+
+retractEmpty r = 
+    case r of
+    {s | } -> s;
+    ;
+    
+retractTuple r = 
+    case r of
+    {s | #1 = v1, #2 = v2, #3 = v3} -> ({#1 = v1, #2 = v2, #3 = v3}, s);
+    ;
+    
+retractOrdinal r = 
+    case r of
+    {s | #3 = v3} -> ({#3 = v3}, s);
+    ; 
+       
+retractTextual r = 
+    case r of
+    {s | f1, f4} -> ({f1 = f1, f4 = f4}, s);
+    ;
+    
+retractTupleMixed r =
+    case r of
+    {s | #1 = v1, #2 = v2, name} -> ({#1 = v1, #2 = v2, name = name}, s);
+    ;
+    
+retractMixed r =
+    case r of
+    {s | #2 = v2, name, age} -> ({#2 = v2, age = age, name = name}, s);
+    ;
+    
+
+    
+retractTuple2 r = 
+    case r of
+    {_ | #1 = v1, #2 = v2, #3 = v3} -> {#1 = v1, #2 = v2, #3 = v3};
+    ;
+    
+retractOrdinal2 r = 
+    case r of
+    {_ | #3 = v3} -> {#3 = v3};
+    ; 
+       
+retractTextual2 r = 
+    case r of
+    {_ | f1, f4} -> {f1 = f1, f4 = f4};
+    ;
+    
+retractTupleMixed2 r =
+    case r of
+    {_ | #1 = v1, #2 = v2, name} -> {#1 = v1, #2 = v2, name = name};
+    ;
+    
+retractMixed2 r =
+    case r of
+    {_ | #2 = v2, name, age} -> {#2 = v2, age = age, name = name};
+    ;  
+ 
+    
+recordExtensionTestHelper x = {#1 = 0.0 + x, #2 = "aaa"};
+recordExtensionTest = 
+    let
+        x = 1.0;
+        y = "ccc";
+    in
+        {(recordExtensionTestHelper x) | #3 = y};
+        
+        
+testTupleRecords = 
+    (1.0, "abc", True).#1 == 1.0
+    && (2.0, "def", False).#2 == "def"
+    && Prelude.field1 (1.0, "abc", True) == 1.0
+    && Prelude.field1 ("def", False) == "def"
+    && {{#1 = "Harry", #3 = [["Wendy"]]} | #2 = ["Sally"]} == ("Harry", ["Sally"], [["Wendy"]])
+    || error "RecordTests.testTupleRecords failed.";
+    
+
+//with tuple-record unification these are just the identity function. However, they are retained here as tests.
+    
+tuple2ToRecord :: (a, b) -> {#1 :: a, #2 :: b};
+tuple2ToRecord !t =
+    case t of
+    (f1, f2) -> {#1 = f1, #2 = f2};
+    ;
+    
+tuple3ToRecord :: (a, b, c) -> {#1 :: a, #2 :: b, #3 :: c};
+tuple3ToRecord !t =
+    case t of
+    (f1, f2, f3) -> {#1 = f1, #2 = f2, #3 = f3};
+    ;
+    
+tuple4ToRecord :: (a, b, c, d) -> {#1 :: a, #2 :: b, #3 :: c, #4 :: d};
+tuple4ToRecord !t =
+    case t of
+    (f1, f2, f3, f4) -> {#1 = f1, #2 = f2, #3 = f3, #4 = f4};
+    ;
+    
+tuple5ToRecord :: (a, b, c, d, e) -> {#1 :: a, #2 :: b, #3 :: c, #4 :: d, #5 :: e};
+tuple5ToRecord !t =
+    case t of
+    (f1, f2, f3, f4, f5) -> {#1 = f1, #2 = f2, #3 = f3, #4 = f4, #5 = f5};
+    ;
+    
+tuple6ToRecord :: (a, b, c, d, e, f) -> {#1 :: a, #2 :: b, #3 :: c, #4 :: d, #5 :: e, #6 :: f};
+tuple6ToRecord !t =
+    case t of
+    (f1, f2, f3, f4, f5, f6) -> {#1 = f1, #2 = f2, #3 = f3, #4 = f4, #5 = f5, #6 = f6};
+    ;
+    
+tuple7ToRecord :: (a, b, c, d, e, f, g) -> {#1 :: a, #2 :: b, #3 :: c, #4 :: d, #5 :: e, #6 :: f, #7 :: g};
+tuple7ToRecord !t =
+    case t of
+    (f1, f2, f3, f4, f5, f6, f7) -> {#1 = f1, #2 = f2, #3 = f3, #4 = f4, #5 = f5, #6 = f6, #7 = f7};
+    ;
+
+////////////////////////////////////////////////////////////////////////////////////
+//tests of the field value update operator := for records
+
+testRecordFieldValueUpdate =
+  ///////////////////////////
+  //record updates in a lazy context
+  assert ({(2.5, "Anton", True) | #1 := "Anton", #2 := 2.5} == ("Anton", 2.5, True))
+  && assert ({(2.5, "Anton", True) | #1 := "Fred", #3 := 40 :: Int} == ("Fred", "Anton", 40))
+  && assert ({(2.5, "Anton", True) | #1 := "Fred"} == ("Fred", "Anton", True))
+  && assert ({(2.5, "Anton", True) | #2 := "Fred"} == (2.5, "Fred", True))
+  //note the combination of an update and an extension in the field modification list
+  && assert ({{name = "Anton", age = 2.5} | age := Just (40 :: Int), name := "Fred", shoeSize = 10 :: Int}
+         == {name = "Fred", age = Just 40, shoeSize = 10})
+  && assert ({{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | age := Just (40 :: Int), name := "Fred", #1 := Just GT, #2 := "arg", #4 = "zaphod"}
+         == {#1 = Just GT, #2 = "arg", #3 = 100.0, #4 = "zaphod", name = "Fred", age = Just 40})
+  && assert ({{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | name := "Fred", #2 := "arg", #5 = "zaphod", #6 = 600.0}
+         == {#1 = [10.0, 20.0], #2 = "arg", #3 = 100.0, #5 = "zaphod", #6 = 600.0, name = "Fred", age = 2.5})                        
+  ;
+
+
+testRecordFieldValueUpdate2 =
+  ///////////////////////////
+  //record updates in a strict context
+  assert (eager {(2.5, "Anton", True) | #1 := "Anton", #2 := 2.5} == ("Anton", 2.5, True))
+  && assert (eager {(2.5, "Anton", True) | #1 := "Fred", #3 := 40 :: Int} == ("Fred", "Anton", 40))
+  && assert (eager {(2.5, "Anton", True) | #1 := "Fred"} == ("Fred", "Anton", True))
+  && assert (eager {(2.5, "Anton", True) | #2 := "Fred"} == (2.5, "Fred", True))
+  //note the combination of an update and an extension in the field modification list
+  && assert (eager {{name = "Anton", age = 2.5} | age := Just (40 :: Int), name := "Fred", shoeSize = 10 :: Int}
+         == {name = "Fred", age = Just 40, shoeSize = 10})
+  && assert (eager {{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | age := Just (40 :: Int), name := "Fred", #1 := Just GT, #2 := "arg", #4 = "zaphod"}
+         == {#1 = Just GT, #2 = "arg", #3 = 100.0, #4 = "zaphod", name = "Fred", age = Just 40})
+  && assert (eager {{#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5} | name := "Fred", #2 := "arg", #5 = "zaphod", #6 = 600.0}
+         == {#1 = [10.0, 20.0], #2 = "arg", #3 = 100.0, #5 = "zaphod", #6 = 600.0, name = "Fred", age = 2.5}) 
+  ;       
+
+//testRecordFieldValueUpdate3 and testRecordFieldValueUpdate3Helper work to test record
+//updates in a lazy context where the base record is not expressed literally.
+//This is necessary because in cases where the base record is a literal record value
+//we will compile the extension/update operation strictly.
+testRecordFieldValueUpdate3Helper r1 r2 r3 =
+  ///////////////////////////
+  //record updates in a lazy context
+  assert ({r1 | #1 := "Anton", #2 := 2.5} == ("Anton", 2.5, True))
+  && assert ({r1 | #1 := "Fred", #3 := 40 :: Int} == ("Fred", "Anton", 40))
+  && assert ({r1 | #1 := "Fred"} == ("Fred", "Anton", True))
+  && assert ({r1 | #2 := "Fred"} == (2.5, "Fred", True))
+  //note the combination of an update and an extension in the field modification list
+  && assert ({r2 | age := Just (40 :: Int), name := "Fred", shoeSize = 10 :: Int}
+         == {name = "Fred", age = Just 40, shoeSize = 10})
+  && assert ({r3 | age := Just (40 :: Int), name := "Fred", #1 := Just GT, #2 := "arg", #4 = "zaphod"}
+         == {#1 = Just GT, #2 = "arg", #3 = 100.0, #4 = "zaphod", name = "Fred", age = Just 40})
+  && assert ({r3 | name := "Fred", #2 := "arg", #5 = "zaphod", #6 = 600.0}
+         == {#1 = [10.0, 20.0], #2 = "arg", #3 = 100.0, #5 = "zaphod", #6 = 600.0, name = "Fred", age = 2.5})                        
+  ;
+
+testRecordFieldValueUpdate3 =
+  testRecordFieldValueUpdate3Helper 
+      (2.5, "Anton", True) 
+      {name = "Anton", age = 2.5}
+      {#1 = [10.0, 20.0], #2 = (LT, GT), #3 = 100.0, name = "Anton", age = 2.5};
+////////////////////////////////////////////////////////////////////////////////////
+
+//Test mixed record update bug.
+//This code exercises a scenario which had a bug in the original
+//implementation of record field updates.
+//In situations where a mixed record was updated and both ordinal and 
+//textual fields were updated the original record would be modified with
+//new values as well as a copy being created with the updated field values.
+//As a result in testMixedRecordsUpdateBugHelper the second comparison 
+//(i.e. r3 == r1) would fail because the age field in r3 had incorrectly
+//been modified.
+
+testMixedRecordUpdateBugHelper r1 r2 r3 =
+ // test the mixed record update bug in a lazy context
+ ({r3 | age :=  (40 :: Int), #2 := "arg"}
+        == r2)
+ &&
+ (r3
+        == r1)
+ ;
+
+testMixedRecordUpdateBugHelper2 =
+ // test the mixed record update bug in a strict context
+ let
+     r1 = {#2 = (LT, GT), name = "Anton", age = 2.5};
+     r2 = {#2 = (LT, GT), name = "Anton", age = 2.5};
+     r3 = {r1 | age :=  (40 :: Int), #2 := "arg"};
+ in
+     Prelude.seq r3 (r1 == r2);
+      
+
+testMixedRecordUpdateBug = 
+ (testMixedRecordUpdateBugHelper 
+     {#2 = (LT, GT), name = "Anton", age = 2.5}
+     {#2 = "arg", name = "Anton", age =  40}
+     {#2 = (LT, GT), name = "Anton", age = 2.5}) 
+     &&
+     testMixedRecordUpdateBugHelper2;
+
+///////////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * @return true if the testing predicates in this module all run successfully.
+ */
+public testModule =
+    assert testFirst
+    && assert testRecordSelection
+    && assert testRecordSelection2
+    && assert testRecordCase1
+    && assert testRecordCase2
+    && assert testRemoveColour
+    && assert testRemoveColour2
+    && assert testLazyRecordSelection
+    && assert testLazyRecordCase
+    && assert testLazyIf
+    && assert testLazyRecordExtension
+    && assert testLazyRecordExtension2
+    && assert testFunnyFunction
+    && assert testAddAnton
+    && assert testToTuple
+    && assert testPoint
+    && assert testWeirdType
+    && assert (testStrictSelection == 3.0)
+    && assert testHasField
+    && assert testRecordInstances
+    && assert testFieldNames
+    && assert ordinalFieldNamesTests
+    && assert testRecordOrdInstances
+    && assert testEmptyRecords
+    && assert testOptimizedRecords
+    && assert (recordExtensionTest == {#1 = 1.0, #2 = "aaa", #3 = "ccc"})
+    && assert testTupleRecords
+    && assert testRecordFieldValueUpdate
+    && assert testRecordFieldValueUpdate2
+    && assert testRecordFieldValueUpdate3    
+    && assert testMixedRecordUpdateBug
+    ;
+//please leave testModule last! Also sort the tests. It makes it easy to see what tests are hooked up.
+        
+                        

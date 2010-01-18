@@ -1,0 +1,31 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: %pluginName
+Bundle-SymbolicName: org.openquark.cal.runtime
+Bundle-Version: 1.2.0.131v20060927
+Bundle-Localization: plugin
+Bundle-Vendor: %providerName
+Require-Bundle: 
+ org.openquark.import,
+ org.openquark.util
+Export-Package: 
+ org.openquark.cal.compiler,
+ org.openquark.cal.foreignsupport.module.Prelude,
+ org.openquark.cal.internal.compiler,
+ org.openquark.cal.internal.foreignsupport.module.Array,
+ org.openquark.cal.internal.foreignsupport.module.ArrayPrimitives,
+ org.openquark.cal.internal.foreignsupport.module.Bits,
+ org.openquark.cal.internal.foreignsupport.module.Debug,
+ org.openquark.cal.internal.foreignsupport.module.Exception,
+ org.openquark.cal.internal.foreignsupport.module.Memoize,
+ org.openquark.cal.internal.foreignsupport.module.Prelude,
+ org.openquark.cal.internal.foreignsupport.module.Resource,
+ org.openquark.cal.internal.foreignsupport.module.String,
+ org.openquark.cal.internal.foreignsupport.module.StringProperties,
+ org.openquark.cal.internal.runtime,
+ org.openquark.cal.internal.runtime.lecc,
+ org.openquark.cal.internal.runtime.lecc.functions,
+ org.openquark.cal.runtime,
+ org.openquark.cal.runtime.lecc,
+ org.openquark.cal.services,
+ org.openquark.cal.util

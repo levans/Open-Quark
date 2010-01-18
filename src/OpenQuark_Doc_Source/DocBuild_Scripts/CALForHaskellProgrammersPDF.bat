@@ -1,0 +1,1 @@
+@call buildPDF-base.bat CALForHaskellProgrammers.xml "CAL for Haskell Programmers.pdf" article-docbook.xsl

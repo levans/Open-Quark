@@ -1,0 +1,1211 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * QuickCheck.cal
+ * Created: Sept 2006
+ * By: Magnus Byne
+ */
+
+
+/**
+ QuickCheck provides a simple mechanism for testing programs by generating arbitrary test data. 
+ It is closely based on QuickCheck for Haskell, 
+ see: {@url http://www.cs.chalmers.se/~rjmh/QuickCheck/@}
+ 
+ The basic idea is to help simplify and improve testing by 
+ automatically creating arbitrary test data. Properties of 
+ programs can be described by functions. QuickCheck can be used to validate
+ these properties by automatically generating lots of arbitrary data to fill the functions'
+ parameters. If a property is not true, QuickCheck can report the parameters
+ that falsified the property.
+ 
+ For example a simple property of reverse can be expressed as: 
+ 
+ {@code prop_reverse :: [Int] -> Boolean;
+prop_reverse list = list == reverse (reverse list);@}
+
+ This property can be checked using the following:
+
+ {@code quickCheck prop_reverse@}
+ 
+ The {@link runTests@} function will automatically create 100 pseudo random lists of integers in order to 
+ test the property and collect the results.
+
+ It is possible to specify preconditions on the testing data using {@link implies@}.  
+ For example to test the transitivity of less than:
+ {@code prop_lessThan :: Int -> Int -> Int -> Property;
+prop_lessThan x y z = ((x < y) && (y < z)) `implies` (x < z);@} 
+
+ When this property is tested around three quarters of the test data will be discarded. In cases where
+ it is rare that random data will satisfy the preconditions, a custom generator  {@link dataConstructor = Gen@} should be implemented
+ and specified using {@link forAll@}.
+ 
+ It is possible to classify the
+ generated data to gather statistics about the tests, see {@link classify@} and 
+ {@link summarize@} for more information.
+
+ @author Magnus Byne 
+ */
+
+
+module Cal.Utilities.QuickCheck;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Byte, Char, Decimal, Double, Either, Float, Int, Long, Maybe, Short, String, Unit;
+    dataConstructor = False, True, Left, Right, Nothing, Just;
+    function = 
+        abs, asTypeOf, assert, concat, flip, fromInt, fst, snd, toInt, undefined;
+    ;
+import Cal.Collections.List using
+    function = head, length, subscript, tail;
+    ;
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+
+import Cal.Core.String;
+import Cal.Utilities.Random;
+
+friend Cal.Test.Utilities.QuickCheck_Tests;
+friend Cal.Test.Core.Record_Tests;
+
+/**
+ * Converts a {@link typeConstructor = Char@} value to an {@link Int@} value.
+ * 
+ * @arg charValue the value to be converted.
+ * @return the corresponding {@code Int@} value.
+ */
+foreign unsafe import jvm "cast"
+    private charToInt :: Char -> Int;
+
+/**
+ * Converts a {@link Double@} value to the equivalent {@link typeConstructor = Decimal@} value.
+ */
+foreign unsafe import jvm "constructor"
+    private decimalFromDouble :: Double -> Decimal;
+
+/**
+ * Converts an {@link Int@} value to a {@link typeConstructor = Char@} value.
+ * 
+ * @arg intValue the value to be converted.
+ * @return the corresponding {@code Char@} value.
+ */
+foreign unsafe import jvm "cast"
+    private charFromInt :: Int -> Char;
+
+foreign unsafe import jvm "static method java.lang.Math.round"
+    private roundDoubleToLong :: Double -> Long;   
+
+foreign unsafe import jvm "static method java.lang.Math.round"
+    private roundFloatToInt :: Float -> Int;  
+
+/** The GenParams is an abstract type used for controlling the generation of {@link Arbitrary@} instances.
+ * GenParams contain a size parameter for controlling the size of generated instances. For example this is used to constrain
+ * the size of Arbitrary Lists and Strings. GenParams also contains a random source. This is used as the basis
+ * for creating all arbitrary instances. Varying the random source will vary the instances created by a generator.
+ */
+data public GenParams =
+    /**
+     * A data constructor for controlling generation of Arbitrary types.
+     * @arg size
+     *        controls the size of generated instances, e.g. String length
+     * @arg longs
+     *        list of the longs used as the random source for generating instances
+     */
+    private GenParams
+        size :: !Int
+        longs :: [Long];
+
+/** 
+ * A default set of generator parameters
+ * 
+ * @return default genParams
+ */
+makeDefaultGenParams :: GenParams;
+public makeDefaultGenParams =
+    GenParams (5 :: Int) (Random.randomLongs (0 :: Long));
+
+/**
+ * Returns the sizing parameter associated with genParams
+ * This should be used to control the size of the generated test data, e.g. it is used to limit the maximum size of 
+ * arbitrary lists.
+ * 
+ * @arg genParams
+ * @return the size parameter
+ */
+size :: GenParams -> Int;
+public size !genParams = 
+    genParams.GenParams.size;
+
+
+/**
+ * Create a new GenParams with updated sizing parameter
+ * 
+ * @arg newSize the new size
+ * @arg genParams
+ * 
+ * @return the new genParams
+ */
+resize :: Int -> GenParams -> GenParams;
+public resize newSize !genParams = 
+    case genParams of GenParams size longs  -> 
+        GenParams newSize longs ;
+    ;
+        
+
+/**
+ * This is the default sizing function for testing -
+ * as test are performed the sizing gradually approaches a limit.
+ * 
+ * @arg testIteration  the test iternation number for which to compute the sizing
+ * 
+ * @return the sizing for the iteration
+ */
+defaultResizing :: Int -> Int;
+public defaultResizing testIteration = 
+    let 
+        sizingLimit = 20;//this controls the maximum test size
+        sizingRate = 1;  //this controls how quickly testing reaches the maximum size.
+        current = testIteration / sizingRate;
+    in
+        ( current  * sizingLimit) / ( current + sizingLimit ) + 1;
+
+/**
+ * returns a set of gen params which will create randoms independent of rightGenParams
+ * 
+ * @arg genParams
+ * @return {@link dataConstructor=GenParams@} an independent genParams that will create different independent objects
+ */
+leftGenParams :: GenParams -> GenParams;
+private leftGenParams genParams = 
+    nthGenParams 1 genParams;
+
+/**
+ * returns a set of gen params which will create randoms independent of leftGenParams
+ * 
+ * @arg genParams
+ * @return {@link dataConstructor=GenParams@} an independent genParams that will create different independent objects
+ */
+rightGenParams :: GenParams -> GenParams;
+private rightGenParams genParams =
+    nthGenParams 2 genParams;
+
+
+/**
+ * Used to split a genParams into different independent streams that can be used
+ * for creating independent arbitrary instances.
+ * 
+ * @arg nth the nth independent genParams
+ * @arg genParams
+ * @return {@link dataConstructor=GenParams@} an independent genParams that will create different independent objects
+ */
+nthGenParams :: Int -> GenParams -> GenParams;
+public nthGenParams nth genParams = 
+    GenParams genParams.GenParams.size (Random.randomLongs ((head genParams.GenParams.longs) + (fromInt nth)));
+
+
+/**
+ * Used to extract a pseudo random bounded integer from {@link dataConstructor=GenParams@}
+ * 
+ * @arg genParams
+ * @arg low the lower bound on the int
+ * @arg highExclusive the exclusive upper bound on the integer
+ * @return pseudo random bounded int
+ */
+getBoundedInt :: GenParams -> Int -> Int -> Int;
+public getBoundedInt genParams low highExclusive = 
+    let 
+        i = Prelude.toInt $ head genParams.GenParams.longs;
+    in
+        ((abs i) % (highExclusive - low)) + low;
+
+/**
+ * Used to extract the nth pseudo random bounded integer from {@link dataConstructor=GenParams@}
+ * 
+ * @arg nth gets the nth bounded integer from genParams
+ * @arg genParams
+ * @arg low the lower bound on the int
+ * @arg highExclusive the exclusive upper bound on the integer
+ * @return pseudo random bounded int
+ */
+getNthBoundedInt :: Int -> GenParams -> Int -> Int -> Int;
+public getNthBoundedInt nth genParams low highExclusive = 
+    let 
+        i = Prelude.toInt $ head (List.drop nth genParams.GenParams.longs);
+    in
+        ((abs i) % (highExclusive - low)) + low;
+
+
+    
+
+/**
+ * Used to extract a pseudo random bounded double from {@link dataConstructor=GenParams@}
+ * 
+ * @arg genParams
+ * @arg low the lower bound on the int
+ * @arg highExclusive the exclusive upper bound on the integer
+ * @return pseudo random bounded int
+ */
+getBoundedDouble :: GenParams -> Double -> Double -> Double;
+getBoundedDouble genParams low highExclusive = 
+    let
+        d = head (Random.randomDoubles (head genParams.GenParams.longs));
+    in
+        d * (highExclusive - low) + low;
+
+/** {@summary Gen is an abstract type that is used for creating 
+ * instances of {@link Arbitrary@} types for testing. 
+ * The generation is controlled by the {@link dataConstructor=GenParams @}. @}
+ * A generator can create different instances of a type by varying the Random source 
+ * in the GenParams. 
+ */
+data public Gen a = private Gen f :: ( GenParams -> a);
+
+/** 
+ * Constructs a generator from a generator function
+ * 
+ * @arg genFunction the generator function
+ */
+makeGen :: (GenParams -> a) -> Gen a;
+public makeGen genFunction = (Gen genFunction);
+
+
+/**
+ * Creates a constant generator that will always return the specified item
+ * 
+ * @arg item
+ * @return {@link dataConstructor=Gen@} a constant generator
+ */
+makeConstGen :: a -> Gen a;
+public makeConstGen item =
+    Gen(\genParams -> item);
+
+/**
+ * Creates a generator that returns bounded integers
+ * 
+ * @arg low the lower bound on the int
+ * @arg highExclusive the exclusive upper bound on the integer
+ * @return generator of pseudo random bounded int
+ */
+makeBoundedIntGen :: Int -> Int -> Gen Int;
+public makeBoundedIntGen low highExclusive = 
+    makeGen(\genParams -> getBoundedInt genParams low highExclusive);
+
+/**
+ * Creates a new generator by applying a mapping to the output of an existing generator
+ * 
+ * @arg func the mapping function to apply
+ * @arg gen the base generator
+ * 
+ * @return the new generator
+ */
+mapGen :: (a -> b) -> Gen a -> Gen b;
+public mapGen func gen =
+    makeGen (\genParams -> func ( generate genParams gen));
+
+/**
+ * Zips two generators with a combining function to create a new generator
+ * 
+ * @arg func the combining function
+ * @arg gen1 
+ * @arg gen2
+ * 
+ * @return the combined generator
+ */
+zipWithGen :: (a -> b -> c) -> Gen a -> Gen b -> Gen c;
+public zipWithGen func gen1 gen2 =
+    makeGen (\genParams -> func (generate (leftGenParams genParams) gen1) (generate (rightGenParams genParams) gen2));
+
+/**
+ * Creates a generator that will return an item from the input list.
+ * 
+ * @arg listOfItems 
+ * @return {@link dataConstructor=Gen@} a generator of items contained in the input list
+ */
+makeChooseOneOfGen :: [a] -> Gen a;
+public makeChooseOneOfGen listOfItems = 
+    Gen(\genParams -> subscript listOfItems ( getBoundedInt genParams (0 :: Int) (List.length listOfItems)));
+
+/**
+ * creates a generator that will return items from the input generators
+ * 
+ * @arg listOfGenerators
+ * @return {@link dataConstructor=Gen@} a generator which will create an item using one of the input generators
+ */
+chooseOneOf :: [Gen a] -> Gen a;
+public chooseOneOf listOfGenerators = 
+    Gen (\genParams -> generate genParams 
+         (subscript listOfGenerators ( getBoundedInt genParams (0 :: Int) (List.length listOfGenerators))));
+ 
+
+/**
+ * creates a generator that will return items from the input generators with the
+ * specified frequencies. 
+ * 
+ * @arg freqList  a list of pairs of (frequency, gen)
+ * @return {@link dataConstructor=Gen@} a generator of items with specified frequency
+ */
+chooseOneOfWithFreq :: Arbitrary a => [ (Int, Gen a) ] -> Gen a;
+public chooseOneOfWithFreq freqList =
+    let
+        total = List.sum (List.map fst freqList);
+        
+        choose :: Int -> [ (Int, Gen a) ] -> Gen a;
+        choose i freqList =
+            if (i < (fst $ head freqList)) then 
+                snd $ head freqList
+            else
+                choose (i - (fst $ head freqList)) (tail freqList);
+    in
+        Gen (\genParams -> generate genParams (choose (getBoundedInt genParams (0 :: Int) total) freqList));
+
+
+/**
+ * Extracts the generating function from a generator
+ * 
+ * @arg gen the generator
+ * @return the generator function
+ */
+genFunc :: Gen a -> (GenParams -> a);
+private genFunc !gen = gen.Gen.f;
+
+/**
+ * Creates an item using a generator
+ * 
+ * @arg genParams the generator params
+ * @arg gen the generator
+ * @return generated item
+ */
+generate :: GenParams -> Gen a -> a;
+public generate !genParams !gen = (genFunc gen) genParams;
+
+/**
+ * Creates a string showing n items created using a generator.
+ * This is intended to aid people developing {@link Arbitrary@} instances. 
+ *
+ * @arg numItems the number of items to generate
+ * @arg gp the generator params
+ * @arg gen the generator
+ * @return string with one item per line
+ */
+generateNInstances :: Show a => Int -> GenParams -> Gen a -> String;
+public generateNInstances numItems gp gen = 
+    if (numItems == 0) then 
+        ""
+    else 
+        (show (generate (leftGenParams gp) gen)) ++
+        "\n" ++ 
+        (generateNInstances (numItems - 1) (rightGenParams gp)  gen);
+
+/**
+ * Creates an alternative generator from an input generator by applying a mapping to the genParams
+ * @arg v controls the variant
+ * @arg gen the input generator to vary
+ * @return the altered generator
+ */
+variant :: Int -> Gen a -> Gen a;
+private variant v gen = 
+    Gen( \genParams -> (genFunc gen) (nthGenParams v genParams) );
+
+/**
+ * Given a function f that creates a generator of b, returns
+ * a new generator that generates functions a->b
+ * 
+ * @arg func function that creates a generator
+ * @return a generator that creates functions 
+ */
+promote :: (a -> Gen b) -> Gen( a-> b);
+private promote func = Gen ( \genParams -> \a -> (genFunc (func a)) genParams);
+
+
+/**
+ * adds another generator to the head of a list generator
+ * so that if the input generator returns list of length n
+ * the output generator will create list of length n+1
+ * 
+ * @arg gen      input generator of type a
+ * @arg listGen  input generator of type [a] where length n
+ * @return generator of list of length n+1
+ */
+appendGenToListGen :: Gen a -> Gen [a] -> Gen [a];
+private appendGenToListGen gen listGen = 
+    Gen (\genParams -> 
+        (genFunc gen) (leftGenParams genParams) : (genFunc listGen) (rightGenParams genParams));
+
+
+/**
+ * creates a list generator
+ * 
+ * @arg lengthGen generator used to determine the length of the lists
+ * @arg itemGen  generator used for the items in generated lists
+ * @return       generator of lists of items
+ */
+makeListGen :: Gen Int -> Gen a -> Gen [a];
+public makeListGen !lengthGen !itemGen = 
+    let 
+        //vectorHelper :: Gen [a] -> Int -> Gen [a];
+        vectorHelper list !n = 
+            if (n == 0) then
+                list
+            else
+                vectorHelper (appendGenToListGen itemGen list) (n - 1);
+    in
+       makeGen(\genParams -> 
+            generate
+                genParams 
+                (vectorHelper (Gen(\genParams -> [])) (generate genParams lengthGen)));
+       
+
+/**
+ * The {@code Arbitrary@} type class is used to represent types for which 
+ * pseudo random instances can be created. All the input parameters of test functions
+ * must be instances of {@code Arbitrary@}.
+ * 
+ */
+public class Arbitrary a where
+    /**
+     * @return a generator for the type
+     */
+    public arbitrary :: Gen a;
+    
+    /**
+     * Modifies a generator based on an instance of this type class.
+     * This method is required for generating functions with a domain of this type class
+     * 
+     * @return modified generator based on an instance of this type class
+     */
+    public coarbitrary :: a -> Gen b -> Gen b;
+    
+    /**
+     * This creates a random instance of the type class
+     * this method is only used internally in the arbitrary primitive functions
+     * @return an arbitrary instance of the type class based on the genParams
+     */
+    private generateInstance :: GenParams -> a
+        default generateInstanceDefault;
+    ;
+ 
+generateInstanceDefault :: Arbitrary a => GenParams -> a;
+generateInstanceDefault genParams = generate genParams arbitrary;
+
+/* @example */
+arbitraryExamples :: Boolean;
+arbitraryExamples =
+    assert  (generate makeDefaultGenParams (arbitrary :: Gen Int) == -5)
+    && assert (generate (leftGenParams makeDefaultGenParams) (arbitrary :: Gen [Short]) == [1, -5])
+    && assert (generate makeDefaultGenParams (arbitrary :: Gen {x :: Char, y :: Double} ) == {x = 'J', y = (-0.4369256573047302)} )
+    && assert (generate makeDefaultGenParams (arbitrary :: Gen Byte) == (-5))
+    && assert (generate makeDefaultGenParams (arbitrary :: Gen (Either Int Char)) == Left 0)
+    && assert (generate makeDefaultGenParams (arbitrary :: Gen () ) == ());
+
+
+/**
+ * The {@link Arbitrary@} instance for the record type. 
+ */
+instance Arbitrary r => Arbitrary {r} where
+    arbitrary = arbitraryRecord;
+    coarbitrary = coarbitraryRecord;
+    ;
+
+arbitraryRecord :: Arbitrary r => Gen {r};
+arbitraryRecord = Gen (\genParams -> arbitraryRecordPrimitive genParams nthGenParams);
+
+coarbitraryRecord :: Arbitrary r => {r} -> Gen b -> Gen b;
+coarbitraryRecord record gen = coarbitraryRecordPrimitive record gen;
+
+primitive protected arbitraryRecordPrimitive :: Arbitrary r => GenParams -> (Int -> GenParams -> GenParams) -> {r};
+
+primitive private coarbitraryRecordPrimitive :: Arbitrary r => {r} -> Gen b -> Gen b;
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link Int@} type. This creates integers
+ * in the range -20 to 20.
+ */
+instance Arbitrary Int where
+    arbitrary = arbitraryInt;
+    coarbitrary = coarbitraryInt;
+    ;
+
+arbitraryInt :: Gen Int;
+arbitraryInt = Gen(\genParams -> getBoundedInt genParams  (- (size genParams))  (size genParams));
+
+coarbitraryInt :: Int -> Gen a -> Gen a;
+coarbitraryInt n = variant n;
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link Short@} type. The range of the shorts is
+ * controlled by the genParams.
+ */
+instance Arbitrary Short where
+    arbitrary = arbitraryShort;
+    coarbitrary = coarbitraryShort;
+    ;
+
+arbitraryShort :: Gen Short;
+arbitraryShort =  mapGen fromInt (arbitrary::Gen Int);
+
+coarbitraryShort :: Short -> Gen a -> Gen a;
+coarbitraryShort s = 
+    variant $ toInt s;
+
+/**
+ * The {@link Arbitrary@} instance for the {@link Byte@} type. 
+ */
+instance Arbitrary Byte where
+    arbitrary = arbitraryByte;
+    coarbitrary = coarbitraryByte;
+    ;
+
+arbitraryByte :: Gen Byte;
+arbitraryByte = mapGen fromInt (arbitrary::Gen Int);
+
+coarbitraryByte :: Byte -> Gen a -> Gen a;
+coarbitraryByte s = 
+    variant $ toInt s;
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link Unit@} type. This creates 
+ * ().
+ */
+instance Arbitrary Unit where
+    arbitrary = arbitraryUnit;
+    coarbitrary = coarbitraryUnit;
+    ;
+
+arbitraryUnit :: Gen Unit;
+arbitraryUnit = makeConstGen( () );
+
+coarbitraryUnit :: Unit -> Gen a -> Gen a;
+coarbitraryUnit u = variant 0;
+
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link Maybe@} type. This generates 
+ * either Nothing or Just a, with respective probabilities of 0.25 and 0.75.
+ */
+instance Arbitrary a => Arbitrary (Maybe a) where
+    arbitrary = arbitraryMaybe;
+    coarbitrary = coarbitraryMaybe;
+    ;
+
+arbitraryMaybe :: Arbitrary a => Gen (Maybe a);
+arbitraryMaybe = 
+    chooseOneOfWithFreq [ (1, makeConstGen Nothing), 
+                          (3, makeGen(\genParams -> Just (generateInstance (rightGenParams genParams))))];
+
+
+coarbitraryMaybe :: Arbitrary a => Maybe a -> Gen b -> Gen b;
+coarbitraryMaybe !m = 
+    case m of
+    Nothing ->
+        variant 0;
+    Just a -> 
+        variant 1 # coarbitrary a;
+    ;
+
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link Either@} type. This creates 
+ * either Left a or Right b with equal probability.
+ */
+instance (Arbitrary a, Arbitrary b) => Arbitrary (Either a b) where
+    arbitrary = arbitraryEither;
+    coarbitrary = coarbitraryEither;
+    ;
+
+arbitraryEither :: (Arbitrary a, Arbitrary b) => Gen (Either a b);
+arbitraryEither = 
+    chooseOneOf [ makeGen(\genparams -> Left (generateInstance (leftGenParams genparams))),
+                  makeGen(\genparams -> Right (generateInstance (rightGenParams genparams)))];
+
+coarbitraryEither :: (Arbitrary a, Arbitrary b) => Either a b -> Gen c -> Gen c;
+coarbitraryEither !m = 
+    case m of
+    Left a ->
+        variant 0 # coarbitrary a;
+    Right b -> 
+        variant 1 # coarbitrary b;
+    ;
+
+        
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = Char@} type. 
+ * The generated characters include all those in 7 bit ASCII.
+ */
+instance Arbitrary Char where
+    arbitrary = arbitraryChar;
+    coarbitrary = coarbitraryChar;
+    ;
+
+arbitraryChar :: Gen Char;
+arbitraryChar = Gen(\genParams -> (charFromInt $ getBoundedInt genParams (0 :: Int) (127 :: Int)) );
+
+coarbitraryChar :: Char -> Gen a -> Gen a;
+coarbitraryChar c = variant  ( charToInt c);
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = Long@} type. 
+ */
+instance Arbitrary Long where
+    arbitrary = arbitraryLong;
+    coarbitrary = coarbitraryLong;
+    ;
+
+arbitraryLong :: Gen Long;
+arbitraryLong = mapGen fromInt (arbitrary::Gen Int);
+
+coarbitraryLong :: Long -> Gen a -> Gen a;
+coarbitraryLong n = 
+    variant  (Prelude.toInt n);
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = Float@} type. 
+ */
+instance Arbitrary Float where
+    arbitrary = arbitraryFloat;
+    coarbitrary = coarbitraryFloat;
+    ;
+
+arbitraryFloat :: Gen Float;
+arbitraryFloat = mapGen Prelude.toFloat (arbitrary::Gen Double);
+
+coarbitraryFloat :: Float -> Gen a -> Gen a;
+coarbitraryFloat value = 
+    let 
+        n = (abs $ roundFloatToInt (value * 10));
+    in
+        variant  n;
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = Double@} type. 
+ */
+instance Arbitrary Double where
+    arbitrary = arbitraryDouble;
+    coarbitrary = coarbitraryDouble;
+    ;
+
+arbitraryDouble :: Gen Double;
+arbitraryDouble = Gen(\genParams -> getBoundedDouble genParams ( - (fromInt (size genParams)) ) (fromInt (size genParams)) ) ;
+
+coarbitraryDouble :: Double -> Gen a -> Gen a;
+coarbitraryDouble value = 
+    let 
+        n = (abs $ Prelude.toInt $ roundDoubleToLong (value * 10));
+    in
+        variant  n;
+
+
+/**
+ * The {@link Arbitrary@} instance for the {@link typeConstructor = Decimal@} type. 
+ */
+instance Arbitrary Decimal where
+    arbitrary = arbitraryDecimal;
+    coarbitrary = coarbitraryDecimal;
+    ;
+
+arbitraryDecimal :: Gen Decimal;
+arbitraryDecimal = mapGen decimalFromDouble (arbitrary::Gen Double);
+    
+coarbitraryDecimal :: Decimal -> Gen a -> Gen a;
+coarbitraryDecimal value = 
+    let 
+        n = (abs $ Prelude.toInt $ roundDoubleToLong (Prelude.toDouble value * 10));
+    in
+        variant  n;
+
+
+/**
+ * The {@link Arbitrary@} instance for the lists. Arbitrary lists are of 
+ * random length in the range 0 to the GenParams size parameter. 
+ */
+instance Arbitrary a => Arbitrary [a] where
+    arbitrary = arbitraryList;
+    coarbitrary = coarbitraryList;
+    ;
+
+arbitraryList :: Arbitrary a => Gen [a];
+arbitraryList = 
+    makeListGen (makeGen(\genParams -> getBoundedInt genParams 0 (size genParams))) arbitrary;
+
+coarbitraryList :: Arbitrary a => [a] -> Gen b -> Gen b;
+coarbitraryList b = 
+    if (length b == 0) then 
+        variant 0
+    else 
+        (variant 1) # (coarbitrary (head b)) # (coarbitrary (tail b)) ;
+
+
+                
+
+/**
+ * The {@link Arbitrary@} instance for the {@link Boolean@} type 
+ */
+instance Arbitrary Boolean where
+    arbitrary = arbitraryBoolean;
+    coarbitrary = coarbitraryBoolean;
+    ;
+
+arbitraryBoolean :: Gen Boolean;
+arbitraryBoolean = makeChooseOneOfGen [False, True];
+
+coarbitraryBoolean :: Boolean -> Gen a -> Gen a;
+coarbitraryBoolean b = if b then variant 0 else variant 1;
+
+
+/**
+ * The {@link Arbitrary@} instance for the String type 
+ */
+instance Arbitrary String where
+    arbitrary = arbitraryString;
+    coarbitrary = coarbitraryString;
+    ;
+
+arbitraryString :: Gen String;
+arbitraryString = Gen(\genParams -> String.fromList ((generateInstance genParams)::[Char]) );
+
+coarbitraryString :: String -> Gen a -> Gen a;
+coarbitraryString string = variant (String.length string);
+
+
+/**
+ * The {@link Arbitrary@} instance for functions 
+ */
+instance (Arbitrary a, Arbitrary b) => Arbitrary (a->b) where
+    arbitrary = arbitraryFunction;
+    coarbitrary = coarbitraryFunction;
+    ;
+
+arbitraryFunction :: (Arbitrary a, Arbitrary b) => Gen  (a-> b) ;
+arbitraryFunction = promote((flip coarbitrary) arbitrary);
+
+coarbitraryFunction :: (Arbitrary a, Arbitrary b)  => (a->b) -> Gen c -> Gen c;
+coarbitraryFunction f gen=Gen(\genParams -> genFunc( coarbitrary (f (generate (leftGenParams genParams) arbitrary)) gen ) (rightGenParams genParams) );
+
+
+/**
+ * A type for representing a test result. 
+ * Contains the outcome of the test, the arguments used to conduct the test,
+ * and any labels (see {@link classify@}) associated with the test arguments.
+ */
+data public Result =
+    /**
+     * A data constructor that represents the result of a single test.
+     * @arg ok
+     *        the outcome of the test - Nothing if the test could not be run.
+     * @arg labels
+     *        list of the labels that are associated with the test.
+     * @arg args
+     *        list of the arguments that were used to conduct the test.
+     */
+    protected Result
+        ok :: (Maybe Boolean)
+        labels :: [String]
+        args :: [String]
+    deriving Show;
+
+nothing :: Result;
+private nothing = Result Nothing [] [];
+
+/**
+ * An abstract type for representing a program Property. A property is esentially a testable function with
+ * wrappers such as {@link implies@} and {@link classify@}.
+ */
+data public Property = 
+    private Property gen ::(Gen Result);
+
+/**
+ * The {@code Testable@} is an abstract type class used to represent types that can be tested
+ */
+public class Testable a where
+    private test :: a -> GenParams -> Result;
+    ;
+
+
+instance Testable Property where
+    test = testProperty;
+    ;
+testProperty :: Property -> GenParams -> Result;
+testProperty property genParams = generate genParams property.Property.gen;    
+
+
+instance Testable Boolean where
+    test = testBoolean; 
+    ;
+testBoolean :: Boolean -> GenParams -> Result;
+testBoolean value genParams = Result (Just value) [] [];
+
+
+instance Testable Result where
+    test = testResult;
+    ;
+testResult :: Result -> GenParams -> Result;
+testResult res genParams = res;
+
+
+instance (Arbitrary a, Debug.Show a, Testable b) => Testable (a -> b) where
+    test = testFunction; 
+    ;
+
+/**
+ * Tests a function using the default domain generator
+ */
+testFunction :: (Debug.Show a, Arbitrary a, Testable b) => (a -> b) -> GenParams -> Result;
+testFunction func genParams =  testFunctionGen  arbitrary func genParams;
+
+/**
+ * Adds an argument into a result
+ * 
+ * @arg arg the argument to add to the result
+ * @arg result the result to add to the argument
+ * 
+ * @return the result with the argument a
+ */
+addArg :: Show a => a -> Result -> Result;
+private addArg arg result=
+    case result of
+    Result {ok, labels, args} -> Result ok labels (Debug.show arg : args);
+    ;  
+
+/**
+ * Tests a function using a supplied domain generator
+ */
+testFunctionGen :: (Debug.Show a, Testable b) => Gen a -> (a -> b) -> GenParams -> Result;
+private testFunctionGen gen func genParams =
+    let
+ 
+        
+        domain :: (a -> b) -> a;
+        domain = undefined;
+        
+        arg = (generate (leftGenParams genParams) gen);
+        
+        res :: Result;
+        res = addArg (arg `asTypeOf` domain func) (test (func arg) (rightGenParams genParams));
+        
+    in
+        res;
+    
+    
+
+/**
+ * Checks a list of results and returns true iff test outcomes are true
+ * and that there is the expected number of test results
+ * 
+ * @arg num the expected number of tests
+ * @arg res the list of results
+ * 
+ * @return true iff there the expected number of positive tests
+ */
+allTestsPass :: Int -> [Result] -> Boolean;
+private allTestsPass num res =
+    let
+        outcomes = List.filterJust (List.map (\r -> r.Result.ok) res);
+    in
+        List.andList outcomes &&
+        num == List.length outcomes;
+
+defaultNumTests :: Int;
+private defaultNumTests = 100;
+
+
+/**
+ * configuration used for controlling how tests are run
+ */
+data public Config =
+    private Config
+        numTests :: Int
+        maxTests :: Int
+        resizing :: (Int -> Int)
+        genParams :: GenParams;
+
+/**the default configuration used to run tests*/
+defaultConfig :: Config;
+public defaultConfig =
+    Config defaultNumTests (defaultNumTests * 10) defaultResizing makeDefaultGenParams;
+
+/**make a configuration which will run the specified number of tests
+ * @arg numTests the number of tests to run.
+ * @return the test configuration.
+ */
+public makeConfigWithMaxTests numTests =
+    Config numTests (numTests * 10) defaultResizing makeDefaultGenParams;
+
+/**make a test configuration
+ * 
+ * @arg numTests the number of tests to run
+ * @arg maxTries the maximum number of times data will be generated to run tests
+ *               if the test has an implies constraint test data may have to be discarded
+ *               because it does not meet the constraints. 10 times num tests
+ *               is a reasonable value.
+ * @arg resizing The function used to resize the generator parameters after each test
+ * @arg genParams the generator parameters.
+ * 
+ * @return the new test configuration
+ */
+public makeConfig numTests maxTries resizing genParams =
+    Config numTests maxTries resizing genParams;
+
+
+/**
+ * Verifies a property using default configuration.
+ * 
+ * @arg testItem  the item to test
+ * 
+ * @return true iff all tests pass
+ */
+quickCheck :: (Testable t) => t -> Boolean;
+public quickCheck testItem = 
+    check defaultConfig testItem;
+
+
+/**
+ * Verifies a property using supplied configuration. 
+ * @arg config the configuration used for testing
+ * @arg testItem the property to test
+ * @return true if configured number of tests can be generated and pass, false if a test fails or the required number of tests cannot be generated.
+ */
+check :: (Testable t) => Config -> t -> Boolean;
+public check config testItem =
+    allTestsPass config.Config.numTests (testResults config testItem);
+
+/**
+ * Runs tests according to config and returns a list of results, or the 
+ * first failing result. This function may be used in conjunction with
+ * {@link formatResults@} or {@link summarize@}.
+ * @arg config the confiuration to use for testing
+ * @arg testItem the property to test
+ * @return list of results, or first failing result.
+ */
+testResults :: (Testable t) => Config -> t -> [Result];
+public testResults config testItem = 
+    runTests config testItem;
+
+/**
+ * Tests a property and returns the list of results, or the first failing test.
+ */
+verboseCheck :: (Testable t) => t -> [Result];
+public verboseCheck testItem = 
+    testResults defaultConfig testItem;
+
+
+/**
+ * This tests a property using the default configuration and returns
+ * a string suitable for display that described the parameters
+ * used for each test and the result.
+ */
+showResults :: (Testable t) => t -> String;
+public showResults testItem =
+    formatResults $ runTests defaultConfig testItem;
+
+/**
+ * Converts a list of results to a string in which the parameters used
+ * in each test are shown on a seperate line. This function is most useful
+ * for checking the test parameters are as expected.
+ * e.g. formatResults (check defaultConfig test_property)
+ * 
+ * @arg results the list of results to format into a string
+ * @return a string with each set of test parameters on a seperate line.
+ */
+formatResults :: [Result] -> String;
+public formatResults results =
+    let
+        showResult result = 
+            (
+                case result.Result.ok of
+                Nothing -> "Not tested:  ";
+                Just a -> 
+                if a then
+                   "Passed with: "
+                else
+                   "Failed with: ";
+            ) ++ "(" ++ (List.join ", " result.Result.args) ++ ")";
+    in
+        List.join "\n" (List.map (\result -> showResult result) results);
+
+/**
+* Tests testItem the specified number of times and return a list of results. If a test fails no more tests are conducted. 
+* If the maxTestAttempts is exceeded an error is raised.
+* 
+* @arg config the test configuration
+* @arg testItem the item to test
+* @return details the outcome of the each test
+*/
+runTests :: (Testable t) => Config -> t -> [Result];
+private runTests !config testItem =         
+    let 
+        resizingFunction = config.Config.resizing;
+        
+        //without this type declaration, runTestsHelper has inferred type
+        //(Show a, Num a, Num b, Testable c) => a -> b -> GenParams -> c -> [Result] -> [Result]       
+        runTestsHelper :: (Testable t) => Int -> Int -> Int -> GenParams -> t -> [Result] -> [Result];
+        runTestsHelper !testNum !numTestsRemaining !testAttemptsRemaining genParams testItem results =  
+            if numTestsRemaining == 0 then
+                results
+            else if testAttemptsRemaining == 0 then
+                results 
+            else
+                let
+                    res :: Result;
+                    res = test testItem (resize (resizingFunction testNum) (leftGenParams genParams));
+                in
+                    case res.Result.ok of
+                    Nothing ->
+                        runTestsHelper (testNum + 1) numTestsRemaining (testAttemptsRemaining - 1) (rightGenParams genParams) testItem (results ++ [res]);
+                    Just b -> 
+                        if b then
+                            runTestsHelper (testNum + 1) (numTestsRemaining - 1) (testAttemptsRemaining - 1) (rightGenParams genParams) testItem (results ++ [res])
+                        else
+                            [res];
+            ; 
+        
+    in
+        runTestsHelper 1 config.Config.numTests config.Config.maxTests config.Config.genParams testItem []; 
+
+
+
+/**
+ * Allows a function to be tested using a specific generator. This allows the user
+ * to supply their own custom generator. This may be necessary when a property
+ * has implies conditions that are hard to satisfy with random data. For example consider 
+ * the function orderedInsert, which inserts a number into an ordered list preserving the ordered property of the list.
+ * This could be tested using an {@link implies@} expression to ensure that the test list
+ * is ordered, but many randomly generated lists will not satisfy this condition, and so the 
+ * testing may prove problematic. This situation can be improved by implementing a custom
+ * List generator that is guaranteed to create ordered lists. 
+ * In this case the forAll function is used to 
+ * specify the custom generator.
+ * 
+ * 
+ * @arg gen the custom generator to use in testing.
+ * @arg func the function to be tested.
+ * @return the property for testing.
+ */
+forAll :: (Show a, Testable b) => (Gen a) -> (a -> b) -> Property;
+public forAll gen func = 
+    Property (Gen(\genParams -> testFunctionGen gen func (genParams)));
+
+
+
+/**
+ * creates a Property with a precondition.
+ * The testItem is tested only if the precondition is true. For example:
+ *  
+ *  {@code prop_Insert :: Int -> [Int] -> Property;
+prop_Insert x list = (ordered list) `implies` (ordered (orderedInsert x list));@}
+ *
+ *  This property will only test the orderedInsert function when 
+ *  the precondition (ordered list) is True.  If a precondition is rarely 
+ *  satisfied by random data the Property will be problematic to test. In this case
+ *  a custom generator that has a greater chance of satisfying the
+ *  precondition should be used, see {@link forAll@}.
+ * 
+ * @arg precondition the condition that must be met before testItem will be tested
+ * @arg testItem the item to test
+ * @return Property - the testItem guarded by the precondition
+ */
+implies :: (Testable a) => Boolean -> a -> Property;
+public implies precondition testItem = 
+    if precondition then 
+        Property (Gen(\genParams -> test testItem genParams)) 
+    else
+        Property (Gen(\genParams -> nothing));
+
+/**
+ * creates a property which classifys the results for a test
+ * whenever the condition is met. This may be used for collecting 
+ * information about the
+ * nature of the data used for testing. For example:
+ * 
+ * {@code prop_reverse_classify :: [Int] -> Property;
+prop_reverse_classify list = 
+   classify ((length list) <= 1) "trivial" $
+   classify ((length list) >1) "nontrivial" 
+   (list==reverse (reverse list));@}
+
+This will classify all test cases for which the list is of length 0 or 1 as trivial, and all others as nontrivial. 
+ * 
+ * @arg condition  the condition for classifying
+ * @arg name the label to use
+ * @arg testItem the item to test
+ * @return a testable property
+ */
+classify :: (Testable a, Show b) => Boolean -> b -> a -> (Property);
+public classify !condition name testItem = 
+    if condition then 
+        Property(Gen(\genParams -> labelResult (show name) (test testItem genParams)))
+    else
+        Property(Gen(\genParams -> test testItem genParams));
+
+labelResult :: String -> Result -> Result;
+labelResult name res = Result res.Result.ok (name : res.Result.labels) res.Result.args;
+
+getLabels :: Result -> [String];
+getLabels !r = r.Result.labels;
+
+/**
+ * Summarizes results. This summarizes test data showing the percentage matching
+ * each of the classification conditions. 
+ * 
+ * @arg results the list of results to summarize
+ * @return summary - a string describing the results
+ */
+summarize :: [Result] -> String;
+public summarize results = 
+    let
+        notRun = List.filter (\res -> res.Result.ok == Nothing) results;
+        passed = List.filter (\res -> res.Result.ok == Just True) results;
+        npassed = length passed;
+        allLabels = List.sort $ concat (List.map getLabels passed);
+        distinctLabels = List.union [] allLabels; 
+        counts = List.map (\l -> (length l) *100 /npassed) $ List.group allLabels; 
+    in
+        "Tests Passed:       " ++ (show npassed) ++ "\n" ++
+        "Failed to generate: " ++ (show (length notRun)) ++ "\n" ++
+        (concat (List.zipWith (\label freq -> label ++ ": " ++ (show freq) ++ "%\n") distinctLabels counts));
+ 
+
+
+
+
+
+

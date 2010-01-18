@@ -1,0 +1,706 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * cal
+ * Creation date: July 7, 2005.
+ * By: James Wright
+ */
+
+/**
+ * This is a support file for the SourceMetricFinder_Test suite of JUnit tests
+ * (org.openquark.cal.compiler.SourceMetricFinder_Test)
+ * 
+ * The JUnit tests expect this module to have certain contents; if you change
+ * the module, you may need to change the tests as well, and vice versa. 
+ * 
+ * Author: James Wright
+ */
+
+////////////////////////////////////////////////
+module Cal.Test.JUnitSupport.SourceMetricFinder_Test_Support;
+// We import this module first to ensure that the line and column are known,
+// so please be careful about moving it around.
+import Cal.Utilities.StringNoCase using
+    function = fromString;
+    ;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char, Integer, JList, Maybe, Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        add, append, compare, concat, const, doubleToString, equals, error, fromJust, fst, input,
+        intToString, isNothing, isEmpty,  max, mod, not, output, round, seq, snd, toDouble,
+        field1, field2, field3, upFrom, upFromTo;
+    typeConstructor = Either, Short, Byte, Float;
+    dataConstructor = Left, Right;  
+    function = apply, compose;
+    ;
+import Cal.Core.Dynamic using    
+    typeConstructor = Dynamic;
+    function = fromDynamic, fromDynamicWithDefault, toDynamic;  
+    ;
+import Cal.Collections.List using  
+    function = all, chop, filter, foldLeft, foldLeftStrict, foldRight, head, intersperse,
+        last, length, list2, map, outputList, reverse, subscript, sum, tail, take,
+        zip, zip3, zipWith;  
+    ;      
+import Cal.Core.String using  
+    function = toList;
+    ;        
+import Cal.Collections.Array;
+
+////////////////////////////////////////////////
+/// Reference frequency checks
+    
+// Nobody calls this function
+// Reference frequency = 0
+leaf0 x =
+    90 - x;
+    
+// This function is called once
+// Reference frequency = 1
+leaf1 x =
+    50 + x;
+
+caller1 arg =
+    leaf1 (arg * 2);
+
+// This function is called from two functions  
+// Reference frequency = 2
+leaf2 x y =
+    x - y;
+
+caller2a arg =
+    leaf2 (arg + 1) (arg + 2);
+
+caller2b arg =
+    leaf2 arg arg;
+
+// This function is called twice from one function and once from another
+// Reference frequency = 3
+leaf3 x =
+    66 - x;
+
+caller3a =
+    Prelude.negate (leaf3 10);
+
+caller3b arg =
+    leaf3 (leaf3 arg);
+
+// This function is called as multiple arguments of some other function
+// Reference frequency = 2
+leaf4 x y =
+    x && y;
+
+caller4 arg1 arg2 =
+    Prelude.or (leaf4 arg1 arg2) (leaf4 arg2 arg1);
+
+// This function is called as multiple arguments of a binary operator and as 
+// an argument to negate
+// Reference frequency = 3
+leaf5 x =
+    x * x;
+
+caller5a x y =
+    (leaf5 x) / (leaf5 x);
+
+caller5b arg =
+    - (leaf5 arg);
+
+// This function is called four times
+// Reference frequency = 4
+leaf6 x =
+    x / x;
+
+caller6a arg = 
+    let
+        baz q = leaf6 q;
+    in
+        baz (leaf6 arg);
+
+// (Adds only one reference)
+caller6b arg =
+    \ leaf6 -> arg (SourceMetricFinder_Test_Support.leaf6 leaf6);
+    
+// (Adds only one reference) 
+caller6c arg =
+    let
+        leaf6 = arg;
+    in
+        SourceMetricFinder_Test_Support.leaf6 leaf6;
+    
+// (This should not add a reference to leaf6)
+caller6d arg =
+    let
+        leaf6 p = p + 2;
+    in
+        leaf6 arg;
+    
+// (This should not add a reference to leaf6 either)
+caller6e arg =
+    let
+        leaf6 p = p + 2;
+
+        foo = leaf6 arg;
+    in
+        foo + foo;
+
+// (nor should this)
+caller6f arg =
+    \ leaf6 -> leaf6;
+    
+    
+// This function is called from a backquoted operator
+// Reference frequency = 1
+leaf7 x y =
+    x ++ y;
+
+caller7 =
+    "str1" `leaf7` "str2";
+    
+// This function is called once from a test function and once from a non-test function
+// Reference frequency = 2 (unfiltered) or 1 (filtered)
+leaf8 x = x;
+
+caller8a = 
+    leaf8 56;
+
+called8bExamples =
+    leaf8 65;
+
+////////////////////////////////////////////////
+/// Compositional frequency checks
+mangleValue x = 
+    x * 7 - 17;
+
+stompValue :: Int -> Int -> Int -> Int;
+stompValue val x y =
+    if val > 10 then 1 else val;
+
+// Basic check
+// (callerC1, mangleValue) has compositional frequency = 1
+// (mangleValue, callerC1) has compositional frequency = 2
+// (stompValue, callerC1) has compositional frequency = 3
+callerC1 x = x;
+
+root1 =
+    mangleValue (callerC1 (mangleValue 10)) +
+    mangleValue (callerC1 20) +
+    stompValue (callerC1 10) (callerC1 20) (callerC1 30);
+
+// Apply function and operator
+// (mangleValue, callerC2) has compositional frequency = 1
+// (callerC2a, mangleValue) has compositional frequency = 2
+// (callerC2, mangleValue) has compositional frequency = 1
+callerC2 x = x;
+callerC2a x = x;
+
+root2 =
+    apply mangleValue (callerC2 10) +
+    ((callerC2a $ mangleValue) $ 20) +
+    (callerC2a $ mangleValue $ 20) +
+    callerC2 (mangleValue 20);
+
+// Compose function and operator
+// (mangleValue, callerC3) has compositional frequency = 2
+// (callerC3, mangleValue) has compositional frequency = 2
+// (callerC3, stompValue) has compositional frequency = 1
+callerC3 x = x;
+
+root3 =
+    (compose callerC3 mangleValue) 20 +
+    (callerC3 # mangleValue # callerC3) 30 +
+    (mangleValue # callerC3) (stompValue 40 1 1);
+
+// Lambda handling
+// (stompValue, callerC4) has compositional frequency = 3
+// (callerC4, mangleValue) has compositional frequency = 1
+// (mangleValue, callerC4) has compositional frequency = 0
+callerC4 x = x;
+
+root4 =
+    stompValue (callerC4 1) (callerC4 10) (callerC4 100) + 
+    mangleValue ((\x -> callerC4 (mangleValue x)) 50);
+
+// Test function filtering
+// (callerC5, mangleValue) has compositional frequency = 3 unfiltered
+// (callerC5, mangleValue) has compositional frequency = 1 filtered
+callerC5 x = x;
+
+root5 = 
+    callerC5 (mangleValue 10);
+
+testRoot5 =
+    (compose callerC5 mangleValue) 20;
+
+root5Examples =
+    callerC5 $ (mangleValue 30);
+
+////////////////////////////////////////////////
+/// Linter checks
+
+// For testing the redundant-lambda-finder (in SourceMetricFinder.LintWalker).
+// l1, l2, l4, l5, and l6 should all be flagged as redundant.
+// l3 and l7 should not.
+
+// Rightmost args equal lambda's args in order.
+l1 = \x1 -> map Prelude.negate x1;
+
+// Binary operator's args are lambda's args in order
+l2 = \x2 y2 -> x2 + y2;
+
+// Both args show up multiple times; this is not a redundant lambda
+l3 = \x3 y3 -> (x3 + y3) - (x3 - y3);
+
+// The x4 that shows up in the let is not the same as the x4 that shows up on the right,
+// so this is a redundant lambda (args to let expr are lambda's args in order)
+l4 = \x4 -> (let x4 = 10; in Prelude.add x4) x4;
+
+// l4 case but for binary operators
+l5 = \x5 -> (let x5 = 12; in x5) + x5;
+
+// Unary operator accepts lambda's sole argument
+l6 = \x6 -> (- x6);
+
+// Out-of-order binary operator
+// This is redundant, but not trivially so, so the linter shouldn't flag it.
+l7 = \x7 -> x7 - 7;
+
+
+// For testing the unplinged-primitive-argument-finder in SourceMetricFinder.LintWalker.
+
+fullyUnplingedPrimitives :: Int -> Int -> Int;
+fullyUnplingedPrimitives x y = x + y;
+
+partiallyUnplingedPrimitives1 :: Int -> Int -> Int;
+partiallyUnplingedPrimitives1 !x y = x / y;
+
+partiallyUnplingedPrimitives2 :: Short -> Short -> Short;
+partiallyUnplingedPrimitives2 !x y = x / y;
+
+partiallyUnplingedPrimitives3 :: Double -> Double -> Double;
+partiallyUnplingedPrimitives3 x !y = x / y;
+
+partiallyUnplingedPrimitives4 :: Float -> Float -> Float;
+partiallyUnplingedPrimitives4 x !y = x / y;
+
+partiallyUnplingedPrimitives5 :: Char -> Char -> (Char, Char);
+partiallyUnplingedPrimitives5 x !y = (x, y);
+
+// The first argument should be plinged, although the second argument needn't be.
+// (The linter isn't smart enough to make that distinction, but in this case the
+// expected warning is correct)
+partiallyUnplingedPrimitives6 :: Boolean -> Boolean-> Boolean;
+partiallyUnplingedPrimitives6 x !y = x || y;
+
+// Neither of these functions should be flagged
+fullyUnplingedConstrained :: Num a => a -> a -> a;
+fullyUnplingedConstrained x y = x - y;
+
+fullyUnplingedAlgebraic :: Maybe Int -> Maybe Int -> Int;
+fullyUnplingedAlgebraic x y = (fromJust x) + (fromJust y);
+
+// Test that sourcePositions work properly
+// If you rearrange the formatting of this function at all (including renaming arguments),
+// please also fix the test in SourceMetricFinder_Test that you almost certainly 
+// will break.  In particular, the lambda is lined up with firstArgument on purpose.
+veryLintyFunction :: Int -> Int -> (Int -> Int);
+veryLintyFunction firstArgument secondArgument =
+                  \arg -> firstArgument + secondArgument + arg;
+
+
+// For testing the unreferenced-private-function finder in SourceMetricFinder.LintWalker
+
+// This function is unreferenced, but also public, so it should not be flagged
+public unreferencedPublicFunction x = x + 10;
+
+// These 2 functions are private but referenced by a public, so they should not be flagged
+private referenced1 x = x + 15;
+referenced2 x = x + 20;
+
+public referencer = referenced1 (referenced2 50);
+
+// These 2 functions are private but each referenced by a private, so they should not be flagged
+private referenced3 x = x + 50;
+referenced4 x = x + 25;
+
+private referencer2 z = referenced3 z;
+referencer3 w = referenced4 (w - 1);
+
+// These 2 functions are private and unreferenced by anyone, so they should be flagged
+private unreferencedPrivate1 = 100;
+unreferencedPrivate2 x y = x / y;
+
+
+// For testing the alias-with-mismatched-plings finder in SourceMetricFinder.LintWalker
+data private UselessAlgebraic =
+    UnplingedCtor       arg1 :: Int     arg2 :: String |
+    PlingedCtor         arg1 :: !Int    arg2 :: !String |
+    HalfPlinged1        arg1 :: !Int    arg2 :: String |
+    HalfPlinged2        arg1 :: Int     arg2 :: !String;
+
+data foreign unsafe import jvm "java.io.File" 
+    private JFile deriving Inputable, Outputable;
+
+foreign unsafe import jvm "constructor"
+    private jFile_new_withParentChild :: String -> String -> JFile;
+
+// These functions match the plings exactly on what they wrap and should not be flagged
+alias1 x y = UnplingedCtor x y;
+alias2 !x !y = PlingedCtor x y;
+alias3 !x y = HalfPlinged1 x y;
+alias4 x !y = HalfPlinged2 x y;
+alias5 !x !y = jFile_new_withParentChild x y;
+
+// These functions match plings partially in a compatible way (ie, the
+// aliased function doesn't cause a different evaluation order than the
+// one guaranteed by the alias)
+alias6 !x y = PlingedCtor x y;
+alias7 x y = PlingedCtor x y;
+alias8 x y = HalfPlinged1 x y;
+alias9 x y = HalfPlinged2 x y;
+alias10 !x y = jFile_new_withParentChild x y;
+alias11 x y = jFile_new_withParentChild x y;
+
+// These functions have too few plings and should be flagged
+// (The alias guarantees that the second parameter will be evaluated first,
+// whereas the aliased function/ctor evaluates the first argument first)
+badAlias1 x !y = PlingedCtor x y;
+badAlias2 x !y = jFile_new_withParentChild x y;
+
+// These functions have too many plings and should be flagged
+// (the alias guarantees that one of the arguments will be early-evaluated
+// that the aliased function/ctor does not guarantee)
+badAlias3 !x y = UnplingedCtor x y;
+badAlias4 x !y = UnplingedCtor x y;
+badAlias5 !x !y = UnplingedCtor x y;
+
+badAlias6 !x !y = HalfPlinged1 x y;
+badAlias7 !x !y = HalfPlinged2 x y;
+
+// These functions have unmatched plings but are not fully-saturated calls, and should not be flagged
+partialAlias1 !x = UnplingedCtor x;
+partialAlias2 x = PlingedCtor x;
+partialAlias3 x = HalfPlinged1 x;
+partialAlias4 !x = HalfPlinged2 x;
+partialAlias5 x = PlingedCtor x;
+
+// These functions have unmatched plings but reorder their arguments and should not be flagged
+notAlias1 !x !y = UnplingedCtor y x;
+notAlias2 x y = PlingedCtor y x;
+notAlias3 x y = HalfPlinged1 y x;
+notAlias4 x y = HalfPlinged2 y x;
+notAlias5 x y = jFile_new_withParentChild y x;
+
+// These two functions have different arities, so notAlias6 is not a alias for notAliased6
+// and should therefore not be flagged in spite of its differing plings.
+notAliased6 x = Prelude.add x;
+notAlias6 x y = notAliased6 x y;
+
+// For testing unused let-variable detection
+
+// These functions all contain unused let-variables because the case expression
+// masks the binding of x
+unusedLetVars1 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        Just x -> x;
+        Nothing -> 0;
+        ;
+        
+unusedLetVars2 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        Just {value = x} -> x;
+        Nothing -> 0;
+        ;
+        
+unusedLetVars3 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        x : y -> x;
+        [] -> 0;
+        ;
+        
+unusedLetVars4 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        w : x -> x;
+        [] -> [0];
+        ;
+        
+unusedLetVars5 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        {x | foo} -> x;
+        ;
+        
+unusedLetVars6 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        {x} -> x;
+        ;
+        
+unusedLetVars7 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        {v | w = x} -> x;
+        ;
+        
+unusedLetVars8 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        {foo | x} -> x;
+        ;
+        
+// This function contains unused let-variables because the lambda expression
+// masks the binding of x by binding a parameter named x
+unusedLetVars9 arg =
+    let
+        x = arg;
+    in
+        \ x -> x;
+        
+// This function contains unused let-variables because the inner let expression
+// masks the outer let expression's binding
+unusedLetVars10 arg =
+    let
+        x = arg;
+    in
+        let
+            x = 23;
+        in
+            x;
+        
+// This function contains unused let-variables because the parameter to the
+// local function definition masks x's binding
+unusedLetVars11 arg =
+    let
+        x = 55;
+    
+        fcn x = x + 2;
+    in
+        fcn arg;
+    
+// This function just plain old doesn't reference the let variable
+unusedLetVars12 arg =
+    let
+        x = 55;
+    in
+        arg + 55;
+    
+// This function uses its let variable, because the variable masks the parameter
+usesLetVar1 x =
+    let
+        x = 55;
+    in
+        x;
+
+// These functions use their respective let variables because they bind
+// potentially-masking field names to other, non-masking names
+usesLetVar2 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        {x = y} -> x;
+        ;
+        
+usesLetVar3 arg =
+    let
+        x = 55;
+    in
+        case arg of
+        {w | x = y} -> x;
+        ;
+
+usesLetVar4 arg =
+    let
+        value = 55;
+    in
+        case arg of
+        Just {value = x} -> value;
+        ;
+        
+// This function just plain old references the variable
+usesLetVar5 arg =
+    let
+        x = 25;
+
+        operate y = x + y;
+    in
+        operate arg;
+
+////////////////////////////////////////////////
+/// Search checks
+
+// Because we are checking SourcePositions again, formatting once again matters!
+// Be aware that modifying anything between this line and the {DONE} comment in any
+// way will probably necessitate corresponding changes to the SourceMetricFinder_Test suite.
+sillyFunction x y = x * y * 10;
+
+// These are both references to sillyFunction
+crazyFunction arg =
+    (sillyFunction 50 arg, sillyFunction 50);
+
+// This is not a reference to SourceMetricFinder_Test_Support.sillyFunction
+lonerFunction arg =
+    let
+        sillyFunction x = x + 1;
+    in
+        sillyFunction arg;
+    
+testSillyFunction =
+    testSillyFunctionHelper sillyFunction;
+
+// contains an application of Prelude.equals in operator form
+testSillyFunctionHelper fn =
+    fn 10.0 20 == 10 * 20 * 10 ||
+    (fn 10.0 20) `Prelude.equals` (20 * 20 * 20);
+    
+data private SillyDataType =
+    SillyDataType a::Int |
+    Silly a::Int b::String
+    deriving Eq;
+
+class Identifiable a where
+    identityFunction :: a -> a;
+    ;
+    
+instance Identifiable SillyDataType where
+    identityFunction = Prelude.id;
+    ;
+
+testSillyCons =
+    10 `Silly` "ten";
+    
+testSillyConsUnpack arg =
+    case arg of
+    (Silly | SillyDataType) {a} -> arg.Silly.a;
+    ;
+
+data private CrazyType =
+    Crazy1 a::(Int -> Int) |
+    Crazy2 a::(Int -> Int);
+
+testConsUnpackBindingSingleDatacons arg =
+    case arg of
+    Crazy1 {a = sillyFunction} -> sillyFunction 50; // This is not an application of SourceMetricFinder_Test_Support.sillyFunction, because sillyFunction is bound in the case alternative pattern
+    ;
+    
+testConsUnpackBindingMultiDatacons arg =
+    case arg of
+    (Crazy1 | Crazy2) {a = sillyFunction} -> sillyFunction 50; // This is not an application of SourceMetricFinder_Test_Support.sillyFunction, because sillyFunction is bound in the case alternative pattern
+    ;
+
+arrayToList = Array.toList;
+stringToList = toList;
+
+// This line is baseLine + 59
+data private ConsName1 =
+    ConsName2 |
+    ConsName4;
+
+data private ConsName2 =
+    ConsName1 |
+    ConsName3;
+
+// This line is baseLine + 68
+mangleList x =
+    case x of
+    [] -> "nil";
+    a : b -> "cons";
+    ;
+    
+unmangleList x =
+    if x != "cons" then
+        []
+    else
+        [1, 2];
+
+// This line is baseLine + 81
+makeCasedString :: StringNoCase.StringNoCase -> String;
+makeCasedString !stringNoCase = 
+    let
+        uncoercedValue :: StringNoCase.StringNoCase;
+        uncoercedValue = stringNoCase :: StringNoCase.StringNoCase;
+    in
+        Prelude.unsafeCoerce uncoercedValue;
+    
+foreign unsafe import jvm "method toString"
+    private cloneObject :: Prelude.JObject -> Prelude.String;
+    
+// {DONE} source formatting is unimportant following this comment 
+
+// A pre-order or post-order traversal of binary operators will yield search
+// results that are not in source order for the binary add operator due to the
+// body expression of this function.
+outOfOrderBinaryExpression =
+    (2 + 3 + 4 + 5) +
+    (6 + 7 + 8 + 9);
+
+// A pre-order or post-order traversal of backquoted expressions will yield search
+// results that are not in source order for the binary add operator due to the
+// body expression of this function.
+outOfOrderBackquotedExpression =
+    (2 `add` 2 `add` 2 `add` 2 `add` 2) `add`
+    (2 `add` 2 `add` 2 `add` 2 `add` 2);
+
+
+class Constantable a where
+    constantFunction :: a -> b -> a;
+    ;
+    
+instance Constantable [a] where
+    constantFunction = const;
+    ;
+    
+instance Constantable (a -> b) where
+    constantFunction = const;
+    ;

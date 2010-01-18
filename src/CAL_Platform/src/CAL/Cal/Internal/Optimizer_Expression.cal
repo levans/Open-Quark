@@ -1,0 +1,3304 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Optimizer.cal
+ * Created: August 12, 2005
+ * By: Greg McClement
+ */
+
+/**
+ * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WAR 
+ * 
+ * This file is part of the compiler and not to be modified. 
+ * 
+ * ING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+ *
+ * The definition of the Expression data type and related functions. These data objects correspond to the Java
+ * expression type.
+ * 
+ * @author Greg McClement
+ * 
+*/
+
+module Cal.Internal.Optimizer_Expression;
+
+import Cal.Core.Prelude using
+    typeConstructor = String, Boolean, Int, Short, Float, Integer, Long, Maybe, JObject, Double, Char, JList, Ordering;
+    dataConstructor = Nothing, Just, True, False, LT, GT, EQ;
+    typeClass = Eq, Inputable, Outputable, Ord;
+    function = not, assert, uncurry, undefined, input, output, seq, upFromTo, error, isNothing, max, isEmpty;
+    ;
+
+import Cal.Collections.List using
+    function = foldLeft, reverse, map, andList, zip, length, head, orList, find, isElem, delete;
+    ;
+    
+import Cal.Internal.Optimizer_Type using
+    typeConstructor = Type, JTypeExpr;
+    dataConstructor = AppType, TypeId, TypeVar;
+    function = 
+            inputType, type_listToType, type_unify, unflattenFunctionTypes,
+            type_isStrict,
+            outputType, flattenType, optimizerHelper_newTypeVar;
+    ;
+
+import Cal.Core.String using
+    function = indexOfString;
+    ;
+    
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = trace, show;
+    ;
+
+friend Cal.Internal.Optimizer;
+friend Cal.Internal.Optimizer_Transformations;
+friend Cal.Internal.Optimizer_Traversers;
+friend Cal.Internal.Optimizer_State;
+friend Cal.Test.Internal.Optimizer_Test;
+
+trace2 :: String -> a -> a;
+trace2 unused v = v;
+
+/**
+ * Represensts a qualified CAL name.
+ */    
+    
+data protected QualifiedName = 
+    protected QN 
+        moduleName::!String 
+        functionName::!String        
+    ;
+
+instance Eq QualifiedName where
+    equals = qualifiedName_equals;
+    notEquals = qualifiedName_notEquals;
+    ;
+    
+qualifiedName_compare :: QualifiedName -> QualifiedName -> Ordering;
+protected qualifiedName_compare qn1 qn2 =
+    case qn1 of
+    QN m1 fn1 ->
+        case qn2 of
+        QN m2 fn2 ->
+            if m1 < m2 then
+                LT
+            else if m1 > m2 then
+                GT
+            else if fn1 < fn2 then
+                LT
+            else if fn1 > fn2 then
+                GT
+            else
+                EQ;
+        ;
+    ;
+    
+qualifiedName_equals :: QualifiedName -> QualifiedName -> Boolean;
+qualifiedName_equals !qn1 !qn2 =
+    case qn1 of
+    QN moduleName1 functionName1 ->
+        case qn2 of
+        QN moduleName2 functionName2 ->
+            functionName1 == functionName2 && moduleName1 == moduleName2;
+        ;
+    ;
+
+qualifiedName_notEquals :: QualifiedName -> QualifiedName -> Boolean;    
+qualifiedName_notEquals !qn1 !qn2 = not (qn1 == qn2);
+ 
+/**
+ * Returns true iff the given qualified name is a top level name.
+ * 
+ * @arg qn The qualified name to test.
+ */
+
+qualifiedName_isTopLevel :: QualifiedName -> Boolean;
+protected qualifiedName_isTopLevel !qn = not (indexOfString "$" qn.QN.functionName != -1);
+//qualifiedName_isTopLevel !qn = not (findString qn.QN.functionName "$");
+   
+qualifiedName_getName :: QualifiedName -> String;    
+protected qualifiedName_getName !qn = qn.QN.functionName;
+
+qualifiedName_toString :: QualifiedName -> String;
+qualifiedName_toString !qn =
+    case qn of
+    QN m f -> m ++ "." ++ f;
+    ;
+
+instance Show QualifiedName where
+    show = showQualifiedName;
+;
+
+showQualifiedName :: QualifiedName -> String;
+showQualifiedName !qn =
+    case qn of
+    QN mn fn ->
+        if mn == "Cal.Core.Prelude" && fn == "Nil" then
+            "[]"
+        else
+            mn ++ "." ++ fn;
+    ;
+
+data foreign unsafe import jvm protected "org.openquark.cal.compiler.ModuleName"
+    protected JModuleName deriving Inputable, Outputable;
+
+foreign unsafe import jvm "method toString"
+    jModuleName_toString :: JModuleName -> String;
+
+data foreign unsafe import jvm protected "org.openquark.cal.compiler.QualifiedName"
+protected JQualifiedName deriving Inputable, Outputable;
+
+foreign unsafe import jvm "method getModuleName"
+    jQualifiedName_getModuleName :: JQualifiedName -> JModuleName;
+    
+foreign unsafe import jvm "method getUnqualifiedName"
+    jQualifiedName_getUnqualifiedName :: JQualifiedName -> String;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.QualifiedName.make"
+    jQualifiedName_make :: String -> String -> JQualifiedName;
+
+instance Outputable QualifiedName where
+output = qualifiedNameToJObject;
+;
+
+instance Inputable QualifiedName where
+input = jobjectToQualifiedName;
+;
+
+qualifiedNameToJObject :: QualifiedName -> JObject;
+qualifiedNameToJObject qn = 
+    output (outputQualifiedName qn);
+
+jobjectToQualifiedName :: JObject -> QualifiedName;
+jobjectToQualifiedName jobj = 
+    inputQualifiedName (input jobj);
+
+/**
+ * Optimizes the case where a single qualifiedName value exists.
+ */
+outputQualifiedName :: QualifiedName -> JQualifiedName;
+protected outputQualifiedName !qn = 
+    let
+        moduleName :: String;
+        moduleName = qn.QN.moduleName;
+        unqualifiedName :: String;
+        unqualifiedName = qn.QN.functionName;
+    in
+        jQualifiedName_make moduleName unqualifiedName;
+
+inputQualifiedName :: JQualifiedName -> QualifiedName;
+inputQualifiedName !jQN = 
+    let
+        moduleName :: String;
+        moduleName = jModuleName_toString $ jQualifiedName_getModuleName jQN;
+        unqualifiedName :: String;
+        unqualifiedName = jQualifiedName_getUnqualifiedName jQN;
+    in
+        QN moduleName unqualifiedName;
+
+/**
+ * Expression represents a CAL expression.
+ */
+    
+data protected Expression =
+    /**
+     * Represents a varible object.
+     * 
+     * @arg name The name of the variable.
+     * @arg inliningContext If the variable was part of an expression that was inlined then 
+     * this contains the name of the original expression. This is used to prevent inlining 
+     * of functions that are co recursive. 
+     */
+    protected Var 
+        name::!QualifiedName
+        inliningContext::[QualifiedName]
+        entity::(Maybe JFunctionalAgent) 
+        type::(Maybe Type) |
+        
+    protected Literal 
+        value::Literal |
+            
+    protected App 
+        expr1::!Expression 
+        expr2::!Expression |
+            
+    /**
+     * @arg var The name of the lambda variable.
+     * @arg type The type of the lambda variable.
+     * @arg argIsWHNF The strictness of the type is due to the argument know to be WHFN. This means when
+     * the core function is plinging arguments this argument being strict will not block higher up arguments
+     * from being plinged.
+     * @arg expr the body of the lambda expression.
+     */
+    protected Lambda 
+        var::!QualifiedName
+        type::Type
+        argIsWHNF::Boolean
+        expr::Expression |
+    
+    /**
+     * @arg variable The name of the variable being defined.
+     * @arg isNew The let expression was created by fusion and should be added
+     *      to the list of top level function in Java.
+     * @arg isKeepable The let expression was part of the original expression.
+     *      The other two cases are that the function may have been added by the
+     *      fusion transformation or the function may have been inserted so the
+     *      inliner had access to the definition.
+     * @arg isTopLevel The function will be top level and so cannot use any context defined variables that
+     * are not top level.
+     * @arg type The types of the arguments and return value.
+     * @arg expr The expression that defined the variable.
+     * @arg body The 'in' expression.
+     * @arg isRecursive True iff the let expression should correspond to
+     *      LetNonRec. Otherwise the corresponds to a LetRec expression.
+     * @arg arity The arity of the expression.
+     * @arg isCoreFunction A flag indicating if this let definition corresponds to a core function.
+     * @arg constArgs The ordinals of the arguments that are constant through all recursive calls of the function.
+     * @arg bodyWasChangedAt Used to optimize the inliner so it will not attempt inlining when the function body has not changed.
+     * @arg inliningWasPerformed A flag so the inliner will not bother inlining if the body and expr has not changed.
+     */    
+
+    protected Let 
+        variable::!QualifiedName 
+        isNew::Boolean 
+        isKeepable::Boolean
+        isTopLevel::Boolean
+        type::!(Maybe [Type])
+        expr::!Expression 
+        body::!Expression 
+        isRecursive::!Boolean 
+        arity::!Int 
+        isCoreFunction::Boolean
+        constArgs::[Boolean]
+        bodyWasChangedAt::Int 
+        inliningWasPerformed::!Boolean |
+                        
+    protected Switch 
+        expr::Expression
+        alts::[Alt] |
+          
+    protected RecordCase 
+        expr::Expression 
+        baseRecordPatternVarName::!String
+        fieldBindingVar::[(FieldName, String)]
+        resultExpr::Expression |
+                  
+    protected Opaque 
+        value::JObject |
+            
+    protected RecordSelection 
+        expr::Expression 
+        fieldName::FieldName |
+            
+    protected RecordExtensionLiteral 
+        fieldsMap::[(FieldName, Expression)] |
+                              
+    protected RecordExtensionPolymorphic 
+        expr::Expression 
+        fieldsMap::[(FieldName, Expression)] |
+                              
+    protected DataConsSelection 
+        dcValueExpr::Expression 
+        dc::DataCons 
+        fieldIndex::!Int 
+        errorInfo::JExpression_ErrorInfo |
+    
+    protected DataConstructor 
+        dc::DataCons |
+            
+    /**
+     * This is a recursive function that is flagged for inlining by the fusion code. Normally recursive functions
+     * would not be inlined.
+     * 
+     * @arg variable The name of the function being defined.
+     * @arg type The type of the expression. 
+     * @arg expr The expression that defined variable.
+     * @arg body The 'in' expression.
+     * @arg arity The arity of expr.
+     * @arg counter testing
+     * @arg constArgs For each argument there is a flag indicating if the argument is passed unchanged in recursive calls.
+     */
+        
+    protected LetInlinable 
+        variable::!QualifiedName 
+        type::(Maybe [Type]) 
+        expr::Expression 
+        body::Expression 
+        arity::!Int 
+        counter::Int
+        constArgs::[Boolean] |
+    
+    // This is used to perform an optimization where new functions
+    // are added so that the arguments can be plinged.
+    protected ChainOfSeqs seqs::[Expression] expression::Expression |
+    
+    protected ErrorInfo value::JObject;
+
+instance Show Expression where
+    show = showExpression;
+    ;
+
+instance Eq Expression where
+    equals = expressionEquals;
+    notEquals = expressionNotEquals;
+    ;
+
+data protected Tags =
+    /**
+     * Used for containing meta-information about the expression.
+     * @arg inlinedFrom The subexpression came from inlining the given expression. 
+     * This is used to stop inlining is co-recursive function.
+     */
+    Tags
+        inlinedFrom :: QualifiedName
+    deriving Show;
+
+
+showExpression :: Expression -> String;
+showExpression = showExpressionNice;
+
+showExpressionStructure :: Expression -> String;    
+protected showExpressionStructure !expression =
+    case expression of    
+    Var name _ _ type ->
+        "(Var " ++ show name /*++ "type(" ++ show type ++ ")" */++ ")";
+    DataConsSelection dcValueExpr dc fi err ->
+        "(DataConsSelection " ++ showExpressionStructure dcValueExpr ++ " (" ++ show dc ++ ")." ++ show fi ++ ")";
+    DataConstructor dc -> 
+        "(DataConstructor " ++ show dc ++ ")";
+    Literal {value} ->
+        "(Literal " ++ show value ++ ")";
+    ErrorInfo value -> 
+        "(ErrorInfo " ++ show value ++ ")";
+    App expr1 expr2 ->
+        "(App " ++ showExpressionStructure expr1 ++ " " ++ showExpressionStructure expr2 ++ ")";
+    Lambda lambdaVar _ _ lambdaExpr ->
+        "(Lambda " ++ show lambdaVar ++ " " ++ showExpressionStructure lambdaExpr ++ ")";
+    Let letVar isNew _ isKeepable letType letExpr letBody _ arity _ constVars changedAt _ ->
+        "(Let" ++ show letVar ++ "/" ++ show arity ++ (if isNew then "NEW" else "OLD") ++ " " ++ (if isKeepable then "KEEP" else "NOKEEP") ++ /*" (" ++ show letType ++ ") " ++*/ showExpressionStructure letExpr ++ " " ++ "InLet(" ++ show letVar ++ ") " ++ showExpressionStructure letBody ++ (if [] == constVars then "" else " " ++ show constVars) ++ "EndLet(" ++ show letVar ++ "))"; 
+    LetInlinable letVar _ letExpr letBody arity _ constVars ->
+        "(LetInlinable " ++ show letVar ++ "/" ++ show arity ++ " " ++ showExpressionStructure letExpr ++ " " ++ showExpressionStructure letBody ++ ")"; 
+    Switch switchExpr switchAlts ->
+        "(Switch " ++  
+//        (
+//                if switchExpr == (Literal (LitInt 1)) then
+//                    "23(" ++ source ++ ")"
+//                else 
+//                    ""
+//        ) ++
+        showExpressionStructure switchExpr ++ "[" ++ (foldLeft (\cur alt -> cur ++ " " ++ showAltStructure alt) "" switchAlts) ++ "] " ++ ")";            
+    Opaque {} ->
+            // make sure none of these have variables defined in them.
+        "(Opaque _)";
+    RecordExtensionLiteral recordExtension ->
+//        "(RecordExtensionLiteral " ++ show recordExtension ++ ")";
+        "(RecordExtensionLiteral)";
+    RecordExtensionPolymorphic body recordExtension ->
+//        "(RecordExtensionPolymorphic " ++ " (" ++ showExpressionStructure body ++ ") " ++ show recordExtension ++  ")";
+        "(RecordExtensionPolymorphic)";
+    RecordSelection expr fieldName ->
+//        "(RecordSelection " ++ showExpressionStructure expr ++ "." ++ show fieldName ++ ")";
+        "(RecordSelection)";
+    ;
+
+showExpressionNice :: Expression -> String;    
+showExpressionNice !expression =
+        case expression of    
+        Var {name, type} ->
+            show name /*++ "(" ++ show type ++ ")"*/;
+        DataConsSelection dcValueExpr dc fi err ->
+            "(" ++ showExpressionNice dcValueExpr ++ ")." ++ show fi;
+        DataConstructor dc -> 
+            show dc;
+        Literal {value} ->
+            show value;
+        ErrorInfo value -> 
+            "(ErrorInfo " ++ show value ++ ")";
+        App expr1 expr2 ->
+//            showListNice expression True False;
+            let
+                flat :: [Expression];
+                flat = flattenExpression expression [];            
+            in
+                "(" ++ foldLeft (\cur expr -> cur ++ (showExpressionNice expr) ++ " ") "" flat ++ ")";
+        Lambda lambdaVar lambdaType _ lambdaExpr ->
+            "(\\" ++ 
+                (
+                    if type_isStrict lambdaType then
+                        "!"
+                    else
+                        ""
+                ) ++
+                show lambdaVar ++ /*"(" ++ show lambdaType ++ ")" ++ */ " -> " ++ showExpressionNice lambdaExpr ++ ")";
+        Let {variable, inliningWasPerformed} ->
+            let
+                flattenLets :: Expression -> String;
+                flattenLets expr = 
+                    case expr of
+                    Let {variable=letVar, expr=letExpr, body=letBody, isNew, isKeepable, type} ->
+                        show letVar ++ 
+                            (if isNothing type then "" else "*")
+                            ++ (if isNew then "NEW" else "")
+                            ++ (if inliningWasPerformed then "INLININGWASPERFORMED" else "")
+                            ++ " = " ++ showExpressionNice letExpr ++ /*"(" ++ show type ++ ", " ++ (if isKeepable then "KEEP" else "DROP") ++ ")" ++*/ "\n" ++
+                        flattenLets letBody;
+                    _ -> " in\n" ++ showExpressionNice expr ++ "\n";
+                    ;
+            in
+                "(let" ++ "\n" ++ flattenLets expression ++ ")";
+        LetInlinable letVar _ letExpr letBody arity _ constVars ->
+            "(LetInlinable " ++ show letVar ++ "/" ++ show arity ++ " " ++ showExpressionNice letExpr ++ " " ++ showExpressionNice letBody ++ ")"; 
+        Switch switchExpr switchAlts ->
+            "(case " ++ showExpressionNice switchExpr ++ " of [" ++ (foldLeft (\cur alt -> cur ++ " " ++ show alt) "" switchAlts) ++ "] " ++ ")";            
+        Opaque {} ->
+                // make sure none of these have variables defined in them.
+            "(Opaque _)";
+        RecordExtensionLiteral recordExtension ->
+            "(RecordExtensionLiteral " ++ 
+//                show recordExtension
+                (List.foldLeftStrict (\curr next -> curr ++ (if curr == "" then "" else ", ") ++ show next.#1 ++ "-" ++ showExpressionNice next.#2) "" recordExtension)
+                ++ ")";
+        RecordExtensionPolymorphic body recordExtension ->
+            "(RecordExtensionPolymorphic (" ++ showExpressionNice body ++ ") " ++ 
+//            show recordExtension
+            (List.foldLeftStrict (\curr next -> curr ++ (if curr == "" then "" else ", ") ++ show next.#1 ++ "-" ++ showExpressionNice next.#2) "" recordExtension)
+            ++ ")";
+        RecordSelection expr fieldName ->
+            "(" ++ showExpressionNice expr ++ ")" ++ "." ++ show fieldName;
+        ChainOfSeqs seqExprs innerExpr ->
+            "(ChainOfSeqs " ++ 
+//            show seqExprs
+            (List.foldLeftStrict (\curr next -> curr ++ (if curr == "" then "" else ", ") ++ showExpressionNice next) "" seqExprs)
+            ++ ", " ++ showExpressionNice innerExpr ++ ")";
+        ;
+
+showExpression2 :: Expression -> Int -> String;
+protected showExpression2 expression maxDepth =
+    if maxDepth == 0 then
+        "..."
+    else
+        case expression of    
+        Var {name} ->
+            "(Var " ++ show name ++ ")";
+        DataConsSelection dcValueExpr dc fi err ->
+            "(DataConsSelection " ++ showExpressionNice dcValueExpr ++ ")";
+        DataConstructor dc -> 
+            "(DataConstructor " ++ show dc ++ ")";
+        Literal {value} ->
+            "(Literal " ++ show value ++ ")";
+        ErrorInfo value ->
+            "(ErrorInfo " ++ show value ++ ")";
+        App expr1 expr2 ->
+            "(App " ++ showExpression2 expr1 (maxDepth - 1) ++ " " ++ showExpression2 expr2 (maxDepth - 1) ++ ")";
+        Lambda lambdaVar _ _ lambdaExpr ->
+            "(Lambda " ++ show lambdaVar ++ " " ++ showExpression2 lambdaExpr (maxDepth - 1) ++ ")";
+        Let {variable=letVar, type=letType, expr=letExpr, body=letBody, arity} ->
+            "(Let " ++ show letVar ++ "/" ++ show arity ++ " (" ++ show letType ++ ") " ++ showExpression2 letExpr (maxDepth - 1) ++ " " ++ showExpression2 letBody (maxDepth - 1) ++ ")"; 
+        LetInlinable letVar _ letExpr letBody arity _ constArgs ->
+            "(LetInlinable " ++ show letVar ++ "/" ++ show arity ++ " " ++ showExpression2 letExpr (maxDepth - 1) ++ " " ++ showExpression2 letBody (maxDepth - 1) ++ ")"; 
+        Switch switchExpr switchAlts -> 
+            "(Switch " ++ showExpression2 switchExpr (maxDepth-1) ++ "[" ++ (foldLeft (\cur alt -> cur ++ " " ++ showAlt2 alt (maxDepth - 1)) "" switchAlts) ++ "] " ++ ")";            
+        Opaque {} ->
+                // make sure none of these have variables defined in them.
+            "(Opaque _)";
+        RecordExtensionLiteral recordExtension ->
+            "(RecordExtensionLiteral _)";
+        RecordExtensionPolymorphic body recordExtension ->
+            "(RecordExtensionPolymorphic _ _)"; //(" ++ showExpression2 body (maxDepth-1) ++ ") " /*++ show recordExtension ++*/ "_ )";
+        RecordSelection rsExpr rsFieldName ->
+            "(RecordSelection _)";
+        ;
+
+expressionNotEquals :: Expression -> Expression -> Boolean;    
+expressionNotEquals !e1 !e2 = not (expressionEquals e1 e2);
+
+/**
+ * Checks two expression for equality. Note, this is not robust and currently only used for debugging and 
+ * unit test code.
+ * 
+ * @arg expr1 Expression to compare.
+ * @arg expr2 Expression to compare.
+ * @return A boolean indication if the given expressions are equals. 
+ */
+    
+expressionEquals :: Expression -> Expression -> Boolean;    
+expressionEquals !expr1 !expr2 = 
+    case expr1 of    
+    Var {name=name1} ->
+        case expr2 of
+        Var {name=name2} ->
+            name1 == name2;
+        _ -> False;
+        ;
+    
+    Literal {value=value1} ->
+        case expr2 of
+        Literal {value=value2} ->
+            value1 == value2;
+        _ -> False;
+        ;
+        
+    ErrorInfo value1 ->
+        case expr2 of
+        ErrorInfo value2 -> True; // close enought this is for debug only
+        _ -> False;
+        ;
+        
+    App expr11 expr12 ->
+        case expr2 of
+        App expr21 expr22 -> expressionEquals expr11 expr21 && expressionEquals expr12 expr22;
+        _ -> False;
+        ;
+    Lambda lambdaVar1 _ _ lambdaExpr1 ->
+        case expr2 of
+        Lambda lambdaVar2 _ _ lambdaExpr2 -> lambdaVar1 == lambdaVar2 && expressionEquals lambdaExpr1 lambdaExpr2;
+        _ -> False;
+        ;        
+    Let variable1 isNew1 isKeepable1 _ type1 expr1 body1 isRecursive1 arity1 _ constArgs1 _ _ ->
+        case expr2 of
+        Let variable2 isNew2 isKeepable2 _ type2 expr2 body2 isRecursive2 arity2 _ constArgs2 _ _ ->
+            variable1 == variable2 && expressionEquals expr1 expr2 && expressionEquals body1 body2;
+        _ -> False;
+        ;
+    Switch expr1 alts1 ->
+        case expr2 of
+        Switch expr2 alts2 ->
+            let
+                altEquals :: Alt -> Alt -> Boolean;
+                altEquals alt1 alt2 =
+                    expressionEquals alt1.Alt.expr alt2.Alt.expr;
+            in
+                expressionEquals expr1 expr2 && andList (map (uncurry altEquals) (zip alts1 alts2));
+        _ -> False;
+        ;
+    Opaque {} ->
+        case expr2 of
+        Opaque {} -> True;
+        _ -> False;
+        ;
+    RecordExtensionLiteral fieldsMap1 ->
+        case expr2 of
+        RecordExtensionLiteral fieldsMap2 ->
+            fieldsMap1 == fieldsMap2;
+        _ -> False;
+        ;
+    RecordSelection expr1_expr expr1_fieldName -> 
+        case expr2 of
+        RecordSelection expr2_expr expr2_fieldName ->
+            (expressionEquals expr1_expr expr2_expr) && (expr1_fieldName == expr2_fieldName);
+        _ -> False;
+        ;
+    RecordExtensionPolymorphic expr1 fieldsMap1 ->
+        case expr2 of
+        RecordExtensionPolymorphic expr2 fieldsMap2 ->
+            expr1 == expr2 && fieldsMap1 == fieldsMap2;
+        _ -> False;
+        ;
+    DataConsSelection dcValueExpr1 dc1 fi1 err1 ->
+        case expr2 of
+        DataConsSelection dcValueExpr2 dc2 fi2 err2 ->
+            dcValueExpr1 == dcValueExpr2 && dc1 == dc2 && fi1 == fi2;
+        _ -> False;
+        ;
+    DataConstructor dc1 ->
+        case expr2 of
+        DataConstructor dc2 -> dc1 == dc2;
+        _ -> False;
+        ;
+    LetInlinable variable1 type1 expr1 body1 arity1 _ constArgs1 ->
+        case expr2 of
+        LetInlinable variable2 type2 expr2 body2 arity2 _ constArgs2 ->
+            variable1 == variable2 && expressionEquals expr1 expr2 && expressionEquals body1 body2;
+        _ -> False;
+        ;     
+    ;
+
+/**
+ * Returns whether or not the given expression is a Var type data object.
+ * @arg expr The expression to test
+ * @return True iff the given expression is a Var.
+ */    
+isVar :: Expression -> Boolean;
+protected isVar !expr =
+    case expr of
+    Var {} -> True;
+    _ -> False;
+    ;
+
+/**
+ * Returns whether or not the given expression is a Literal type data object.
+ * @arg expr The expression to test.
+ * @return True iff the given expression is a Literal.
+ */
+isLiteral :: Expression -> Boolean;
+protected isLiteral !expr =
+    case expr of
+    Literal {} -> True;
+    _ -> False;
+    ;
+    
+/**
+ * Returns true iff then given expression contains the given variable. 
+ * The variable must be free in expr.
+ *
+ * @arg var The variable to look for in the given expression.
+ * @arg expr The expression to search for the given variable.
+ * @return True iff var is in expr. 
+ */
+
+containsFree :: QualifiedName -> Expression -> Boolean;
+protected containsFree !var !expr =
+    case expr of    
+    ChainOfSeqs {} -> undefined;
+    Var {name=varName} ->
+        varName == var;
+    DataConsSelection {dcValueExpr} ->
+        containsFree var dcValueExpr;
+    App expr1 expr2 ->
+        containsFree var expr1 || containsFree var expr2;
+    Lambda lambdaVar _ _ lambdaExpr ->
+        if lambdaVar == var then
+            False
+        else
+            containsFree var lambdaExpr;
+    Let {variable=letVar, expr=letExpr, body=letBody} ->
+        if letVar == var then
+            False
+        else
+            containsFree var letExpr || containsFree var letBody;
+    LetInlinable {variable=letVar, expr=letExpr, body=letBody, arity} ->
+        if letVar == var then
+            False
+        else
+            containsFree var letExpr || containsFree var letBody;
+    Switch switchExpr switchAlts ->
+        containsFree var switchExpr || containsAlt var switchAlts;
+    RecordExtensionLiteral recordExtension ->
+        orList (map (\nxt -> containsFree var nxt.#2) recordExtension);
+    RecordExtensionPolymorphic body recordExtension ->
+        foldLeft (\cur nxt -> cur || containsFree var nxt.#2) (containsFree var body) recordExtension;
+    RecordSelection rsExpr rsFieldName ->
+        containsFree var rsExpr;
+    Literal {} -> False;
+    DataConstructor {} -> False;
+    ErrorInfo {} -> False;
+    ;
+
+/**
+ * Returns true iff then given expression contains the given variable. 
+ * The variable must be free in expr.
+ *
+ * @arg vars The variables to look for in the given expression.
+ * @arg expr The expression to search for the given variable.
+ * @return True iff var is in expr. 
+ */
+
+containsAnyFree :: [QualifiedName] -> Expression -> Boolean;
+protected containsAnyFree !vars !expr =
+    case expr of    
+    ChainOfSeqs {} -> undefined;
+    Var {name=varName} ->
+        isElem varName vars;
+    DataConsSelection {dcValueExpr} ->
+        containsAnyFree vars dcValueExpr;
+    App expr1 expr2 ->
+        containsAnyFree vars expr1 || containsAnyFree vars expr2;
+    Lambda lambdaVar _ _ lambdaExpr ->
+        containsAnyFree (delete lambdaVar vars) lambdaExpr;
+    Let {variable=letVar, expr=letExpr, body=letBody} ->
+        let
+            varsPrime = delete letVar vars;
+        in
+            containsAnyFree varsPrime letExpr || containsAnyFree varsPrime letBody;
+    LetInlinable {variable=letVar, expr=letExpr, body=letBody, arity} ->
+        let
+            varsPrime = delete letVar vars;
+        in
+            containsAnyFree varsPrime letExpr || containsAnyFree varsPrime letBody;
+    Switch switchExpr switchAlts ->
+        containsAnyFree vars switchExpr || containsAnyAlt vars switchAlts;
+    RecordExtensionLiteral recordExtension ->
+        orList (map (\nxt -> containsAnyFree vars nxt.#2) recordExtension);
+    RecordExtensionPolymorphic body recordExtension ->
+        foldLeft (\cur nxt -> cur || containsAnyFree vars nxt.#2) (containsAnyFree vars body) recordExtension;
+    RecordSelection rsExpr rsFieldName ->
+        containsAnyFree vars rsExpr;
+    Literal {} -> False;
+    DataConstructor {} -> False;
+    ErrorInfo {} -> False;
+    ;
+
+/**
+ * Returns true iff then given expression contains the given variable. 
+ * The variable must be may or may not be free in expr.
+ * 
+ * @arg var The variable to look for in the given expression.
+ * @arg expr The expression to search for the given variable.
+ * @return True iff var is in expr. 
+ */
+
+contains :: QualifiedName -> Expression -> Boolean;
+protected contains !var !expr =
+    case expr of    
+    Var {name=varName} -> varName == var;
+    DataConsSelection {dcValueExpr} ->
+        contains var dcValueExpr;
+    App expr1 expr2 ->
+        contains var expr1 || contains var expr2;
+    Lambda {expr=lambdaExpr} -> contains var lambdaExpr;
+    Let {variable=letVar, expr=letExpr, body=letBody} ->
+        contains var letExpr || contains var letBody;
+    LetInlinable {variable=letVar, expr=letExpr, body=letBody, arity} ->
+        contains var letExpr || contains var letBody;
+    Switch switchExpr switchAlts ->
+        contains var switchExpr || containsAlt var switchAlts;
+    RecordExtensionLiteral recordExtension ->
+        orList (map (\nxt -> contains var nxt.#2) recordExtension);
+    RecordExtensionPolymorphic body recordExtension ->
+        foldLeft (\cur nxt -> cur || contains var nxt.#2) (contains var body) recordExtension;
+    RecordSelection rsExpr rsFieldName ->
+        contains var rsExpr;
+    Literal {} -> False;
+    DataConstructor {} -> False;
+    ErrorInfo {} -> False;
+    ;
+
+/**
+ * Does the given list of alts contains an alt that uses the given name.
+ * @arg var The name to search for
+ * @arg alts The list of alts to search
+ * @return True iff the an alt in the list of alts contains the given var.
+ */    
+containsAlt :: QualifiedName -> [Alt] -> Boolean;    
+containsAlt !var !alts =
+    case alts of
+    [] -> False;
+    x:xs ->
+        containsFree var (alt_getExpr x) || containsAlt var xs;
+    ;
+
+containsAnyAlt :: [QualifiedName] -> [Alt] -> Boolean;    
+containsAnyAlt !vars !alts =
+    case alts of
+    [] -> False;
+    x:xs ->
+        containsAnyFree vars (alt_getExpr x) || containsAnyAlt vars xs;
+    ;
+
+/**
+ * Returns a flag indication whether or not the expression would need to be reduced.
+ * 
+ * TODO this is not the correct definition of whnf. Change the function name to a more appropriate one.
+ */    
+    
+expression_isWHNF :: Expression -> Boolean;    
+protected expression_isWHNF !expr = 
+    case expr of
+    Var {} -> False;
+    Literal {} -> True;
+    App {} -> False;
+    Lambda {} -> True;
+    Let {} -> False; 
+    Switch {} -> False;
+    Opaque {} -> False;
+    RecordExtensionLiteral {} -> False; 
+    RecordSelection {} -> False; 
+    RecordExtensionPolymorphic {} -> False;
+    DataConsSelection {}  -> False;
+    DataConstructor {} -> True;
+    LetInlinable {} -> True;
+    ;
+
+expression_isConstant :: Expression -> Boolean;    
+protected expression_isConstant !expr = 
+    case expr of
+    Var {} -> False;
+    Literal {} -> True;
+    App {} -> False;
+    Lambda {} -> True;
+    Let {} -> False; 
+    Switch {} -> False;
+    Opaque {} -> False;
+    RecordExtensionLiteral {} -> False; 
+    RecordSelection {} -> False; 
+    RecordExtensionPolymorphic {} -> False;
+    DataConsSelection {}  -> False;
+    DataConstructor {} -> True;
+    LetInlinable {} -> False;
+    ;
+
+    
+/**
+ * Returns true iff then given expression contains the given variable. 
+ * The variable must be free in expr.
+ *
+ * TODO pick a better name
+ * @arg test The test to look for in the given expression.
+ * @arg expr The expression to search for the given variable.
+ * @return True iff var is in expr. 
+ */
+
+containsMatching :: (Expression -> Boolean) -> Expression -> Boolean;
+protected containsMatching test !expr =
+    if test expr then
+        True
+    else
+        case expr of    
+        Var {} -> False;
+        DataConsSelection {dcValueExpr} -> containsMatching test dcValueExpr;
+        DataConstructor {} -> False;
+        Literal {} -> False;
+        ErrorInfo {} -> False;
+        App expr1 expr2 -> 
+            containsMatching test expr1 || containsMatching test expr2;
+        Lambda {expr=lambdaExpr} -> containsMatching test lambdaExpr;
+        Let {expr=letExpr, body=letBody} ->
+            containsMatching test letExpr || containsMatching test letBody;
+        LetInlinable {expr=letExpr, body=letBody} ->
+            containsMatching test letExpr || containsMatching test letBody;
+        Switch switchExpr switchAlts ->
+            containsMatching 
+                    test switchExpr || 
+                    orList (map (\alt -> case alt of (Alt | Alts) {expr} -> containsMatching test expr;) switchAlts);
+        Opaque {} ->
+                // make sure none of these have variables defined in them.
+            False;
+        RecordExtensionLiteral recordExtension ->
+            orList (map (containsMatching test) (map (\ef -> ef.#2) recordExtension));
+        RecordExtensionPolymorphic body recordExtension ->
+            containsMatching test body || orList (map (containsMatching test) (map (\ef -> ef.#2) recordExtension));
+        RecordSelection rsExpr _ ->
+            containsMatching test rsExpr;
+        ;
+
+expression_setType :: Expression -> Maybe Type -> Expression;    
+protected expression_setType !expr type =
+    case expr of
+    Var {name, inliningContext, entity, type=type1} ->
+        let
+            unifiedType :: Maybe [Type];
+            unifiedType =
+                if isNothing type || isNothing type1 then
+                    Nothing
+                else
+                    let
+                        appType :: Type;
+                        appType = AppType type.Just.value type1.Just.value;
+                    in
+                        Just (type_listToType (type_unify [(TypeId 1 False, appType)]));
+        in
+//        trace2 (
+//                "type = " ++ show type ++ "\n" ++
+//                "type1 = " ++ show type1 ++ "\n" ++
+//                "unified type = " ++ show unifiedType ++ "\n"
+//                )
+            Var name inliningContext entity type;
+    _ -> expr;
+    ;
+    
+/**
+ * Same as substitute but it is known what varExpr does not contain any variables that might 
+ * be bound in the expression.
+ */
+substituteNoRename :: QualifiedName -> Expression -> Expression -> Expression;
+protected substituteNoRename !var varExpr !expr =
+    case expr of    
+    Var {name, type} ->
+        if name == var then
+            expression_setType varExpr type     
+        else
+            expr;
+    DataConsSelection dcValueExpr dc fi err ->
+        DataConsSelection (substituteNoRename var varExpr dcValueExpr) dc fi err;
+    DataConstructor {} -> expr;
+    Literal {} -> expr;
+    ErrorInfo _ -> expr;
+    App expr1 expr2 ->
+        App (substituteNoRename var varExpr expr1) (substituteNoRename var varExpr expr2)
+        ;
+    Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+        if lambdaVar == var then
+            expr
+        else
+            // Does the expression we are inserting contain the lambda variable? If so
+            // then we must rename it to avoid name capture
+            if containsFree lambdaVar varExpr then
+                error "This is a bug. The caller should not call this function for this case"
+            else
+                Lambda lambdaVar lambdaType lambdaArgIsWHNF (substituteNoRename var varExpr lambdaExpr)
+        ;
+    Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constVars wasBodyChangedAt _ ->
+        if letVar == var then
+            Let letVar isNew isKeepable isTopLevel letType (substituteNoRename var varExpr letExpr) letBody isRecursive arity isCoreFunction constVars wasBodyChangedAt False
+        else
+            // Does the expression we are inserting contain the let variable? If so
+            // then we must rename it in the body to avoid name capture
+            if containsFree letVar varExpr then
+                error "This is a bug. The caller should not call this function for this case"
+            else
+                Let letVar isNew isKeepable isTopLevel letType (substituteNoRename var varExpr letExpr) (substituteNoRename var varExpr letBody) isRecursive arity isCoreFunction constVars wasBodyChangedAt False
+        ;
+        
+    LetInlinable letVar letType letExpr letBody arity counter constArgs ->
+        case substituteNoRename var varExpr (Let letVar False False False Nothing letExpr letBody False arity False [] 1 False) of
+        Let {variable=letVar1, expr=letExpr1, body=letBody1} ->            
+            LetInlinable letVar1 letType letExpr1 letBody1 arity counter constArgs;
+        ;
+        
+    Switch switchExpr switchAlts ->
+        let
+            substituteAlt :: Alt -> Alt;
+            substituteAlt alt =
+                case alt of 
+                Alt caseConst isPositional vars expr -> Alt caseConst isPositional vars (substituteNoRename var varExpr expr);
+                Alts caseConsts isPositional vars expr -> Alts caseConsts isPositional vars (substituteNoRename var varExpr expr);
+                ;
+        in
+            Switch
+                (substituteNoRename var varExpr switchExpr) 
+                (map substituteAlt switchAlts)
+        ;
+        
+    Opaque {} ->
+            // make sure none of these have variables defined in them.
+        expr;
+
+    RecordExtensionLiteral recordExtension ->
+        RecordExtensionLiteral (map (\fne -> (fne.#1, (substituteNoRename var varExpr fne.#2))) recordExtension);
+    
+    RecordExtensionPolymorphic body recordExtension ->
+        RecordExtensionPolymorphic (substituteNoRename var varExpr body) (map (\fne -> (fne.#1, (substituteNoRename var varExpr fne.#2))) recordExtension);
+    
+    RecordSelection rsExpr rsFieldName ->
+        RecordSelection (substituteNoRename var varExpr rsExpr) rsFieldName;
+    ;
+
+/*
+ * The code for converting between java and CAL data types for expressions
+ */
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression"
+JExpression deriving Inputable, Outputable;
+
+instance Outputable Expression where
+output = expressionToJObject;
+;
+
+instance Inputable Expression where
+input = jobjectToExpression;
+;
+
+expressionToJObject :: Expression -> JObject;
+expressionToJObject qn = 
+    output (outputExpression qn);
+
+jobjectToExpression :: JObject -> Expression;
+jobjectToExpression jobj = 
+    inputExpression (input jobj);
+
+foreign unsafe import jvm "isNull"
+optimizerHelper_expression_isNull :: JExpression -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_var_name"
+optimizerHelper_expression_new_var_name :: JQualifiedName -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_var_entity"
+optimizerHelper_expression_new_var_entity :: JFunctionalAgent -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_literal"
+optimizerHelper_expression_new_literal :: JObject -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_appl"
+optimizerHelper_expression_new_appl :: JExpression -> JExpression -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_let"
+optimizerHelper_expression_new_let :: String -> JExpression -> JExpression -> Boolean -> JTypeExpr -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_switch"
+optimizerHelper_expression_new_switch :: JExpression -> JObject -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_opaque"
+optimizerHelper_expression_new_opaque :: JObject -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_dataConstructor"
+optimizerHelper_expression_new_dataConstructor :: JObject -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_recordSelection"
+optimizerHelper_expression_new_recordSelection :: JExpression -> JFieldName -> JExpression;
+
+/**
+ * RecordType definitions 
+ */
+
+data foreign unsafe import jvm protected "org.openquark.cal.compiler.RecordType"
+protected JCompiler_RecordType_RecordType deriving Show, Inputable, Outputable, Eq;
+    
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.type_asRecordType"
+protected optimizerHelper_type_asRecordType :: JTypeExpr -> JCompiler_RecordType_RecordType;
+
+foreign unsafe import jvm "method getHasFieldType"
+protected compiler_RecordType_RecordType_getHasFieldType :: JCompiler_RecordType_RecordType -> JFieldName -> JTypeExpr;
+    
+/**
+ * RecordExtension definitions
+ */
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$RecordExtension"
+JExpression_RecordExtension deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getExtensionFieldsMap"
+expression_RecordExtension_getExtensionFieldsMap :: JExpression_RecordExtension -> JSortedMap;
+
+foreign unsafe import jvm "method getBaseRecordExpr"
+expression_RecordExtension_getBaseRecordExpr :: JExpression_RecordExtension -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_dataConsSelection"
+optimizerHelper_expression_new_dataConsSelection :: JExpression -> JFunctionalAgent -> Int -> JExpression_ErrorInfo -> JExpression;
+
+foreign unsafe import jvm "method asRecordExtension"
+expression_asRecordExtension :: JExpression -> JExpression_RecordExtension;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_recordExtensionLiteral"
+optimizerHelper_expression_new_recordExtensionLiteral :: JObject -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_recordExtensionPolymorphic"
+optimizerHelper_expression_new_recordExtensionPolymorphic :: JExpression -> JObject -> JExpression;
+
+/**
+ * Optimizes the case where a single expression value exists.
+ */
+
+outputExpression :: Expression -> JExpression;
+outputExpression !expression = 
+    case expression of 
+        Var name _ entity type ->
+            case entity of
+            Just value -> optimizerHelper_expression_new_var_entity value;
+            Nothing -> optimizerHelper_expression_new_var_name (outputQualifiedName name);
+            ;
+
+        Literal {value} -> optimizerHelper_expression_new_literal (output value);
+                
+        App expr1 expr2 -> optimizerHelper_expression_new_appl (outputExpression expr1) (outputExpression expr2);
+                
+        Lambda {} -> error 
+                ("Lambda expression should not be going back to Java. " ++ showExpressionNice expression);
+        
+        Let {variable=varName, expr=varExpr, body=bodyExpr, isRecursive=isRecursive, type=maybeType} ->
+            case maybeType of
+            Nothing -> error ("Type is missing for: " ++ showExpressionNice expression);
+            Just types ->
+                let
+                    type :: Type;
+                    type = unflattenFunctionTypes types;
+                in
+                    optimizerHelper_expression_new_let varName.QN.functionName (outputExpression varExpr) (outputExpression bodyExpr) isRecursive (outputType type);
+            ;    
+        
+        LetInlinable {} -> error "LetInlinable's should not be going back to Java."; 
+                                      
+        Switch expr alts -> optimizerHelper_expression_new_switch (outputExpression expr) (output alts);
+        
+        Opaque value -> optimizerHelper_expression_new_opaque (output value);
+                
+        RecordExtensionLiteral extensionFields -> 
+            optimizerHelper_expression_new_recordExtensionLiteral (output extensionFields);
+        
+        RecordExtensionPolymorphic expr extensionFields ->
+            optimizerHelper_expression_new_recordExtensionPolymorphic (outputExpression expr) (output extensionFields);
+            
+        RecordSelection {expr, fieldName} ->
+            optimizerHelper_expression_new_recordSelection (outputExpression expr) (outputFieldName fieldName);        
+        
+        RecordCase expr baseRecordPatternVarName fieldBindingVar resultExpr ->
+            optimizerHelper_expression_new_recordCase 
+                (outputExpression expr) 
+                baseRecordPatternVarName
+                (output fieldBindingVar)
+                (outputExpression resultExpr);
+                
+        DataConstructor dc -> optimizerHelper_expression_new_dataConstructor (output dc.DataCons.dataCons); 
+           
+        DataConsSelection dcValueExpr dc fieldIndex errorInfo ->
+            optimizerHelper_expression_new_dataConsSelection 
+                (outputExpression dcValueExpr) 
+                dc.DataCons.dataCons
+                fieldIndex 
+                errorInfo;
+
+        ErrorInfo value -> optimizerHelper_expression_new_opaque (output value);
+        ;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Appl"
+    JExpression_Appl deriving Show, Inputable, Outputable, Eq;
+        
+foreign unsafe import jvm "method asAppl"
+    expression_asAppl :: JExpression -> JExpression_Appl;
+        
+foreign unsafe import jvm "method getE1"
+    expression_Appl_getE1 :: JExpression_Appl -> JExpression;
+
+foreign unsafe import jvm "method getE2"
+    expression_Appl_getE2 :: JExpression_Appl -> JExpression;
+
+foreign unsafe import jvm "method asLiteral"
+    expression_asLiteral :: JExpression -> JExpression_Literal;
+        
+foreign unsafe import jvm "method asVar"
+    expression_asVar :: JExpression -> JExpression_Var;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.var_getType"
+    optimizerHelper_var_getType :: JExpression_Var -> Int;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Var"
+    JExpression_Var deriving Show, Inputable, Outputable, Eq;
+    
+foreign unsafe import jvm "method getName"
+    expression_Var_getName :: JExpression_Var -> JQualifiedName;
+    
+foreign unsafe import jvm "method getFunctionalAgent"
+expression_Var_getFunctionalAgent :: JExpression_Var -> JFunctionalAgent;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getExpressionType"
+optimizerHelper_getExpressionType :: JExpression -> Int;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Let"
+JExpression_Let deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method asLetNonRec"
+expression_Let_asLetNonRec :: JExpression_Let -> JExpression_LetNonRec;
+
+foreign unsafe import jvm "method asLetRec"
+expression_Let_asLetRec :: JExpression_Let -> JExpression_LetRec;
+
+//     Let
+
+foreign unsafe import jvm "method asLet"
+expression_asLet :: JExpression -> JExpression_Let;
+
+foreign unsafe import jvm "method getBody"
+expression_Let_getBody :: JExpression_Let -> JExpression;
+
+//     LetDefn
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Let$LetDefn"
+JExpression_Let_LetDefn deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getVar"
+expression_Let_LetDefn_getVar :: JExpression_Let_LetDefn -> String;
+
+foreign unsafe import jvm "method getExpr"
+expression_Let_LetDefn_getExpr :: JExpression_Let_LetDefn -> JExpression;
+
+foreign unsafe import jvm "method getVarType"
+expression_Let_LetDefn_getVarType :: JExpression_Let_LetDefn -> JTypeExpr;
+
+
+//     LetRec
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$LetRec"
+JExpression_LetRec deriving Show, Inputable, Outputable, Eq;
+
+//     LetNonRec 
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$LetNonRec"
+JExpression_LetNonRec deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getBody"
+expression_LetNonRec_getBody :: JExpression_LetNonRec -> JExpression;
+
+foreign unsafe import jvm "method getDefn"
+expression_LetNonRec_getDefn :: JExpression_LetNonRec -> JExpression_Let_LetDefn;
+
+//     obsolete (hopefully)
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.let_getDef"
+optimizerHelper_let_getDef :: JExpression_Let -> Int -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.let_getDefType"
+optimizerHelper_let_getDefType :: JExpression_Let -> Int -> JTypeExpr;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.let_getVar"
+optimizerHelper_let_getVar :: JExpression_Let -> Int -> String;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Switch"
+JExpression_Switch deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method asSwitch"
+expression_asSwitch :: JExpression -> JExpression_Switch;
+
+foreign unsafe import jvm "method getSwitchExpr"
+expression_Switch_getSwitchExpr :: JExpression_Switch -> JExpression;
+
+/**
+ * Expression.Switch.SwitchAlt definitions
+ */
+ 
+data foreign unsafe import jvm "[Lorg.openquark.cal.compiler.Expression$Switch$SwitchAlt;"
+JExpression_Switch_SwitchAltArray deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getAltTags"
+expression_Switch_SwitchAlt_getAltTags :: JExpression_Switch_SwitchAlt -> JList;
+
+/**
+ * java.util.List definitions.
+ */
+ 
+foreign unsafe import jvm "method size"
+jList_size :: JList -> Int;
+
+foreign unsafe import jvm "method iterator"
+jList_iterator :: JList -> JIterator;
+ 
+foreign unsafe import jvm "method getAlt"
+expression_Switch_getAlt :: JExpression_Switch -> Int -> JExpression_Switch_SwitchAlt;
+
+foreign unsafe import jvm "method getNAlts"
+expression_Switch_getNAlts :: JExpression_Switch -> Int;
+
+foreign unsafe import jvm "method getName"
+envEntity_getName :: JFunctionalAgent -> JQualifiedName;
+
+envEntity_getQualifiedName :: JFunctionalAgent -> QualifiedName;
+protected envEntity_getQualifiedName fa = inputQualifiedName (envEntity_getName fa);
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$TailRecursiveCall"
+JExpression_TailRecursiveCall deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method asTailRecursiveCall"
+expression_asTailRecursiveCall :: JExpression -> JExpression_TailRecursiveCall;
+
+foreign unsafe import jvm "method getApplForm"
+expression_TailRecursiveCall_getApplForm :: JExpression_TailRecursiveCall -> JExpression;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$RecordSelection"
+JExpression_RecordSelection deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method asRecordSelection"
+expression_asRecordSelection :: JExpression -> JExpression_RecordSelection;
+
+foreign unsafe import jvm "method getRecordExpr"
+expression_RecordSelection_getRecordExpr :: JExpression_RecordSelection -> JExpression;
+
+foreign unsafe import jvm "method getFieldName"
+expression_RecordSelection_getFieldName :: JExpression_RecordSelection -> JFieldName;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$DataConsSelection"
+JExpression_DataConsSelection deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method asDataConsSelection"
+expression_asDataConsSelection :: JExpression -> JExpression_DataConsSelection;
+
+foreign unsafe import jvm "method getDCValueExpr"
+expression_DataConsSelection_getDCValueExpr :: JExpression_DataConsSelection -> JExpression;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.DataConstructor"
+JDataConstructor deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getDataConstructor"
+expression_DataConsSelection_getDataConstructor :: JExpression_DataConsSelection -> JDataConstructor;
+
+foreign unsafe import jvm "method getFieldIndex"
+expression_DataConsSelection_getFieldIndex :: JExpression_DataConsSelection -> Int;
+
+foreign unsafe import jvm "method getErrorInfo"
+expression_DataConsSelection_getErrorInfo :: JExpression_DataConsSelection -> JExpression_ErrorInfo;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.dataConstructor_asFunctionalAgent"
+optimizerHelper_dataConstructor_asFunctionalAgent :: JDataConstructor -> JFunctionalAgent;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.functionalAgent_asDataConstructor"
+protected optimizerHelper_functionalAgent_asDataConstructor :: JFunctionalAgent -> JDataConstructor;
+
+foreign unsafe import jvm "method getFieldIndex"
+protected dataConstructor_getFieldIndex :: JDataConstructor -> JFieldName -> Int;
+
+foreign unsafe import jvm "method getArity"
+protected dataConstructor_getArity :: JDataConstructor -> Int;
+
+foreign unsafe import jvm "method getOrdinal"
+protected dataConstructor_getOrdinal :: JDataConstructor -> Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.dataConstructor_getNumberOfDataTypes"
+optimizerHelper_dataConstructor_getNumberOfDataTypes :: JDataConstructor -> Int;
+
+foreign unsafe import jvm "method isArgStrict"
+protected dataConstructor_isArgStrict :: JDataConstructor -> Int -> Boolean;
+
+
+/**
+ * Java Map definitions.
+ */
+
+data foreign unsafe import jvm "java.util.Map"
+JMap deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method entrySet"
+map_entrySet :: JMap -> JSet;
+
+/**
+ * Java SortedMap definition
+ */
+
+data foreign unsafe import jvm "java.util.SortedMap"
+JSortedMap deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method entrySet"
+sortedMap_entrySet :: JSortedMap -> JSet;
+
+/**
+ * Java Map.Entry definitions.
+ */
+
+data foreign unsafe import jvm "java.util.Map$Entry"
+JMap_Entry deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getKey"
+map_Entry_getKey :: JMap_Entry -> JObject;
+
+foreign unsafe import jvm "method getValue"
+map_Entry_getValue :: JMap_Entry -> JObject;
+
+/**
+ * Java Set definitions.
+ */
+
+data foreign unsafe import jvm "java.util.Set"
+JSet deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method iterator"
+set_iterator :: JSet -> JIterator;
+
+/**
+ * Java Iterator definitions.
+ */
+
+data foreign unsafe import jvm "java.util.Iterator"
+JIterator deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method hasNext"
+iterator_hasNext :: JIterator -> Boolean;
+
+/** foreign method java.util.Iterator.next */
+foreign unsafe import jvm "method next"
+iterator_next :: JIterator -> JObject;
+
+/**
+ * Expression.RecordCase definitions
+ */
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$RecordCase"
+    JExpression_RecordCase deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getConditionExpr"
+    expression_RecordCase_getConditionExpr :: JExpression_RecordCase -> JExpression;
+ 
+foreign unsafe import jvm "method getBaseRecordPatternVarName"
+    expression_RecordCase_getBaseRecordPatternVarName :: JExpression_RecordCase -> String;
+
+foreign unsafe import jvm "method getFieldBindingVarMap"
+    expression_RecordCase_getFieldBindingVarMap :: JExpression_RecordCase -> JSortedMap;
+
+foreign unsafe import jvm "method getResultExpr"
+    expression_RecordCase_getResultExpr :: JExpression_RecordCase -> JExpression;
+ 
+foreign unsafe import jvm "method asRecordCase"
+    expression_asRecordCase :: JExpression -> JExpression_RecordCase;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.expression_new_recordCase"
+optimizerHelper_expression_new_recordCase :: JExpression -> String -> JObject -> JExpression -> JExpression;
+
+inputExpression :: JExpression -> Expression;
+inputExpression jExpression =
+    let
+        type :: Int;
+        type = optimizerHelper_getExpressionType jExpression;
+    in
+        case type of
+        1 -> // Appl
+            let
+                appl :: JExpression_Appl;
+                appl = expression_asAppl jExpression;
+            in
+                App (inputExpression (expression_Appl_getE1 appl)) (inputExpression (expression_Appl_getE2 appl));
+        2 -> // Cast
+            undefined;
+        3 -> // DataConsSelection
+            let
+                jDataConsSelection :: JExpression_DataConsSelection;
+                jDataConsSelection = expression_asDataConsSelection jExpression;
+                
+                dcValueExpr :: Expression;
+                dcValueExpr = inputExpression (expression_DataConsSelection_getDCValueExpr jDataConsSelection);
+
+                jDC :: JDataConstructor;
+                jDC = expression_DataConsSelection_getDataConstructor jDataConsSelection;
+
+                envEntity :: JFunctionalAgent;
+                envEntity = optimizerHelper_dataConstructor_asFunctionalAgent jDC;
+                
+                envEntityName :: QualifiedName;
+                envEntityName = inputQualifiedName (envEntity_getName envEntity);
+                
+                dc :: DataCons;
+                dc = DataCons (qualifiedName_toString envEntityName) envEntity;
+
+                fieldIndex :: Int;
+                fieldIndex = expression_DataConsSelection_getFieldIndex jDataConsSelection;
+
+                errorInfo :: JExpression_ErrorInfo;
+                errorInfo = expression_DataConsSelection_getErrorInfo jDataConsSelection;                
+            in
+                DataConsSelection dcValueExpr dc fieldIndex errorInfo;
+        4 -> // ErrorInfo
+            ErrorInfo (output jExpression); 
+        5 -> // LetRec        
+            let
+                variable :: QualifiedName;
+                variable = QN "" (optimizerHelper_let_getVar jLetExpr 0);
+            
+                jLetExpr :: JExpression_Let;
+                jLetExpr = expression_asLet jExpression;
+                
+                def :: Expression;
+                def = inputExpression (optimizerHelper_let_getDef jLetExpr 0);
+                
+                defType :: [Type];
+                defType = flattenType (inputType (optimizerHelper_let_getDefType jLetExpr 0));
+
+                body :: Expression;
+                body = inputExpression (expression_Let_getBody jLetExpr);
+            in
+                Let variable False True False (Just defType) def body True (-23) False [] 1 False; 
+        14 -> // LetNonRec        
+            let
+                variable :: QualifiedName;
+                variable = QN "" (expression_Let_LetDefn_getVar def);
+            
+                jLetExpr :: JExpression_Let;
+                jLetExpr = expression_asLet jExpression;
+                
+                jLetNonRecExpr :: JExpression_LetNonRec;
+                jLetNonRecExpr = expression_Let_asLetNonRec jLetExpr;
+                
+                def :: JExpression_Let_LetDefn;
+                def = expression_LetNonRec_getDefn jLetNonRecExpr;
+                
+                defExpr :: Expression;
+                defExpr = inputExpression (expression_Let_LetDefn_getExpr def);
+
+                defType :: [Type];
+                defType = flattenType (inputType (expression_Let_LetDefn_getVarType def));
+                
+                bodyExpr :: Expression;
+                bodyExpr = inputExpression (expression_Let_getBody jLetExpr);
+            in
+                Let variable False True False (Just defType) defExpr bodyExpr False (-1) False [] 1 False; 
+        6 -> // Literal
+            Literal (inputLiteral (expression_asLiteral jExpression));
+        7 -> // PackCons
+            undefined;
+        8 -> // RecordCase
+            let
+                jRecordCase :: JExpression_RecordCase;
+                jRecordCase = expression_asRecordCase jExpression;
+                
+                expr :: Expression;
+                expr = inputExpression (expression_RecordCase_getConditionExpr jRecordCase);
+                
+                patternVar :: String;
+                patternVar = expression_RecordCase_getBaseRecordPatternVarName jRecordCase;
+                
+                resultExpr :: Expression;
+                resultExpr = inputExpression (expression_RecordCase_getResultExpr jRecordCase);
+                
+                jFieldBindingsMap :: JSortedMap;
+                jFieldBindingsMap = expression_RecordCase_getFieldBindingVarMap jRecordCase;
+                
+                jEntrySet :: JSet;
+                jEntrySet = sortedMap_entrySet jFieldBindingsMap;
+                
+                jEntrySetIterator :: JIterator;
+                jEntrySetIterator = set_iterator jEntrySet;
+                
+                fieldBindingsMap :: [(FieldName, String)];
+                fieldBindingsMap = buildFieldNameToStringList jEntrySetIterator;                
+            in            
+                RecordCase expr patternVar fieldBindingsMap resultExpr; 
+            
+        9 -> // RecordExtension
+            let
+                jRecordExtension :: JExpression_RecordExtension;
+                jRecordExtension = expression_asRecordExtension jExpression;
+                
+                jExtensionFieldsMap :: JSortedMap;
+                jExtensionFieldsMap = expression_RecordExtension_getExtensionFieldsMap jRecordExtension;
+                
+                jEntrySet :: JSet;
+                jEntrySet = sortedMap_entrySet jExtensionFieldsMap;
+                
+                jEntrySetIterator :: JIterator;
+                jEntrySetIterator = set_iterator jEntrySet;
+
+                buildFieldsMap :: JIterator -> [(FieldName, Expression)];
+                buildFieldsMap jIterator =
+                    if iterator_hasNext jIterator then
+                        let
+                            jNext :: JObject;
+                            jNext = iterator_next jIterator;
+                            
+                            jEntry :: JMap_Entry; 
+                            jEntry = jNext `seq` input (output jNext);
+                            
+                            fieldName :: FieldName;
+                            fieldName = input (map_Entry_getKey jEntry);
+                            
+                            expression :: Expression;
+                            expression = input (map_Entry_getValue jEntry);
+                        in
+                            jNext `seq` ((fieldName, expression) : buildFieldsMap jIterator)
+                    else
+                        [];
+                            
+                baseRecordExpr :: JExpression;
+                baseRecordExpr = expression_RecordExtension_getBaseRecordExpr jRecordExtension;
+                
+                extensionFieldsList :: [(FieldName, Expression)];
+                extensionFieldsList = buildFieldsMap jEntrySetIterator;
+            in 
+                if optimizerHelper_expression_isNull baseRecordExpr then
+                    (RecordExtensionLiteral extensionFieldsList)
+                else
+                    (RecordExtensionPolymorphic (inputExpression baseRecordExpr) extensionFieldsList); 
+        10 -> // RecordSelection
+            let
+                jRecordSelection :: JExpression_RecordSelection;
+                jRecordSelection = expression_asRecordSelection jExpression;
+                
+                expression :: Expression;
+                expression = inputExpression (expression_RecordSelection_getRecordExpr jRecordSelection);
+                
+                fieldName :: FieldName;
+                fieldName = inputFieldName (expression_RecordSelection_getFieldName jRecordSelection);
+            in
+                RecordSelection expression fieldName;
+        11 -> // Switch
+            let
+                jSwitch :: JExpression_Switch;
+                jSwitch = expression_asSwitch jExpression;
+                
+                expr :: Expression;
+                expr = inputExpression (expression_Switch_getSwitchExpr jSwitch);
+
+                indexToAlt :: Int -> Alt;
+                indexToAlt index = inputAlt (expression_Switch_getAlt jSwitch index);
+
+                nAlts :: Int;
+                nAlts = expression_Switch_getNAlts jSwitch;
+                
+                alts :: [Alt];
+                alts = map indexToAlt (upFromTo 0 (nAlts-1));
+            in
+                Switch expr alts;
+            
+        12 -> // TailRecursiveCall
+            let
+                trc :: JExpression_TailRecursiveCall;
+                trc = expression_asTailRecursiveCall jExpression;
+            in
+                inputExpression (expression_TailRecursiveCall_getApplForm trc);
+            
+        13 -> // Var
+            let
+                jVar :: JExpression_Var;
+                jVar = expression_asVar jExpression;
+                
+                type :: Int;
+                type = optimizerHelper_var_getType jVar;
+                
+                envEntity :: JFunctionalAgent;
+                envEntity = expression_Var_getFunctionalAgent jVar;
+                
+                envEntityName :: QualifiedName;
+                envEntityName = inputQualifiedName (envEntity_getName envEntity);
+            in
+                case type of
+                1 -> // DataConstructor
+                    DataConstructor (DataCons (qualifiedName_toString envEntityName) envEntity);
+                2 -> // FunctionEntity
+                    Var envEntityName [] (Just envEntity) Nothing;
+                3 -> // Name
+                    Var (input (output (expression_Var_getName jVar))) [] Nothing Nothing;
+                ;
+        _ -> error ("type = " ++ show type);
+        ;
+
+/**
+ * Converts an expression into a list of expressions where the first expression is the functor followed by
+ * all the arguments of the call.
+ * 
+ * Example: flatten ((App f1 a1) a2) == [f1, a1, a2]
+ * 
+ * @arg expr The expression to flatten.
+ * @arg resultList Accumulator for the terms of the expression. Pass empty list in usually.
+ */ 
+    
+flattenExpression :: Expression -> [Expression] -> [Expression];
+protected flattenExpression !expr resultList =
+    case expr of
+    App e1 e2 -> flattenExpression e1 (e2:resultList);
+    _ -> expr:resultList;
+    ;                
+    
+/* @example */
+flattenExpressionExamples :: Boolean;
+flattenExpressionExamples =
+    let
+        var :: Expression;
+        var = Var (QN "Cal.Core.Prelude" "Functor") [] Nothing Nothing;
+        
+        arg1 :: Expression;
+        arg1 = Literal (LitBoolean False);
+        
+        arg2 :: Expression;
+        arg2 = Literal (LitBoolean True);
+    in    
+           assert (flattenExpression (App (App var arg1) arg2) [] == [var, arg1, arg2])
+        && assert (flattenExpression (App (App var arg1) (App var arg2)) [] == [var, arg1, (App var arg2)])
+        && assert (flattenExpression var [] == [var]);
+
+/**
+ * getFunctions expr == head (flattenExpression expr [])
+ */
+getFunctor :: Expression -> Expression;
+protected getFunctor !expr =
+    case expr of
+    App e1 _ -> getFunctor e1;
+    _ -> expr;
+    ;                
+/**
+ * Get the functor and arity from the given expression.
+ */
+getFunctorAndArity :: Expression -> (Expression, Int);
+protected getFunctorAndArity !expr = 
+    let
+        helper :: Expression -> Int -> (Expression, Int);
+        helper !expr !argCount = 
+            case expr of
+            App e1 _ -> helper e1 (argCount+1);
+            _ -> (expr, argCount);
+            ;
+    in
+        helper expr 0;
+    
+/**
+ * The inverse of flatten. Takes a list of expression and makes an expression where
+ * the first element of the list is the functor, the second is the first arguement ... 
+ * 
+ * Example: unflatten [f1, a1, a2] == ((App f1 a1) a2)
+ * 
+ * @arg exprs The list of expressions to unflatten into a single expression.
+ * @return The result of flattening the given expression. 
+ */    
+    
+unflattenExpression :: [Expression] -> Expression;
+protected unflattenExpression !exprs =
+    let
+        unflattenR :: [Expression] -> Expression;
+        unflattenR !exprsR =
+            case exprsR of
+            head1 : tail1 -> 
+                case tail1 of
+                [] -> head1;
+                head2 : tail2 -> App (unflattenR tail1) head1;
+                ;
+            ;
+    in
+        unflattenR (reverse exprs);
+
+/* @example */
+unflattenExpressionExamples :: Boolean;
+unflattenExpressionExamples =
+    let
+        var :: Expression;
+        var = Var (QN "Cal.Core.Prelude" "Functor") [] Nothing Nothing;
+        
+        arg1 :: Expression;
+        arg1 = Literal (LitBoolean False);
+        
+        arg2 :: Expression;
+        arg2 = Literal (LitBoolean True);
+        
+    in    
+           assert (unflattenExpression [var, arg1, arg2] == (App (App var arg1) arg2))
+        && assert (unflattenExpression [var, arg1, (App var arg2)] == (App (App var arg1) (App var arg2)))
+        && assert (unflattenExpression [var] == var);
+    
+/**
+ * Get the arity from the expression by counting the number of lambda vars before a 'real' expression.
+ * 
+ * @arg expr The expression to get the arity of.
+ * @return The arity of the given expression.
+ */
+
+expression_getArity :: Expression -> Int;
+protected expression_getArity !expr =
+    case expr of
+    Lambda {expr=lambdaExpr} -> 1 + expression_getArity lambdaExpr;
+    _ -> 0;
+    ;
+
+/**
+ * Get the variables from a lambda expression.
+ * 
+ * @arg expr The expression to get the lambda variables from.
+ * @return A list of the lambda variables (at the top level) for the given expression.
+ */
+
+expression_getArguments :: Expression -> [QualifiedName];
+protected expression_getArguments !expr =
+    case expr of
+    Lambda {var, expr} -> var : expression_getArguments expr;
+    _ -> [];
+    ;
+
+/**
+ * Determine if the given expression has any strict top level lambda variables.
+ * 
+ * @arg expr The expression to check.
+ * @return Whether or not the given expression has strict top level lambda variables.
+ */
+
+expression_hasStrictArguments :: Expression -> Boolean;
+protected expression_hasStrictArguments !expr =
+    case expr of
+    Lambda {expr, type} -> type_isStrict type || expression_hasStrictArguments expr;
+    _ -> False;
+    ;
+
+/**
+ * Returns true iff the given expression is a lambda expression.
+ * 
+ * @arg expr The expression to check.
+ */
+
+isLambdaExpression :: Expression -> Boolean;
+protected isLambdaExpression !expr =
+    case expr of
+    Lambda {} -> True;
+    _ -> False;
+    ;
+
+data foreign unsafe import jvm protected "org.openquark.cal.compiler.FunctionalAgent"
+protected JFunctionalAgent deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "method getTypeExpr"
+protected envEntity_getTypeExpr :: JFunctionalAgent -> JTypeExpr;
+
+/**
+ * Represents literal values.
+ */
+
+data protected Literal =
+        protected LitString 
+            value::String
+            
+    |   protected LitInt 
+            value::Int
+            
+    |   protected LitShort 
+            value::Short
+            
+    |   protected LitFloat 
+            value::Float
+            
+    |   protected LitInteger
+            value::Integer
+                
+    |   protected LitBoolean 
+            value::Boolean
+            
+    |   protected LitDouble 
+            value::Double
+            
+    |   protected LitChar 
+            value::Char
+            
+    |   protected LitOpaque 
+            value::JObject
+            
+    |   protected LitByte 
+            value::JObject
+            
+    |   protected LitLong 
+            value::Long
+            
+    ;
+
+instance Eq Literal where
+    equals = equalsLiteral;
+    notEquals = notEqualsLiteral;
+;
+
+instance Show Literal where
+show = showLiteral;
+;
+
+showLiteral :: Literal -> String;
+showLiteral !literal =
+    case literal of
+    LitString {value} -> "\"" ++ value ++ "\"";
+    LitInt {value} -> show value;
+    LitShort {value} -> show value;
+    LitFloat {value} -> show value;
+    LitInteger{value} -> show value;
+    LitBoolean {value} -> show value; 
+    LitDouble {value} -> show value;  
+    LitChar {value} -> "'" ++ show value ++ "'";  
+    LitOpaque {value} -> "opaque"; 
+    LitByte {value} -> show value; 
+    LitLong {value} -> show value;
+    ;
+
+notEqualsLiteral :: Literal -> Literal -> Boolean;
+notEqualsLiteral !l1 !l2 = not (equalsLiteral l1 l2);
+
+equalsLiteral :: Literal -> Literal -> Boolean;
+equalsLiteral !l1 !l2 =
+    case l1 of
+        LitString v1 -> 
+            case l2 of 
+            LitString v2 -> v1 == v2; 
+            _ -> False;
+            ;
+        /* TODO should this compare to other types of numbers */
+        LitInt v1 -> 
+            case l2 of 
+            LitInt v2 -> v1 == v2; 
+            _ -> False;
+            ;
+        LitShort v1 -> 
+            case l2 of 
+            LitShort v2 -> v1 == v2; 
+            _ -> False;
+            ;
+        LitFloat v1 -> 
+            case l2 of 
+            LitFloat v2 -> v1 == v2; 
+            _ -> False;
+            ;
+        LitInteger v1 -> 
+            case l2 of 
+            LitInteger v2 -> v1 == v2; 
+            _ -> False;
+            ;
+        LitLong v1 -> 
+            case l2 of 
+            LitLong v2 -> v1 == v2; 
+            _ -> False;
+            ;
+        LitBoolean v1 -> 
+            case l2 of 
+            LitBoolean v2 -> v1 == v2; 
+            _ -> False;
+            ;
+        LitDouble v1 ->
+            case l2 of
+            LitDouble v2 -> v1 == v2;
+            _ -> False;
+            ;
+        LitChar v1 ->
+            case l2 of
+            LitChar v2 -> v1 == v2;
+            _ -> False;
+            ;
+//        LitByte v1 ->
+//            case l2 of
+//            LitByte v2 -> v1 == v2;
+//            ;
+        _ ->
+            error ("l1: " ++ show l1 ++ "\n" ++ "l2: " ++ show l2 ++ "\n");
+//            undefined; // TODO add the rest of these sometime.
+    ;
+
+isZero :: Literal -> Boolean;
+protected isZero literal =
+    case literal of
+    LitDouble {value} -> value == 0.0;
+    LitInt {value} -> value == 0;
+    LitShort {value} -> value == 0;
+    LitFloat {value} -> value == 0;
+    LitInteger {value} -> value == 0;
+    LitLong {value} -> value == 0;
+    ;
+     
+/**
+ * The code for inputing and outputing Literals
+ */    
+
+instance Outputable Literal where
+output = literalToJObject;
+;
+
+instance Inputable Literal where
+input = jobjectToLiteral;
+;
+
+literalToJObject :: Literal -> JObject;
+literalToJObject literal = 
+    output (outputLiteral literal);
+
+jobjectToLiteral :: JObject -> Literal;
+jobjectToLiteral jobject = 
+    inputLiteral (input jobject);
+
+/**
+ * Optimizes the case where a single literal value exists.
+ */
+
+outputLiteral :: Literal -> JObject;
+outputLiteral !literal = 
+    case literal of
+    LitString value -> output value;
+    LitInt value -> output value;
+    LitShort value -> output value;
+    LitFloat value -> output value;
+    LitInteger value -> output value;
+    LitBoolean value -> output value; 
+    LitDouble value -> output value; 
+    LitChar value -> output value; 
+    LitOpaque value -> value; 
+    LitByte value -> output value; 
+    LitLong value -> output value; 
+    ;
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Literal"
+    JExpression_Literal deriving Show, Inputable, Outputable, Eq;
+    
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getLiteralType"
+    optimizerHelper_getLiteralType :: JExpression_Literal -> Int;
+
+foreign unsafe import jvm "method getLiteral"
+    expression_Literal_getLiteral :: JExpression_Literal -> JObject;
+    
+inputLiteral :: JExpression_Literal -> Literal;
+inputLiteral !jLiteral =
+    let
+        type :: Int;
+        type = optimizerHelper_getLiteralType jLiteral;
+        
+        value :: JObject;
+        value = expression_Literal_getLiteral jLiteral;
+        
+    in
+        case type of
+        1 -> LitString (input value);
+        2 -> LitInt (input value);
+        10 -> LitShort (input value);
+        11 -> LitFloat (input value);
+        9 -> LitInteger (input value);
+        3 -> LitBoolean (input value);
+        4 -> LitDouble (input value);
+        5 -> LitChar (input value);
+        6 -> LitByte (input value);
+        7 -> LitLong (input value);
+        8 -> LitOpaque value;
+        ;
+
+
+/**
+ * Represents a case alternative.
+ */
+
+data protected Alt =
+    protected Alt
+        caseConst::CaseConst
+        isPositional::Boolean // otherwise matching
+        vars::[(FieldName, QualifiedName, Type)]
+                 
+        expr::Expression |
+        
+    protected Alts
+        caseConst::[CaseConst]
+        isPositional::Boolean // otherwise matching
+        vars::[(FieldName, QualifiedName, Type)]
+                 
+        expr::Expression
+    ;
+    
+/**
+ * The code for inputing and outputing Alt
+ */    
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Switch$SwitchAlt"
+JExpression_Switch_SwitchAlt deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.alt_new"
+optimizerHelper_alt_new :: JObject -> Boolean -> JObject -> JExpression -> JExpression_Switch_SwitchAlt;
+
+instance Outputable Alt where
+     output = altToJObject;
+;
+
+instance Inputable Alt where
+    input = jobjectToAlt;
+;
+
+altToJObject :: Alt -> JObject;
+altToJObject qn = 
+    output (outputAlt qn);
+
+jobjectToAlt :: JObject -> Alt;
+jobjectToAlt jobj = 
+    inputAlt (input jobj);
+
+/**
+ * Optimizes the case where a single alt value exists.
+ */
+
+outputAlt :: Alt -> JExpression_Switch_SwitchAlt;
+outputAlt !alt = 
+    case alt of
+    Alt caseConst isPositional vars expr ->
+        let
+            switchTag :: JObject;
+            switchTag =
+                case caseConst of
+                CaseLiteral value -> output value;
+                CaseDataCons value -> output value.DataCons.dataCons;
+                ;
+                
+            maybeNameToJObject :: Maybe QualifiedName -> String;
+            maybeNameToJObject !maybeName =
+                case maybeName of
+                Nothing -> "";
+                Just value -> value.QN.functionName;
+                ;
+                
+        in        
+            optimizerHelper_alt_new 
+                switchTag 
+                isPositional
+                (output vars)
+                (outputExpression expr);
+    ;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getAltType"
+optimizerHelper_getAltType :: JExpression_Switch_SwitchAlt -> Int;
+
+foreign unsafe import jvm "method getAltExpr"
+expression_Switch_SwitchAlt_getAltExpr :: JExpression_Switch_SwitchAlt -> JExpression;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.alt_tagIsDataConstructor"
+optimizerHelper_alt_tagIsDataConstructor :: JExpression_Switch_SwitchAlt -> Boolean;
+ 
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.alt_getFirstTag_asJLiteral"
+optimizerHelper_alt_getFirstTag_asJLiteral :: JExpression_Switch_SwitchAlt -> JExpression_Literal;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.alt_getFirstTag_asJFunctionalAgent"
+optimizerHelper_alt_getFirstTag_asJFunctionalAgent :: JExpression_Switch_SwitchAlt -> JFunctionalAgent;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.alt_getNArguments"
+optimizerHelper_alt_getNArguments :: JExpression_Switch_SwitchAlt -> Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.alt_getPositionArgument"
+optimizerHelper_alt_getPositionArguments :: JExpression_Switch_SwitchAlt -> Int -> String;
+
+/**
+ * Expression.Switch.SwitchAlt.Matching definitions.
+ */
+ 
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Switch$SwitchAlt$Matching"
+    JExpression_Switch_SwitchAlt_Matching deriving Show, Inputable, Outputable, Eq;
+ 
+foreign unsafe import jvm "method getFieldNameToVarNameMap"
+    expression_Switch_SwitchAlt_Matching_getFieldNameToVarNameMap :: JExpression_Switch_SwitchAlt_Matching -> JMap;
+
+/**
+ * Expression.Switch.SwitchAlt.Positional definitions.
+ */
+ 
+data foreign unsafe import jvm "org.openquark.cal.compiler.Expression$Switch$SwitchAlt$Positional"
+    JExpression_Switch_SwitchAlt_Positional deriving Show, Inputable, Outputable, Eq;
+ 
+foreign unsafe import jvm "method getPositionToVarNameMap"
+    expression_Switch_SwitchAlt_Positional_getPositionToVarNameMap :: JExpression_Switch_SwitchAlt_Positional -> JSortedMap;
+ 
+inputAlt :: JExpression_Switch_SwitchAlt -> Alt;
+inputAlt !jAlt =
+     let
+         type :: Int;
+         type = optimizerHelper_getAltType jAlt;
+        
+         expr :: Expression;
+         expr = inputExpression (expression_Switch_SwitchAlt_getAltExpr jAlt);
+         
+         altTags :: [CaseConst];
+         altTags = buildCaseConstList (jList_iterator jAltTagsList);
+         
+         jAltTagsList :: JList;
+         jAltTagsList = expression_Switch_SwitchAlt_getAltTags jAlt;
+         
+         nAltTags :: Int;
+         nAltTags = jList_size jAltTagsList;
+         
+         jMatching :: JExpression_Switch_SwitchAlt_Matching;
+         jMatching = input (output jAlt);
+                       
+         fieldTypes :: Maybe [(Int, Type)];
+         fieldTypes =             
+             if length altTags == 1 then
+                 case caseConst_getType (head altTags) of
+                 Nothing -> Nothing;
+                 Just type -> Just (zip (Prelude.upFrom 1) (flattenType type));
+             else
+                 Nothing;
+         
+         addTypes :: (FieldName, QualifiedName, Type) -> (FieldName, QualifiedName, Type);
+         addTypes fqt =
+             case fieldTypes of
+             Nothing -> fqt;
+             Just types ->
+                 case fqt of
+                 (fn, qn, t) ->
+                     case fn of
+                     FNOrdinal ordinal ->
+                         case find (\t -> t.#1 == ordinal) types of
+                         Nothing -> fqt;
+                         Just ordType -> (fn, qn, ordType.#2);
+                         ;
+                     _ -> fqt;
+                     ;
+                 ;
+             ;
+         
+         fieldNameToVarNameMapMatching :: JMap;
+         fieldNameToVarNameMapMatching = expression_Switch_SwitchAlt_Matching_getFieldNameToVarNameMap jMatching;
+         
+         fieldNameToVarNameMatching :: [(FieldName, QualifiedName, Type)];
+         fieldNameToVarNameMatching = 
+            buildFieldNameToQualifiedNameList 
+                (set_iterator (map_entrySet fieldNameToVarNameMapMatching));
+
+         jPositional :: JExpression_Switch_SwitchAlt_Positional;
+         jPositional = input (output jAlt);
+                       
+         fieldNameToVarNameMapPositional :: JSortedMap;
+         fieldNameToVarNameMapPositional = expression_Switch_SwitchAlt_Positional_getPositionToVarNameMap jPositional;
+         
+         fieldNameToVarNamePositional :: [(FieldName, QualifiedName, Type)];
+         fieldNameToVarNamePositional = 
+            buildFieldNameToQualifiedNameList2 
+                (set_iterator (sortedMap_entrySet fieldNameToVarNameMapPositional));
+     in
+         case
+             type of
+         1 -> // Matching
+             Alts altTags False fieldNameToVarNameMatching expr;
+         2 -> // Positional
+             Alts altTags True (map addTypes fieldNameToVarNamePositional) expr;
+         ;
+
+         buildCaseConstList :: JIterator -> [CaseConst];
+         buildCaseConstList jIterator =
+             if iterator_hasNext jIterator then
+                 let
+                     jNext :: JObject;
+                     jNext = iterator_next jIterator;
+
+                     caseConst :: CaseConst;
+                     caseConst = altTagToCaseConst jNext;            
+                in
+                     jNext `seq` (caseConst : buildCaseConstList jIterator)
+             else
+                 [];
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.object_isDataConstructor"
+optimizerHelper_object_isDataConstructor :: JObject -> Boolean;
+
+/**
+ * Helper function for inputing AltTags
+ */
+
+altTagToCaseConst :: JObject -> CaseConst;
+altTagToCaseConst jAltTag =
+    if optimizerHelper_object_isDataConstructor jAltTag then
+        let
+            jEnvEntity :: JFunctionalAgent;
+            jEnvEntity = input (output jAltTag);
+            
+            dcName :: String; 
+            dcName = qualifiedName_toString (inputQualifiedName (envEntity_getName jEnvEntity)); 
+        in            
+            CaseDataCons (DataCons dcName jEnvEntity)
+    else
+        let
+            jLiteral :: JExpression_Literal;
+            jLiteral = input (output (optimizerHelper_expression_new_literal jAltTag));
+        in
+            CaseLiteral (inputLiteral jLiteral);
+
+/**        
+ * Helper function for inputting switch alts.
+ */
+altToCaseConst :: JExpression_Switch_SwitchAlt -> JFunctionalAgent -> CaseConst;
+altToCaseConst jAlt jEnvEntity =
+    if optimizerHelper_alt_tagIsDataConstructor jAlt then
+        let
+            dcName :: String; 
+            dcName = qualifiedName_toString (inputQualifiedName (envEntity_getName jEnvEntity)); 
+        in            
+            CaseDataCons (DataCons dcName jEnvEntity)
+    else
+        CaseLiteral (inputLiteral (optimizerHelper_alt_getFirstTag_asJLiteral jAlt));
+
+
+/**
+ * Helper functions for converting an iterator over FieldName's to a list of CAL field names.
+ */
+buildFieldNameToStringList :: JIterator -> [(FieldName, String)];
+buildFieldNameToStringList jIterator =
+    if iterator_hasNext jIterator then
+        let
+            jNext :: JObject;
+            jNext = iterator_next jIterator;
+            
+            jEntry :: JMap_Entry; 
+            jEntry = jNext `seq` input (output jNext);
+            
+            fieldName :: FieldName;
+            fieldName = input (map_Entry_getKey jEntry);
+            
+            var :: String;
+            var = input (map_Entry_getValue jEntry);
+        in
+            jNext `seq` ((fieldName, var) : buildFieldNameToStringList jIterator)
+    else
+        [];
+   
+/**
+ * Helper function for converting an iterator over a map of field names to qualified names 
+ * into a CAL data type.
+ */
+buildFieldNameToQualifiedNameList :: JIterator -> [(FieldName, QualifiedName, Type)];
+buildFieldNameToQualifiedNameList jIterator =
+    if iterator_hasNext jIterator then
+        let
+            jNext :: JObject;
+            jNext = iterator_next jIterator;
+            
+            jEntry :: JMap_Entry; 
+            jEntry = input (output jNext);
+             
+            fieldName :: FieldName;
+            fieldName = input (map_Entry_getKey jEntry);
+             
+            var :: QualifiedName;
+            var = QN "" (input (map_Entry_getValue jEntry));
+            
+            type :: Type;
+            type = TypeVar optimizerHelper_newTypeVar False;
+        in
+            jNext `seq` ((fieldName, var, type) : buildFieldNameToQualifiedNameList jIterator)
+    else
+        [];
+   
+/**
+ * TODO pick a better name
+ */
+buildFieldNameToQualifiedNameList2 :: JIterator -> [(FieldName, QualifiedName, Type)];
+buildFieldNameToQualifiedNameList2 jIterator =
+    if iterator_hasNext jIterator then
+        let
+            jNext :: JObject;
+            jNext = iterator_next jIterator;
+            
+            jEntry :: JMap_Entry; 
+            jEntry = input (output jNext);
+            
+            /**
+             * Ordinals start at zero but FNOrdinals start at one.
+             */
+            ordinal :: Int;
+            ordinal = (input (map_Entry_getKey jEntry)) + 1;
+         
+            var :: String;
+            var = input (map_Entry_getValue jEntry);
+            
+            type :: Type;
+            type = TypeVar optimizerHelper_newTypeVar False;
+        in
+             jNext `seq` ((FNOrdinal ordinal, QN "" var, type) : buildFieldNameToQualifiedNameList2 jIterator)
+     else
+         [];
+      
+
+/**
+ * Get the expression of a given case alt.
+ */
+alt_getExpr :: Alt -> Expression;
+protected alt_getExpr !alt =
+    case alt of
+    (Alt | Alts) {expr} -> expr;
+    ;
+    
+instance Show Alt where
+show = showAlt;
+;
+
+showAltStructure :: Alt -> String;
+showAltStructure !alt =
+    case alt of
+    Alt {caseConst, vars, expr} -> showAltHelper showExpressionStructure [caseConst] vars expr;
+    Alts {caseConst, vars, expr} -> showAltHelper showExpressionStructure caseConst vars expr;
+    ;
+
+showAlt :: Alt -> String;
+showAlt !alt =
+    case alt of
+    Alt {caseConst, vars, expr} -> showAltHelper showExpressionNice [caseConst] vars expr;
+    Alts {caseConst, vars, expr} -> showAltHelper showExpressionNice caseConst vars expr;
+    ;
+    
+showAltHelper :: Show b => (a -> String) -> [b] -> [(FieldName, QualifiedName, Type)] -> a -> String;
+showAltHelper showExpression caseConsts vars expr =
+    let
+        showVar :: (FieldName, QualifiedName, Type) -> String;
+        showVar !fnqn =
+            case fnqn.#1 of
+            FNOrdinal {ordinal} -> show ordinal ++ "/" ++ show fnqn.#2 /*++ "(" ++ show fnqn.#3 ++ ")"*/;
+            _ -> show "FN(" ++ show fnqn.#1 ++ ")-QN(" ++ show fnqn.#2 ++ ")";
+            ;
+    in
+        (if length caseConsts == 1 then show (head caseConsts) else show caseConsts) ++ " " ++
+        foldLeft (\cur maybeVar -> cur ++ " " ++ showVar maybeVar) "" vars ++
+        " -> " ++ showExpression expr ++ ";";
+    
+    
+showAlt2 :: Alt -> Int -> String;
+showAlt2 !alt maxDepth = 
+    case alt of
+    Alt caseConst isPositional vars expr ->
+        "Alt " ++ (if isPositional then "Positional" else "Matching") ++ show caseConst ++ " " ++ show vars ++ " -> " ++ showExpression2 expr maxDepth;
+    ;
+
+/**
+ * FieldName represents a field name in a record selection expression
+ */
+
+data protected FieldName =
+        protected FNOrdinal 
+            ordinal::Int    // numbered from 1
+            
+    |   protected FNTextual 
+            name::String
+            
+    deriving Show, Eq;
+
+/**
+ * The code for inputing and outputing FieldName
+ */    
+
+data foreign unsafe import jvm "org.openquark.cal.compiler.FieldName"
+    JFieldName deriving Show, Inputable, Outputable, Eq, Ord;
+
+instance Outputable FieldName where
+output = fieldNameToJObject;
+;
+
+instance Inputable FieldName where
+input = jobjectToFieldName;
+;
+
+fieldNameToJObject :: FieldName -> JObject;
+fieldNameToJObject qn = 
+    output (outputFieldName qn);
+
+jobjectToFieldName :: JObject -> FieldName;
+jobjectToFieldName jobj = 
+    inputFieldName (input jobj);
+
+/**
+ * Optimizes the case where a single fieldName value exists.
+ */
+
+outputFieldName :: FieldName -> JFieldName;
+protected outputFieldName !fieldName = 
+    case fieldName of
+    FNOrdinal ordinal -> optimizerHelper_fieldName_ordinal_new ordinal;
+    FNTextual name ->  optimizerHelper_fieldName_textual_new name;    
+    ;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.getFieldNameType"
+    optimizerHelper_getFieldNameType :: JFieldName -> Int;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.fieldName_ordinal_new"
+    optimizerHelper_fieldName_ordinal_new :: Int -> JFieldName;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.fieldName_textual_new"
+    optimizerHelper_fieldName_textual_new :: String -> JFieldName;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.fieldName_getOrdinal"
+    optimizerHelper_fieldName_getOrdinal :: JFieldName -> Int;
+
+foreign unsafe import jvm "method getCalSourceForm"
+    fieldName_getCalSourceForm :: JFieldName -> String;
+
+inputFieldName :: JFieldName -> FieldName;
+inputFieldName !jFieldName =
+    let
+        type :: Int;
+        type = optimizerHelper_getFieldNameType jFieldName;
+        
+        ordinal :: Int;
+        ordinal = optimizerHelper_fieldName_getOrdinal jFieldName;
+        
+        sourceForm :: String;
+        sourceForm = fieldName_getCalSourceForm jFieldName;
+    in
+        case type of
+        1 -> FNOrdinal ordinal;
+        2 -> FNTextual sourceForm;
+        ;
+
+
+/**
+ * Represents data constructors.
+ */
+
+data protected DataCons =
+    protected DataCons 
+        name::String 
+        dataCons::JFunctionalAgent
+        
+    deriving Inputable, Outputable;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.functionalAgent_getTypeExprExact"
+protected optimizerHelper_functionalAgent_getTypeExprExact :: JFunctionalAgent -> Optimizer_Type.JTypeExpr;
+
+/**
+ * Is the given data constructor strict on the given argument.
+ */
+dataCons_isStrict :: DataCons -> Int -> Boolean;
+protected dataCons_isStrict dc index =
+    dataConstructor_isArgStrict (optimizerHelper_functionalAgent_asDataConstructor dc.DataCons.dataCons) index;
+
+dataCons_getArity :: DataCons -> Int;
+protected dataCons_getArity dc =
+    dataConstructor_getArity (optimizerHelper_functionalAgent_asDataConstructor dc.DataCons.dataCons);
+
+dataCons_getFieldIndex :: DataCons -> FieldName -> Int;
+protected dataCons_getFieldIndex dc fieldName =
+    case fieldName of
+    FNOrdinal index -> (index - 1);  // one based to zero based index Arg!
+    _ -> dataConstructor_getFieldIndex (optimizerHelper_functionalAgent_asDataConstructor dc.DataCons.dataCons) (outputFieldName fieldName);
+    ;
+
+dataCons_getOrdinal :: DataCons -> Int;
+protected dataCons_getOrdinal dc =
+    let
+        jdc :: JDataConstructor;
+        jdc = optimizerHelper_functionalAgent_asDataConstructor dc.DataCons.dataCons;
+    in
+        dataConstructor_getOrdinal jdc;
+        
+dataCons_getNumberOfTypes :: DataCons -> Int;
+protected dataCons_getNumberOfTypes dc =
+    let
+        jdc :: JDataConstructor;
+        jdc = optimizerHelper_functionalAgent_asDataConstructor dc.DataCons.dataCons;
+    in
+        optimizerHelper_dataConstructor_getNumberOfDataTypes jdc;
+
+/**
+ * Get the type of the given data constructor.
+ * 
+ * @arg dc The data constructor to get the type of.
+ * @return The type of the given data constructor.
+ */
+
+dataCons_getType :: DataCons -> Type;
+protected dataCons_getType dc =
+    inputType (optimizerHelper_functionalAgent_getTypeExprExact dc.DataCons.dataCons);
+
+instance Show DataCons where
+    show = showDataCons;
+;
+
+showDataCons :: DataCons -> String;
+showDataCons !dc =
+    case dc of
+    DataCons {name} ->
+        if name == "Cal.Core.Prelude.Nil" then
+            "[]"
+        else
+            name;
+    ;
+
+instance Eq DataCons where
+    equals = equalsDataCons;
+    notEquals = notEqualsDataCons;
+    ;
+    
+notEqualsDataCons :: DataCons -> DataCons -> Boolean;    
+notEqualsDataCons !dc1 !dc2 = not (equalsDataCons dc1 dc2);
+
+equalsDataCons :: DataCons -> DataCons -> Boolean;
+equalsDataCons !dc1 !dc2 = dc1.DataCons.name == dc2.DataCons.name;
+
+data foreign unsafe import jvm protected "org.openquark.cal.compiler.Expression$ErrorInfo"
+protected JExpression_ErrorInfo deriving Show, Inputable, Outputable, Eq;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.dataCons_isTrue"
+optimizerHelper_dataCons_isTrue :: JFunctionalAgent -> Boolean;
+
+foreign unsafe import jvm "static method org.openquark.cal.compiler.OptimizerHelper.dataCons_isFalse"
+optimizerHelper_dataCons_isFalse :: JFunctionalAgent -> Boolean;
+
+/**
+ * Check if the given data constructor is either true or false.
+ * @arg dc The data constructor to check the value of
+ * @arg value The value to see if the data constructor matches.
+ * @return True iff the data constructor is either Prelude.True or Prelude.False corresponding to the match value. 
+ */
+ 
+dataCons_matches :: DataCons -> Boolean -> Boolean;
+protected dataCons_matches dc value = 
+    case dc of
+    DataCons {dataCons} -> 
+        if value then
+            optimizerHelper_dataCons_isTrue dataCons
+        else
+            optimizerHelper_dataCons_isFalse dataCons;
+    ;
+
+/**
+ * Corresponds to Expression.SwitchAlt.altTag. 
+ */
+
+data protected CaseConst =
+        protected CaseLiteral 
+            value::Literal
+            
+    |   protected CaseDataCons 
+            value::DataCons
+            
+    deriving Inputable, Outputable, Eq;
+
+instance Show CaseConst where
+    show=showCaseConst;
+;
+
+showCaseConst :: CaseConst -> String;
+showCaseConst !cc =
+    case cc of
+    CaseLiteral value -> show value;
+    CaseDataCons value -> show value;
+    ;
+    
+caseConst_getType :: CaseConst -> Maybe Type;
+caseConst_getType caseConst =
+    case caseConst of
+    CaseLiteral value ->
+        Nothing;
+    CaseDataCons value ->
+        Just (dataCons_getType value);
+    ;
+
+/**
+ * Represents a Java core function.
+ */
+data protected CoreFunction =
+    /**
+     * @arg name The name of the core function.
+     * @arg args The arguments of the core function.
+     * @arg expr The expression that defines the core function.
+     * @arg type A list of the argument and return types of the core function.
+     * @arg strictness The stricness of the type parameters
+     * @arg argIsWHNF The argument is marked strict becuase the caller only passes arguments in WHNF
+     */
+    protected CoreFunction 
+        name::!QualifiedName
+        args::[QualifiedName]
+        expr::Expression
+        type::![Type]
+        strictness::[Boolean]
+        argIsWHNF::[Boolean]
+        
+   deriving Inputable, Outputable, Show;
+
+/**
+ * Returns true if the given name occurs more that once in the given expression. This is slightly 
+ * different that the obvious definition. This is used for inlining so occurs more than once means
+ * if the variable were inlined would the resulting expression be calculated more than once.
+ * 
+ * @arg name The variable to look for.
+ * @arg dc If the name has a known data constructor then this is it. This is used in the switch case. Look there for an explanation.
+ * @arg expr The expression to search
+ * @return True if the given name would be calculated more than once if inlined in the given expression.
+ */
+    
+occursMoreThanOnce :: QualifiedName -> Maybe DataCons -> Expression -> Boolean;
+protected occursMoreThanOnce !name dc !expr =
+    getOccurs name dc expr == Occurs_MoreThanOnce;
+
+data protected Occurs = 
+    protected Occurs_ZeroTimes |
+    protected Occurs_Once |
+    protected Occurs_MoreThanOnce
+    deriving Show, Eq;
+
+addOccurs :: Occurs -> Occurs -> Occurs;
+addOccurs !o1 !o2 =
+    case o1 of
+    Occurs_ZeroTimes -> o2;
+    Occurs_Once -> 
+        case o2 of
+        Occurs_ZeroTimes -> Occurs_Once;
+        Occurs_Once -> Occurs_MoreThanOnce;
+        Occurs_MoreThanOnce -> Occurs_MoreThanOnce;
+        ;
+    Occurs_MoreThanOnce -> Occurs_MoreThanOnce;
+    ;
+
+/**
+ * Select the larger of the two occurs values.
+ */
+ 
+maxOccurs :: Occurs -> Occurs -> Occurs;
+maxOccurs !o1 !o2 =
+    case o1 of
+    Occurs_ZeroTimes -> o2;
+    Occurs_Once ->
+        case o2 of
+        Occurs_ZeroTimes -> Occurs_Once;
+        Occurs_Once -> Occurs_Once;
+        Occurs_MoreThanOnce -> Occurs_MoreThanOnce;
+        ;
+    Occurs_MoreThanOnce -> Occurs_MoreThanOnce;
+    ;
+    
+/**    
+ * Count the number of times that an expression would be calculated if inlined in the given expression. 
+ * 
+ * @arg name Variable to look for.
+ * @arg dc If the name has a known data constructor then this is it. This is used in the switch case. Look there for an explanation.
+ * @arg expression The expression to search.
+ * @return Zero if the variable does not occur. One if the variable would be calculated once. Two if the variable would be calculated more than once.
+ */
+    
+getOccurs :: QualifiedName -> Maybe DataCons -> Expression -> Occurs;
+protected getOccurs !name dc !expression =
+    case expression of    
+    Var {name = varName} ->
+        if varName == name then Occurs_Once else Occurs_ZeroTimes;
+    DataConstructor {} -> Occurs_ZeroTimes;
+    DataConsSelection {dcValueExpr} -> getOccurs name dc dcValueExpr;
+    Literal {value} -> Occurs_ZeroTimes;
+    ErrorInfo _ -> Occurs_ZeroTimes;
+    App expr1 expr2 ->
+        addOccurs (getOccurs name dc expr1) (getOccurs name dc expr2);
+    Lambda lambdaVar _ _ lambdaExpr ->
+        if lambdaVar == name then
+            Occurs_ZeroTimes
+        else
+            getOccurs name dc lambdaExpr;
+    Let {variable=letVar, type=letType, expr=letExpr, body=letBody} ->
+        addOccurs
+            (            
+                if (getOccurs name dc letExpr) == Occurs_ZeroTimes then
+                    Occurs_ZeroTimes 
+                else
+                    Occurs_MoreThanOnce
+            )
+            (if letVar == name then
+                Occurs_ZeroTimes
+            else
+                getOccurs name dc letBody
+            );
+    LetInlinable {variable=letVar, expr=letExpr, body=letBody} ->
+        let
+            nOccurExpr :: Occurs;
+            nOccurExpr = getOccurs name dc letExpr;
+        in
+            addOccurs
+                (
+                // if the symbol occurs in the let body then this counts as more than
+                // once since the let function could be (co) recursive 
+                    if getOccurs name dc letExpr == Occurs_ZeroTimes then
+                        Occurs_ZeroTimes 
+                    else
+                        Occurs_MoreThanOnce
+                )
+                (if letVar == name then
+                     Occurs_ZeroTimes
+                 else
+                     getOccurs name dc letBody
+                );
+    Switch switchExpr switchAlts ->
+        let
+        
+            // TODO: This should notice the names of and pattern variables.
+            occursMoreThanOnceAlt :: Alt -> Occurs; 
+            occursMoreThanOnceAlt !alt = 
+                getOccurs name dc (alt_getExpr alt);
+                
+            occursMoreThanOnceAlts :: [Alt] -> Occurs;  
+            occursMoreThanOnceAlts !altList =
+                case altList of
+                [] -> Occurs_ZeroTimes;
+                alt:alts ->
+                    maxOccurs (occursMoreThanOnceAlt alt) (occursMoreThanOnceAlts alts);                    
+                ;
+            
+            occursMoreThanOnceAltsDC :: DataCons -> [Alt] -> Occurs;  
+            occursMoreThanOnceAltsDC dc !altList =
+                case altList of
+                [] -> Occurs_ZeroTimes;
+                alt:alts ->
+                    case alt of
+                    Alt {caseConst} ->
+                        case caseConst of
+                        CaseDataCons {value=altDC} ->
+                            if altDC == dc then
+                                occursMoreThanOnceAlt alt
+                            else
+                                occursMoreThanOnceAltsDC dc alts;
+                        CaseLiteral {value=altValue} ->
+                            case altValue of
+                            LitString _ -> occursMoreThanOnceAlt alt; // must be _
+                            _ -> occursMoreThanOnceAltsDC dc alts;
+                            ;
+                        ;  
+                    ;
+                ;
+        in
+            case dc of
+            Just dataCons ->
+                let
+                    matches :: QualifiedName -> Expression -> Boolean;
+                    matches qn expr = 
+                        case expr of
+                        Var {name} -> qn == name;
+                        _ -> False;
+                        ;
+                in
+                    if matches name switchExpr then 
+                        occursMoreThanOnceAltsDC dataCons switchAlts
+                    else
+                        addOccurs 
+                            (getOccurs name dc switchExpr) 
+                            (occursMoreThanOnceAlts switchAlts);
+            Nothing -> 
+                addOccurs 
+                    (getOccurs name dc switchExpr) 
+                    (occursMoreThanOnceAlts switchAlts);
+        ;
+        
+    Opaque {} ->
+            // TODO make sure none of these have variables defined in them.
+        Occurs_ZeroTimes;
+    RecordExtensionLiteral recordExtension ->
+        foldLeft (\acc reTuple -> addOccurs acc (getOccurs name dc reTuple.#2)) Occurs_ZeroTimes recordExtension;
+    RecordExtensionPolymorphic body recordExtension -> 
+        foldLeft 
+            (\acc reTuple -> addOccurs acc (getOccurs name dc reTuple.#2)) 
+            (getOccurs name dc body) 
+            recordExtension;
+    RecordSelection {expr} -> getOccurs name dc expr;
+    ;
+
+/**
+ * Skip all the outer let definitions and get just the function body.
+ */
+
+expression_getBody :: Expression -> Expression;        
+protected expression_getBody !expression =
+    case expression of
+    Let {body} -> expression_getBody body;
+    _ -> expression;
+    ;
+
+/**
+ * Take the expression and embed it in a lambda expression 
+ * on the given variables.
+ * 
+ * @arg vars The lambda variables.
+ * @arg expr The expression to embed.
+ * @return The new lambda expression.
+ */    
+    
+addLambdaVars :: [(QualifiedName, Type)] -> Expression -> Expression; 
+protected addLambdaVars !vars expr =
+    case vars of
+    [] -> expr;
+    v:vs -> 
+        case v of
+        (var,type) -> Lambda var type False (addLambdaVars vs expr);
+        ;
+    ;
+
+//    
+//addLambdaVarsExamples :: Boolean;
+//addLambdaVarsExamples =
+//    let
+//        var1 :: QualifiedName;
+//        var1 = QN "Cal.Core.Prelude" "var1";
+//        
+//        var2 :: QualifiedName;
+//        var2 = QN "Cal.Core.Prelude" "var2";
+//        
+//        false :: Expression;
+//        false = Literal (LitBoolean False);
+//    in
+//        assert (addLambdaVars [var1, var2] false == (Lambda var1 (Lambda var2 false)));
+
+/**
+ * Remove the most outer lambda variables from the expression.
+ * 
+ * @arg expr The expression to remove the most outer lambda variables from.
+ * @return The expression that results from removing the most outer lambda variables from the given expression.
+ */    
+    
+removeLambdaVars :: Expression -> Expression;
+protected removeLambdaVars expr =
+    case expr of
+    Lambda {expr} -> removeLambdaVars expr;
+    _ -> expr;
+    ;
+
+/* @example */
+//removeLambdaVarsExamples :: Boolean;
+//removeLambdaVarsExamples =
+//    let
+//        var1 :: QualifiedName;
+//        var1 = QN "Cal.Core.Prelude" "var1";
+//        
+//        var2 :: QualifiedName;
+//        var2 = QN "Cal.Core.Prelude" "var2";
+//        
+//        false :: Expression;
+//        false = Literal (LitBoolean False);
+//    in
+//        assert (removeLambdaVars (addLambdaVars [var1, var2] false) == false);
+
+/**
+ * TODO fix this to have better space usage. Maybe get rid of it too.
+ */
+
+expression_getDepth :: Expression -> Int -> Int;
+protected expression_getDepth !expr !acc =
+    case expr of    
+    App expr1 expr2 ->
+        let
+            depth1 :: Int;
+            depth1 = expression_getDepth expr1 (acc + 1);
+            depth2 :: Int;
+            depth2 = expression_getDepth expr2 (acc + 1);
+        in
+            max depth1 depth2;
+    Lambda lambdaVar _ _ lambdaExpr ->
+        expression_getDepth lambdaExpr acc; 
+    Let {expr=letExpr, body=letBody} ->
+        let
+            depth1 :: Int;
+            depth1 = expression_getDepth letExpr acc;
+            depth2 :: Int;
+            depth2 = expression_getDepth letBody acc;
+        in
+            max depth1 depth2;
+    LetInlinable {expr=letExpr, body=letBody} ->  // same as let (maybe combine the two with a param)
+        let
+            depth1 :: Int;
+            depth1 = expression_getDepth letExpr acc;
+            depth2 :: Int;
+            depth2 = expression_getDepth letBody acc;
+        in
+            max depth1 depth2;
+    Switch switchExpr switchAlts ->
+        let
+            alt_getDepth :: Alt -> Int;
+            alt_getDepth !alt =
+                case alt of
+                (Alt | Alts) {expr} -> expression_getDepth expr acc;
+                ;
+
+            alts_getDepth :: [Alt] -> Int;
+            alts_getDepth !alts  =
+                case alts of
+                [] -> 0;
+                alt:rest ->
+                    let
+                        depth1 :: Int;
+                        depth1 = alt_getDepth alt;
+                        
+                        depth2 :: Int;
+                        depth2 = alts_getDepth rest;
+                    in
+                        max depth1 depth2;
+                ;
+          
+            depth1 :: Int;
+            depth1 = expression_getDepth switchExpr acc;
+            depth2 :: Int;
+            depth2 = alts_getDepth switchAlts;
+        in
+            max depth1 depth2;
+    RecordSelection {expr} -> expression_getDepth expr acc;
+    _ -> acc;
+    ;
+
+/**
+ * Convert the given Alt to a positional alt. May result in no change if the Alt already is positional.
+ */
+    
+convertToPositional :: Alt -> Alt;    
+protected convertToPositional alt =
+    case alt of
+    Alt caseConst isPositional vars expr ->
+       if isPositional then
+           alt
+       else
+            case caseConst of
+            CaseDataCons dc ->
+                case dc of
+                DataCons {dataCons} ->
+                    let
+                        dc :: JDataConstructor;
+                        dc = optimizerHelper_functionalAgent_asDataConstructor dataCons;
+                        
+                        fieldNameToPositional :: FieldName -> FieldName; 
+                        fieldNameToPositional fieldName =
+                            case fieldName of
+                            FNTextual {name} -> FNOrdinal ((dataConstructor_getFieldIndex dc (outputFieldName fieldName)) + 1); 
+                            _ -> fieldName;
+                            ;
+                            
+                        fnqnToPositional :: (FieldName, QualifiedName, Type) -> (FieldName, QualifiedName, Type);
+                        fnqnToPositional var =
+                            case var of
+                            (fieldName, qualifiedName, type) ->
+                                (fieldNameToPositional fieldName, qualifiedName, type);
+                            ;
+                            
+                        varsPrime :: [(FieldName, QualifiedName, Type)];
+                        varsPrime = map fnqnToPositional vars;  
+                    in
+                        Alt caseConst True varsPrime expr;
+                ;
+            _ -> alt;
+       ;
+    ;
+    
+/* @test */
+unitTests :: Boolean;
+protected unitTests = 
+       assert flattenExpressionExamples
+    && assert unflattenExpressionExamples;
+//    && assert addLambdaVarsExamples;
+
+/**
+ * Checks two expression are the same except that variables names might be different. The only variables
+ * considered for renaming are variables defined in the expression.
+ * 
+ * @arg expr1 Expression to compare.
+ * @arg expr2 Expression to compare.
+ * @return A boolean indication if the given expressions are expressionIsomorphic in the sense that there exists 
+ * a renaming of the variables of expression one such that expr1 equals expr2. 
+ */
+
+expressionIsomorphic :: Expression -> Expression -> Boolean;
+protected expressionIsomorphic expr1 expr2 =
+    (expressionIsomorphicHelper expr1 expr2 []).#2;
+
+expressionIsomorphicHelper :: Expression -> Expression -> [(QualifiedName, QualifiedName)] -> ([(QualifiedName, QualifiedName)], Boolean);    
+expressionIsomorphicHelper !expr1 !expr2 renaming = 
+    case expr1 of    
+    Var {name=name1} ->
+        case expr2 of
+        Var {name=name2} ->
+            case find (\name -> name1 == name.#1 || name2 == name.#1) renaming of
+            Nothing -> ((name1, name2):renaming, True);
+            Just namePair ->
+                if namePair.#1 == name1 && namePair.#2 == name2 then
+                    (renaming, True)
+                else if namePair.#1 == name2 && namePair.#2 == name1 then
+                    (renaming, True)
+                else
+                    ([], False);
+            ;
+        _ -> ([], False);
+        ;
+        
+    Literal {value=value1} ->
+        case expr2 of
+        Literal {value=value2} ->
+            (renaming, assert (value1 == value2));
+        DataConstructor dc2 ->
+            (renaming, isMatchingDataConsLiteral dc2 value1); 
+        _ -> ([], False);
+        ;
+        
+    ErrorInfo value1 ->
+        case expr2 of
+        ErrorInfo value2 -> (renaming, True); // close enought this is for debug only
+        _ -> ([], False);
+        ;
+        
+    App expr11 expr12 ->
+        case expr2 of
+        App expr21 expr22 ->
+            case expressionIsomorphicHelper expr11 expr21 renaming of
+            (renaming1, equals) ->
+                if equals then
+                    expressionIsomorphicHelper expr12 expr22 renaming1
+                else
+                    ([], False);
+             ;
+            
+        _ -> ([], False);
+        ;
+        
+    Lambda lambdaVar1 _ _ lambdaExpr1 ->
+        case expr2 of
+        Lambda lambdaVar2 _ _ lambdaExpr2 ->
+            case find (\mapping -> lambdaVar1 == mapping.#1) renaming of
+            Just mapping ->
+                if mapping.#2 == lambdaVar2 then
+                    expressionIsomorphicHelper lambdaExpr1 lambdaExpr2 renaming
+                else
+                    ([], False); // inconsistent renaming so they are not expressionIsomorphicHelper                        
+            Nothing ->
+                expressionIsomorphicHelper lambdaExpr1 lambdaExpr2 ((lambdaVar1, lambdaVar2):renaming);
+            ;    
+        _ -> ([], False);
+        ;
+        
+    Let {variable=variable1, expr=expr1, body=body1} ->
+        case expr2 of
+        Let {variable=variable2, expr=expr2, body=body2} ->
+            case expressionIsomorphicHelper (Var variable1 [] Nothing Nothing) (Var variable2 [] Nothing Nothing) renaming of
+            (renaming1, result1) ->
+                case expressionIsomorphicHelper expr1 expr2 renaming1 of
+                (renaming2, result2) ->
+                    case expressionIsomorphicHelper body1 body2 renaming2 of
+                    (renaming3, result3) -> (renaming3, result1 && result2 && result3);
+                ;
+            ;    
+        ;
+        _ -> ([], False);
+        ;
+        
+    Switch expr1 alts1 ->
+        case expr2 of
+        Switch expr2 alts2 ->
+            let
+                altEquals :: Alt -> Alt -> [(QualifiedName, QualifiedName)] -> ([(QualifiedName, QualifiedName)], Boolean);
+                altEquals alt1 alt2 renaming =
+                    expressionIsomorphicHelper (alt_getExpr alt1) (alt_getExpr alt2) renaming;
+                
+                altsEquals :: [Alt] -> [Alt] -> [(QualifiedName, QualifiedName)] -> ([(QualifiedName, QualifiedName)], Boolean);
+                altsEquals alts1 alts2 renaming =                    
+                    case alts1 of
+                    a1:as1 ->
+                        case alts2 of
+                        a2:as2 ->
+                            case altEquals a1 a2 renaming of
+                            (renaming2, isOk) ->
+                                if isOk then
+                                    altsEquals as1 as2 renaming2
+                                else
+                                    ([], False);
+                            ;    
+                        _ -> ([], False);
+                        ;
+                    _ -> ([], (isEmpty alts2));
+                    ;
+                     
+            in
+                case expressionIsomorphicHelper expr1 expr2 renaming of
+                (renaming1, areIsomorphic) ->
+                    if areIsomorphic then
+                        altsEquals alts1 alts2 renaming1
+                    else
+                        ([], False);
+                ;    
+        _ -> ([], False);
+        ;
+        
+    Opaque {} ->
+        case expr2 of
+        Opaque {} -> (renaming, True);
+        _ -> ([], False);
+        ;
+        
+    RecordExtensionLiteral fieldsMap1 ->
+        case expr2 of
+        RecordExtensionLiteral fieldsMap2 -> (renaming, fieldsMap1 == fieldsMap2);
+        _ -> ([], False);
+        ;
+        
+    RecordSelection expr1_expr expr1_fieldName -> 
+        case expr2 of
+        RecordSelection expr2_expr expr2_fieldName ->
+            (renaming, (expr1_expr == expr2_expr) && (expr1_fieldName == expr2_fieldName));
+        _ -> ([], False);
+        ;
+        
+    RecordExtensionPolymorphic expr1 fieldsMap1 ->
+        case expr2 of
+        RecordExtensionPolymorphic expr2 fieldsMap2 ->
+            (renaming, expr1 == expr2 && fieldsMap1 == fieldsMap2);
+        _ -> ([], False);
+        ;
+        
+    DataConsSelection dcValueExpr1 dc1 fi1 err1 ->
+        case expr2 of
+        DataConsSelection dcValueExpr2 dc2 fi2 err2 ->
+            case expressionIsomorphicHelper dcValueExpr1 dcValueExpr2 renaming of
+            (renaming1, areIsomorphicExpr) ->
+            (renaming1, areIsomorphicExpr && dc1 == dc2 && fi1 == fi2);
+            ;
+        _ -> ([], False);
+        ;
+        
+    DataConstructor dc1 ->
+        case expr2 of
+        DataConstructor dc2 -> (renaming, dc1 == dc2);
+        _ -> ([], False);
+        ;
+        
+    LetInlinable variable1 type1 expr1 body1 arity1 _ constArgs1 ->
+        case expr2 of
+        LetInlinable variable2 type2 expr2 body2 arity2 _ constArgs2 ->
+            (renaming, assert (variable1 == variable2 && expr1 == expr2 && body1 == body2));
+        _ -> ([], False);
+        ;     
+    ;
+
+/**
+ * Checks if the given literal would match the given data constructor. This is
+ * currently only implemented for Booleans
+ * 
+ * @arg dc The data constructor
+ * @arg l The listeral
+ * @return True if the given literal matches the data constructor.
+ */
+
+isMatchingDataConsLiteral :: DataCons -> Literal -> Boolean;
+protected isMatchingDataConsLiteral !dc !l =
+    case l of
+    LitBoolean boolean ->
+        case dc of
+        DataCons {name} -> 
+            case boolean of
+            True -> name == "Cal.Core.Prelude.True";
+            False -> name == "Cal.Core.Prelude.False";
+            ;
+        ;
+    LitInt value ->
+        trace2 (
+                "isMatchingDataConsLiteral: " ++
+                "    dataCons_getOrdinal dc == value" ++ show (dataCons_getOrdinal dc == value) ++
+                "    value: " ++ show value ++ "\n" ++
+                "    dataCons_getOrdinal dc: " ++ show (dataCons_getOrdinal dc) ++ "\n" ++
+                "    dc: " ++ show dc ++ "\n"
+        )
+        dataCons_getOrdinal dc == value;
+    LitString value -> value == "_";
+    _ -> 
+        trace2 ("isMatchingDataConsLiteral: " ++ show dc ++ " / " ++ show l ++ "\n") 
+        False;
+    ;
+
+prelude_seq :: QualifiedName;
+protected prelude_seq = QN "Cal.Core.Prelude" "seq";
+
+isSeq :: Expression -> Boolean;
+protected isSeq expr =
+    case expr of
+    Var {name} -> name == prelude_seq;
+    _ -> False;
+    ;
+
+prelude_error :: QualifiedName;
+protected prelude_error = QN "Cal.Core.Prelude" "error";
+
+/**
+ * Pick off all the seq'ed expression from the from of the expression. Return a list of expressions
+ * where the first expression is the innermost one followed by the seq'ed expression in reverse order.
+ */
+
+flattenSeqs2 :: Expression -> (Expression,[Expression]);
+protected flattenSeqs2 expr =
+    let
+        flattenSeqsHelper :: Expression -> [Expression] -> (Expression, [Expression]);
+        flattenSeqsHelper expr acc =
+            case getSeq expr of
+            Nothing -> (expr, reverse acc);
+            Just arg1_arg2 ->
+                case arg1_arg2 of
+                (arg1, arg2) -> flattenSeqsHelper arg2 (arg1:acc);
+                ;
+            ;
+    in                        
+        flattenSeqsHelper expr [];
+
+/**
+ * If the given expression is a call to Prelude.seq return the two arguments otherwise return nothing.
+ */            
+getSeq :: Expression -> Maybe (Expression, Expression);
+protected getSeq expr =
+    case flattenExpression expr [] of
+    f : args ->
+        case f of
+        Var {name} -> 
+            if name == prelude_seq then
+                case args of
+                a1 : args1 ->
+                    case args1 of
+                    a2 : args2 ->
+                        if isEmpty args2 then
+                            Just (a1, a2)
+                        else
+                            Nothing
+                        ;
+                    _ -> Nothing;
+                    ;
+                _ -> Nothing;
+            else
+                Nothing;
+        _ -> Nothing;
+        ;
+    ;
+            

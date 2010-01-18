@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Copyright (c) 2006 BUSINESS OBJECTS SOFTWARE LIMITED
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+ 
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+ 
+    * Neither the name of Business Objects nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+ 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    GeneratingDocBookDocumentation.xml
+    Creation date: Nov 22, 2006.
+    By: Neil Corkum
+-->
+<!DOCTYPE book [
+<!ENTITY % sgml.features "IGNORE">
+<!ENTITY % xml.features "INCLUDE">
+<!ENTITY euro "&#8364;">
+<!ENTITY % dbcent PUBLIC "-//OASIS//ENTITIES DocBook Character Entities V4.4//EN" "http://www.oasis-open.org/docbook/xml/4.4/dbcentx.mod">
+%dbcent;
+
+<!ENTITY legal SYSTEM "LegalNotice.xml">
+]>
+<book version="5.0" xmlns="http://docbook.org/ns/docbook"
+      xmlns:xlink="http://www.w3.org/1999/xlink"
+      xmlns:xi="http://www.w3.org/2001/XInclude"
+      xmlns:svg="http://www.w3.org/2000/svg"
+      xmlns:mml="http://www.w3.org/1998/Math/MathML"
+      xmlns:html="http://www.w3.org/1999/xhtml"
+      xmlns:db="http://docbook.org/ns/docbook">
+  <title>Generating DocBook Documentation for the Quark Project</title>
+
+  <info>
+    <releaseinfo>Last modified: October 16, 2007</releaseinfo>
+
+    <authorgroup>
+      <author>
+        <personname>Neil Corkum</personname>
+      </author>
+
+      <author>
+        <personname>Andrew Eisenberg</personname>
+      </author>
+
+      <author>
+        <personname>Edward Lam</personname>
+      </author>
+    </authorgroup>
+
+    &legal;
+  </info>
+
+  <chapter>
+    <title>What you need to know to edit files (it's really not all that hard
+    or scary)</title>
+
+    <para>Actually, it <emphasis>is</emphasis> a little hard and scary, but
+    don't worry, this document is here to help.</para>
+
+    <section>
+      <title>How to organize the DocBook source files</title>
+
+      <para>Create the folder structure as shown in <xref
+      linkend="FigureDocBookFileStructure" /></para>
+
+      <figure xml:id="FigureDocBookFileStructure">
+        <title>DocBook Source File Structure</title>
+
+        <screenshot>
+          <mediaobject>
+            <imageobject>
+              <imagedata fileref="images/GeneratingDocBookDocumentation/DocBookSourceFileStructure.PNG"></imagedata>
+            </imageobject>
+          </mediaobject>
+        </screenshot>
+      </figure>
+
+      <para></para>
+
+      <para></para>
+
+      <?dbfo-need height="2in" ?>
+      <para>Locations of various files are as follows:<variablelist>
+          <varlistentry>
+            <term>Build Scripts</term>
+
+            <listitem>
+              <para><filename>/OpenQuark_Doc_Source/DocBuild_Scripts/</filename></para>
+            </listitem>
+          </varlistentry>
+
+          <varlistentry>
+            <term>Source Files</term>
+
+            <listitem>
+              <para><filename>/OpenQuark_Doc_Source/xml/</filename></para>
+            </listitem>
+          </varlistentry>
+
+          <varlistentry>
+            <term>Generated PDF</term>
+
+            <listitem>
+              <para><filename>/OpenQuark/docs/</filename></para>
+            </listitem>
+          </varlistentry>
+
+          <varlistentry>
+            <term>Generated GemCutter Help</term>
+
+            <listitem>
+              <para><filename>/Quark_Gems/Help/GemCutterHelpFiles.jar</filename></para>
+            </listitem>
+          </varlistentry>
+
+          <varlistentry>
+            <term>Eclipse Help</term>
+
+            <listitem>
+              <para><filename>/CAL_Eclipse_Help/</filename></para>
+            </listitem>
+          </varlistentry>
+        </variablelist></para>
+    </section>
+
+    <section>
+      <title>How to edit the DocBook files</title>
+
+      <para>DocBook is a language based on XML. It gets compiled into either
+      HTML or PDF using XSLT. Lots of fun.</para>
+
+      <para><orderedlist>
+          <listitem>
+            <para>See above on how to organize the source files and
+            tools.</para>
+          </listitem>
+
+          <listitem>
+            <para>Download <emphasis role="bold">XMLMind XML Editor</emphasis>
+            from:</para>
+
+            <para><uri>http://www.xmlmind.com/xmleditor/download.shtml</uri></para>
+          </listitem>
+
+          <listitem>
+            <para>Get the <emphasis role="bold">DocBook 5 With XInclude
+            Configuration</emphasis> add-on:</para>
+
+            <para><uri>http://www.xmlmind.net/xmleditor/_download/docbook5xi_config-3_6_0.zip</uri></para>
+          </listitem>
+
+          <listitem>
+            <para>Check out the files you will be editing.</para>
+          </listitem>
+
+          <listitem>
+            <para>Open the files in XMLMind and edit away!</para>
+
+            <para>Just be warned that editing XML in XMLMind is similar to,
+            but not quite like editing HTML in your favorite HTML
+            editor.</para>
+          </listitem>
+
+          <listitem>
+            <para>Add any new images to the appropriate sub-folder of:
+            <filename>/OpenQuark_Doc_Source/xml/images/</filename></para>
+          </listitem>
+        </orderedlist></para>
+    </section>
+
+    <section>
+      <title>How to build the DocBook files</title>
+
+      <para>This is the scary part. There are lots of little steps, so read
+      carefully and pay attention. Maybe you want to get another cup of coffee
+      before you read this.</para>
+
+      <orderedlist>
+        <listitem>
+          <para>Run the build script located at:</para>
+
+          <para><filename>/OpenQuark_Doc_Source/DocBuild_Scripts/buildall.bat</filename></para>
+
+          <para>Before running it, you may want to edit it and comment out
+          (<command>@rem</command>) the batch files that you do not want
+          called (e.g. you can comment out
+          <filename>GemCutterJavaHelp.bat</filename> if you have not made
+          changes to the GemCutter help). This will prevent unnecessary files
+          from being generated.</para>
+        </listitem>
+
+        <listitem>
+          <para>If the build scripts are throwing Java Exceptions, then it is
+          likely that the document is not a valid XML document.</para>
+
+          <para>Type <keycombo>
+              <keycap>Ctrl</keycap>
+
+              <keycap>Shift</keycap>
+
+              <keycap>V</keycap>
+            </keycombo> to validate. If this doesn't tell you where your
+          problem is, then you are allowed to cry.</para>
+        </listitem>
+
+        <listitem>
+          <para>If you edited Eclipse Help files, there are some more
+          steps.</para>
+
+          <orderedlist>
+            <listitem>
+              <para>The help files were generated in a sub-folder below where
+              the script was executed.</para>
+            </listitem>
+
+            <listitem>
+              <para>Run the script
+              <filename>stripDoctypeDeclarations.bat</filename> located in the
+              <filename>DocBuild_Scripts</filename> folder.</para>
+
+              <para>Note that this script uses cygwin's
+              '<command>sed</command>' utility, so ensure that
+              <command>sed</command> is on the path.</para>
+            </listitem>
+
+            <listitem>
+              <para>Move the files from this sub-folder to
+              <filename>/CAL_Eclipse_Help/</filename></para>
+            </listitem>
+
+            <listitem>
+              <para>Copy any new images for the eclipse help files from the
+              source directory to the build directory. The build script does
+              not copy them automatically.</para>
+            </listitem>
+          </orderedlist>
+        </listitem>
+
+        <listitem>
+          <para>You may want to review any files you generated in Acrobat
+          and/or a web browser.</para>
+        </listitem>
+      </orderedlist>
+    </section>
+
+    <section>
+      <title>Handy DocBook reference:</title>
+
+      <para>DocBook is a bit like HTML (both are XML/SGML based), but they are
+      very different languages. In general, DocBook translators are less
+      tolerant of errors than browsers are. Here are some good places to read
+      up on DocBook:</para>
+
+      <literallayout><emphasis role="bold">DocBook 5 online guide</emphasis><uri>:
+http://www.docbook.org/tdg5/en/html/docbook.html</uri></literallayout>
+
+      <literallayout><emphasis role="bold">DocBook XSL online guide:
+</emphasis><uri>http://www.sagehill.net/docbookxsl/index.html</uri></literallayout>
+
+      <literallayout><emphasis role="bold">DocBook XSL Stylesheet reference online documentation:
+</emphasis><uri>http://docbook.sourceforge.net/release/xsl/current/doc/</uri></literallayout>
+    </section>
+
+    <section>
+      <title>That's it!</title>
+
+      <para>Enjoy another cup of coffee (or a beer). You deserve it!</para>
+
+      <para>The rest of this document describes more about the components in
+      the DocBook toolchain</para>
+    </section>
+  </chapter>
+
+  <chapter>
+    <title>Components in the DocBook Toolchain</title>
+
+    <section>
+      <title>Xalan-J</title>
+
+      <para>Xalan-J is the XSLT processor used to transform the input DocBook
+      XML documents to intermediate or final form.</para>
+
+      <para>The website for Xalan-j is here: <link
+      xlink:href="http://xml.apache.org/xalan-j/"></link></para>
+    </section>
+
+    <section>
+      <title>Apache FOP</title>
+
+      <para>Apache FOP (Formatting Objects Processor) is an open source
+      implementation of an XSL formatting objects (XSL-FO) processor. Its
+      website is located at <link
+      xlink:href="http://xmlgraphics.apache.org/fop/"></link>.</para>
+
+      <para>To generate PDF documentation, the input DocBook document is first
+      transformed to intermediate XSL-FO input using the DocBook stylesheets.
+      This intermediate output is then consumed by the XSL-FO processor to
+      produce PDFs. Note that since the intermediate form is an XML document
+      representing output document layout, alternative output forms from FOP
+      are theoretically possible, but at the time of this writing only the PDF
+      output implementation is mature.</para>
+    </section>
+
+    <section>
+      <title>JavaHelp</title>
+
+      <para>JavaHelp is an HTML-based help system from Sun which can be used
+      to provide online help for Java applications. Its website is here: <link
+      xlink:href="http://java.sun.com/products/javahelp/"></link>.</para>
+
+      <para>Generating JavaHelp from the XML source documents involves several
+      steps. First, the XSLT processor must be run on the input DocBook
+      document using the DocBook stylesheets. This will create a large
+      collection of HTML files, along with some other files that are necessary
+      for JavaHelp to function correctly.</para>
+
+      <para>One of these files is a generated helpset file with a default name
+      -- this is renamed with an appropriate name.</para>
+
+      <para>The next step is to generate the full-text search database for the
+      JavaHelp. This is necessary to make the <guilabel>Search</guilabel>
+      functionality in the help work. To generate this, the <application
+      class="software">jhindexer</application> tool that is included in the
+      JavaHelp software package must be used.</para>
+
+      <para>Finally, all the files needed by JavaHelp must be packaged into a
+      JAR file. The directory structure in the JAR file should look like
+      this:</para>
+
+      <informaltable>
+        <tgroup cols="2">
+          <colspec colwidth="1*" />
+
+          <colspec colwidth="2*" />
+
+          <thead>
+            <row>
+              <entry align="center">Subdirectory</entry>
+
+              <entry align="center">Contents</entry>
+            </row>
+          </thead>
+
+          <tbody>
+            <row>
+              <entry>JavaHelp</entry>
+
+              <entry><filename>&lt;helpsetname&gt;.hs</filename>,
+              <filename>jhelpidx.xml</filename>,
+              <filename>jhelpmap.jhm</filename>,
+              <filename>jhelptoc.xml</filename>, HTML files for each help
+              page</entry>
+            </row>
+
+            <row>
+              <entry>JavaHelp/images/&lt;filename&gt;</entry>
+
+              <entry>Images displayed in the help referenced from
+              &lt;<filename>filename&gt;.xml</filename></entry>
+            </row>
+
+            <row>
+              <entry>JavaHelp/JavaHelpSearch</entry>
+
+              <entry>Files generated by
+              <application>jhindexer</application></entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </informaltable>
+    </section>
+  </chapter>
+</book>

@@ -1,0 +1,236 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Accumulate.cal
+ * Created: March 9, 2005
+ * By: Bo Ilic
+ */
+
+/**
+ * Defines accumulation functions, that can be used to compute multiple summaries over data, along with
+ * finalizing the results. This is similar to the sort of summary operations done by a reporting application.
+ *  
+ * @author Raymond Cypher
+ */
+
+module Cal.Utilities.Accumulate;
+import Cal.Core.Prelude using
+    typeConstructor = Double, Int, String;
+    ;
+      
+import Cal.Core.String;        
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * Do an accumulation operation across a data set.
+ * 
+ * @arg accumulator function to apply at each data point
+ * @arg finalizer function that is applied to the result of applying func across the record set.
+ * @arg runningValue current state of calculation
+ * @arg converter function that transforms an element of the data set to the type of data point func is expecting.
+ * @arg values a list of values
+ */
+accumulate :: (a -> b -> a) -> (a -> c) -> a -> (d -> b) -> [d] -> c;
+public accumulate !accumulator !finalizer !runningValue !converter !values =
+    let
+        helper accumulator runningValue converter values = 
+            case values of
+            [] -> runningValue;
+            x : xs ->         
+                let
+                   eval = accumulator runningValue (converter x);
+                in
+                   Prelude.seq eval (helper accumulator eval converter xs);
+            ;        
+    in
+        finalizer (helper accumulator runningValue converter values);
+
+/**
+ * {@code accumulate1@} takes a record describing the accumulator and a set of values to operate on.
+ * 
+ * The record contains: {@code accumulator@}, {@code finalizer@}, {@code runningValue@}, and {@code converter@}
+ * The accumulator is applied to the running value and each data point.
+ * The finalizer is replied to the running value after the accumulator has been applied to all data points.
+ * The running value represents the current state of the accumulation.
+ * The converter is used to transform an individual value.  Often it is used to extract a field from a record/tuple.
+ *
+ * {@link accumulate2@} takes a record containing two accumulator description records and so on for {@link accumulate3@}, etc.
+ *
+ * @arg accumulator - the record containing the accumulator parts
+ * @arg values - a {@link Prelude.List@} of values
+ */
+accumulate1  :: (a\accumulator, a\converter, a\finalizer, a\runningValue) => {a | accumulator :: b -> c -> b, converter :: d -> c, finalizer :: b -> e, runningValue :: b} -> [d] -> e;
+public accumulate1 accumulator values = 
+    accumulate accumulator.accumulator accumulator.finalizer accumulator.runningValue accumulator.converter values;
+
+/**
+ * {@code accumulate2@} is lazy in each of the accumulated values.  i.e. accessing one accumulated value doesn't cause the other value to
+ * be evaluated.  As a result there are two passes over the data to get each value.  Also the entire value record set ends up residing in
+ * memory.
+ * It takes a record containing two fields, #1 and #2, each of which are an accumulator description record as
+ * described in the comment for {@link accumulate1@}
+ *
+ * @arg accumulators - a record containing the records containing the accumulator parts
+ * @arg values - a {@link Prelude.List@} of values
+ */
+accumulate2 :: (a\#1, a\#2, b\accumulator, b\converter, b\finalizer, b\runningValue, g\accumulator, g\converter, g\finalizer, g\runningValue) => {a | #1 :: {b | accumulator :: c -> d -> c, converter :: e -> d, finalizer :: c -> f, runningValue :: c}, #2 :: {g | accumulator :: h -> i -> h, converter :: e -> i, finalizer :: h -> j, runningValue :: h}} -> [e] -> {#1 :: f, #2 :: j};            
+public accumulate2 accumulators values =
+    let
+        ac1 = accumulators.#1;
+        ac2 = accumulators.#2;
+    in
+        {#1 = accumulate1 ac1 values, #2 = accumulate1 ac2 values};
+
+/**
+ * {@code accumulate2Strict@} calculates all accumulated values in a single pass over the data.  
+ * This means that it runs in constant space
+ * and that it is not possible to access one value without both being calculated.
+ *
+ * It takes a record containing two fields, #1 and #2, each of which are an accumulator description record as
+ * described in the comment for {@link accumulate1@}
+ *
+ * @arg accumulators - a record containing the records containing the accumulator parts
+ * @arg values - a {@link Prelude.List@} of values
+ */
+accumulate2Strict :: (a\#1, a\#2, b\accumulator, b\converter, b\finalizer, b\runningValue, g\accumulator, g\converter, g\finalizer, g\runningValue) => {a | #1 :: {b | accumulator :: c -> d -> c, converter :: e -> d, finalizer :: c -> f, runningValue :: c}, #2 :: {g | accumulator :: h -> i -> h, converter :: e -> i, finalizer :: h -> j, runningValue :: h}} -> [e] -> {#1 :: f, #2 :: j};            
+public accumulate2Strict !accumulators !values =
+    let
+        accumulator1 = accumulators.#1;
+        accumulator2 = accumulators.#2;
+        
+        helper accumulator1 accumulator2 rv1 rv2 values =
+            case values of
+            [] -> (rv1, rv2);
+            x : xs ->
+                let
+                    eval1 = accumulator1.accumulator rv1 (accumulator1.converter x);
+                    eval2 = accumulator2.accumulator rv2 (accumulator2.converter x);
+                in
+                    Prelude.seq (Prelude.seq eval1 eval2) (helper accumulator1 accumulator2 eval1 eval2 xs);
+            ;
+            
+        accumulated = helper accumulator1 accumulator2 accumulator1.runningValue accumulator2.runningValue values;
+    in
+        (accumulator1.finalizer accumulated.#1, accumulator2.finalizer accumulated.#2);
+
+/**
+ * {@code accumulate3@} is lazy in each of the accumulated values.  i.e. accessing one accumulated value doesn't cause the other value to
+ * be evaluated.  As a result there are three passes over the data if all values are accessed.  
+ * Also the entire value record set ends up residing in memory.
+ *
+ * @arg accumulators - a record containing the records containing the accumulator parts
+ * @arg values - a {@link Prelude.List@} of values
+ */
+accumulate3 :: (a\#1, a\#2, a\#3, b\accumulator, b\converter, b\finalizer, b\runningValue, g\accumulator, g\converter, g\finalizer, g\runningValue, k\accumulator, k\converter, k\finalizer, k\runningValue) => {a | #1 :: {b | accumulator :: c -> d -> c, converter :: e -> d, finalizer :: c -> f, runningValue :: c}, #2 :: {g | accumulator :: h -> i -> h, converter :: e -> i, finalizer :: h -> j, runningValue :: h}, #3 :: {k | accumulator :: l -> m -> l, converter :: e -> m, finalizer :: l -> n, runningValue :: l}} -> [e] -> {#1 :: f, #2 :: j, #3 :: n};
+public accumulate3 accumulators values = 
+    {#1 = accumulate1 accumulators.#1 values, 
+     #2 = accumulate1 accumulators.#2 values, 
+     #3 = accumulate1 accumulators.#3 values};
+
+
+/**
+ * {@code accumulate3Strict@} calculates all accumulated values in a single pass over the data.  This means that it runs in constant space
+ * and that it is not possible to access one accumulated value without all three being calculated.
+ *
+ * @arg accumulators - a record containing the records containing the accumulator parts
+ * @arg values - a {@link Prelude.List@} of values
+ */
+accumulate3Strict :: (a\#1, a\#2, a\#3, b\accumulator, b\converter, b\finalizer, b\runningValue, g\accumulator, g\converter, g\finalizer, g\runningValue, k\accumulator, k\converter, k\finalizer, k\runningValue) => {a | #1 :: {b | accumulator :: c -> d -> c, converter :: e -> d, finalizer :: c -> f, runningValue :: c}, #2 :: {g | accumulator :: h -> i -> h, converter :: e -> i, finalizer :: h -> j, runningValue :: h}, #3 :: {k | accumulator :: l -> m -> l, converter :: e -> m, finalizer :: l -> n, runningValue :: l}} -> [e] -> {#1 :: f, #2 :: j, #3 :: n};
+public accumulate3Strict !accumulators !values =
+    let
+        accumulator1 = accumulators.#1;
+        accumulator2 = accumulators.#2;
+        accumulator3 = accumulators.#3;
+        
+        helper accumulator1 accumulator2 accumulator3 rv1 rv2 rv3 values =
+            case values of
+            [] -> (rv1, rv2, rv3);
+            x : xs ->
+                let
+                    eval1 = accumulator1.accumulator rv1 (accumulator1.converter x);
+                    eval2 = accumulator2.accumulator rv2 (accumulator2.converter x);
+                    eval3 = accumulator3.accumulator rv3 (accumulator3.converter x);
+                in
+                    Prelude.seq (Prelude.seq eval1 (Prelude.seq eval2 eval3)) (helper accumulator1 accumulator2 accumulator3 eval1 eval2 eval3 xs);
+            ;
+            
+        accumulated = helper accumulator1 accumulator2 accumulator3 accumulator1.runningValue accumulator2.runningValue accumulator3.runningValue values;
+    in
+        (accumulator1.finalizer accumulated.#1, accumulator2.finalizer accumulated.#2, accumulator3.finalizer accumulated.#3);
+
+
+/**
+ * {@code accumulate4@} is lazy in each of the accumulated values.  i.e. accessing one accumulated value doesn't cause the other value to
+ * be evaluated.  As a result there are four passes over the data if all accumulated values are accessed.  
+ * Also the entire value record set ends up residing in memory.
+ *
+ * @arg accumulators - a record containing the records containing the accumulator parts
+ * @arg values - a {@link Prelude.List@} of values
+ */
+public accumulate4 accumulators values = 
+    {#1 = accumulate1 accumulators.#1 values, 
+     #2 = accumulate1 accumulators.#2 values, 
+     #3 = accumulate1 accumulators.#3 values, 
+     #4 = accumulate1 accumulators.#4 values};
+
+/**
+ * {@code accumulate4Strict@} calculates all accumulated values in a single pass over the data.  This means that it runs in constant space
+ * and that it is not possible to access one accumulated value without all four being calculated.
+ *
+ * @arg accumulators - a record containing the records containing the accumulator parts
+ * @arg values - a {@link Prelude.List@} of values
+ */
+public accumulate4Strict !accumulators !values =
+    let
+        accumulator1 = accumulators.#1;
+        accumulator2 = accumulators.#2;
+        accumulator3 = accumulators.#3;
+        accumulator4 = accumulators.#4;
+        
+        helper accumulator1 accumulator2 accumulator3 accumulator4 rv1 rv2 rv3 rv4 values =
+            case values of
+            [] -> (rv1, rv2, rv3, rv4);
+            x : xs ->
+                let
+                    eval1 = accumulator1.accumulator rv1 (accumulator1.converter x);
+                    eval2 = accumulator2.accumulator rv2 (accumulator2.converter x);
+                    eval3 = accumulator3.accumulator rv3 (accumulator3.converter x);
+                    eval4 = accumulator4.accumulator rv4 (accumulator4.converter x);
+                in
+                    Prelude.seq (Prelude.seq eval1 (Prelude.seq eval2 (Prelude.seq eval3 eval4))) (helper accumulator1 accumulator2 accumulator3 accumulator4 eval1 eval2 eval3 eval4 xs);
+            ;
+            
+        accumulated = helper accumulator1 accumulator2 accumulator3 accumulator4 accumulator1.runningValue accumulator2.runningValue accumulator3.runningValue accumulator4.runningValue values;
+    in
+        (accumulator1.finalizer accumulated.#1, accumulator2.finalizer accumulated.#2, accumulator3.finalizer accumulated.#3, accumulator4.finalizer accumulated.#4);
+

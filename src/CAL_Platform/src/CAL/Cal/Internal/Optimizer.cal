@@ -1,0 +1,3149 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Optimizer.cal
+ * Created: August 12, 2005
+ * By: Greg McClement
+ */
+
+/**
+ * WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WAR 
+ * 
+ * This file is part of the compiler and not to be modified. 
+ * 
+ * ING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
+ *
+ * There are five modules that comprise the optimizer.
+ * 
+ * {@link Optimizer@}
+ *      This module contains the code that applies the optimizating transformations to the given expression. 
+ *      {@link optimize @} is the entry point to the optimization process.
+ * 
+ * {@link Optimizer_Type@}
+ *      This module contains the definitions for type expressions in CAL. This file contains helper functions
+ *      including all the code for type unifications.
+ *      
+ * {@link Optimizer_Expression@}
+ *      This module contains all the definition for expression objects in CAL. 
+ *      
+ * {@link Optimizer_State@}
+ *      This module contains the definition for TransformState and TransformHistory as well as supporting functions. 
+ *      These data values are used by the traversal and transformation functions.
+ *      
+ * {@link Optimizer_Traversers@}
+ *      This module contains functions for traversing expressions and performing transformations.
+ *      
+ * {@link Optimizer_Transformations@}
+ *      This module contains all of the optimizing transformations as well as supporting functions.
+ *
+ * TODO Add some of the fancy new cal type elements. 
+ * 
+ * @author Greg McClement
+ */
+
+/*
+ * CAL function for performing optimization via transformations on CAL programs. 
+ * 
+ * 1. Define the CAL representation of the compiled CAL code. 
+ * 2. Insert in the compilation path a call that runs a no-op version of the CAL optimizer. Check this in. This will be done around ExpressionAnalyzer. Java Expressions will be converted to CAL Expressions. The optimizer will be run and then CAL Expression will be converted back. 
+ * 3. Implement optimizations. These can be done in parallel.
+ *      1. Case reductions.
+ *      2. Inlining. (For this step perform only on explicitly marked functions or let variables).
+ *          - need to have file for storing inline-able functions for each module so this info can be available
+ *      3. Dead code elimination.
+ *      4. Beta Reduction.
+ *      5. Function specialization. This is needed to get the optimization from version 5 to version 6 where a new function is added that is specialized.
+ *      6. Some compile time evaluation smarts. For example, a && True ==> a, b || False ==> b. This will include logical equivalences. This is needed for getting from version 5 to 6 as well.
+ * 4. If you think of the set of all CAL programs, P where members of P are p1, p2, etc. Then you can imagine a graph G, where there is an edge between p1 and p2 iff there is a single optimization (from number 3) that transforms p1 into p2. I have verified that there is a path from getNthPrime to getNthPrime8 in the graph but we not only need the path but we need the optimizer to choose that path and decide to stop at the right spot. The Haskell optimizer runs for up to 4 passes and then stops. We could do this for version one but it might be nice to have a cost function and use heuristics to select the best optimization paths as well. This step in the implementation would be to make sure that all the transformations are being applied so as to produce the best result.
+ * 
+ * Future work: * 
+ * 5. Have the optimizer decide whether to inline functions that are not explicitly marked.
+ * 6. There are tons more optimizations described in http://www.research.microsoft.com/~simonpj/Papers/inlining/inline.pdf
+ * 
+ * If CAL is being run on a server these could be done in the background during idle loops.
+ * 
+ * 7. Writing out logging files during program execution in order to see the functions that are called heavily. Feed this into the optimizer so that it knows the functions to spend more time on.
+ * 8. Getting the optimizer to run the code and see which version are faster. That information could be logged so the same optimization path is chosen for subsequence recompiles of unchanged functions.
+ * 9. Constant analysis on recursive functions
+ * 11. Constant analysis -> how ga1 and ga2 are constant for the execution of map1$map2
+ * 
+ *      let 
+ *      
+ *          map1$map2 = \ga1 ga2 ga3 ->
+ *              case ga3 of
+ *              []->[];
+ *              head2 : tail2 -> ga1 (ga2 head2) : map1$map2 ga1 ga2 tail2;
+ *              
+ *      in
+ *      
+ *          map1$map2 myF1 myF2 myList
+ *          
+ *  12. What about building list accumulators from appends.
+ *  13. Lambda expressions that are constants (\x -> True), check that.
+ *  14. Not in-lining maxboundint (check this)
+ *  15. Using Let to hold function defitions does not work for mutually recursive functions. 
+ *  16. Sharing of optimization results.
+ *  17. if Accumulate.t$x$1 then
+ *          if Accumulate.t$x$1 then
+ *                  True
+ *          else
+ *                  False
+ *      else
+ *          False
+ *  18. Don't store the core functions as lets have a different data structure.
+ *  20. Check out why unsafecoerce has that special code once the prelude stuff is being inlined.
+ *  21. Put the fusion/specializations in the core function list so they may be reused.
+ *  22. Change TransformState to TransformContext
+ *  23. Shorten up the name of the generated functions. Maybe just use a path.
+ *  24. Inline functions if the strict arguments are already known values.
+ *  25. Can arguments that are functions be marked as strict?
+ *  26. Go through the renames and make sure they all NEED to be done.
+ *  27. A cache a call that passes a bunch of constants
+ *          f x = Cons x []
+ *          ...
+ *          f 1
+ *  28. Change the foldLeft's to and/orList
+ *  29. Even if the specializer cannot inline arguments it can make the type more specific. 
+ *  30. f a = 
+ *          if a == 0 then 0
+ *          else f a + f a;
+ *          f = (1+2) + (1+2);
+ *          
+ *          option1: no inline
+ *          option2: inline but restructure to get one call
+ *  31. substituteAlt should check the names of the alt variables before doing the substitution
+ *  32. optmize this automatically programmatically
+ *      protected flattenExpression !expr =
+ *       let
+ *           flattenR :: Expression -> [Expression];
+ *           flattenR !expr =
+ *               case expr of
+ *               App e1 e2 -> e2 : flattenR e1;
+ *               _ -> [expr];
+ *               ;                
+ *       in            
+ *          reverse (flattenR expr);
+ *  34. In this call, "find (\entry -> matchFN switchDC fn entry.#1) xs" is it faster to (partially) evalute the lambda body before the call.
+ *  36. making an argument strict if the arg is know to be evaluated
+ *  37. Make the type info spread around better
+ *  
+ *   Format.zipWith$$$map [zipFunction, list1, mapFunction, list2]
+ *       (case list1 of [
+ *           Cons 1/a 2/b -> 
+ *               (case list2 of [ 
+ *               []  -> []; 
+ *               Cons 1/listHead 2/listTail -> 
+ *                   (Cons
+ *                       (zipFunction a (mapFunction listHead )) 
+ *                       (Format.zipWith$$$map zipFunction b mapFunction listTail ) );
+ *               ] ); 
+ *           []  -> [];
+ *       ] ) 
+ *       
+ *       [(!Prelude.Int -> (!Prelude.Int -> Prelude.Int)), ![JTypeVar(10148486)], (JTypeVar(8441961) -> JTypeVar(15912964)), ![JTypeVar(8441961)], [JTypeVar(32056442)]] 
+ *       [Prelude.False, Prelude.True, Prelude.False, Prelude.True])
+ *
+ *          
+ * @author Greg McClement
+ * 
+*/
+
+module Cal.Internal.Optimizer;
+
+import Cal.Core.Prelude using
+    typeConstructor = String, Int, Boolean, JObject, JList, Double, Char, Long, Maybe;
+    dataConstructor = True, False, Just, Nothing;
+    typeClass = Eq, Outputable, Inputable, Ord;
+    function = 
+        deepSeq, seq, max, typeOf, empty, input, output, intToString, 
+        uncurry, assert, snd, fst, error, concat, or, isNothing, isJust, 
+        compare, and, not, compose, upFrom, isEmpty, upFromTo, undefined,
+        fromJust,
+        append, isStringType, isIntType, isBooleanType, isDoubleType, isCharType;
+    ;
+
+import Cal.Collections.List using
+    function = 
+        zipWith, zipWith3, zipWith4, find, foldLeft, foldLeft1, andList, union, map,
+        maximum, isElem, sort, zip4, subList, unzip4, drop, take,
+        last, zip3, filter, orList, sortBy, tail, head, zip, reverse, length;
+    ;
+    
+import Cal.Core.String using
+    function = indexOfString;
+    ;
+    
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = trace, show;
+    ;
+
+import Cal.Internal.Optimizer_Type using
+    typeConstructor = Type, JTypeExpr;
+    dataConstructor = TypeConst, TypeConstTest, TypeVar, TypeId, FunctionType, ListType, AppType;
+    function = types_hasStrictArguments, type_specializeArguments, optimizerHelper_typeExpr_getName,
+               type_isStrict, unflattenFunctionTypes, type_hasStrictArguments, type_applyStrictness,
+               type_unify, type_applyBindings, inputType, flattenType, outputType, type_atLeastAsStrict,
+               type_listToType, type_isFunctionType, unflattenAppTypes, optimizerHelper_newTypeVar,
+               type_setStrictness,  
+               type_selectMostSpecificType;
+    ;
+    
+import Cal.Internal.Optimizer_Expression using
+    typeConstructor = 
+        Expression, QualifiedName, FieldName, Alt, DataCons, Literal, CaseConst, JFunctionalAgent, 
+        JCompiler_RecordType_RecordType, CoreFunction;
+    dataConstructor = 
+        FNOrdinal, Alt, Alts, Var, Literal, App, Lambda, Let, Switch, RecordCase, ChainOfSeqs, Opaque, RecordSelection, 
+        RecordExtensionLiteral, RecordExtensionPolymorphic, DataConsSelection, DataConstructor, LetInlinable, 
+        ErrorInfo, QN, LitString, LitInt, LitBoolean, LitDouble, LitChar, LitOpaque, LitByte, LitLong, CaseLiteral, 
+        CaseDataCons, DataCons, CoreFunction, FNTextual;
+    function = 
+        unflattenExpression, showExpressionStructure, flattenExpression, qualifiedName_getName, 
+        qualifiedName_isTopLevel, optimizerHelper_functionalAgent_getTypeExprExact, dataCons_getType, 
+        optimizerHelper_type_asRecordType, outputFieldName, isVar, compiler_RecordType_RecordType_getHasFieldType, 
+        isLambdaExpression, alt_getExpr, dataConstructor_getFieldIndex, isSeq, prelude_seq, 
+        optimizerHelper_functionalAgent_asDataConstructor, convertToPositional, getFunctor, envEntity_getTypeExpr, 
+        containsAnyFree, getSeq, flattenSeqs2, envEntity_getQualifiedName, 
+        substituteNoRename, containsFree, addLambdaVars, expression_getDepth, isLiteral;
+    ;
+
+import Cal.Internal.Optimizer_State using
+    typeConstructor = TransformState, TransformHistory, JPreludeTypeConstants;
+    dataConstructor = TransformState, TransformHistory;
+    function = 
+        transformState_getType, transformState_updateTopLevelBoundNames, transformState_clearInContextBoundNames,
+        transformState_getInContextBoundNames, newVar, prelude_seq_expr, 
+        transformState_isBoundName, transformState_isKnownToBeWHNF, transformState_isAlreadySeqed, 
+        transformState_getTopLevelBoundNames, transformState_getModuleName, transformState_getCurrentFunctionName,
+        transformHistory_addCoreFunction, transformState_setCurrentFunctionName, transformState_getName,
+        transformState_clearLambdaVars, transformHistory_setStartTime, transformHistory_setCoreFunction,
+        transformState_addKnownToBeWHFN, transformState_setTraverseCoreFunctions, transformState_setType,
+        transformState_isTopLevelBoundName, convertToUniqueName, transformState_removeTypes,
+        transformHistory_isLiftedLetVar, transformHistory_updateLiftedLetVar, buildSeq3, 
+        transformState_init, expression_getType, transformHistory_init, transformState_deeper;
+    
+    ;
+
+import Cal.Internal.Optimizer_Traversers using
+    function = 
+        transformAcc, transformNoHistory, combineTransforms, transform,
+        convertToType, canConvertToType, transformOnly, transformTopDown,
+        traverse, transformTopDownSimple,
+        transform_withHistory, traverseTopDownAcc;
+    ;
+    
+import Cal.Internal.Optimizer_Transformations using
+    function = 
+        performFusion, tShower, tShower3, optimizeExplicit, constVars, transform_if_to_case, transform_3_2_2, 
+        transform_3_1, transform_3_2_1, transform_specialization, transform_letFloatingFromCaseScrutinee, 
+        transform_hasBadStructure, transform_3_5_2, transform_convertToIfs, transform_evaluateRecordSelection, 
+        transform_3_5_1, transform_simplifySeq, transform_3_5_5, transform_evaluateCase, transform_3_4_2, 
+        transform_redundantCases, transform_3_5_2_withInlining, renameLetVariables, transform_canonizeSeq, 
+        transform_defineAllAltVariables, transform_removeUnusedAltVariables, flattenSeqs, buildSeq, 
+        transform_evaluateArithmeticExpressions, transform_simplifyCase, adjustTypeForLetExpression;
+    ;
+
+friend Cal.Test.Internal.Optimizer_Test;
+
+/**
+* This function performs transformational optimization on the given expression. 
+*
+* @arg name The name of the expression being optimized.
+* @arg arguments The names of the arguments of the functions whose body this is the expression of.
+* @arg argumentStrictness The strictness array for the given arguments.
+* @arg startTime The time that the optimizer is starting at.
+* @arg typeConstants Used to lookup the type expression for various basic types (String, Int, Double ...)
+* @arg nameToTypeList1 Mapping for variable name to type for some pre-known values. The [Boolean] is the argument strictness.
+* @arg coreFunctionsIn The definitions for the functions used in the given expression.
+* @arg nonCalFunctions The names of primitive and foreign functions.
+* @arg expr The expression to optimize.
+* @return The optimizer version of the given expression and new helper functions along with an array flagging which arguments are strict.
+*/
+
+optimize :: QualifiedName -> [QualifiedName] -> [Boolean] -> Long -> JPreludeTypeConstants -> [(QualifiedName, [Type], [Boolean])] -> [CoreFunction] -> [QualifiedName] -> Expression -> ([CoreFunction], [Boolean], Expression);
+protected optimize name arguments argumentStrictness startTime typeConstants nameToTypeList1 coreFunctionsIn nonCalFunctions expr =
+    
+    let
+        /**
+         * Embed the strictness value in the given types. I was storing strictness with the type and that is 
+         * a little different than what happens in Java. 
+         */
+        embedStrictness :: [Type] -> [Boolean] -> [Type];
+        embedStrictness types !strictness =
+            case strictness of
+            [] -> types;
+            s:ss ->
+                case types of
+                types_head : types_tail ->
+                    type_applyStrictness types_head s : embedStrictness types_tail ss;
+                ;    
+            ;
+            
+        /**
+         * Convert the given nameToTypeList to a format where the type has strictness embedded in it. 
+         * This can be done directly on the Java side.
+         * 
+         */
+        nameToTypeList2 :: [(QualifiedName, Type)];
+        nameToTypeList2 = 
+            map (\!triple -> 
+                case triple of
+                (name, types, strictness) -> 
+                    (name, unflattenFunctionTypes (embedStrictness types strictness));
+                ) nameToTypeList1;
+
+        argumentsThatAreStrict :: [Expression];
+        argumentsThatAreStrict = 
+            // list of arguments that are known to be strict
+            map fromJust
+            (
+                filter
+                isJust
+                (zipWith (\argument isStrict ->
+                    if isStrict then
+                        Just (Var argument [] Nothing Nothing)
+                    else
+                        Nothing)
+                 arguments argumentStrictness
+                )
+            );
+
+
+    in
+        let
+
+            /**
+             * 
+             * Without this test then for the following code t2 will run in 2.5 seconds and
+             * t3 will run in 7 seconds.
+             * 
+             * t2 :: String;
+             * t2 = Debug.show t2_helper;
+             * t2_helper :: Double;
+             * t2_helper = benchmarkAverage (Cal.Core.Prelude.upFromTo 1.0 20000000.0);
+             * 
+             *  t3 :: String;
+             *  t3 = Debug.show (benchmarkAverage (Cal.Core.Prelude.upFromTo 1.0 20000000.0));
+             *  
+             */
+        isComplexCAF :: CoreFunction -> Boolean;
+        isComplexCAF cf =
+            case cf of
+            CoreFunction {type, expr} ->
+                if length type > 1 then
+                    False // not a CAF
+                else
+                    let
+                        cafType :: Type;
+                        cafType = head type;
+                    in
+                        case cafType of
+                        TypeConst {} -> not (isLiteral expr);
+                        FunctionType {} -> False;
+                        _ -> True;
+                ;
+            ;
+        
+        coreFunctions :: [CoreFunction];
+        coreFunctions =
+            arrangeCoreFunctions $
+            filter            
+                (\cf ->
+                    (not (isComplexCAF cf)) &&
+                    (cf.CoreFunction.name.QN.moduleName != "Cal.Collections.Array") &&
+                    not 
+                     (coreFunction_probablyHasUnsafeCoerce
+                         (transformState_init name typeConstants nameToTypeList2 knownNames arguments expr argumentsThatAreStrict nonCalFunctions)
+                         cf
+                     )
+                )
+                (map coreFunction_setStrictnessInTypes coreFunctionsIn);
+
+        moduleName :: String;
+        moduleName = name.QN.moduleName;
+
+        nameToTypeListCoreFunction :: [(QualifiedName, Type)];
+        nameToTypeListCoreFunction =
+            map (\!cf ->
+                case cf of
+                CoreFunction {name, type, strictness} ->
+                    (name, unflattenFunctionTypes (embedStrictness type strictness));) coreFunctions;
+
+        // For the lambda lifter so it know that these names are not free.
+        knownNames :: [QualifiedName];
+        knownNames = map (\!cf -> cf.CoreFunction.name) coreFunctions;
+        
+        nameToTypeList3 :: [(QualifiedName, Type)];
+        nameToTypeList3 = append nameToTypeList2 nameToTypeListCoreFunction;
+        
+        in
+            let
+        
+        knownToBeWHNF :: [Expression];
+        knownToBeWHNF =
+            map 
+                fromJust
+                (filter 
+                     isJust 
+                     (zipWith (\arg isStrict -> if isStrict then Just (Var arg [] Nothing Nothing) else Nothing) arguments argumentStrictness)
+                );
+        
+        // convert if/then/else to cases
+        startWith1 :: Expression;
+        startWith1 =
+            let
+                initState :: Expression -> TransformState;
+                initState expr =
+                    (transformState_init name typeConstants nameToTypeList3 knownNames arguments expr argumentsThatAreStrict nonCalFunctions);
+                
+                expr0 = 
+                    transformNoHistory 
+                    (transformState_init name typeConstants nameToTypeList3 knownNames arguments expr knownToBeWHNF nonCalFunctions)
+                    (
+                        (embedCoreFunctions 
+                         (initState expr)
+                         (filter
+                          (\!cf -> not (containsFree (QN "Cal.Core.Memoize" "memo") cf.CoreFunction.expr))
+                          (filter 
+                           (\!cf -> not (containsFree (QN "Cal.Core.Prelude" "unsafeCoerce") cf.CoreFunction.expr)) 
+                           coreFunctions)
+                         )
+                         expr)
+                    )
+                    (\state expr ->
+                        (transform_addType state 
+                         (transform_convertAltsToAlt state 
+                          (transform_if_to_case state (transform_addModuleNameToVariables state expr))))
+                    )
+                    ;
+                expr1 = (transform (initState expr0) transformHistory_init expr0 transform_addTypeToLet).#3;
+            in  
+                transformNoHistory (initState expr1) expr1 transform_addType;  
+            in
+                let
+                    /**
+         * Go through the expression looking for let variables and try to get their type from the body 
+         * of the variable. This uses startWith1 so that the variable names all have the module name set.
+         */
+        nameToTypeList4 :: [(QualifiedName, Type)];
+        nameToTypeList4 =
+            let
+                initState :: Expression -> TransformState;
+                initState expr = transformState_init name typeConstants nameToTypeList3 arguments knownNames expr [] nonCalFunctions;              
+            in
+                (transformAcc (initState startWith1) nameToTypeList3 startWith1 transform_getTypeForLetVariable).#1;
+                
+        /**
+         * If the expression is a let variable definition. Try to calculate the type of the variable name
+         * from the defining expression. This information is save in the accumulator.
+         */    
+        transform_getTypeForLetVariable :: TransformState -> [(QualifiedName, Type)] -> Expression -> ([(QualifiedName, Type)], Expression);
+        transform_getTypeForLetVariable state nameToTypeList !expr = 
+            case expr of
+            Let {variable, expr=def} ->
+                let
+                    maybeType :: Maybe Type;
+                    maybeType = expression_getType state transformHistory_init def;
+                in
+                    case maybeType of
+                    Nothing -> (nameToTypeList, expr);
+                    Just maybeType_Just_value ->
+                        ((variable, maybeType_Just_value):nameToTypeList, expr);
+                    ;    
+            _ -> (nameToTypeList, expr);
+            ;
+
+        initState :: Expression -> TransformState;
+        initState expr =
+                (transformState_init name typeConstants nameToTypeList4 knownNames arguments expr argumentsThatAreStrict nonCalFunctions);                   
+
+        initHistory :: TransformHistory;
+        initHistory = transformHistory_init;       
+        startWithAndHistory :: (TransformHistory, Boolean, Expression);
+        startWithAndHistory =
+            transform (initState startWith1) initHistory startWith1
+                (\state history expr ->
+                    case transform_defineAllAltVariables state history expr of
+                    (history2, wasChanged2, expr2) ->
+                        case transform_updateModule moduleName state history2 expr2 of
+                        (history3, wasChanged3, expr3) ->
+                            case convertToUniqueName state history3 expr3 of
+                            (history4, wasChanged4, expr4) -> (history4, wasChanged2 || wasChanged3 || wasChanged4, expr4);
+                            ;
+                        ;
+                );
+
+        transformationsFirstPass :: [TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)];
+        transformationsFirstPass = [                
+                          transform_3_2_2       // inlining
+                       ,  transform_3_5_5       // lambda floating
+                       ,  transform_3_1         // beta reduction
+                       ,  transform_3_5_1
+                       ,  transform_3_5_2
+                       ,  transform_simplifyCase
+                       ,  performFusion
+                       ,  transform_3_4_2  // XX
+                       ,  transform_redundantCases // XX
+                       ,  transform_evaluateCase
+                       ,  transform_evaluateArithmeticExpressions
+                       ,  transform_letFloatingFromCaseScrutinee // XX
+                       ,  transform_3_5_2_withInlining
+                       ,  transform_evaluateRecordSelection
+                       ,  (transform_3_2_1 False)       // dead code elimination
+                       ,  transform_canonizeSeq
+                       ,  transform_simplifySeq  // after canonize seq for test41
+                      ];
+        
+        transformationsSecondPass :: [TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression)];
+        transformationsSecondPass = [
+                            transform_3_2_2        // inlining
+                         ,  transform_3_5_5 // lambda floating
+                         ,  transform_3_5_1
+                         ,  transform_3_5_2
+                         ,  transform_simplifyCase
+                         ,  transform_3_1          // beta reduction
+                         ,  transform_3_4_2
+                         ,  transform_redundantCases
+                         ,  transform_specialization
+                         ,  transform_evaluateCase
+                         ,  transform_letFloatingFromCaseScrutinee
+                         ,  transform_3_5_2_withInlining
+                         ,  transform_evaluateRecordSelection
+                         ,  (transform_3_2_1 True)       // dead code elimination
+                         ,  transform_evaluateArithmeticExpressions
+                         ,  transform_canonizeSeq
+                         ,  transform_simplifySeq  // after canonize seq for test41
+                      ];
+        /**
+         * The result of running the transformations on the input expression.
+         */
+        
+        optimization1 :: (TransformHistory, Boolean, Expression);
+        optimization1 =            
+            case startWithAndHistory of
+            (history, wasChanged, startWith) ->
+                startWithAndHistory `deepSeq`
+                optimizeExplicit transformationsFirstPass (transformState_deeper (initState startWith) name) (transformHistory_setStartTime history startTime) (16::Int) startWith;
+            ;    
+        
+        optimization2 :: (TransformHistory, Boolean, Expression);
+        optimization2 =
+            case optimization1 of
+            (history, wasChanged, expression) ->
+                optimization1 `deepSeq`
+                optimizeExplicit transformationsSecondPass (transformState_deeper (initState expression) name) history (16::Int) expression;
+            ;    
+
+        finalOptimization :: (TransformHistory, Boolean, Expression);
+        finalOptimization = optimization2;
+
+        /**
+         * Resugar the optimized expression. 
+         */
+        
+        numberOfCoreFunctions :: Int;
+        numberOfCoreFunctions = length coreFunctions;
+        
+        coreFunctionsDepth :: Int;
+        coreFunctionsDepth = 
+            foldLeft (\maxD cf -> max (expression_getDepth cf.CoreFunction.expr 0) maxD) 0 coreFunctions;
+
+        skipThisFunction :: QualifiedName -> Boolean;
+        skipThisFunction name =
+            let
+                nameAsString :: String;
+                nameAsString = show name;
+            in
+                name.QN.moduleName == "Cal.Collections.Array" ||
+                name.QN.moduleName == "BusinessObjects.Olap.Test.OlapExpressionParser_Tests" ||
+                name.QN.moduleName == "BusinessObjects.Olap.Test.ExpressionOrdering_Tests" ||
+                nameAsString == "BusinessObjects.Olap.DataFacets.membersAtDepthsInSubtree" ||
+                nameAsString == "Cal.Data.Sql.tableNameText" ||
+                nameAsString == "Cal.Data.Sql.queryText";
+
+    in    
+        if not (skipThisFunction name) && expression_getDepth expr 0 < 20 then
+            case finalOptimization of
+            (history2a, wasChanged2a, optimized2a) -> 
+                case transform (initState expr) 
+                               history2a 
+                               optimized2a
+                               adjustTypeForLetExpression of
+                (history2, wasChanged2, optimized2) ->
+                let
+                    resugared :: Expression;
+                    resugared =
+                        (case convertSeqExpressions (initState optimized2) transformHistory_init arguments optimized2 of
+                        (_, _, optimized3) ->
+                            transformNoHistory (initState optimized3) optimized3 
+                            (\state expr ->
+                                case transform_3_2_1 True state transformHistory_init 
+                                (transform_renameCaseVariables state (transform_removeUnusedAltVariables (transform_convertToIfs expr))) of
+                                (_, _, result) -> result;
+                            );
+                        );
+                    
+                    /**
+                     * Go through the let definitions and add extra arguments for fusion and specialization created
+                     * functions if necessary. 
+                     */
+                    result :: (TransformHistory, Boolean, Expression);        
+                    result =
+                        let
+                            topLevelFunctionNames :: [QualifiedName];
+                            topLevelFunctionNames = 
+                                append 
+                                    nonCalFunctions
+                                    (map (\cf -> cf.CoreFunction.name) coreFunctionsIn);
+
+                            liftUntilDone :: [QualifiedName] -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+                            liftUntilDone functionsToLift history expr =
+                                case transform 
+                                        (initState expr) 
+                                        history 
+                                        expr 
+                                        adjustTypeForLetExpression of
+                                (historyPrime, wasChanged, exprPrime) ->
+                                    liftUntilDoneHelper functionsToLift historyPrime exprPrime;
+                                ;
+                            
+                            liftUntilDoneHelper :: [QualifiedName] -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+                            liftUntilDoneHelper functionsToLift history expr =
+                                case 
+                                    transform 
+                                        (initState expr) 
+                                        history 
+                                        expr 
+                                        (liftLambdas functionsToLift topLevelFunctionNames) of
+                                (historyPrime, wasChanged, exprPrime) -> 
+                                    if wasChanged then
+                                        liftUntilDoneHelper functionsToLift historyPrime exprPrime
+                                    else
+                                        (historyPrime, False, exprPrime);
+                                ;
+                        in
+                            (
+                                case
+                                    transform (initState resugared) history2 resugared transform_convertLambdaAndCaseToLet of
+                                (history3, _, noLambdaExpr) ->
+                                    case
+                                        transform (initState noLambdaExpr) history3 noLambdaExpr (renameLetVariables True) of
+                                        (history4, _, renamed) -> 
+                                            (
+                                                    // make a list of the functions that need to be lifted because
+                                                    // (mainly) they are lambda expressions.
+                                                    case getFunctionsToLift (initState renamed) history4 renamed of
+                                                    (history5, functionsToLift, exprFromLift) ->
+                                                        let
+                                                            markTopLevelFunctions :: Expression -> Expression; 
+                                                            markTopLevelFunctions expr =
+                                                                case expr of
+                                                                Let variable isNew isKeepable isTopLevel type letExpr body isRecursive arity isCoreFunction constArgs bodyWasChangedAt inliningWasPerformed ->
+                                                                    case find (\qn -> qn == variable) functionsToLift of
+                                                                    Nothing -> expr;
+                                                                    Just _ -> Let variable isNew isKeepable True type letExpr body isRecursive arity isCoreFunction constArgs bodyWasChangedAt inliningWasPerformed;
+                                                                    ;
+                                                                _ -> expr;
+                                                                ;
+                                                            
+                                                            /*
+                                                             * Expression with all the top level functions flagged.
+                                                             */
+                                                            markedExpression :: Expression;
+                                                            markedExpression = transformOnly exprFromLift markTopLevelFunctions;
+                                                        in
+                                                            (case
+                                                                liftUntilDone functionsToLift history5 markedExpression of
+                                                                (history6, _, lifted) ->
+                                                                    removeFunctionDefs 
+                                                                        functionsToLift
+                                                                        (initState lifted) history6 lifted;
+                                                            )
+                                                        ;
+                                            );
+                                    ;
+                            )
+                        ;
+                    
+                    /**
+                     * Pick out the newly created functions from the expression. Remove all other function definitions
+                     * that do not need to be there.
+                     */
+                    newCoreFunctions :: [CoreFunction];
+                    newCoreFunctions = result.#1.TransformHistory.newCoreFunctions;
+                    finalExpr :: Expression;
+                    finalExpr = result.#3;
+                    
+                in
+                    // Expression that are too deep result in code that the java compiler cannot handle.
+                    if expression_getDepth resugared 0 > 25 then
+                        error "Too deep"
+                        // The transformation can contain things that I don't handle. Nested cases are not allowed in the final
+                        // form of CAL. So skip all the expressions that have this problem. 
+                    else
+                        (
+                            case (liftArgumentStrictness (initState expr) arguments argumentStrictness (map (\notUsed -> False) argumentStrictness) finalExpr) of
+                            (strictness, finalExpr1) ->
+                                if Optimizer_State.transformHistory_takingTooLong history2 then
+                                    ([], map (\notUsed -> False) arguments, expr)
+                                else
+                                    case optimizeExplicit [transform_3_2_2, (transform_3_2_1 True)] (initState finalExpr1) history2 (4::Int) finalExpr1 of
+                                    (history3, _, finalExpr2) ->
+                                        case liftArgumentStrictnessCoreFunctions (initState finalExpr1) newCoreFunctions [] finalExpr2 of
+                                        (newNewCoreFunctions, finalFinalExprReallyIAmSeriousThisTime) ->
+                                            (newNewCoreFunctions, strictness, finalFinalExprReallyIAmSeriousThisTime)
+                                            ;
+                                        ;
+                                ;
+                        );
+                ;
+        else 
+            ([], map (\notUsed -> False) arguments, expr)
+    ;
+
+/**
+ * @arg ensureTheseAreTopLevel Lift of symbols that should end up at the top level. 
+ * This list is created from other expressions that are being lifted to the top 
+ * level and reference these symbols.
+// * @arg state The context of the expression.
+// * @arg liftThese The expression to lift.
+// * @arg expr The expression to remove function definitions from.
+// * @return A pair, the elements in the first list are pairs. The first element is the function name. If
+ * the expression is present the name is a function to lift, otherwise the name is a function that should have
+ * a helper function made.
+ */ 
+
+transform_getFunctionToLift :: [QualifiedName] -> TransformState -> (TransformHistory, [QualifiedName]) -> Expression -> ((TransformHistory, [QualifiedName]), Expression);    
+transform_getFunctionToLift ensureTheseAreTopLevel state liftThese expr =
+    case expr of
+    Let variable isNew isKeepable isTopLevel letType letExpr body isRecursive arity isCoreFunction constVars bodyWasChangedAt _ ->
+        if 
+            (
+                shouldBeLifted expr && not (qualifiedName_isTopLevel variable) 
+                ||
+                isJust (find (\qn -> qn == variable) liftThese.#2)                
+//                isJust (find (\qn -> qn == variable) ensureTheseAreTopLevel)                
+//                ||
+//                getFunctor letExpr == prelude_seq_expr
+                ||
+                // If the function refers to variable that are being lifted then
+                // it must be lifted.
+                containsAnyFree ensureTheseAreTopLevel letExpr
+            ) && 
+            (isKeepable || isNew) 
+//            (not (isElem variable alreadyLifted))
+        then            
+            case liftThese of
+            (history, lift) ->
+            if (case letExpr of Switch {} -> True; _ -> False;) then
+                case newVar state history variable "FTL" of
+                (history2, helperFunctionName) ->
+                    let
+                        helperFunctionExpr = Var helperFunctionName [] Nothing Nothing;
+                    in
+                    (
+                        (history2, helperFunctionName:lift),
+                        Let 
+                        helperFunctionName 
+                        True
+                        True 
+                        True 
+                        letType
+                        (substituteNoRename variable helperFunctionExpr letExpr)
+                        (
+                            Let
+                            variable
+                            isNew
+                            isKeepable
+                            isTopLevel
+                            letType                                            
+                            helperFunctionExpr
+                            body
+                            False
+                            arity
+                            isCoreFunction
+                            constVars
+                            bodyWasChangedAt
+                            False
+                        )
+                        isRecursive 
+                        arity
+                        isCoreFunction 
+                        constVars 
+                        bodyWasChangedAt 
+                        False 
+                    );
+            else
+                ((history, variable:lift), expr);
+        // Inlined definition that must be keep.
+        // or is a new function that does not need to be lifted.
+//        else if not (shouldBeLifted letExpr) && (isKeepable || isNew) then
+//            (liftThese, expr)
+        else
+            (liftThese, expr);
+    
+    LetInlinable {} -> error "This should not be present in fully transformed expressions.";
+
+    _ -> (liftThese, expr);
+    ;
+
+/**
+ * Make a list of the names of the functions that need to be lifted to the top level (arg1)
+ * and a list of functions that need helpers created. For example, the q in the following
+ * should not be lifted to the top level because 'q' is referenced in spiral more than once.
+ * 
+ * let
+ *     q =
+ *         case qs of
+ *             listHead : _ -> listHead; 
+ *             []  -> error "Empty list.";
+ *             ;
+ *     sp = Nofib.spiral ws (List.tail ps) (List.tail qs);
+ *     spiral = (Prelude.seq ns (Prelude.foldRight (turn0 q sp) (roll q sp s ns ms s) ns));
+ * in
+ *     spiral;
+ */
+
+getFunctionsToLift :: TransformState -> TransformHistory -> Expression -> (TransformHistory, [QualifiedName], Expression);
+getFunctionsToLift state history expression =
+    let
+        
+        helper :: TransformHistory -> Expression -> [QualifiedName] -> (TransformHistory, [QualifiedName], Expression);
+        helper history expression ensureTheseSymbolsAreTopLevel =
+            let
+                functionsToLift :: ((TransformHistory, [QualifiedName]), Expression);
+                functionsToLift = 
+                    transformAcc state (history, []) expression (transform_getFunctionToLift ensureTheseSymbolsAreTopLevel);
+            in
+                case functionsToLift of
+                (newSymbols, exprPrime) -> 
+                    case newSymbols of
+                    (history, lift) -> (history, lift, exprPrime);
+                    ;
+            ;
+        
+    in
+        helper history expression [];
+
+/**
+ * Remove the functions that need to be top level from the optimized expression. There is a loop
+ * because if a function is lifted then the functions that is depends on must be lifted as well.
+ */
+
+removeFunctionDefs :: [QualifiedName] -> TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+removeFunctionDefs functionsToLift state history expression =
+    let
+        
+        helper :: TransformHistory -> Expression -> [CoreFunction] -> (TransformHistory, Boolean, Expression);
+        helper history expression newCoreFunctionsAcc =
+            case transform state history expression (transform_removeFunctionDefs functionsToLift) of
+            (history2, wasChanged2, expression2) ->
+                if wasChanged2 then
+                    case history2 of
+                    TransformHistory a1 a2 a3 a4 llv newCoreFunctions2 a5 ->
+                        let
+                            history3 :: TransformHistory;
+                            history3 = TransformHistory a1 a2 a3 a4 llv [] a5;
+                            
+                            newCoreFunctionsAcc2 :: [CoreFunction];
+                            newCoreFunctionsAcc2 = append newCoreFunctionsAcc newCoreFunctions2;
+
+                            /*
+                             * If the expression is a var then add it to the list of vars seen.
+                             */
+                            symbolsUsedExpression :: Expression -> [QualifiedName] -> [QualifiedName];
+                            symbolsUsedExpression expr acc =
+                                let
+//                                    getVars :: TransformState -> acc -> Expression -> (acc, Expression);
+                                    getVars state vars expr =
+                                        case expr of
+                                        Var {name} -> (name:vars, expr);
+                                        _ -> (vars, expr);
+                                        ;
+                                in
+                                    (transformAcc state acc expr getVars).#1;
+                                
+                            /*
+                             * Get the symbol names used in the body of the core function.
+                             */
+                            symbolsUsedCoreFunction :: CoreFunction -> [QualifiedName] -> [QualifiedName];
+                            symbolsUsedCoreFunction cf acc =
+                                symbolsUsedExpression cf.CoreFunction.expr acc;
+                            
+                            /*
+                             * Get a list of the symbols used in the core functions.
+                             */
+                            symbolsUsed :: [CoreFunction] -> [QualifiedName] -> [QualifiedName];
+                            symbolsUsed cfs acc =
+                                case cfs of
+                                [] -> acc;
+                                c : cs ->
+                                    symbolsUsed cs (symbolsUsedCoreFunction c acc);
+                                ;
+                            
+                            
+                        in
+                            helper history3 expression2 newCoreFunctionsAcc2;
+                else
+                    (transformHistory_setCoreFunction history newCoreFunctionsAcc, True, expression2);
+            ;        
+    in
+        helper history expression [];
+
+// The CAL optimizer will just keep track of the types that must be unified.
+// But Java will actually do the unification if needed. This is okay since
+// no errors are possible
+
+transform_addType :: TransformState -> Expression -> Expression;
+transform_addType state !expr =
+    case expr of
+    Var name inliningContext entity type ->
+        case (transformState_getType state name) of
+        Nothing -> expr;
+        Just type -> Var name inliningContext entity (Just type);
+        ;
+    _ -> expr;
+    ;
+
+transform_addTypeToLet :: TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+transform_addTypeToLet state history !expr =
+    case expr of
+    Let variable 
+        isNew 
+        isKeepable
+        isTopLevel
+        originalType
+        expr 
+        body 
+        isRecursive 
+        arity 
+        isCoreFunction
+        constArgs
+        bodyWasChangedAt 
+        inliningWasPerformed ->
+            let
+                calculatedType :: Maybe Type;
+                calculatedType = expression_getType state history expr;
+                
+                bestType :: Maybe [Type];
+                bestType =
+                    if isNothing calculatedType then
+                        originalType
+                    else
+                        Just (flattenType calculatedType.Just.value);
+            in
+                (history, True,
+                   Let variable isNew isKeepable isTopLevel bestType expr body isRecursive arity isCoreFunction constArgs bodyWasChangedAt inliningWasPerformed);
+    
+    _ -> (history, False, expr);
+    ;
+
+
+lookForUnsafeCoerces :: TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+lookForUnsafeCoerces state history expr =
+    case expr of
+    Switch expr alts ->
+        case expression_getType state history expr of
+        Nothing -> (history, False, expr);
+        Just switchExprTypeExpr ->
+            case alts of
+            [] -> (history, False, expr);
+            head : _ ->
+                let
+                    checkCase caseConst =
+                        case caseConst of
+                        CaseLiteral {} -> (history, False, expr);
+                        CaseDataCons value ->
+                            case switchExprTypeExpr of
+                            TypeConst {type=switchExprJTypeExpr, name=switchExprName} ->
+                                if switchExprName == qualifiedName_getName (envEntity_getQualifiedName value.DataCons.dataCons)                                    
+                                then
+                                    // Set the flag to true to indicate that a probably unsafeCoerce side effect was found.
+                                    (history, True, expr)
+                                else
+                                    (history, False, expr);
+                            _ -> 
+                                (history, False, expr);
+                            ;
+                        ;
+                in
+                case head of
+                Alt {caseConst} -> checkCase caseConst;
+                Alts {caseConst} ->checkCase (List.head caseConst);
+                ;
+            ;
+        ;
+    _ -> (history, False, expr);
+    ;
+
+/**
+ * If a function had an unsafeCoerce then the optimizer should not touch them because the coerce is 
+ * mostly lost at this point. 
+ * TODO Change the code so this embedding is not needed.
+ */
+coreFunction_probablyHasUnsafeCoerce :: TransformState -> CoreFunction -> Boolean;
+coreFunction_probablyHasUnsafeCoerce state !cf =
+    case cf of
+    CoreFunction name args expr types strictness argIsWHNF ->
+        // Look for cases. If the type of a case does not match the type of the patterns then 
+        // this function contained an unsafeCoerce and so the optimizer will not use it.
+        case transform state transformHistory_init expr lookForUnsafeCoerces
+            of
+        (_, hasUnsafeCoerce, _) -> hasUnsafeCoerce;
+        ;
+    ;    
+
+/**
+ * Embed the strictness information in the types. 
+ * TODO Change the code so this embedding is not needed.
+ */
+coreFunction_setStrictnessInTypes :: CoreFunction -> CoreFunction;
+coreFunction_setStrictnessInTypes !cf =
+    case cf of
+    CoreFunction name args expr types strictness argIsWHNF ->
+        let
+            typeWithStrictness :: [Type] -> [Boolean] -> [Type];
+            typeWithStrictness !types strictness =
+                case types of
+                [] -> [];
+                t:ts ->
+                    case strictness of
+                    s:ss -> (type_applyStrictness t s) : typeWithStrictness ts ss;
+                    [] -> types;
+                    ;
+                ;                
+        in
+            CoreFunction name args expr (typeWithStrictness types strictness) strictness argIsWHNF;
+    ;
+        
+/**
+ * Rename the arguments of the function so that they look like they belong to the current module. This
+ * is needed because the argument names in the CoreFunction do not have module name. The current module is
+ * assumed. 
+ * 
+ * @arg state The context of the current expression.
+ * @arg cf The core function to update.
+ * @return The core function with the arguments renamed so they are in the current module. 
+ */
+
+renameCoreFunctionForThisModule :: TransformState -> CoreFunction -> CoreFunction;
+renameCoreFunctionForThisModule state !cf =
+    case cf of
+    CoreFunction cfName cfArgs cfExpr cfType strictness argIsWHNF ->
+        let
+            name :: QualifiedName;
+            name = transformState_getName state;
+            moduleName :: String;
+            moduleName = name.QN.moduleName;
+            functionName :: String;
+            functionName = name.QN.functionName;
+            oldNames :: [QualifiedName];
+            oldNames = cfArgs;
+            rename :: QualifiedName -> QualifiedName;
+            rename oldName =
+                QN moduleName (functionName ++ "$" ++ oldName.QN.functionName); 
+            newNames :: [QualifiedName];
+            newNames = map rename oldNames;
+
+            
+            updateNames :: Expression -> [(QualifiedName, QualifiedName)] -> Expression;
+            updateNames expr !oldNameToNewNames =
+                case oldNameToNewNames of
+                [] -> expr;
+                o2n:o2ns ->
+                    let
+                        oldName :: QualifiedName;
+                        oldName = o2n.#1;
+                        newName :: QualifiedName;
+                        newName = o2n.#2;
+
+                        expr1 :: Expression;
+                        expr1 = substituteNoRename oldName (Var newName [] Nothing Nothing) expr;
+                    in
+                        updateNames expr1 o2ns;
+                ;
+            
+            newExpr :: Expression;
+            newExpr = updateNames cfExpr (zip oldNames newNames);
+          
+        in
+            CoreFunction cfName newNames newExpr cfType strictness argIsWHNF;
+    ;
+
+    
+/**
+ * Gets the arity of an expression.
+ * 
+ * @arg expr The expression to get the arity from.
+ * @return The arity of the expression.
+ */
+
+getArity :: Expression -> Int;
+getArity !expr =
+    let
+        getArityHelper :: Expression -> Int -> Int;
+        getArityHelper !expr !counter = 
+            case expr of
+            Lambda {expr=lambdaExpr} -> getArityHelper lambdaExpr (counter+1);
+            _ -> counter;
+            ;
+    in
+        getArityHelper expr 0;
+
+/* @example */
+getArityExamples :: Boolean;
+getArityExamples =
+    assert ((getArity (Lambda (QN "Cal.Core.Prelude" "var1") (TypeId 1 False) False (Lambda (QN "Cal.Core.Prelude" "var2") (TypeId 1 False) False (Lambda (QN "Cal.Core.Prelude" "var3") (TypeId 1 False) False (Literal (LitBoolean False)))))) == 3) &&
+    assert ((getArity (Lambda (QN "Cal.Core.Prelude" "var1") (TypeId 1 False) False (Lambda (QN "Cal.Core.Prelude" "var2") (TypeId 1 False) False (Literal (LitBoolean False))))) == 2) &&
+    assert ((getArity (Lambda (QN "Cal.Core.Prelude" "var1") (TypeId 1 False) False (Literal (LitBoolean False)))) == 1) &&
+    assert ((getArity (Literal (LitBoolean False))) == 0);
+
+/** 
+ * Removes any functions that use "unsafeCoerce" from the given list of core functions.
+ */
+
+filterOutUnsafeCoerce :: [CoreFunction] -> [CoreFunction];
+filterOutUnsafeCoerce !list =
+    case list of
+    [] -> [];
+    listHead : listTail ->
+        if not (containsFree (QN "Cal.Core.Prelude" "unsafeCoerce") listHead.CoreFunction.expr) then
+            listHead : filterOutUnsafeCoerce listTail
+        else
+            filterOutUnsafeCoerce listTail;
+    ;
+
+/**
+ * Takes the set of input definitions and a start expression and embeds the expressions
+ * using let in the given expression. Note: This will change in the future to use a different
+ * data structure because of problems with co-recursion.
+ * 
+ * TODO: Change the way that the core functions are embedded.
+ */
+    
+embedCoreFunctions :: TransformState -> [CoreFunction] -> Expression -> Expression; 
+embedCoreFunctions state !coreFunctions expr =
+    let
+
+        embedType :: QualifiedName -> Type -> TransformState -> Expression -> Expression;
+        embedType !searchFor type state !expr =
+            case expr of
+            Var {name, entity} ->
+                if name == searchFor then
+                    Var name [] entity (Just type)
+                else
+                    expr;
+            _ -> expr;
+            ;
+
+        embedTypes :: Type -> Expression -> Expression;
+        embedTypes !type !expr =
+            case expr of
+            Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr ->
+                case type of
+                FunctionType domain codomain _ ->
+                    Lambda lambdaVar lambdaType lambdaArgIsWHNF (embedTypes codomain (transformNoHistory state lambdaExpr (embedType lambdaVar domain)));
+                _ -> expr;
+                ;
+            _ -> expr;
+            ;                
+
+    in
+
+        // Unsafe coerce has type information that the source code generator needs so it 
+        // cannot be inlined.
+        case coreFunctions of
+        [] -> expr;
+        cf : cfs ->
+            case cf of
+            CoreFunction cfName cfArgs cfExprNoLambda cfTypes cfStrictness cfArgIsWHNF -> 
+                let
+                    // List of arguments that are strict
+                    strictArgs :: [QualifiedName];
+                    strictArgs = 
+                        reverse (map fst (filter (uncurry (\arg isStrict -> isStrict)) (zip cfArgs cfStrictness)));
+                    
+                    // The expression with any strict arguments seq'ed around it.
+                    seqedExpr :: Expression;
+                    seqedExpr = 
+                        foldLeft 
+                        (\curr strictArgAndType ->
+                            case strictArgAndType of
+                            (strictArg, maybeType) ->
+                                (App (App (prelude_seq_expr state) (Var strictArg [] Nothing maybeType)) curr);
+                        )
+                        cfExprNoLambda 
+                        (zip strictArgs (map Just cfTypes));
+                    
+                    cfExpr :: Expression;
+                    cfExpr = addLambdaVars (zip cfArgs cfTypes) seqedExpr;
+                    
+                    cfType :: Type;
+                    cfType = unflattenFunctionTypes cfTypes;
+                    
+                    cfExprWithType :: Expression;
+                    cfExprWithType = embedTypes cfType cfExpr;
+                    
+                    cfConstVars :: [Boolean];
+                    cfConstVars = constVars cfName state.TransformState.typeConstants cfArgs cf.CoreFunction.expr;
+                    
+                    /** 
+                     * The expression with the module name added to the let and switch variables.
+                     */
+                    cfExprWithTypeAndModuleName :: Expression;
+                    cfExprWithTypeAndModuleName = 
+                        transformNoHistory (transformState_setCurrentFunctionName state cfName) cfExprWithType transform_addModuleNameToVariables; 
+                    
+                in
+                    Let cfName False False False (Just cf.CoreFunction.type) cfExprWithTypeAndModuleName (embedCoreFunctions state cfs expr) True (getArity cfExpr) True cfConstVars 1 False;
+            ;
+        ;
+
+/**
+ * Move the module of any let definition to be this module so the java code builder
+ * does not get confused. All let vars with now be prefixed with the module name to avoid
+ * name clash. 
+ */
+
+transform_updateModule :: String -> TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+transform_updateModule moduleName state history !expr =
+    let
+        noChange :: (TransformHistory, Boolean, Expression);
+        noChange = (history, False, expr);
+    in
+        case expr of
+            Let variable isNew isKeepable isTopLevel type letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+                if variable.QN.moduleName == moduleName || not isKeepable then
+                    noChange
+                else
+                    let                    
+                        result1 :: (TransformHistory, QualifiedName);
+                        result1 = newVar state history variable "UM";
+                        
+                        history1 :: TransformHistory;
+                        history1 = result1.#1;
+                        newName :: QualifiedName;
+                        newName = result1.#2;
+                        
+                        newNameExpr :: Expression;
+                        newNameExpr = Var newName [] Nothing Nothing;
+                        newLetBody :: Expression;
+                        newLetBody = substituteNoRename variable newNameExpr letBody;
+                        newLetExpr :: Expression;
+                        newLetExpr = substituteNoRename variable newNameExpr letExpr;
+                    in
+                        (history1, True, Let newName isNew isKeepable isTopLevel type newLetExpr newLetBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt False);
+            _ -> noChange;
+        ;
+    
+    
+/**        
+ * Search for a string within another string.
+ * 
+ * @arg string The string to search.
+ * @arg contains The string to search for.
+ * @return True iff the string contains the search for string.
+ */
+        
+findString :: String -> String -> Boolean;        
+findString string contains =
+    indexOfString contains string != -1;
+
+/**
+ * Used to search the expression for free variables. This should be called by a traversal function 
+ * using transformAcc.
+ */
+
+findFreeVariable :: TransformHistory -> [QualifiedName] -> TransformState -> [(Expression, Maybe Type)] -> Expression -> ([(Expression, Maybe Type)], Expression);
+findFreeVariable history functionsToBeLifted state names !expr =
+    case expr of
+    Var {name, type=varType} ->
+        if 
+            not (
+                    qualifiedName_isTopLevel name || 
+                    transformState_isTopLevelBoundName state name ||
+                    isJust (find (\qn -> name == qn) functionsToBeLifted)
+                ) &&
+            not (transformState_isBoundName state name) &&
+//            isNothing (find (\bname -> name == bname) (transformState_getBoundNames state)) &&
+            isNothing (find (\lv -> lv == name) state.TransformState.safeForInliningVars) && 
+            isNothing (find (\exprType -> (case exprType.#1 of Var {name=name2} -> name == name2; _ -> False;)) names)    
+        then
+            let
+                type :: Maybe Type;
+                type =
+                    case 
+                        (
+                            if isNothing varType then
+                                expression_getType state history expr
+                            else
+                                varType
+                        ) of
+                        Nothing -> Nothing;
+                        // don't keep the strictness from the type since it does not apply to the any new variable created in the lifted function.
+                        Just type -> Just (type_setStrictness type False);
+                    ;
+            in
+                ((expr, type):names, expr)
+        else
+            (names, expr);
+    _ -> (names, expr);                
+    ;
+
+/**
+ * Should the given let expression be lifted to the file scope.
+ * 
+ * @arg expr The expression to check
+ * @return Whether or not the given expression should be lifted.
+ */
+
+shouldBeLifted :: Expression -> Boolean;
+shouldBeLifted expr =
+    case expr of
+    Let {isNew, variable, isKeepable, expr} ->
+//        isNew ||
+        // A let expression that was part of the original expression. If the body has changed
+        // in such a way that it must be lifted then lift it. The case is because bad structure 
+        // test allows top level cases since it is used for top level expression but here we 
+        // are not top level.
+       (
+           (transform_hasBadStructure False expr) 
+           || 
+           (case expr of Switch {} -> True; _ -> False;)
+           // removed to make M2.testStrictFunction2 work
+           // this seems to be wrong since later on the lifter lifts these so why
+           // should it not know they are being lifted earlier on.
+//           || 
+//           (getFunctor expr == prelude_seq_expr)
+//           &&
+//           isKeepable
+       );
+    _ -> False;
+    ;
+
+/**
+ * For a given let definition decide if the function needs to have free variables added as parameters
+ * so that when the function is made into a top level function all the variabled will be properly defined.
+ * 
+ *  @arg functionsToBeLifted A list of functions that are to be lifted.
+ *  @arg topLevelFunctions A list of function names known to be top level.
+ *  @arg state The context of the current expression. Including all of the bound names.
+ *  @arg history The history of the current transformation.
+ *  @arg expr The expression to check for lambda lifting.
+ *  @return The expression with lambda lifting performed if necessary.
+ *  
+ *  Note: This is not general purpose lambda lifting. This is what is needed for getting the fusion and
+ *  specialized function out.
+ *  
+ *  TODO Make sure this corresponds with Johnsson style lambda lifting.
+ */
+
+liftLambdas :: [QualifiedName] -> [QualifiedName] -> TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+liftLambdas functionsToBeLifted topLevelFunctions state history !expr =
+    let
+        noChange :: (TransformHistory, Boolean, Expression);
+        noChange = (history, False, expr);
+    in
+        case expr of
+        Let letVar isNew isKeepable isTopLevel letType letExpr letBody isRecursive arity isCoreFunction constVars bodyWasChangedAt _ ->
+            let            
+                createHelper :: Boolean;
+                createHelper =
+                    (
+                        (case letExpr of
+                        // switching this off makes Functor_Tests.mapExamples fail.
+                        Switch{} -> True; 
+                        _ -> False;
+                        ) ||
+                        // plinging is way more efficient than seq'ing
+                        (case flattenExpression letExpr [] of
+                        functor : args ->
+                            isSeq functor;
+                        )
+                    ) &&
+                      not (isElem letVar functionsToBeLifted)
+//                        not (transformHistory_isLiftedLetVar history letVar)
+                    ; 
+                    // isJust (find (\fn -> fn == letVar) createHelperFunctions) && (case letExpr of Switch{} -> True; _ -> False;);
+//                createHelper = True && (case letExpr of Switch{} -> True; _ -> False;);
+                
+                someFreeVariablesHaveNoType :: Boolean;
+                someFreeVariablesHaveNoType = orList (map (\entry -> isNothing entry.#2) freeVariablesFromExpression);
+                
+                /**
+                 * Get a list of the free variables and their type in the letExpr. The types maybe missing
+                 * for some cases.
+                 */
+                freeVariablesFromExpression :: [(Expression, Maybe Type)];
+                freeVariablesFromExpression =
+                    let
+                        statePrime :: TransformState;
+                        statePrime =
+                            (transformState_updateTopLevelBoundNames letVar (transformState_clearLambdaVars (transformState_clearInContextBoundNames state)));
+                        
+                        result :: [(Expression, Maybe Type)];
+                        result =
+                            (
+                                Optimizer_Traversers.transformAcc
+                                    statePrime 
+                                    [] 
+                                    letExpr 
+                                    (findFreeVariable history (append topLevelFunctions functionsToBeLifted))
+                            ).#1;
+                    in
+                        result;
+
+                getTypeFromContext :: Expression -> Maybe Type;
+                getTypeFromContext var =                    
+                    case var of
+                    Var {name} ->
+                        let
+                        
+                            calls :: [(TransformState, Expression)];
+                            calls = selectCalls name state expr;
+                            
+                            maybeTypes :: [Maybe Type];
+                            maybeTypes = 
+                                map (uncurry callToType) calls;
+
+                            /**
+                             * Try to get the Type for the given expression.
+                             */
+                            
+                            callToType :: TransformState -> Expression -> Maybe Type;                        
+                            callToType state call =
+                                (
+                                if canConvertToType state call then
+                                    case convertToType state history 0 [] call of
+                                    (counter, varToIdList, type) ->
+                                        let
+                                            unification :: [(Type, Type)];
+                                            unification =
+                                                type_unify [(TypeId counter False, type)];
+                                            
+                                            applied :: [(Type, Type)];
+                                            applied = type_applyBindings unification unification;
+                                            
+                                            
+                                        in
+                                            case find (\pair -> pair.#1 == name) varToIdList of
+                                            Just pair ->
+                                                case pair of
+                                                (_, varId) ->
+                                                    case find (\pair -> pair.#1 == varId) applied of
+                                                    Nothing ->
+                                                        case find (\pair -> pair.#2 == varId) applied of
+                                                        Nothing -> 
+                                                            error (
+                                                              "callToType\n" ++
+                                                              "    name: " ++ show name ++ "\n" ++
+                                                              "    call: " ++ show call ++ "\n" ++
+                                                              "    callS: " ++ showExpressionStructure call ++ "\n" ++
+                                                              "    currentFunctionName: " ++ show state.TransformState.currentFunctionName ++ "\n" ++
+                                                              "    ntotlist: " ++ show state.TransformState.nameToTypeList ++ "\n" ++
+                                                              "    varToIdList: " ++ show varToIdList ++ "\n" ++
+                                                              "    type: " ++ show type ++ "\n" ++
+                                                              "    varToIdList: " ++ show varToIdList ++ "\n" ++
+                                                              "    unify: " ++ show unification ++ "\n" ++
+                                                              "    applied: " ++ show applied ++ "\n"
+                                                              );
+                                                        Just pair ->
+                                                            case pair of 
+                                                            (_, type) -> Just type;
+                                                            ;
+                                                        ;
+                                                    Just pair ->
+                                                        case pair of 
+                                                        (_, type) -> Just type;
+                                                        ;
+                                                    ;
+                                                ;
+                                            ;    
+                                else
+                                    Nothing);
+                                
+                            types :: [Type];
+                            types = map (\mt -> mt.Just.value) (filter (\maybeType -> not (isNothing maybeType)) maybeTypes);
+                            
+                        in
+                            if isEmpty types then
+                                Nothing
+                            else
+                                Just (type_selectMostSpecificType types);
+                        
+                    _ -> Nothing;
+                    ;
+
+                    
+                /** 
+                 * For any variable that does not have type try to get the type from the context of how
+                 * the variable is used.
+                 */
+                    
+                freeVariablesOriginalOrder :: [(Expression, Maybe Type)];
+                freeVariablesOriginalOrder = 
+                    map (\pair -> 
+                        case pair of
+                        (expr, maybeType) ->
+                            // If the type is nothing try to get the type from the context of use.
+                            if isNothing maybeType then
+                                (expr, getTypeFromContext expr)
+                            else
+                                pair;
+                        ) freeVariablesFromExpression;
+                    
+                /**
+                 * Reorder the free variables so that the order is the same as any seq'ed variables
+                 * at the start of the expression. This will allow the optimization that pling's arguments
+                 * to pling them all.
+                 */
+                freeVariables :: [(Expression, Maybe Type)];
+                freeVariables =
+                    case flattenSeqs2 letExpr of
+                    (_, seqExprs) ->
+                        let
+                            // pass over the list seqExpr picking out the freeVariables in the
+                            // same order. Keep track of the left over and add that to the end.
+                            helper :: [Expression] -> [(Expression, Maybe Type)] -> [(Expression, Maybe Type)];
+                            helper seqExprs freeVariables =
+                                case seqExprs of
+                                [] -> freeVariables;
+                                se:ses ->
+                                    let
+                                        matchSeq :: Expression -> [(Expression, Maybe Type)] -> (Maybe (Expression, Maybe Type), [(Expression, Maybe Type)]);
+                                        matchSeq lookFor freeVariables =
+                                            case freeVariables of
+                                            [] -> (Nothing, []);
+                                            fv:fvs ->
+                                                if fv.#1 == lookFor then
+                                                    (Just fv, fvs)
+                                                else
+                                                    case matchSeq lookFor fvs of
+                                                    (match, leftOver) -> (match, fv:leftOver);
+                                                ;
+                                            ;
+                                    in
+                                        case matchSeq se freeVariables of
+                                        (match, leftOver) ->
+                                            if isNothing match then
+                                                helper ses leftOver
+                                            else
+                                                fromJust match : helper ses leftOver;
+                                    ;
+                                ;
+                        in
+                            helper seqExprs freeVariablesOriginalOrder;
+                    ;
+                
+                // [(OldName, NewName)]
+                freeRenamedVariablesAndHistory :: (TransformHistory, [(QualifiedName, Expression)]);
+                freeRenamedVariablesAndHistory =
+                    let
+                        rename :: TransformHistory -> Expression -> Maybe Type -> (TransformHistory, (QualifiedName, Expression));
+                        rename history !expr type =                        
+                            case expr of
+                            Var name inliningContext entity type ->
+                                case name of
+                                QN moduleName functionName ->
+                                    case newVar state history letVar "FRV" of
+                                    (history1, letVarPrime) ->
+                                        (history1, (name, Var letVarPrime inliningContext entity type));
+                                    ;
+                                ;
+                            ;
+    
+                        renames :: TransformHistory -> [(Expression, Maybe Type)] -> (TransformHistory, [(QualifiedName, Expression)]);
+                        renames history !freeVariables =
+                            case freeVariables of
+                            [] -> (history, []);
+                            fv:fvs ->
+                                let
+                                    result1 :: (TransformHistory, (QualifiedName, Expression));
+                                    result1 = rename history fv.#1 fv.#2;
+                                    
+                                    history1 :: TransformHistory;
+                                    history1 = result1.#1;
+                                    
+                                    fv1 :: (QualifiedName, Expression);
+                                    fv1 = result1.#2;
+                                    
+                                    result2 :: (TransformHistory, [(QualifiedName, Expression)]);
+                                    result2 = renames history1 fvs;
+                                    
+                                    history2 :: TransformHistory;
+                                    history2 = result2.#1;
+                                    
+                                    fvs1 :: [(QualifiedName, Expression)];
+                                    fvs1 = result2.#2;
+                                in
+                                    (history2, fv1 : fvs1);
+                            ;
+                    in
+                        renames history freeVariables;
+                
+                history1 :: TransformHistory;
+                history1 = freeRenamedVariablesAndHistory.#1;
+                
+                freeRenamedVariables :: [(QualifiedName, Expression)];
+                freeRenamedVariables = freeRenamedVariablesAndHistory.#2;
+                
+                letExprWithRenamedVars :: Expression; 
+                letExprWithRenamedVars = 
+                    foldLeft (\expr oldNameNewName -> substituteNoRename oldNameNewName.#1 oldNameNewName.#2 expr) letExpr freeRenamedVariables;
+                
+                addVariablesToLambda :: Expression -> [(QualifiedName, Expression)] -> Expression;
+                addVariablesToLambda expr names =
+                    let
+                        localState :: TransformState;
+                        localState = transformState_removeTypes state (map fst names);
+                    in
+                    foldLeft 
+                        (\expr free ->
+                            case free.#2 of
+                            Var {name, type} ->
+                                let
+                                    okayToPling :: Boolean;
+                                    okayToPling = 
+                                        transformState_isKnownToBeWHNF free.#2 localState 
+                                        || 
+                                        transformState_isAlreadySeqed free.#2 localState
+                                        ||
+                                        transformState_isKnownToBeWHNF (Var free.#1 [] Nothing Nothing) localState 
+                                        || 
+                                        transformState_isAlreadySeqed (Var free.#1 [] Nothing Nothing) localState;
+
+                                    typeHelper :: TransformState -> Maybe Type;
+                                    typeHelper state = expression_getType (transformState_setType state letVar (unflattenFunctionTypes letType.Just.value)) history (Var free.#1 [] Nothing Nothing);
+
+                                    type1 :: Maybe Type;
+                                    type1 = typeHelper localState;
+                                    
+                                    // This was added to get UniqueIdentifier to compile.
+                                    type2 :: Maybe Type;
+                                    type2 = typeHelper state;
+                                in
+                                    case type1 of
+                                    Nothing -> 
+                                        if type == Nothing then
+                                            case type2 of
+                                            Nothing -> 
+                                                error 
+                                                (
+                                                    show name ++ ": " ++ show type ++ "\n" ++ 
+                                                    "    expr: " ++ show expr ++ "\n" ++ 
+                                                    "    letVar: " ++ show letVar ++ "\n" ++
+                                                    "    free.#1: " ++ show free.#1 ++ "\n" ++
+                                                    "    free.#2: " ++ show free.#2 ++ "\n" ++
+                                                    "    freeRenamedVariablesAndHistory: " ++ show freeRenamedVariablesAndHistory ++ "\n"
+                                                );
+                                            Just type ->
+                                                Lambda name (type_applyStrictness type okayToPling) True expr;
+                                        else
+                                            // the strictness can comes from where the expression appears
+                                            // in the inner expression. We want the strictness only from the
+                                            // outer context.
+                                            Lambda 
+                                                name
+                                                (type_setStrictness type.Just.value okayToPling) 
+                                                True expr;
+                                    
+                                    Just type ->
+                                        Lambda name (type_applyStrictness type okayToPling) True expr;
+                                ;
+                        ) 
+                        expr 
+                        (reverse names);
+
+                letExprWithLambdaUpdate :: Expression;
+                letExprWithLambdaUpdate =
+                    addVariablesToLambda 
+                        (transformNoHistory state letExprWithRenamedVars (addVariableToCall (map snd freeRenamedVariables) letVar))                     
+                        freeRenamedVariables;
+                
+                /*
+                 * Make a list of types where moreTypes are listed first followed by maybeTypes. Take into
+                 * account possible nothing values.
+                 */
+                addTypes :: Maybe [Type] -> [Maybe Type] -> Maybe [Type];
+                addTypes !maybeTypes moreTypes = 
+                    let
+                        appendTypes :: [Type] -> [Maybe Type] -> [Type];
+                        appendTypes existingTypes !newTypes =                         
+                            case newTypes of
+                            [] -> existingTypes;
+                            t:ts ->
+                                case t of
+                                Nothing -> error ("appendTypes\n" ++ show maybeTypes ++ "\n" ++ show moreTypes ++ "\n");
+                                Just value -> value : (appendTypes existingTypes ts);
+                                ;
+                            ;
+                    in
+                        case maybeTypes of
+                        Just types -> Just (appendTypes types moreTypes);
+                        Nothing -> Nothing;
+                        ;
+
+                /**
+                 * The types of the lambda variables can be specialized when building the new
+                 * expression so let's use the specialized types.
+                 */
+                letExprWithLambdaUpdate_LambdaVarTypes :: [Type];
+                letExprWithLambdaUpdate_LambdaVarTypes =
+                    let
+                        helper nextVars expr types =
+                            case nextVars of
+                            [] -> reverse types;
+                            ns:nvs ->                                
+                                case expr of
+                                Lambda {type, expr} -> helper nvs expr (type:types);
+                                ;
+                            ;
+                    in                        
+                        helper freeRenamedVariables letExprWithLambdaUpdate [];
+                    
+
+                maybeCalculatedLetExprType :: Maybe Type;
+                maybeCalculatedLetExprType = 
+                    expression_getType state history letExpr; 
+                
+                letTypePrime :: Maybe [Type];
+                letTypePrime =
+                    case maybeCalculatedLetExprType of
+                    Nothing -> addTypes letType (map (\pair -> pair.#2) freeVariables);
+                    Just calculatedLetExprType -> 
+                        Just (
+                        zipWith
+                            (\type typeStrictness ->
+                                type_applyStrictness type (type_isStrict typeStrictness)
+                            )
+                            (addTypes (Just (flattenType calculatedLetExprType)) (map Just letExprWithLambdaUpdate_LambdaVarTypes)).Just.value
+                            (addTypes letType (map (\pair -> pair.#2) freeVariables)).Just.value);
+                    ;
+                
+                arityPrime :: Int;
+                arityPrime = arity + length freeVariables;
+
+                /**
+                 * For all calls of the given function add the given arguments to the call.
+                 */
+                addVariableToCall :: [Expression] -> QualifiedName -> TransformState -> Expression -> Expression;
+                addVariableToCall freeVariables !functor state !expr =
+                    case expr of
+                    Var name _ entity type ->
+                        if name == functor then
+                            unflattenExpression (expr : freeVariables)
+                        else
+                            expr;
+                    _ -> expr;
+                    ;
+    
+                letBodyPrime :: Expression;
+                letBodyPrime = transformNoHistory state letBody (addVariableToCall (map fst freeVariables) letVar);
+    
+            in
+                if createHelper then
+                    case newVar state history1 letVar "LFT" of
+                    (history2, letVarHelper) ->
+                        /*
+                         * Build a helper function that can be called by the original function. This leaves
+                         * the original expression in place. 
+                         */
+                                (
+                                 transformHistory_updateLiftedLetVar history1 letVarHelper, 
+                                 arityPrime != arity,
+                                 Let 
+                                                         letVarHelper 
+                                                         True
+                                                         True 
+                                                         True 
+                                                         letTypePrime 
+                                                         (substituteNoRename letVar (Var letVarHelper [] Nothing Nothing) letExprWithLambdaUpdate)
+                                                         (
+                                                             Let
+                                                             letVar
+                                                             isNew
+                                                             isKeepable
+                                                             isTopLevel
+                                                             letType                                            
+                                                             (unflattenExpression ((Var letVarHelper [] Nothing Nothing) : (map fst freeVariables)))
+                                                             letBody
+                                                             False
+                                                             arity
+                                                             isCoreFunction
+                                                             constVars
+                                                             bodyWasChangedAt
+                                                             False
+                                                         )
+                                                         isRecursive 
+                                                         arityPrime 
+                                                         isCoreFunction 
+                                                         constVars 
+                                                         bodyWasChangedAt 
+                                                         False
+                               );
+                else if 
+                    (isJust (find (\qn -> qn == letVar) functionsToBeLifted) 
+                    ||
+                    // This is so that when addVariableToCall adds variables to calls of a function. That
+                    // functions that contains those calls have a chance to parameterize the variables 
+                    // if that function is going to be top level.
+                    (
+                        isNew && 
+                        isTopLevel &&                     
+                        (case letExpr of 
+                        Lambda {} -> True; 
+                        _ -> False;
+                        )
+                    )
+                            ) then
+                    (history1, arityPrime != arity, Let letVar isNew isKeepable isTopLevel letTypePrime letExprWithLambdaUpdate letBodyPrime isRecursive arityPrime isCoreFunction constVars bodyWasChangedAt False)
+                else
+                    noChange;   // don't fiddle with unchanged functions
+        _ -> noChange;
+        ;
+    
+//
+// The optimization are numbered according to Santos.
+//
+// http://citeseer.ist.psu.edu/cache/papers/cs/3175/http:zSzzSzwww.di.ufpe.brzSz~almszSzpszSzthesis.pdf/santos95compilation.pdf
+//
+
+///**
+// * Let lifting
+// * 
+// * f1 (let v = e in a1)
+// * 
+// * to
+// * 
+// * let v = e in f1 a1
+// * 
+// * Where v is not free in f1. The purpose of this is so that functions createed by specialization or
+// * fusion can be floated up so that they can be reapplied again.
+// *  
+// */ 
+//
+//transform_3_4_2 :: TransformState -> Expression -> Expression;    
+//transform_3_4_2 state history !expr =
+//    case expr of
+//    App e1 e2 ->
+//        case e2 of
+//        Let variable2 isNew2 isKeepable2 type2 expr2 body2 isRecursive2 arity2 isCoreFunction constArgs2 hasStrictArguments2 ->
+//            if not (contains variable2 e1) then
+//                (history, Let variable2 isNew2 isKeepable2 type2 expr2 (App e1 e2) isRecursive2 arity2 isCoreFunction constArgs2 hasStrictArguments2)
+//            else
+//                (history, expr)
+//            ;
+//        _ -> (history, expr);
+//        ;
+//    _ ->
+//        (history, expr)
+//        ;
+//    ;
+
+//transform_3_2_1Examples = 
+//    let
+//        initState = transformState_init (QN "ModuleName" "functionName") [] [];
+//        helloWorldString = Literal (LitString "hello world"); 
+//        
+//        expr = Let (QN "Cal.Core.Prelude" "unusedVar") False False Nothing helloWorldString helloWorldString False 0 [] False;         
+//    in
+//        // ((\varName -> varName) "hello world") == "hello world" 
+//        assert (transform_3_2_1 initState expr == helloWorldString);
+
+// fix this up so the inliner does it.
+/**
+ * The variable names in the alternative of a case expression do not have the module name 
+ * (in the Java expression representation) however
+ * the variables when used in the alternative expression do have the module name. The optimizer
+ * can inline a case expression from a different module into the current module. This causes
+ * a problem because the case is in a different module and so the compiler assumed the module name
+ * for the case variables is the current module but the body is using the original module name.
+ * This transformation renames the variables in the alternative expression to match the current module 
+ * for any case variables. In the CAL representation of an expression the module name is present in
+ * the case variable so this can be used to determine if the case came from a different module and
+ * needs to have its arguments renamed.
+ * 
+ * TODO: Do this renaming in java during the construction of the input data.
+ */
+    
+transform_renameCaseVariables :: TransformState -> Expression -> Expression;
+transform_renameCaseVariables state !expr =
+    case expr of
+    Switch expr alts ->
+        let 
+            fixUpAlt :: Alt -> Alt;
+            fixUpAlt !alt =
+                case alt of
+                // Alt (CaseConst, [QualifiedName], Expression)
+                (Alt | Alts) {isPositional=ip, vars=oldFNQNs, expr} ->
+                    let
+                        newFNQNs :: [(FieldName, QualifiedName, Type)];
+                        newFNQNs = map (\fnqn -> (fnqn.#1, (QN thisModule fnqn.#2.QN.functionName), fnqn.#3)) oldFNQNs;
+                        
+                        oldNames :: [QualifiedName];
+                        oldNames = map (\fnqn -> fnqn.#2) oldFNQNs;
+                        
+                        thisModule :: String;
+                        thisModule = transformState_getModuleName state;
+                        /**
+                         * If the case variable name is not from this module the name must
+                         * be changed to the current module otherwise when this is converted
+                         * back into Java Expression and the module name is removed from the
+                         * case variable problems will occur
+                         * 
+                         *  @arg expr The expression for the case alternative.
+                         *  @arg qn The current name of the case variable.
+                         *  @return The alternative expression with the case variable (possibly) renamed. 
+                         */
+                        
+                        fixUpName :: Expression -> QualifiedName -> Expression;
+                        fixUpName expr !qn =
+                            if qn.QN.moduleName != thisModule then
+                                substituteNoRename qn (Var (QN thisModule qn.QN.functionName) [] Nothing Nothing) expr
+                            else
+                                expr;
+                    in
+                        case alt of
+                        Alt {caseConst} -> Alt caseConst ip newFNQNs (foldLeft fixUpName expr oldNames);
+                        Alts {caseConst} -> Alts caseConst ip newFNQNs (foldLeft fixUpName expr oldNames);
+                        ;
+                ;
+        in
+            Switch expr (map fixUpAlt alts);
+    _ -> expr;
+    ;
+
+/**
+ * If the case variable name is not from this module the name must
+ * be changed to the current module otherwise when this is converted
+ * back into Java Expression and the module name is removed from the
+ * case variable problems will occur
+ *
+ *  @arg state The context of the current transformation.
+ *  @arg expr The expression for the case alternative.
+ *  @arg qn The current name of the case variable.
+ *  @return The alternative expression with the case variable (possibly) renamed. 
+ */
+
+fixUpName :: TransformState -> Expression -> QualifiedName -> Expression;
+fixUpName state expr !qn =
+    let
+        thisModule :: String;
+        thisModule = transformState_getModuleName state;
+    in
+        if qn.QN.moduleName != thisModule then
+            let
+                /**
+                 * The name of the function this code is in the body of. This
+                 * is the most recent function.
+                 */
+                currentFunctionName :: QualifiedName;
+                currentFunctionName = transformState_getCurrentFunctionName state;
+                /**
+                 * The name of the module that this code came from. This is
+                 * used to find the case vars
+                 */
+                originalModuleName :: String;
+                originalModuleName = currentFunctionName.QN.moduleName;
+                
+                functionName :: String;
+                functionName = qn.QN.functionName;
+            in
+                substituteNoRename (QN originalModuleName functionName) (Var (QN thisModule functionName) [] Nothing Nothing) expr
+        else
+            expr;
+
+
+/**
+ * Convert Alts to Alt type expressions. Alts arise during conversion from Java to Cal.
+ * see inputAlt. This also converts matching type alts to positional alts. 
+ */    
+transform_convertAltsToAlt :: TransformState -> Expression -> Expression;
+transform_convertAltsToAlt state !expr = 
+    case expr of
+    Switch expr alts ->
+        let
+            convertAltToAlts :: Alt -> [Alt] -> [Alt]; 
+            convertAltToAlts alt altAcc =
+                case alt of
+                Alt {} -> alt : altAcc;
+                Alts caseConsts isPositional vars expr ->
+                    append (reverse (map (\cc -> Alt cc isPositional vars expr) caseConsts)) altAcc;
+                ;
+                
+            convert :: [Alt] -> [Alt] -> [Alt];    
+            convert !alts altAcc =
+                case alts of
+                [] -> reverse altAcc;
+                x:xs ->
+                    convert xs (convertAltToAlts x altAcc);
+                ;
+                
+                
+        in
+            Switch expr (map convertToPositional (convert alts []));
+    _ -> expr;
+    ;
+
+/**
+ * The Alt and Let variables have "" as the module name because conversion is done without a context. This 
+ * code set the module name correctly.
+ * 
+ * The names of case variables are all converted to be in this module. Otherwise the code that maps back
+ * to Java will assume that the names are in this module although they are not.
+ * 
+ * TODO: Make sure there can be no name clashing.
+ */    
+transform_addModuleNameToVariables :: TransformState -> Expression -> Expression;
+transform_addModuleNameToVariables state !expr =
+    let
+        thisModule :: String;
+        thisModule = transformState_getModuleName state;
+        
+        newName :: QualifiedName -> QualifiedName;
+        newName !oldName =
+            case oldName of
+            QN moduleName functionName ->                                
+                if moduleName == "" then
+                    (QN thisModule functionName)
+                else
+                    oldName;
+            ;
+            
+        /**
+        * If the given name has not module name then set the module name. This can
+        * arise because the convertion code to map from java expressions to cal objects
+        * does not have access to the context.
+        * 
+        *  @arg fnqn The name to update.
+        *  @return The name with module set.
+        */
+        maybeNewName :: (FieldName, QualifiedName, Type) -> (FieldName, QualifiedName, Type);
+        maybeNewName !fnqn =
+            case fnqn of
+            (fn, oldQN, type) ->
+                case oldQN of
+                QN moduleName functionName ->                                
+                    if moduleName == "" then
+                        (fn, (QN thisModule functionName), type)
+                    else
+                        fnqn;
+                ;
+            ;
+    in            
+        case expr of
+        Let variable isNew isKeepable isTopLevel type letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt _ ->
+            let
+                currentFunctionName :: QualifiedName;
+                currentFunctionName = transformState_getCurrentFunctionName state;
+                
+                currentModuleName :: String;
+                currentModuleName = currentFunctionName.QN.moduleName;
+                
+                /**
+                 * If there is no module name put it in the original definiting module. This happens
+                 * because the conversion code has no access to the contect and so let variable come
+                 * through with no module name.
+                 */
+                variablePrime :: QualifiedName;
+                variablePrime = QN currentModuleName variable.QN.functionName;
+            in
+                if variable.QN.moduleName == "" then
+                    Let variablePrime isNew isKeepable isTopLevel type letExpr letBody isRecursive arity isCoreFunction constArgs bodyWasChangedAt False
+                else
+                    expr;
+    
+        Switch expr alts ->
+            let 
+                fixUpAlt :: Alt -> Alt;
+                fixUpAlt !alt =
+                    case alt of
+                    // Alt (CaseConst, [QualifiedName], Expression)
+                    Alt caseConst ip oldFNQNs expr ->
+                        let
+                            newFNQNs :: [(FieldName, QualifiedName, Type)];
+                            newFNQNs = map maybeNewName oldFNQNs;
+                        in
+                            Alt caseConst ip newFNQNs (foldLeft (fixUpName state) expr (map (\fnqn -> fnqn.#2) oldFNQNs));
+                    Alts caseConsts ip oldFNQNs expr ->
+                        let
+                            newFNQNs :: [(FieldName, QualifiedName, Type)];
+                            newFNQNs = map maybeNewName oldFNQNs;
+                        in
+                            Alts caseConsts ip newFNQNs (foldLeft (fixUpName state) expr (map (\fnqn -> fnqn.#2) oldFNQNs));
+                    ;
+            in
+                Switch expr (map fixUpAlt alts);
+        _ -> expr;
+        ;
+
+/**
+ * If there are any strict arguments in the expression that can be moved to plinged arguments
+ * then do that.
+ */
+
+liftArgumentStrictnessCoreFunction :: TransformState -> CoreFunction -> CoreFunction;
+liftArgumentStrictnessCoreFunction state cf = 
+    case cf of
+    CoreFunction name args expr type strictness argIsWHNF ->
+        case liftArgumentStrictness state args strictness argIsWHNF expr of
+        (strictnessPrime, exprPrime) ->
+            CoreFunction name args exprPrime type strictnessPrime argIsWHNF;
+        ;
+    ;
+
+/**
+ * For core functions where later arguments are plings move them to the left. For example,
+ * change (f x y !z) into (f !z x y). 
+ */
+floatStrictArguments :: CoreFunction -> [CoreFunction] -> [CoreFunction] -> Expression -> Maybe (CoreFunction, [CoreFunction], [CoreFunction], Expression);
+floatStrictArguments cf todo done expr =
+    case cf of
+    CoreFunction cf_name cf_args cf_expr cf_type cf_strictness cf_argIsWHNF ->
+        let
+            reverseType :: [Type];
+            reverseType = reverse cf_type;
+            
+            argTypes :: [Type];
+            argTypes = reverse (tail reverseType);
+            
+            returnType :: Type;
+            returnType = head reverseType;
+            
+            // In an array like this 
+            //     [True, True, ... False, False ... False, ->True<-, True]
+            // return the index of ->True<-
+            splitArgs :: [(Boolean, Boolean, Type, QualifiedName)] -> [(Boolean, Boolean, Type, QualifiedName)] -> Maybe ([(Boolean, Boolean, Type, QualifiedName)], [(Boolean, Boolean, Type, QualifiedName)], [(Boolean, Boolean, Type, QualifiedName)]);
+            splitArgs args reverseBeforeArgs =
+                case args of
+                [] -> Nothing;
+                args_head : args_tail ->
+                    if args_head.#1 then                        
+                        splitArgs args_tail (args_head : reverseBeforeArgs)
+                    else
+                       let
+                               findTrue :: [(Boolean, Boolean, Type, QualifiedName)] -> [(Boolean, Boolean, Type, QualifiedName)] -> Maybe ([(Boolean, Boolean, Type, QualifiedName)], [(Boolean, Boolean, Type, QualifiedName)], [(Boolean, Boolean, Type, QualifiedName)]);
+                               findTrue args reverseMiddleArgs = 
+                                   case args of
+                                   [] -> Nothing;
+                                   args_head:args_tail ->
+                                       if args_head.#1 then
+                                           Just (reverse reverseBeforeArgs, reverse reverseMiddleArgs, args)
+                                       else
+                                           findTrue args_tail (args_head:reverseMiddleArgs);
+                                   ;        
+                       in
+                               findTrue args_tail [args_head];
+                    ;
+        in
+            case       
+                splitArgs (zip4 cf_strictness cf_argIsWHNF argTypes cf_args) [] 
+               // Nothing
+                of
+            Nothing -> Nothing;
+            Just parts -> 
+                case parts of
+                (beforeArgs, middleArgs, afterArgs) -> 
+                    let
+                        lengthBefore = length beforeArgs;
+                        lengthMiddle = length middleArgs;                        
+                        lengthAfter = length afterArgs;
+                        
+                        newArgs = append beforeArgs (append afterArgs middleArgs);
+                        updateCall :: Expression -> (Boolean, Expression);
+                        updateCall expr =
+                            case getFunctor expr of
+                            Var {name=varName} ->
+                                if cf_name == varName then
+                                    let
+                                        flatExpr :: [Expression];
+                                        flatExpr = flattenExpression expr [];
+                                    in
+                                        case flatExpr of
+                                        flatExpr_functor : flatExpr_args ->
+                                            let
+                                                before = take lengthBefore flatExpr_args;
+                                                startOfAfter = lengthBefore + lengthMiddle;
+                                                middle = take lengthMiddle (drop lengthBefore flatExpr_args);
+                                                endOfList = startOfAfter + lengthAfter;
+                                                after = drop startOfAfter flatExpr_args;
+                                                fullySaturated = length after == lengthAfter;
+                                            in
+                                                if fullySaturated then
+                                                    (True, 
+                                                        unflattenExpression 
+                                                            (flatExpr_functor:(append before (append after middle))))
+                                                else
+                                                    (False, expr);
+                                else 
+                                    (False, expr);
+                            _ -> (False, expr);
+                            ;
+                            
+                        updateCoreFunctions :: [CoreFunction] -> [CoreFunction];
+                        updateCoreFunctions cfs = map updateCoreFunction cfs;
+                        
+                        updateCoreFunction :: CoreFunction -> CoreFunction;
+                        updateCoreFunction cf =
+                            case cf of
+                            CoreFunction name args expr type strictness argIsWHNF ->
+                                CoreFunction name args (updateExpr expr) type strictness argIsWHNF;    
+                            ;
+                            
+                        updateExpr :: Expression -> Expression;
+                        updateExpr expr = 
+                            (transformTopDownSimple expr updateCall).#2;
+                    in
+                        case unzip4 newArgs of
+                        (strictness2, argIsWHNF2, argTypes2, args2) ->
+                            let
+                                newCFExpr = updateExpr cf_expr;
+                                newCF = CoreFunction cf_name args2 newCFExpr (append argTypes2 [returnType]) strictness2 argIsWHNF2;
+                                newToDo = updateCoreFunctions todo;
+                                newDone = updateCoreFunctions done;
+                                newExpr = updateExpr expr;
+                            in                            
+                                Just (newCF, newToDo, newDone, newExpr);
+                        ;
+                ;
+            ;        
+        ;
+
+liftArgumentStrictnessCoreFunctions :: TransformState -> [CoreFunction] -> [CoreFunction] -> Expression -> ([CoreFunction], Expression);
+liftArgumentStrictnessCoreFunctions state todo done expr = 
+    case todo of
+    [] -> (done, expr);    
+    todo_cf : todo_tail ->         
+        let
+            lifted_cf :: CoreFunction;
+            lifted_cf = liftArgumentStrictnessCoreFunction state todo_cf;
+        in
+            case floatStrictArguments lifted_cf todo_tail done expr of
+            Nothing -> liftArgumentStrictnessCoreFunctions state todo_tail (lifted_cf:done) expr;
+            Just updates ->
+                case updates of
+                (todo_cf2, todo_tail2, done2, expr2) ->
+                    liftArgumentStrictnessCoreFunctions state (todo_cf2:todo_tail2) done2 expr2;
+                ;
+            ;
+    ;
+
+/**
+ * If the arguments of a functions are `seq` in the body then instead pling the arguments and remove the
+ * seq. This is more efficient. The strictness is needed so that a test such as "test105 x !y = x `seq` y"
+ * will not result in x being plinged because the order of the x and y evaluation would be changed.
+ *
+ * @arg state
+ * @arg parameters The names of the parameters of the function that has the given body.
+ * @arg extantStrictness The strictness of the given parameters.
+ * @arg argIsWHNF The argument was marked as strict because it is in WHFN. This is used to allow an argument
+ * that appears earlier in the list to be marked as strict based on being seq'ed. This is safe because no out
+ * of order evaluation will occur. 
+ * @arg expression The expression to search for seq'ed that can be used to update the strictness array.
+ */
+
+liftArgumentStrictness :: TransformState -> [QualifiedName] -> [Boolean] -> [Boolean] -> Expression -> ([Boolean], Expression);    
+liftArgumentStrictness state parameters extantStrictness argIsWHNF expression =
+    let
+        
+        /**
+         * Make a list of all the expressions that are seq'ed in order. 
+         */
+        flattenSeq :: Expression -> [Expression] -> [Expression];
+        flattenSeq expr acc =
+            case getFunctor expr of
+            Var {name} ->
+                if name == prelude_seq then
+                    case flattenExpression expr [] of
+                    _ : args ->
+                        case args of
+                        [] -> acc;
+                        arg1 : args1 ->
+                            case args1 of
+                            [] -> acc;
+                            arg2 : args2 ->
+                                case args2 of
+                                [] -> flattenSeq arg1 (arg2:acc);
+                                _ -> undefined;
+                                ;
+                            ;
+                        ;
+                else
+                    expr:acc;
+            _ -> expr:acc;
+            ;
+                            
+        flatSeq :: [Expression];
+        flatSeq = flattenSeq expression [];
+        
+        seqExpr :: Expression;
+        seqExpr = prelude_seq_expr state;
+        
+        unflattenSeq :: [Expression] -> Expression;
+        unflattenSeq exprs =
+            case exprs of
+            head : tail -> 
+                case tail of
+                [] -> head;
+                _ -> (App (App seqExpr (unflattenSeq tail)) head);
+                ;
+            ;
+
+        /**
+         * The parameters that are already marked as strict. On the listed order.
+         */
+        extantStrictParameters :: [QualifiedName];
+        extantStrictParameters =
+            map Prelude.fromJust
+            (
+                filter isJust 
+                (
+                    zipWith3 (\isStrict isWHNF parameter ->
+                        // If the arg is marked as strict just because it was know to be WHNF
+                        // then this should not prevent other arguments from being plinged
+                        if isStrict && not isWHNF then
+                            Just parameter
+                        else
+                            Nothing
+                    ) extantStrictness argIsWHNF parameters
+                )
+            );
+        
+        /**
+         * Picks off the Seq'ed parameters from the given expression. Return the resulting expression
+         * plus a strictness flag array.
+         */
+        buildStrictness :: Expression -> [QualifiedName] -> [Boolean] -> [Boolean] -> ([Boolean], Expression);
+        buildStrictness seqExprs parameters extantStrictness strictness =
+            case parameters of
+            [] ->
+                (reverse strictness, seqExprs);
+            p : ps ->
+                // seq x y
+                case getSeq seqExprs of
+                Nothing -> (append (reverse strictness) extantStrictness, seqExprs);
+//                Nothing -> (reverse (List.foldLeftStrict (\cur p -> False : cur) strictness parameters), seqExprs);
+                Just x_y ->
+                    case x_y of
+                    (x, y) ->
+                        case x of
+                        Var {name} ->
+                            case extantStrictness of
+                            esHead : esTail -> 
+                                /*
+                                 * Allow the argument to be plinged if the argument already is plinged OR
+                                 * The argument is not plinged and non-of the extantPlinged arguments appear
+                                 * after the newly plinged argument in the parameter list. 
+                                 */
+                                let
+                                    // The parameters that are after this one
+                                    getRemainingParameters :: [QualifiedName];
+                                    getRemainingParameters = ps;
+                                    
+                                    remainingParameterIsAlreadyStrict :: Boolean;
+                                    remainingParameterIsAlreadyStrict = 
+                                        orList (
+                                            map (\remainingParameter ->
+                                                isJust (find (\esp -> esp == remainingParameter) extantStrictParameters)
+                                            ) ps
+                                        );
+                                in
+                                    // if a remaining parameters is already strict then the order of the 
+                                    // calculation will change.
+                                    if name == p && not remainingParameterIsAlreadyStrict then
+                                        buildStrictness y ps esTail (True : strictness)
+                                    // if the current seq'ed expression is a plinged arg then remove the seq'ed expr.
+//VERSION2                                    else if esHead && name == p then 
+//VERSION2                                        buildStrictness y ps esTail (True : strictness)
+                                    else
+                                        buildStrictness seqExprs ps esTail ((esHead || False): strictness)
+                                ;
+                            ;
+                        _ -> 
+                            (append (reverse strictness) extantStrictness, seqExprs);
+//                        _ -> (reverse (List.foldLeftStrict (\cur p -> False : cur) strictness parameters), seqExprs);
+                        ;
+                    ;
+                ;
+            ;
+    in
+        buildStrictness expression parameters extantStrictness [];
+
+/**
+ * Removes any Let definitions that were added to contain functions definitions to use for optimization. Functions
+ * that were created by fusion or specialization are collected in put in the list of new core functions.
+ * 
+ * @arg ensureTheseAreTopLevel Lift of symbols that should end up at the top level. 
+ * This list is created from other expressions that are being lifted to the top 
+ * level and reference these symbols.
+ * @arg state The context of the expression.
+ * @arg history The history of the current transformation.
+ * @arg expr The expression to remove function definitions from.
+ * @return A pair, the first element is a list of new core functions and the second is the optimized expression.
+ */ 
+
+transform_removeFunctionDefs :: [QualifiedName] -> TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);    
+transform_removeFunctionDefs ensureTheseAreTopLevel state history !expr =
+    case expr of
+    Let {variable=varName, isNew, isKeepable, body, type=letType, expr=letExpr} ->
+        // Added by fusion or specialization so keep that.
+        if
+            ((isLambdaExpression letExpr) && isNew) ||
+            isJust (find (\qn -> qn == varName) ensureTheseAreTopLevel) 
+        then
+            let
+                getArgsStrictnessAndExpr :: [QualifiedName] -> [Boolean] -> Expression -> ([QualifiedName], [Boolean], Expression);
+                getArgsStrictnessAndExpr vars strictness !expr =
+                    case expr of
+                    Lambda lambdaVar lambdaType lambdaArgIsWHNF lambdaExpr -> getArgsStrictnessAndExpr (lambdaVar:vars) (type_isStrict lambdaType:strictness) lambdaExpr;
+                    _ -> (reverse vars, reverse strictness, expr);
+                    ;
+                
+                fixedUpType :: [Type];
+                fixedUpType =
+                    fixUpType argsStrictnessAndExpr.#1 letType.Just.value;
+                
+                // skip the last type since it is the return type and strictness only
+                // applies to the arguments
+                strictness :: [Boolean];
+                strictness =
+                    zipWith or 
+                    (map type_isStrict (reverse (tail (reverse fixedUpType))))
+                    argsStrictnessAndExpr.#2
+                    ;
+                
+                argsStrictnessAndExpr :: ([QualifiedName], [Boolean], Expression);
+                argsStrictnessAndExpr = getArgsStrictnessAndExpr [] [] letExpr;
+                
+                cf :: CoreFunction;
+                cf =
+                    case argsStrictnessAndExpr of
+                    (args, lambdaStrictness, body1) ->
+                        // There can be some trivial let expressions of the form
+                        //
+                        //      let
+                        //          value = ...;
+                        //      in
+                        //          value;
+                        //
+                        // This code will simplify such expressions.
+                        case optimizeExplicit [transform_3_2_2, (transform_3_2_1 True)] state history (4::Int) body1 of
+                        (_, _, body2) ->
+                            renameCoreFunctionForThisModule
+                            state
+                            (CoreFunction varName args body2 fixedUpType strictness strictness)
+                            ;
+                        ;
+                    ;
+                
+                /**
+                 * Use the arg names to determine the return value. Sometimes a number of types in the list
+                 * must be combined because the return type is a function type. 
+                 */
+                fixUpType :: [QualifiedName] -> [Type] -> [Type];
+                fixUpType args types =
+                    let
+                        fixReturnType :: Int -> [Type] -> [Type];
+                        fixReturnType counter types =
+                            if counter == 0 then
+                                [unflattenFunctionTypes types]
+                            else
+                                case types of
+                                t:ts -> t : fixReturnType (counter - 1) ts;
+                            ;
+                    in
+                        fixReturnType (length args) types;
+                
+                history1 :: TransformHistory;
+                history1 = transformHistory_addCoreFunction history cf; 
+            in
+                (history1, True, body)
+        // Inlined definition that must be keep.
+        // or is a new function that does not need to be lifted.
+//        else if isKeepable || isNew && not (shouldBeLifted expr) then
+        else if /*not (shouldBeLifted expr) &&*/ (isKeepable || isNew) then
+            (history, False, expr)
+        else
+        // Unused or top level function name.
+            (history, True, body);
+    LetInlinable {body} ->
+        error "This should not be present in fully transformed expressions.";
+    _ -> (history, False, expr);
+    ;
+
+/**
+ * If the given structure cannot appear in an expression passed to the source code generator then
+ * change the structure to conform. Example include
+ * 
+ * 1. Lambda expressio not appear in expressions.
+ * 2. Case's not not appear inside an application or record selection expression. Case are converted
+ * in the following way since this is most optimal
+ *      case arg of ...
+ *      
+ *      let
+ *          f !x = case x of ...;
+ *      in
+ *          f arg ...
+ */
+
+transform_convertLambdaAndCaseToLet :: TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+transform_convertLambdaAndCaseToLet state history expr =
+    case expr of
+//    App {} ->
+//        case flattenExpression expr [] of
+//        functor : args ->
+//            // plinging is better than seq'ing
+//            if functor == prelude_seq_expr then
+//                case newVar state history state.TransformState.currentFunctionName "APP" of
+//                (history1, newFunctionName) ->
+//                (
+//                    history1, 
+//                    True,
+//                    Let
+//                    newFunctionName
+//                    True 
+//                    False
+//                    False
+////                    Nothing
+//                    (
+//                    case expression_getType state history expr of
+//                    Nothing -> Nothing;
+//                    Just type -> Just [type];
+//                    )
+//                    expr 
+//                    (Var newFunctionName [] Nothing Nothing) 
+//                    False 
+//                    0 
+//                    False
+//                    []      // not used since we are returning to java land
+//                    0       // ditto
+//                    False   // ditto
+//                );
+//            else
+//                (history, False, expr);
+//        ;
+            
+
+    Lambda {} -> 
+        if (
+            case state.TransformState.parentExpr of
+                Nothing -> True;
+                Just parentExpr ->
+                    case parentExpr of Lambda {} -> False; Let {} -> False; _ -> True;
+                    ;
+                
+           ) then
+            let
+                flattenLambda :: Expression -> [(QualifiedName, Type)] -> ([(QualifiedName, Type)], Expression);
+                flattenLambda expr varAcc =
+                    case expr of
+                    Lambda {var, type, expr} -> flattenLambda expr ((var, type):varAcc);
+                    _ -> (reverse varAcc, expr);
+                    ;
+            in
+                case flattenLambda expr [] of
+                (vars, innerLambdaExpr) ->
+                    case newVar state history state.TransformState.currentFunctionName "lambda" of
+                    (history1, newFunctionName) ->
+                        let
+                            functionType =
+                                let
+                                    helper :: [(QualifiedName, Type)] -> [Type]; 
+                                    helper vars =
+                                        case vars of
+                                        [] -> 
+                                            [
+                                                    case (Optimizer_State.expression_getType state history1 innerLambdaExpr) of
+                                                    Nothing -> 
+                                                        error (
+                                                            "innerLambdaExpr: " ++ show innerLambdaExpr ++ "\n" ++
+                                                            "    expr: " ++ show expr ++ "\n" ++
+                                                            "    parentExpr: " ++ show state.TransformState.parentExpr 
+                                                        );
+                                                    Just type -> type;
+                                            ];
+                                        v:vs ->
+                                            case v of
+                                            (lambdaVar, lambdaType) ->
+                                                case (expression_getType state history1 (Var lambdaVar [] Nothing Nothing)) of
+                                                Nothing -> lambdaType : helper vs; 
+                                                Just type -> type : helper vs;
+                                                ;
+                                            ;
+                                        ;
+                                in
+                                    helper vars;
+                        in
+                            (
+                                history1, 
+                                True,
+                                Let
+                                newFunctionName
+                                True 
+                                False
+                                False
+                                (Just functionType)
+                                expr 
+                                (Var newFunctionName [] Nothing Nothing) 
+                                False 
+                                (length vars) 
+                                False
+                                []      // not used since we are returning to java land
+                                0       // ditto
+                                False   // ditto
+                            );
+                    ;
+        else
+            (history, False, expr);
+    Switch switchExpr switchAlts -> 
+        if (
+            case state.TransformState.parentExpr of
+            Nothing -> False;
+            Just parentExpr ->
+                case parentExpr of
+                App{} -> True; 
+                DataConsSelection{} -> True;
+                RecordExtensionLiteral{} -> True; 
+                RecordExtensionPolymorphic{} -> True;
+                RecordSelection{} -> True;
+                // These are out to make test93 work
+//                Switch{} -> True;
+//                    case state.TransformState.grandParentExpr of
+//                    Nothing -> False;
+//                    Just grandParentExpr ->
+//                        case grandParentExpr of
+//                        Switch{} -> True;
+//                        _ -> False;
+//                        ;
+//                    ;
+                Switch{} -> 
+                    case state.TransformState.grandParentExpr of
+                    Nothing -> False;
+                    Just grandParentExpr ->
+                        case grandParentExpr of
+                        Switch{} -> True;
+                        _ -> False;
+                        ;
+                    ;
+                _ -> False;
+                ;
+            ) then
+            case newVar state history state.TransformState.currentFunctionName "lambda" of
+            (history1, newFunctionName) ->
+            case newVar state history state.TransformState.currentFunctionName "lambdaArg" of
+            (history2, newArgName) ->
+                let
+                    newArgType :: Type;
+                    newArgType = type_applyStrictness (expression_getType state history2 switchExpr).Just.value True;
+                in
+                // have to lift the case expression
+                (
+                    history2, 
+                    True,
+                    Let
+                    newFunctionName
+                    True 
+                    False
+                    False
+                    ((Just [newArgType, (expression_getType state history2 expr).Just.value]))
+                    (
+                            (Lambda 
+                                 newArgName 
+                                 newArgType
+                                 False
+                                 (Switch (Var newArgName [] Nothing (Just newArgType)) switchAlts)
+                            )
+                    )
+                    (App (Var newFunctionName [] Nothing Nothing) switchExpr) 
+                    False 
+                    0
+                    False
+                    []      // not used since we are returning to java land
+                    0       // ditto
+                    False   // ditto
+                );;
+        else            
+            (history, False, expr);
+
+//    RecordExtensionLiteral {fieldsMap} ->
+//        let
+//            updateField :: FieldName -> Expression -> (FieldName, Expression);
+//            updateField field expr = (field, transform_convertLambdaAndCaseToLet state history expr);
+//        in
+//            (history, True, RecordExtensionLiteral (map (uncurry updateField) fieldsMap)); 
+    _ -> (history, False, expr);
+    ;
+        
+    
+/**    
+ * Make a list of all the calls in the given expression that have the given variable as an argument.
+ */
+
+selectCalls :: QualifiedName -> TransformState -> Expression -> [(TransformState, Expression)];    
+selectCalls name state expr =
+    let
+        hasNameAsArg :: [(TransformState, Expression)] -> TransformState -> Expression -> (Boolean, [(TransformState, Expression)]);
+        hasNameAsArg calls state expr =
+            let
+                matches :: Expression -> Boolean;
+                matches expr =
+                    case expr of
+                    Var {name=varName} -> name == varName;
+                    _ -> False;
+                    ;
+            in
+                case find matches (flattenExpression expr []) of
+                Nothing -> (True, calls);
+                Just _ -> (False, (state, expr):calls);
+                ;
+    in
+        traverseTopDownAcc [] state expr hasNameAsArg;
+
+convertSeqExpressions_toChain :: TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+convertSeqExpressions_toChain state history expression =
+    if (
+        case 
+             state.TransformState.parentExpr of 
+        Nothing -> 
+            // for making M2.quicksortIntArray_v1$swap$2 work and 
+            // this test faster ":pt quicksortIntArray_v1 (randomIntArray 2000000)"
+            // The expression is already a body except for top level functions.
+            True;
+//            False; // this is the top level expression so no need to add a function def
+        Just parentExpr -> 
+            case parentExpr of
+            Let {} ->
+                False;  // The expression already is a body of a let expression so no need to add a function
+            _ -> True;
+            ;
+       ) then 
+        case flattenSeqs2 expression of
+        (innerExpr, seqedExpr) ->
+            if isEmpty seqedExpr then
+                (history, False, expression)
+            else
+                (history, True, ChainOfSeqs seqedExpr innerExpr)
+            ;
+    else
+        // The expression already is a let body so don't bother added a function.
+        (history, False, expression)
+    ;
+
+/**
+ * Convert the chain of seq'ed expression to 
+ * 
+ * Input
+ * 
+ *      e1 `seq` e2 ... `seq` ek `seq` e
+ *      
+ * Output (CASE 1) 
+ * 
+ * let
+ *      f = (\!x1 -> (\!x2 -> ... (\!xk -> e) ... ));
+ * in 
+ *      f e1 e2 ... ek;
+ *      
+ * Only do this if all of the ei's are variables.
+ *
+ * If all the e1 are not variables do
+ * 
+ * Output (CASE 2)
+ * 
+ * let
+ *      f !e1 = e2 `seq` ... ek
+ * in 
+ *      f e1 `seq` e
+ *      
+ * Output (CASE 3)
+ * 
+ * let
+ *     f !a1 =
+ *         e2 `seq` ...
+ *         ek;
+ * in
+ *     f e1;        
+ *
+ */
+
+convertSeqExpressions_createFunction :: [QualifiedName] -> TransformState -> TransformHistory -> Expression -> (TransformHistory, Boolean, Expression);
+convertSeqExpressions_createFunction arguments state history expression =
+    case expression of
+    ChainOfSeqs seqedExpr innerExpr ->
+        // if all the arguments are parameters then let the code that plings them handle this.
+        if andList 
+                (map 
+                     (\expr -> isJust (find (\arg -> expr == Var arg [] Nothing Nothing) arguments)) 
+                     seqedExpr
+                ) 
+        then
+            (history, True, buildSeq3 state (append seqedExpr [innerExpr]))
+        else if andList (map isVar seqedExpr) then
+            // CASE 1
+            case newVar state history (state.TransformState.currentFunctionName) "CSE1" of
+            (history2, newFunctionName) ->
+                let
+                    functionType :: Type;
+                    functionType = (expression_getType state history2 innerExpr).Just.value;
+                    
+                    functionBody :: Expression;
+                    functionBody = innerExpr;
+                    
+                    buildFunctionBody history seqedExpr = 
+                        (history2, buildSeq3 state (append seqedExpr [innerExpr]), functionType);
+                    
+                in
+                    case buildFunctionBody history seqedExpr of
+                    (history3, letExpr, letExprType) ->
+                        (history3, True,                                         
+                         Let 
+                         newFunctionName 
+                         True // isNew
+                         True // isKeepable
+                         False // isTopLevel
+                         (Just [letExprType])
+                         letExpr
+                         (Var newFunctionName [] Nothing (Just letExprType))
+                         False // isRecursive 
+                         0 // arity 
+                         False // isCoreFunction
+                         [] // constArgs
+                         0 // not used 
+                         True); // inliningWasPerformed (not inlining of this)
+                ;
+        else
+            if isEmpty seqedExpr || not (isVar (head seqedExpr)) then
+                (history, True, buildSeq3 state (append seqedExpr [innerExpr]))
+            else
+                if length seqedExpr > 2 then
+                    // CASE 2
+                    case 
+                        seqedExpr of
+                        seqHead : seqTail ->
+                            case newVar state history (state.TransformState.currentFunctionName) "CSE2" of
+                            (history2, newFunctionName) ->
+                                case newVar state history2 (state.TransformState.currentFunctionName) "CSE2" of
+                                (history3, argName) ->
+                                    let
+                                        functionType :: Type;
+                                        functionType = (expression_getType state history3 (last seqedExpr)).Just.value;
+                                        
+                                        functionBody :: Expression;
+                                        functionBody = innerExpr;
+                                        
+                                        argType :: Type;
+                                        argType = (expression_getType state history3 seqHead).Just.value;
+                                        
+                                        buildFunctionBody history seqedExpr = 
+                                            (
+                                                history3, 
+                                                substituteNoRename seqHead.Var.name (Var argName [] Nothing Nothing) (buildSeq3 state seqedExpr), 
+                                                functionType
+                                            );
+                                        
+                                    in
+                                        case buildFunctionBody history seqedExpr of
+                                        (history4, letExpr, letExprType) ->
+                                            (history4, True,                                         
+                                             Let 
+                                             newFunctionName 
+                                             True // isNew
+                                             True // isKeepable
+                                             False // isTopLevel
+                                             (Just [argType, letExprType])
+                                             (Lambda argName argType False letExpr) 
+                                             // f e1 `seq` e
+                                             (App (App (prelude_seq_expr state) (App (Var newFunctionName [] Nothing (Just letExprType)) seqHead)) innerExpr)
+                                             False // isRecursive 
+                                             0 // arity 
+                                             False // isCoreFunction
+                                             [] // constArgs
+                                             0 // not used 
+                                             True); // inliningWasPerformed (not inlining of this)
+                                    ;
+                                ;
+                            ;
+                else
+                    // CASE 3
+                    // let
+                    //     f !a1 =
+                    //         e2 `seq` ...
+                    //         ek;
+                    // in
+                    //     f e1;        
+                    case 
+                        seqedExpr of
+                        seqHead : seqTail ->
+                            case newVar state history (state.TransformState.currentFunctionName) "CSE2" of
+                            (history2, newFunctionName) ->
+                                case newVar state history2 (state.TransformState.currentFunctionName) "CSE2" of
+                                (history3, argName) ->
+                                    let
+                                        functionType :: Type;
+                                        functionType = (expression_getType state history3 innerExpr).Just.value;
+                                        
+                                        functionBody :: Expression;
+                                        functionBody = innerExpr;
+                                        
+                                        argType :: Type;
+                                        argType = (expression_getType state history3 seqHead).Just.value;
+                                        
+                                        buildFunctionBody history seqedExpr = 
+                                            (
+                                                history3, 
+                                                substituteNoRename seqHead.Var.name (Var argName [] Nothing Nothing) (buildSeq3 state (append seqedExpr [innerExpr])), 
+                                                functionType
+                                            );
+                                        
+                                    in
+                                        case buildFunctionBody history seqedExpr of
+                                        (history4, letExpr, letExprType) ->
+                                            (history4, True,                                         
+                                             Let 
+                                             newFunctionName 
+                                             True // isNew
+                                             True // isKeepable
+                                             False // isTopLevel
+                                             (Just [argType, letExprType])
+                                             (Lambda argName argType False letExpr) 
+                                             // f e1
+                                             (App (Var newFunctionName [] Nothing (Just letExprType)) seqHead)
+                                             False // isRecursive 
+                                             0 // arity 
+                                             False // isCoreFunction
+                                             [] // constArgs
+                                             0 // not used 
+                                             True); // inliningWasPerformed (not inlining of this)
+                                    ;
+                                ;
+                            ;
+
+
+        ;
+    _ -> (history, False, expression);
+    ;
+
+
+/**
+ * Convert expressions of the form 
+ * 
+ *      x `seq` y `seq` <expression>
+ *      
+ * to
+ * 
+ *      let
+ *          f = x `seq` y `seq` <expression>
+ *      in
+ *          f;
+ *
+ */
+
+convertSeqExpressions :: TransformState -> TransformHistory -> [QualifiedName] -> Expression -> (TransformHistory, Boolean, Expression);
+convertSeqExpressions state history arguments expression =
+    case transformTopDown (transformState_setTraverseCoreFunctions state False) history expression convertSeqExpressions_toChain of
+    (history2, wasChanged, expressionPrime) ->
+        if wasChanged then
+            (
+            case transformTopDown state history2 expressionPrime (convertSeqExpressions_createFunction arguments) of
+            (history3, wasChanged3, expression3) ->
+                (history3, wasChanged3, expression3)
+                ;
+            )
+        else
+            (history, False, expression);
+    ;
+
+arrangeCoreFunctions :: [CoreFunction] -> [CoreFunction];
+arrangeCoreFunctions cfs =
+    topologicalSort (toTransitiveClosure (toAdjacencyList cfs));
+
+toTransitiveClosure :: (Show a, Eq a, Show b) => [(a, b, [a])] -> [(a, b, [a])];
+toTransitiveClosure adjacencyList =
+    map (\aj->
+        case aj of
+        (aj_name, aj_node, aj_neighbours) ->
+            (aj_name, aj_node, (enclose adjacencyList aj_neighbours));
+        ) 
+        adjacencyList;
+
+unions :: Eq a =>  [[a]] -> [a] -> [a];
+unions xss acc =
+    case xss of
+    [] -> acc;
+    xs : xss ->
+        unions xss (union xs acc);
+    ;
+        
+enclose :: (Show a, Eq a) => [(a, b, [a])] -> [a] -> [a];
+enclose adjacencyList nodes =
+    let
+        moreNodes =
+            unions
+            (
+                nodes : 
+                (map (\aj ->
+                    if isElem aj.#1 nodes then
+                        aj.#3
+                    else
+                        []
+                ) adjacencyList 
+                ) 
+            )
+            [];
+    in
+        if length moreNodes == length nodes then
+            nodes
+        else
+            (enclose adjacencyList moreNodes);
+
+toAdjacencyList :: [CoreFunction] -> [(QualifiedName, CoreFunction, [QualifiedName])];
+toAdjacencyList cfs =
+    let
+        symbols :: [QualifiedName];
+        symbols = map (\cf -> cf.CoreFunction.name) cfs;
+
+        selectSymbol :: QualifiedName -> [QualifiedName] -> Expression -> [QualifiedName];
+        selectSymbol cf_name names expression =
+            case expression of
+            Var {name} -> 
+                if name != cf_name && isJust (find (\n -> name == n) symbols) && isNothing (find (\n -> name == n) names)then
+                    (name:names)
+                else
+                    names;
+            _ -> names;
+            ;
+
+        getNeighbours :: CoreFunction -> [QualifiedName];
+        getNeighbours cf = traverse [] cf.CoreFunction.expr (selectSymbol cf.CoreFunction.name);
+    in
+        map (\cf -> (cf.CoreFunction.name, cf, getNeighbours cf)) cfs;
+
+removeNode :: Eq a => a -> (a, b, [a]) -> (a, b, [a]);
+removeNode nodeToRemove aj = 
+    case aj of
+    (name, node, neighbours) -> (name, node, filter (\n -> n != nodeToRemove) neighbours);
+    ;
+
+removeNodes :: Eq a => [a] -> (a, b, [a]) -> (a, b, [a]);
+removeNodes nodesToRemove aj = 
+    case aj of
+    (name, node, neighbours) -> (name, node, filter (\n -> not (isElem n nodesToRemove)) neighbours);
+    ;
+
+selectJoinPoints :: Eq a => Int -> [(a, b, [a])] -> [(a, b, [a])] -> [b] -> ([(a, b, [a])], [b]);
+selectJoinPoints smallestNeighbourSet adjacencyList unused leaves =
+    case adjacencyList of
+    [] -> (unused, leaves);
+    aj:ajs ->
+        case aj of
+        (aj_name, aj_node, aj_neighbours) ->
+            if length aj_neighbours == smallestNeighbourSet then
+                selectJoinPoints smallestNeighbourSet (map (removeNode aj_name) ajs) unused (aj_node:leaves)
+            else
+                selectJoinPoints smallestNeighbourSet ajs (aj:unused) leaves;
+        ;
+    ;
+
+isLeaf :: Eq a => (a, b, [a]) -> Boolean;
+isLeaf aj = isEmpty aj.#3;
+
+isNotLeaf :: Eq a => (a, b, [a]) -> Boolean;
+isNotLeaf aj = not (isEmpty aj.#3);
+
+getMoreLeaves :: Eq a => [(a, b, [a])] -> [(a, b, [a])];
+getMoreLeaves adjacencyList = filter isLeaf adjacencyList;
+
+removeLeaves :: (Show a, Eq a, Show b) => [(a, b, [a])] -> [(a, b, [a])] -> [(a, b, [a])]; 
+removeLeaves moreLeaves adjacencyList =
+    map (removeNodes (map (\aj -> aj.#1) moreLeaves)) adjacencyList;
+
+/**
+ * Remove the nodes in adjacency list that are leaves.
+ */
+selectLeaves :: (Show a, Eq a, Show b) => [(a, b, [a])] -> [(a, b, [a])] -> [b] -> Boolean -> ([(a, b, [a])], Boolean, [b]);
+selectLeaves adjacencyList unused leaves wasChanged =
+    let        
+//        moreLeaves :: Eq a => [(a, b, [a])];
+        moreLeaves = getMoreLeaves adjacencyList;
+        
+//        innerNodes :: Eq a => [(a, b, [a])];
+        innerNodes = filter isNotLeaf adjacencyList;
+        
+//        unused :: Eq a => [(a, b, [a])];
+        unused = removeLeaves moreLeaves innerNodes;
+    in
+        (
+            unused, 
+            not (isEmpty moreLeaves),
+//            []
+            append leaves (map (\aj -> aj.#2) moreLeaves)
+        );
+
+reduce :: (Show a, Eq a, Show b) => [(a, b, [a])] -> [b] -> [b];
+reduce adjacencyList sortedList1 =
+    case selectLeaves adjacencyList [] sortedList1 False of
+    (unused, wasChanged, sortedList2) ->
+        if wasChanged then
+            reduce unused sortedList2
+        else
+            if isEmpty unused then
+                sortedList2
+            else
+                // There are cycles so the sort won't be 'perfect'
+                // Remove the nodes with the fewest number of neighbours
+                let
+                    smallestNeighbourSet :: Int;
+                    smallestNeighbourSet = maximum (map (\aj -> length aj.#3) unused);
+                in
+                    case
+                        selectJoinPoints smallestNeighbourSet unused [] sortedList2 of
+                    (unused2, sortedList3) -> 
+                        reduce unused2 sortedList3;
+        ;
+    ;            
+
+topologicalSort :: (Show a, Eq a, Show b) => [(a, b, [a])] -> [b];
+topologicalSort adjacencyList =
+    reduce adjacencyList [];                
+    
+trace2 :: String -> a -> a;
+trace2 unused v = v;
+
+/* @test */
+unitTests :: JPreludeTypeConstants -> Boolean;    
+protected unitTests typeConstants = 
+       assert Optimizer_Type.unitTests
+    && assert Optimizer_Expression.unitTests
+    && assert (Optimizer_Transformations.unitTests typeConstants)
+    && assert getArityExamples;
+

@@ -1,0 +1,1272 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * SqlParser.cal
+ * Created: June 2005
+ * By: Greg McClement. 
+ */
+
+/**
+ * This module implements a SQL parser.  Using the {@link module = Parser@} and {@link module = ExpressionLexer@} modules, 
+ * a specific lexer and parser are described for a SQL syntax.  
+ * The intent of the parser is to build SQL combinators (see {@link module = Sql@} module) as SQL syntax is parsed, the
+ * result being an evaluable SQL expression (at least translatable to evaluable SQL via a {@link typeConstructor = Sql.SqlBuilder@}).
+ * 
+ * @author Luke Evans
+ * @author Greg McClement
+ * @author Richard Webster
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+module Cal.Data.SqlParser;
+
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Char, Either, Int, Maybe, String;
+    dataConstructor = False, True, Left, Right, Nothing, Just;
+    function = 
+        compare, concat, error, field1, field2, field3, fromJust, fst, 
+        intToString, isEmpty, maybeToList, not, pair, snd, stringToInt, 
+        truncate, uncurry;
+    ;    
+import Cal.Collections.List using
+    function = 
+        all, concatMap, find, foldLeft, head, init, join, isElem, 
+        isSingletonList, last, length, map, removeDuplicates, reverse, sort, 
+        tail;
+    ;      
+import Cal.Core.String using
+    function = equalsIgnoreCase, fromList, toList;
+    ;        
+
+import Cal.Utilities.TimeZone;
+
+import Cal.Utilities.ExpressionLexer using
+    typeConstructor = Token;
+    function = 
+        ampersandToken, asteriskToken, caretToken, closeBraceToken, 
+        closeParenToken, commaToken, dotToken, eqToken, exclmnToken, 
+        functionToken, gtToken, keywordToken, ltToken, minusToken, nameToken, 
+        numberToken, openBraceToken, openParenToken, percentToken, plusToken, 
+        slashToken, specialCharSequenceToken, specificNameToken, stringToken, 
+        tildeToken, tokenStream, vertBarToken;
+    ;
+   
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, Expr, Query, QueryTable;
+    function = notExpr, toTypedExpr, toUntypedExpr;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Utilities.Parser using
+    typeConstructor = GenParser;
+    function = 
+        between, char, choice, count, digit, eof, label, many, many1, option, 
+        optional, pBind, pFail, pOr, pReturn, pSeq, parse, runParser, sepBy1, 
+        sepEndBy1, showParseError, spaces, try;
+    ;
+
+import Cal.Core.Debug;
+
+//
+// A Parser for SQL (parser on a token stream)
+//
+
+// This will start off as a bit of a home-brew SQL query syntax, which will hopefully grow into something more
+// like ANSI 92 SQL as time goes on.  ANSI 92 appears to have officially numbered productions, so if we're really
+// serious about compatibility, we might end up migrating to these.
+
+
+/**
+ * The non alphanumerics in a SQL identifier
+ */
+identifierNonAlphaChars :: [Char];
+private identifierNonAlphaChars = ['_', '#', '$'];
+
+/**
+ * SQL Keywords.  Order these for greedy consumption (esp. with common left substring)
+ * Used with an uppercase compare (for case-blind treatment)
+ * Keyword lexemes are related to actual {@link Token@}s through their images (i.e. the lexeme here must be the same as
+ * the image declared on the tokens used in the parser below).  We could have declared the tokens first, then 
+ * used them in the lexer, but we'd still have to remember to add to this list
+ */
+sqlKeywords :: [String];
+private sqlKeywords = [
+    "INNER JOIN",
+    "LEFT OUTER JOIN",
+    "RIGHT OUTER JOIN",
+    "FULL OUTER JOIN",
+    "WITH TIES",
+    "GROUP BY", 
+    "ORDER BY",
+    "UNION",
+    "BETWEEN",
+//    "COMPARISON",
+    "DESC", 
+    "DISTINCT", 
+    "PERCENT",
+    "EXISTS",
+    "ESCAPE",   // TODO: hook this up...
+    "HAVING",
+    "SELECT",
+    "WHERE",
+//    "TABLE", 
+//    "NAME",
+    "FROM", 
+    "LIKE",
+    "CASE",
+    "ELSE",
+    "THEN",
+    "WHEN",
+    "SOME",     // TODO: hook this up...
+    "NULL",
+    "ALL", 
+    "AND",
+    "ANY",      // TODO: hook this up...
+    "ASC", 
+    "END",
+    "NOT",
+    "TOP", 
+    "AS",
+    "IS",
+    "IN",
+    "OR",
+    "ON"
+    ];
+
+
+/**
+ * Associate the {@link DbFunction@} and the possible arities with each available function name.
+ */
+functionsInfo :: [(String, DbFunction, [Int])];
+functionsInfo = 
+            [
+             ("ABS",           Sql.AbsFunction,           [1]),
+             ("ACOS",          Sql.AcosFunction,          [1]),
+             ("ASIN",          Sql.AsinFucntion,          [1]),
+             ("ATAN",          Sql.AtanFunction,          [1]),
+             ("ATAN2",         Sql.Atan2Function,         [2]),
+             ("CEILING",       Sql.CeilingFunction,       [1]),
+             ("COS",           Sql.CosFunction,           [1]),
+             ("COT",           Sql.CotFunction,           [1]),
+             ("DEGREES",       Sql.DegreesFunction,       [1]),
+             ("EXP",           Sql.ExpFunction,           [1]),
+             ("FLOOR",         Sql.FloorFunction,         [1]),
+             ("LOG",           Sql.LogFunction,           [1]),
+             ("LOG10",         Sql.Log10Function,         [1]),
+             ("MOD",           Sql.ModFunction,           [2]),
+             ("PI",            Sql.PiFunction,            [0]),
+             ("POWER",         Sql.PowerFunction,         [2]),
+             ("RADIANS",       Sql.RadiansFunction,       [1]),
+             ("RAND",          Sql.RandFunction,          [0,1]),
+             ("ROUND",         Sql.RoundFunction,         [2,3]),
+             ("SIGN",          Sql.SignFunction,          [1]),
+             ("SIN",           Sql.SinFunction,           [1]),
+             ("SQRT",          Sql.SqrtFunction,          [1]),
+             ("TAN",           Sql.TanFunction,           [1]),
+             ("TRUNCATE",      Sql.TruncateFunction,      [1]),
+
+             ("ASCII",         Sql.AsciiFunction,         [1]),
+             ("CHAR",          Sql.CharFunction,          [1]),
+             ("DIFFERENCE",    Sql.DifferenceFunction,    [2]),
+             ("INSERT",        Sql.InsertFunction,        [4]),
+             ("LCASE",         Sql.LcaseFunction,         [1]),
+             ("LOWER",         Sql.LcaseFunction,         [1]),
+             ("LEFT",          Sql.LeftFunction,          [2]),
+             ("LENGTH",        Sql.LengthFunction,        [1]),
+             ("LEN",           Sql.LengthFunction,        [1]),
+             ("LOCATE",        Sql.LocateFunction,        [2,3]),
+             ("CHARINDEX",     Sql.LocateFunction,        [2,3]),
+             ("LTRIM",         Sql.LtrimFunction,         [1]),
+             ("REPEAT",        Sql.RepeatFunction,        [2]),
+             ("REPLACE",       Sql.ReplaceFunction,       [3]),
+             ("RIGHT",         Sql.RightFunction,         [2]),
+             ("RTRIM",         Sql.RtrimFunction,         [1]),
+             ("SOUNDEX",       Sql.SoundexFunction,       [1]),
+             ("SPACE",         Sql.SpaceFunction,         [1]),
+             ("SUBSTRING",     Sql.SubstringFunction,     [3]),
+             ("UCASE",         Sql.UcaseFunction,         [1]),
+             ("UPPER",         Sql.UcaseFunction,         [1]),
+
+             ("DATABASE",      Sql.DatabaseFunction,      [0]),
+             ("IFNULL",        Sql.IfNullFunction,        [2]),
+             ("ISNULL",        Sql.IfNullFunction,        [2]),
+             ("NULLIF",        Sql.NullIfFunction,        [2]),
+             ("USER",          Sql.UserFunction,          [0]),
+
+             ("DAYNAME",       Sql.DayNameFunction,       [1]),
+             ("WEEKDAY",       Sql.DayOfWeekFunction,     [1]),
+             ("DAYOFMONTH",    Sql.DayOfMonthFunction,    [1]),
+             ("DAYOFYEAR",     Sql.DayOfYearFunction,     [1]),
+             ("HOUR",          Sql.HourFunction,          [1]),
+             ("MINUTE",        Sql.MinuteFunction,        [1]),
+             ("MONTH",         Sql.MonthFunction,         [1]),
+             ("MONTHNAME",     Sql.MonthNameFunction,     [1]),
+             ("NOW",           Sql.NowFunction,           [0]),
+             ("QUARTER",       Sql.QuarterFunction,       [1]),
+             ("SECOND",        Sql.SecondFunction,        [1]),
+//             ("TIMESTAMPADD",  Sql.TimestampAddFunction,  [3]),
+//             ("TIMESTAMPDIFF", Sql.TimestampDiffFunction, [3]),
+             ("WEEK",          Sql.WeekFunction,          [1]),
+             ("YEAR",          Sql.YearFunction,          [1])
+             // TODO: parse the DateAdd and DateDiff functions...
+            ]
+            ++ map (\t3 -> (field1 t3, field2 t3, [1])) aggregateFunctionsInfo;
+
+/**
+ * Information about aggregate functions.
+ * The second function ID is for distinct summaries (if applicable).
+ */
+aggregateFunctionsInfo :: [(String, DbFunction, DbFunction)];
+aggregateFunctionsInfo = 
+            [
+             ("COUNT",         Sql.AggrCount,             Sql.AggrDistinctCount),
+             ("SUM",           Sql.AggrSum,               Sql.AggrDistinctSum),
+             ("AVG",           Sql.AggrAvg,               Sql.AggrDistinctAvg),
+             ("MIN",           Sql.AggrMin,               Sql.AggrMin),
+             ("MAX",           Sql.AggrMax,               Sql.AggrMax),
+             ("STDEV",         Sql.AggrStdDev,            Sql.AggrStdDev),
+             ("STDDEV",        Sql.AggrStdDev,            Sql.AggrStdDev),
+             ("STDEVP",        Sql.AggrStdDevP,           Sql.AggrStdDevP),
+             ("STDDEVP",       Sql.AggrStdDevP,           Sql.AggrStdDevP),
+             ("VAR",           Sql.AggrVar,               Sql.AggrVar),
+             ("VARIANCE",      Sql.AggrVar,               Sql.AggrVar),
+             ("VARP",          Sql.AggrVarP,              Sql.AggrVarP),
+             ("VARIANCEP",     Sql.AggrVarP,              Sql.AggrVarP)
+            ];
+
+/**
+ * Put the function names in order such that the longest names are first (for greedy consumption).
+ */
+allFunctionNames = List.sortBy (\fname1 fname2 -> compare (String.length fname2) (String.length fname1)) (map field1 functionsInfo);
+
+
+/**
+ * Special SQL character sequences.
+ * Most of these will be a single character, but these should be ordered for greedy comsumption in cases where there are multiple chars.
+ * Multiple character strings should only be used in cases where the characters must appear together with no whitespace between them.
+ */
+specialCharSequences :: [String];
+private specialCharSequences = [
+    "(+)",
+    "*=*",
+    "*=",
+    "=*",
+    "<",
+    ">",
+    "=",    // compare or assignment
+    "!",    // for !> and !<
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",    // modulo
+    "&",    // bitwise AND
+    "|",    // bitwise OR
+    "^",    // bitwise XOR
+    "~",    // bitwise NOT
+    ".",
+    ",",
+    ")",
+    "(",
+    "{",
+    "}"
+    ];
+
+identifierQuoteChars = [('[', ']'),
+                        ('"', '"'),
+                        ('`', '`')];
+
+
+/**
+ * Parses the SQL into tokens.
+ * An error is thrown if the SQL could not be parsed without any remaining text.
+ */
+//sqlTokens :: String -> [Token];
+sqlTokens = tokenStream identifierNonAlphaChars sqlKeywords allFunctionNames specialCharSequences identifierQuoteChars;
+
+parseTestRaw :: (GenParser Char () a) -> String -> a;
+private parseTestRaw p input = 
+case (runParser p () "" (toList input)) of
+    Right x  -> x;
+    Left err -> error (showParseError err);
+;
+
+testTokens sql = 
+    parseTestRaw sqlTokens sql;
+
+test2 = parseTestRaw (sepEndBy1 (Debug.trace "many digit" (many1 digit)) spaces) "a123aa123 123 ";
+//test2 = parseTestRaw (sepEndBy (many1 ParsecChar.digit) ParsecChar.spaces) "123  123";
+
+// Special char sequences for outer joins.
+private starEqualsToken = specialCharSequenceToken "*=";
+private equalsStarToken = specialCharSequenceToken "=*";
+private starEqualsStarToken = specialCharSequenceToken "*=*";
+private oracleOjToken = specialCharSequenceToken "(+)";
+
+// The keyword literal tokens...
+k_ALL        = keywordToken "ALL";
+k_DISTINCT   = keywordToken "DISTINCT";
+k_SELECT     = keywordToken "SELECT";
+k_FROM       = keywordToken "FROM";
+k_ORDERBY    = keywordToken "ORDER BY";
+k_GROUPBY    = keywordToken "GROUP BY";
+k_WHERE      = keywordToken "WHERE";
+k_HAVING     = keywordToken "HAVING";
+k_ASC        = keywordToken "ASC";
+k_DESC       = keywordToken "DESC";
+k_OR         = keywordToken "OR";
+k_AND        = keywordToken "AND";
+k_NOT        = keywordToken "NOT";
+k_IS         = keywordToken "IS";
+k_NULL       = keywordToken "NULL";
+k_BETWEEN    = keywordToken "BETWEEN";
+k_LIKE       = keywordToken "LIKE";
+k_IN         = keywordToken "IN";
+k_ESCAPE     = keywordToken "ESCAPE";
+k_EXISTS     = keywordToken "EXISTS";
+k_AS         = keywordToken "AS";
+k_TOP        = keywordToken "TOP";
+k_PERCENT    = keywordToken "PERCENT";
+k_WITH_TIES  = keywordToken "WITH TIES";
+k_ON         = keywordToken "ON";
+k_INNER_JOIN = keywordToken "INNER JOIN";
+k_LEFT_OJ    = keywordToken "LEFT OUTER JOIN";
+k_RIGHT_OJ   = keywordToken "RIGHT OUTER JOIN";
+k_FULL_OJ    = keywordToken "FULL OUTER JOIN";
+k_UNION      = keywordToken "UNION";
+k_CASE       = keywordToken "CASE";
+k_WHEN       = keywordToken "WHEN";
+k_THEN       = keywordToken "THEN";
+k_ELSE       = keywordToken "ELSE";
+k_END        = keywordToken "END";
+
+
+/**
+ * Parses the SQL text as a SELECT statement.
+ * An error is thrown if the text could not be parsed without any remaining text.
+ */
+parseSelectStatement :: String -> Query;
+public parseSelectStatement sql = parseSQL select_statement sql;
+
+/**
+ * Parses the specified SQL expression text.
+ * An error is thrown if the text could not be parsed without any remaining text.
+ */
+parseExpression :: String -> Expr;
+public parseExpression sqlExprText = parseSQL scalar_expression sqlExprText;
+
+/**
+ * Parses the SQL text using the specified rule.
+ */
+parseSQL rule sql =
+    let
+        parser =  
+            rule `pBind` (\query -> 
+            eof `pSeq`
+            pReturn query);
+    in
+        case (parse sqlTokens "SQL" (toList sql)) of
+        Right tokens ->
+            case (parse parser "SQL" tokens) of
+            Right result  -> result;
+            Left err -> error ("Failed to parse SQL " ++ (showParseError err));
+            ;
+        Left err -> error ("Failed to tokenize SQL statement: " ++ showParseError err);
+        ;
+
+boolean_expression = 
+    sepBy1 boolean_term k_OR `pBind` (\terms ->
+    pReturn (foldLeft Sql.orExpr Sql.falseConstant terms));
+
+boolean_term = 
+    sepBy1 boolean_factor k_AND `pBind` (\factors ->
+    pReturn (foldLeft Sql.andExpr Sql.trueConstant factors));
+
+boolean_factor =
+    try (between openParenToken closeParenToken boolean_expression) `pOr`
+    try (
+    		k_NOT `pSeq` 
+    		boolean_factor `pBind` (\bf ->
+    		pReturn (Sql.notExpr bf))
+        ) `pOr`
+    try boolean_predicate;
+
+boolean_predicate = 
+    let
+        test_for_not_null = 
+            scalar_expression `pBind` (\se ->
+            k_IS `pSeq` 
+            k_NOT `pSeq` 
+            k_NULL `pSeq` 
+            (pReturn (Sql.isNotNullExpr (toTypedExpr se))));
+
+        test_for_null = 
+            scalar_expression `pBind` (\se ->
+            k_IS `pSeq`
+            k_NULL `pSeq`
+            pReturn (Sql.isNullExpr (toTypedExpr se)));
+        
+        existence_test = 
+            k_EXISTS `pSeq`
+            subquery `pBind` (\subquery ->
+            pReturn (Sql.existsExpr (toTypedExpr (Sql.subQueryExpr subquery)))); 
+    in
+        try test_for_not_null `pOr`
+        try test_for_null `pOr`
+        try existence_test `pOr`
+        try comparison_expression;
+
+comparison_expression = 
+    let
+        // TODO: implement this...
+        subquery_comparison_expression = error "not impl";    // scalar_expression [any_all_some] subquery
+
+        scalar_comparison_expression =
+            scalar_expression `pBind` (\expr1 ->
+            comparison_operator `pBind` (\binOp ->
+            scalar_expression `pBind` (\expr2 -> 
+            pReturn (toTypedExpr (Sql.untypedBinaryExpr binOp expr1 expr2)))));
+
+        not_between_comparison = 
+            scalar_expression `pBind` (\leftExpr ->
+            k_NOT `pSeq` 
+            k_BETWEEN `pSeq`
+            scalar_expression `pBind` (\lowerExpr ->
+            k_AND `pSeq`
+            scalar_expression `pBind` (\upperExpr -> 
+            pReturn (notExpr (toTypedExpr (Sql.untypedFunctionExpr Sql.OpBetween [leftExpr, lowerExpr, upperExpr]))))));
+        
+        between_comparison = 
+            scalar_expression `pBind` (\leftExpr ->
+            k_BETWEEN `pSeq`
+            scalar_expression `pBind` (\lowerExpr -> 
+            k_AND `pSeq`
+            scalar_expression `pBind` (\upperExpr ->
+            pReturn (toTypedExpr (Sql.untypedFunctionExpr Sql.OpBetween [leftExpr, lowerExpr, upperExpr])))));
+
+        not_like_comparison = 
+            scalar_expression `pBind` (\leftExpr -> 
+            k_NOT `pSeq`
+            k_LIKE `pSeq`
+            scalar_expression `pBind` (\rightExpr -> 
+            pReturn (notExpr (toTypedExpr (Sql.untypedBinaryExpr Sql.OpLike leftExpr rightExpr)))));
+        
+        like_comparison = 
+            scalar_expression `pBind` (\leftExpr -> 
+            k_LIKE `pSeq`
+            scalar_expression `pBind` (\rightExpr -> 
+            pReturn (toTypedExpr (Sql.untypedBinaryExpr Sql.OpLike leftExpr rightExpr))));
+
+// TODO: turn these on later (once the LIKE operator is treated as a function)...
+//        not_like_escape_comparison = with6 scalar_expression k_NOT k_LIKE scalar_expression k_ESCAPE scalar_expression (\leftExpr unused1 unused2 rightExpr unused3 escapeExpr -> notExpr (toTypedExpr (Sql.untypedFunctionExpr Sql.OpLike [leftExpr, rightExpr, escapeExpr])));
+//        like_escape_comparison = with5 scalar_expression k_LIKE scalar_expression k_ESCAPE scalar_expression (\leftExpr unused1 rightExpr unused2 escapeExpr -> toTypedExpr (Sql.untypedFunctionExpr Sql.OpLike [leftExpr, rightExpr, escapeExpr]));
+
+        not_in_list_comparison = 
+            scalar_expression `pBind` (\leftExpr -> 
+            k_NOT `pSeq` 
+            k_IN `pSeq` 
+            openParenToken `pSeq` 
+            scalar_expression_list `pBind` (\exprList ->
+            closeParenToken  `pSeq`
+            pReturn (notExpr (toTypedExpr (Sql.untypedBinaryExpr Sql.OpIn leftExpr (Sql.untypedListExpr exprList))))));
+        
+        in_list_comparison = 
+            scalar_expression `pBind` (\leftExpr -> 
+            k_IN `pSeq`
+            openParenToken `pSeq` 
+            scalar_expression_list `pBind` (\exprList -> 
+            closeParenToken `pSeq`
+            pReturn (toTypedExpr (Sql.untypedBinaryExpr Sql.OpIn leftExpr (Sql.untypedListExpr exprList)))));
+
+        not_in_subquery_comparison = 
+            scalar_expression `pBind` (\leftExpr -> 
+            k_NOT `pSeq`
+            k_IN `pSeq`
+            subquery `pBind` (\subquery ->
+            pReturn (notExpr (toTypedExpr (Sql.untypedBinaryExpr Sql.OpIn leftExpr (Sql.subQueryExpr subquery))))));
+        
+        in_subquery_comparison = 
+            scalar_expression `pBind` (\leftExpr -> 
+            k_IN `pSeq` 
+            subquery `pBind` (\subquery ->
+            pReturn (toTypedExpr (Sql.untypedBinaryExpr Sql.OpIn leftExpr (Sql.subQueryExpr subquery)))));
+    in
+//      subquery_comparison_expression `pOr`
+        try scalar_comparison_expression `pOr`
+        try not_between_comparison `pOr` try between_comparison `pOr`
+        try not_like_comparison `pOr` try like_comparison `pOr` 
+//      not_like_escape_comparison `pOr` like_escape_comparison `pOr`
+        try not_in_list_comparison `pOr` try in_list_comparison `pOr`
+        try not_in_subquery_comparison `pOr` try in_subquery_comparison;
+
+comparison_operator = 
+    let
+        notEqual1        = ltToken `pSeq` gtToken `pSeq` pReturn Sql.OpNotEq;
+        notEqual2        = exclmnToken `pSeq` eqToken `pSeq` pReturn Sql.OpNotEq;
+        lessThanEqual    = ltToken `pSeq` eqToken `pSeq` pReturn Sql.OpLtEq;
+        greaterThanEqual = gtToken `pSeq` eqToken `pSeq` pReturn Sql.OpGtEq;
+        notLessThan      = exclmnToken `pSeq` ltToken `pSeq` pReturn Sql.OpGtEq;
+        notGreaterThan   = exclmnToken `pSeq` gtToken `pSeq` pReturn Sql.OpLtEq;
+        equal            = eqToken `pSeq` pReturn Sql.OpEq;
+        lessThan         = ltToken `pSeq` pReturn Sql.OpLt;
+        greaterThan      = gtToken `pSeq` pReturn Sql.OpGt;
+    in
+        try notEqual1 `pOr` 
+        try notEqual2 `pOr` 
+        try lessThanEqual `pOr` 
+        try greaterThanEqual `pOr` 
+        try notLessThan `pOr` 
+        try notGreaterThan `pOr` 
+        try equal `pOr` 
+        try lessThan `pOr` 
+        try greaterThan;
+
+scalar_expression = 
+    let
+        apply_binary_operators baseRule tokensAndOperators = 
+            let
+                valid_operators = choice (map (uncurry (\p r -> p `pSeq` pReturn r)) tokensAndOperators);
+            in
+                baseRule `pBind` (\br1 -> 
+                many (valid_operators `pBind` (\op -> baseRule `pBind` (\val -> pReturn (op, val)))) `pBind` (\brs ->
+                pReturn (foldLeft (\cur pr -> Sql.untypedBinaryExpr (fst pr) cur (snd pr)) br1 brs)));
+
+        bitwise_operator_info = [(caretToken, Sql.OpBitXor), (ampersandToken, Sql.OpBitAnd), (vertBarToken, Sql.OpBitOr)];
+        add_subtract_info     = [(plusToken, Sql.OpPlus), (minusToken, Sql.OpMinus)];
+        multiply_divide_info  = [(asteriskToken, Sql.OpMul), (slashToken, Sql.OpDiv), (percentToken, Sql.OpMod)];
+    in
+        // Apply the operators with the correct precedence.
+        foldLeft apply_binary_operators scalar_factor [multiply_divide_info, add_subtract_info, bitwise_operator_info];
+
+scalar_factor = 
+    let
+        unary_operation = 
+            let
+                unary_plus = 
+                    plusToken `pSeq`
+                    scalar_factor `pBind`
+                    pReturn;
+
+                unary_minus = 
+                    minusToken `pSeq`
+                    scalar_factor `pBind` (\factor ->
+                    pReturn ((Sql.untypedUnaryExpr Sql.OpNegate) factor));
+                    
+                unary_bitwise_not = 
+                    tildeToken `pSeq`
+                    scalar_factor `pBind` (\factor ->
+                    pReturn ((Sql.untypedUnaryExpr Sql.OpBitNot) factor));
+            in
+                try unary_plus `pOr`
+                try unary_minus `pOr`
+                try unary_bitwise_not;
+
+        parens_scalar_expression = 
+            openParenToken `pSeq`
+            scalar_expression `pBind` (\expression ->
+            closeParenToken `pSeq`
+            pReturn expression);
+            
+        subquery_expression = 
+            subquery `pBind` (\subquery ->
+            pReturn (Sql.subQueryExpr subquery));
+        
+    in
+    
+        try unary_operation `pOr`
+//        try parameter_reference `pOr` no implemented
+        try literal_expression `pOr`
+        try case_expression `pOr`
+        try aggregate_function_expression `pOr`
+        try function_expression `pOr`
+        try field_reference `pOr`
+        try subquery_expression `pOr`
+        try parens_scalar_expression;
+
+
+scalar_expression_list = sepBy1 scalar_expression commaToken;
+
+aliased_scalar_expression_list = sepBy1 aliased_scalar_expression commaToken;
+
+aliased_scalar_expression =
+    let
+        alias_name = sql_name;
+
+        // Parse an expression of the form:   alias = expr
+        alias_assignment = 
+            alias_name `pBind` (\alias ->
+            eqToken `pSeq`
+            scalar_expression `pBind` (\expr ->
+            pReturn (expr, alias)));
+
+        // Parse an expression of the form:  expr [AS] alias
+        trailing_alias = 
+            scalar_expression `pBind` (\expr ->
+            (optional k_AS) `pSeq`
+            alias_name `pBind` (\alias ->
+            pReturn (expr, alias)));
+
+
+        // Parse an expression with no alias.
+        no_alias = scalar_expression `pBind` (\expr -> pReturn (expr, ""));
+        
+    in
+        try alias_assignment `pOr`
+        try trailing_alias `pOr`
+        try no_alias;
+
+order_by_expression_list = 
+    let
+        order_direction = option True ((k_ASC `pSeq` pReturn True) `pOr` (k_DESC `pSeq` pReturn False));
+
+        orderByExpressionToken = 
+            scalar_expression `pBind` (\expr ->
+            order_direction `pBind` (\order ->
+            pReturn (pair expr order)));
+    in
+        sepBy1 orderByExpressionToken commaToken;
+
+subquery = 
+    openParenToken `pSeq` 
+    select_statement `pBind` (\value -> 
+    closeParenToken `pSeq` 
+    pReturn value);
+
+field_reference = 
+    let
+        // TODO: handle more complex identifier patterns (such as:  schema.table@catalog)...
+        identifierParts = sepBy1 sql_name dotToken;
+
+        namesToFieldExpr :: [String] -> Expr;
+        namesToFieldExpr names = 
+            let
+                fieldName = if (isEmpty names) then error ("Failed to parse identifier")
+                            else last names;
+
+                qualifiers = if (length names <= 1) then [] else init names;
+
+                // TODO: keep the list of qualifiers instead of combining them into a single string...
+                tableName = if (isEmpty qualifiers) then ""
+                            else join "." qualifiers;
+            in
+                Sql.untypedField (Sql.makeQueryTableWithAlias tableName tableName) fieldName;    
+    in
+        identifierParts `pBind` (\parts ->
+        pReturn (namesToFieldExpr parts));
+
+
+sql_name = nameToken;
+sql_number = numberToken;
+sql_string = stringToken;
+
+sql_time = 
+    let
+        // TODO: is this ok?
+        tz = TimeZone.currentTimeZone;
+
+        ticksPerMillisecond :: Int; 
+        ticksPerMillisecond = 10000;
+
+        dash_literal = char '-';
+        colon_rule = char ':';
+        dot_rule = char '.';
+
+        optional_whitespace = optional spaces;
+
+        ranged_limited_rule name lowerBound upperBound value = 
+            if (value < lowerBound || value > upperBound) then
+                pFail ("Value of " ++ name ++ " is out of range of " ++ (intToString lowerBound) ++ " to " ++ (intToString upperBound)) 
+//                pFail "The value must be between " ++ (intToString lowerBound) ++ " and " ++ (intToString upperBound) ++ "." 
+            else 
+                pReturn value;
+
+        year_rule     = count 4 digit `pBind` (\year -> pReturn (stringToInt (fromList year)));
+        month_rule    = count 2 digit `pBind` (\month -> ranged_limited_rule "month" 1 12 (stringToInt (fromList month))); 
+        day_rule      = count 2 digit `pBind` (\day -> ranged_limited_rule "day" 1 31 (stringToInt (fromList day))); 
+        hour_rule     = count 2 digit `pBind` (\hour -> ranged_limited_rule "hour" 0 23 (stringToInt (fromList hour))); 
+        minute_rule   = count 2 digit `pBind` (\minute -> ranged_limited_rule "minute" 0 59 (stringToInt (fromList minute))); 
+        second_rule   = count 2 digit `pBind` (\second -> ranged_limited_rule "second" 0 59 (stringToInt (fromList second))); 
+        fraction_rule = 
+            option '0' digit `pBind` (\d1 -> 
+            option '0' digit `pBind` (\d2 -> 
+            option '0' digit `pBind` (\d3 ->
+            pReturn (stringToInt (fromList [d1, d2, d3])))));
+
+        parse_date_text = 
+            year_rule `pBind` (\y ->
+            dash_literal `pSeq` month_rule `pBind` (\m -> 
+            dash_literal `pSeq` day_rule `pBind` (\d ->
+            pReturn (Time.makeTimeValue y m d 0 0 0 0 tz))));
+
+
+        ansi_date_text :: String -> GenParser a b Time;
+        ansi_date_text dateText =
+            let
+                result = parse 
+                            (
+                                spaces `pSeq` 
+                                parse_date_text `pBind` (\date -> 
+                                spaces `pSeq` 
+                                eof `pSeq` 
+                                pReturn date)
+                            )
+                         "" (toList dateText);
+            in
+                case result of
+                Right date -> pReturn date;
+                Left err -> pFail (showParseError err);
+                ;
+
+        parse_timestamp_text = 
+            year_rule `pBind` (\y -> 
+            dash_literal `pSeq` month_rule `pBind` (\m -> 
+            dash_literal `pSeq` day_rule `pBind` (\d ->
+            spaces `pSeq` hour_rule `pBind` (\hr -> 
+            colon_rule `pSeq` minute_rule `pBind` (\min -> 
+            colon_rule `pSeq` second_rule `pBind` (\sec -> 
+            (option 0 (dot_rule `pSeq` fraction_rule `pBind` pReturn)) `pBind` (\fraction ->
+            pReturn (Time.makeTimeValue y m d hr min sec (fraction * ticksPerMillisecond) tz))))))));
+
+        ansi_timestamp_text timestampText = 
+            let
+                result = parse 
+                            (
+                                spaces `pSeq` 
+                                parse_timestamp_text `pBind` (\timestamp -> 
+                                spaces `pSeq` 
+                                eof `pSeq` 
+                                pReturn timestamp)
+                            )
+                         "" (toList timestampText);
+            in
+                case result of
+                Right timestamp -> pReturn timestamp;
+                Left err -> pFail (showParseError err);
+                ;
+            
+        ansi_date =
+            openBraceToken `pSeq` 
+            specificNameToken "d" `pSeq` 
+            sql_string `pBind` (\str ->
+            closeBraceToken `pSeq`
+            ansi_date_text str);
+        
+        ansi_timestamp =
+            openBraceToken `pSeq` 
+            specificNameToken "ts" `pSeq` 
+            sql_string `pBind` (\str ->
+            closeBraceToken `pSeq`
+            ansi_timestamp_text str);
+        
+    in
+        try ansi_timestamp `pOr` try ansi_date;
+
+//parameter_reference = pFail "parameter_reference not implemented";   // TODO: ...
+
+function_expression = 
+    let
+        // This option controls whether only the known functions can be parsed successfully (and only with the correct number of args).
+        // If it is False, then any function name and/or number of arguments can be used.
+        // TODO: pass this as an option through the SQL parsing code...
+        strictFunctionParsing = False;
+
+        // Parse the function based on the recognized function names and the corresponding argument signatures.
+        checked_function_reference = 
+            let
+                lookupFunctionInfo fnName = 
+                    let
+                        functionInfo = fromJust (find (\info -> equalsIgnoreCase fnName (field1 info)) functionsInfo);
+                    in
+                        (field2 functionInfo, field3 functionInfo);
+
+                function_info = functionToken `pBind` (\fn -> pReturn (lookupFunctionInfo fn));
+
+                apply_arguments functionInfo = 
+                    let
+                        sqlFunction = fst functionInfo;
+                        arities = snd functionInfo;
+
+                        apply_arguments_of_arity arity = 
+                            // Parens are optional for zero arity functions, but must be present if there are arguments.
+                            if (arity == 0) then
+                                (optional (openParenToken `pSeq` closeParenToken)) `pSeq` 
+                                pReturn (Sql.untypedFunctionExpr sqlFunction [])
+                            else
+                                let
+                                    // Check that the correct number of arguments were provided.
+                                    // TODO: would it be possible to check the types as well (as the OlapExpressionParser does)?
+                                    all_args_rule = 
+                                        sepBy1 scalar_expression commaToken `pBind` (\exprs -> 
+                                        if (length exprs == arity) then 
+                                            pReturn exprs 
+                                        else 
+                                            pFail ("Function has arity of " ++ (intToString (length exprs)) ++ " but should have arity of " ++ (intToString arity)));
+                                in
+                                    openParenToken `pSeq`
+                                    all_args_rule `pBind` (\value ->
+                                    closeParenToken `pSeq`
+                                    pReturn ((Sql.untypedFunctionExpr sqlFunction) value));
+                    in
+                        // Attempt to apply the function with the allowed arities from highest to lowest.
+                        choice (map try (map apply_arguments_of_arity (reverse (sort arities))));            
+            in
+                function_info `pBind` apply_arguments;
+
+        // Parse the function ignoring the known function names and argument signatures.
+        // TODO: should this be able to handle zero-arity functions with no parens (it currently doesn't)?
+        unchecked_function_reference = 
+            let
+                lookupSqlFunction :: String -> DbFunction;
+                lookupSqlFunction fnName = 
+                    let
+                        functionInfo = fromJust (find (\info -> equalsIgnoreCase fnName (field1 info)) functionsInfo);
+                    in
+                        field2 functionInfo;
+
+                recognized_function = 
+                    functionToken `pBind` (\fnName -> 
+                    (option [] 
+                        (
+                            openParenToken `pSeq`
+                            (option [] (sepBy1 scalar_expression commaToken)) `pBind` (\value ->
+                            closeParenToken `pSeq`
+                            pReturn value)
+                        )
+                    ) `pBind` (\args ->
+                    pReturn (Sql.untypedFunctionExpr (lookupSqlFunction fnName) args)));
+
+                unrecognized_function = 
+                    nameToken `pBind` (\fnName -> 
+                    (
+                        openParenToken `pSeq`
+                        (option [] (sepBy1 scalar_expression commaToken)) `pBind` (\value ->
+                        closeParenToken `pSeq`
+                        pReturn value)
+                     ) `pBind` (\args ->
+                    pReturn (Sql.untypedFunctionExpr (Sql.FunctionOther fnName) args)));
+            in
+                try recognized_function `pOr` try unrecognized_function;
+
+        base_function_reference = if (strictFunctionParsing) then checked_function_reference 
+                                  else unchecked_function_reference;
+
+        odbc_escaped_function =
+            openBraceToken `pSeq`
+            specificNameToken "fn" `pSeq` 
+            base_function_reference `pBind` (\value ->
+            closeBraceToken `pSeq`
+            pReturn value);
+    in
+        try odbc_escaped_function `pOr` try base_function_reference;
+
+aggregate_function_expression = 
+    let
+        // The COUNT(*) special case.
+        count_all_expression = 
+            let
+                count_all_helper fnName = 
+                    if (equalsIgnoreCase fnName "COUNT") then 
+                        (openParenToken `pSeq` asteriskToken `pSeq` closeParenToken) `pSeq`
+                        pReturn (Sql.untypedFunctionExpr Sql.AggrCountAll [])
+                    else 
+                        pFail "Add error message 23";
+            in
+                functionToken `pBind` count_all_helper;
+
+        // Other aggregate function cases.
+        general_aggregate_expression = 
+            let
+                lookupAggregateFunctionInfo :: String -> Maybe (DbFunction, DbFunction);
+                lookupAggregateFunctionInfo fnName = 
+                    let
+                        maybeInfo = find (\info -> equalsIgnoreCase fnName (field1 info)) aggregateFunctionsInfo;
+                    in
+                        case maybeInfo of
+                        Nothing -> Nothing;
+                        Just aggrFunctionInfo ->
+                            Just (field2 aggrFunctionInfo, field3 aggrFunctionInfo);
+                        ;
+
+                optional_set_quantifier = 
+                    option False ((k_DISTINCT `pSeq` pReturn True) `pOr` (k_ALL `pSeq` pReturn False));
+
+                apply_arguments functionInfo = 
+                    case functionInfo of
+                    Nothing -> pFail "Undefined function";
+                    Just functionInfoValue ->
+                        openParenToken `pSeq`
+                        optional_set_quantifier `pBind` (\isDistinct ->
+                        scalar_expression `pBind` (\summarizedExpr ->
+                        closeParenToken `pSeq` 
+                        pReturn (Sql.untypedFunctionExpr (if isDistinct then snd functionInfoValue else fst functionInfoValue) [summarizedExpr])));
+                    ;
+
+                aggregation_function_info = 
+                    functionToken `pBind` (\value -> 
+                    pReturn (lookupAggregateFunctionInfo value));
+            in
+                aggregation_function_info `pBind` apply_arguments;
+    in
+        try count_all_expression `pOr` try general_aggregate_expression;
+
+
+case_expression = 
+    let
+        optional_else_expression =
+            option Nothing (k_ELSE `pSeq` scalar_expression `pBind` (\expr -> pReturn (Just expr)));
+
+        simple_case_expression = 
+            let
+                when_value_result_expression = 
+                    k_WHEN `pSeq`
+                    scalar_expression `pBind` (\whenExpr -> 
+                    k_THEN `pSeq`
+                    scalar_expression `pBind` (\resultExpr -> 
+                    pReturn (whenExpr, resultExpr)));
+            in
+                k_CASE `pSeq` 
+                scalar_expression `pBind` (\caseExpr -> 
+                (many1 when_value_result_expression) `pBind` (\whenValueAndResults -> 
+                optional_else_expression `pBind` (\elseExpr ->
+                k_END `pSeq`
+                pReturn (Sql.untypedFunctionExpr Sql.OpCase_Simple (caseExpr : concatMap (\pr -> [fst pr, snd pr]) whenValueAndResults ++ maybeToList elseExpr)))));
+
+        searched_case_expression = 
+            let
+                when_value_result_expression = 
+                    k_WHEN `pSeq`
+                    boolean_expression `pBind` (\whenExpr ->
+                    k_THEN `pSeq`
+                    scalar_expression `pBind` (\resultExpr -> 
+                    pReturn (whenExpr, resultExpr)));
+            in
+                k_CASE `pSeq` 
+                (many1 when_value_result_expression) `pBind` (\whenValueAndResults -> 
+                optional_else_expression `pBind` (\elseExpr ->
+                k_END `pSeq` 
+                pReturn (Sql.untypedFunctionExpr Sql.OpCase_Searched (concatMap (\pr -> [toUntypedExpr (fst pr), snd pr]) whenValueAndResults ++ maybeToList elseExpr))));
+    in
+        try simple_case_expression `pOr` try searched_case_expression;
+
+
+// TODO: add booleans, etc...
+literal_expression = 
+    let
+        string_literal = sql_string `pBind` (\s -> pReturn (toUntypedExpr (Sql.stringConstant s)));
+        number_literal = sql_number `pBind` (\n -> pReturn (toUntypedExpr (Sql.numericConstant n)));
+        time_literal   = sql_time `pBind` (\t -> pReturn (toUntypedExpr (Sql.timeConstant t)));
+    in
+        try string_literal `pOr` try number_literal `pOr` try time_literal;
+
+/**
+ * Parses an entire SQL SELECT statement.
+ */
+select_statement :: GenParser Token a Sql.Query;
+select_statement = select_statement_helper True;
+
+/**
+ * Parses an entire SQL SELECT statement.
+ */
+select_statement_helper allowUnion = 
+    let
+        // Parse the optional ALL and DISTINCT keywords.
+        set_quantifier_rule query = 
+            option query (
+                try (k_ALL `pSeq` pReturn query) `pOr`
+                try (k_DISTINCT `pSeq` pReturn (Sql.addOption query Sql.Distinct)));
+
+        // TODO: perhaps the 'N' value should be restricted to a positive integer...
+        top_n_rule query = 
+            k_TOP `pSeq` 
+            sql_number `pBind` (\n ->
+            (option False (k_PERCENT `pSeq` pReturn True)) `pBind` (\percent -> 
+            (option False (k_WITH_TIES `pSeq` pReturn True)) `pBind` (\withTies ->
+            pReturn (Sql.addOption query (Sql.TopN (truncate n) percent withTies)))));
+        
+        optional_top_n_rule query = option query (top_n_rule query);
+
+        // Parses a list of expression tokens and applies them to the result columns of the specified query.
+        // TODO: handle wildcard cases, such as  SELECT * FROM Customer  or  SELECT Customer.*, Orders.Amount...
+        projection_expressions query = 
+            aliased_scalar_expression_list `pBind` (\list ->
+            pReturn (Sql.projectWithAliases query list)) `label` "selection list";
+
+        select_clause = 
+            (k_SELECT `pSeq` pReturn Sql.newQuery) `pBind` (\q1 ->
+            set_quantifier_rule q1 `pBind` (\q2 ->
+            optional_top_n_rule q2 `pBind` 
+            projection_expressions));
+        
+        from_clause query = 
+            option 
+                query 
+                (k_FROM `pSeq` (sepBy1 join_node commaToken) `pBind` (\joins -> pReturn (Sql.setJoins query joins)));
+        
+        where_clause query = 
+            option query 
+            (k_WHERE `pSeq` (where_clause_info query) `pBind` (\whereClauseInfo ->
+            pReturn (Sql.join2 (Sql.restrict query (fst whereClauseInfo)) (snd whereClauseInfo))));
+
+        group_by_clause query = 
+            option 
+                query 
+                (k_GROUPBY `pSeq` scalar_expression_list `pBind` (\list -> pReturn (Sql.group2 query list)));
+
+        having_clause query = 
+            option 
+                query 
+                (k_HAVING `pSeq` boolean_expression `pBind` (\expr -> pReturn (Sql.restrict query expr)));
+
+        order_by_clause query = 
+            option 
+                query 
+                (k_ORDERBY `pSeq` order_by_expression_list `pBind` (\list -> pReturn (Sql.order2 query list)));
+
+        single_select_statement = 
+            select_clause `pBind` (\q1 -> 
+            from_clause q1 `pBind` (\q2 ->
+            where_clause q2 `pBind` (\q3 ->
+            group_by_clause q3 `pBind` (\q4 ->
+            having_clause q4 `pBind`
+            order_by_clause))));
+
+        union_keyword = k_UNION `pSeq` (option False (k_ALL `pSeq` pReturn True)) `pBind` pReturn;
+        union_statement = 
+            select_statement_helper False `pBind` (\query1 ->
+            union_keyword `pBind` (\unionAll ->
+            select_statement_helper True `pBind` (\query2 ->
+            pReturn (Sql.unionQuery query1 query2 unionAll))));
+
+        select_statement_or_union = 
+            if allowUnion then
+                try union_statement `pOr` try single_select_statement
+            else 
+                single_select_statement;
+        
+        select_statement_or_union_parens = 
+            openParenToken `pSeq`
+            (try union_statement `pOr` try single_select_statement) `pBind` (\statement ->
+            closeParenToken `pSeq`
+            pReturn statement);
+
+    in
+        // Allow the SELECT statement to be in parens.
+    try select_statement_or_union `pOr` try select_statement_or_union_parens;
+
+join_node = 
+    let
+        source_table = 
+            let
+                table_alias_name = sql_name;
+ 
+                source_subquery = 
+                    subquery `pBind` (\subquery ->
+                    (option "" (option "" (k_AS `pSeq` table_alias_name `pBind` pReturn))) `pBind` (\tableAlias ->
+                    pReturn (Sql.makeSubQueryTable subquery tableAlias))); 
+
+                source_base_table = 
+                    let
+                        // TODO: handle more complex identifier patterns (such as: schema.table@catalog)...
+                        table_name_parts = sepBy1 sql_name dotToken;
+
+                        // TODO: don't merge the qualifiers into a single string here -- keep them as a list...
+                        qualified_table_name = table_name_parts `pBind` (\parts -> pReturn (join "." parts));
+                    in
+                        qualified_table_name `pBind` (\tableName ->
+                        option "" (option "" (k_AS `pSeq` table_alias_name `pBind` pReturn)) `pBind` (\tableAlias ->
+                        pReturn (Sql.makeQueryTableWithAlias tableName tableAlias)));
+            in
+                (try source_subquery `pOr` try source_base_table) `pBind` (\jt -> pReturn (Sql.JoinTable jt));
+
+        join_type =
+            (try k_INNER_JOIN `pSeq` pReturn Sql.InnerJoin) `pOr`
+            (try k_LEFT_OJ `pSeq` pReturn Sql.LeftOuterJoin) `pOr`
+            (try k_RIGHT_OJ `pSeq` pReturn Sql.RightOuterJoin) `pOr`
+            (try k_FULL_OJ `pSeq` pReturn Sql.FullOuterJoin);
+
+        ansi92_table_join = 
+            let
+                child_join_node = try source_table `pOr` try (openParenToken `pSeq` join_node `pBind` (\join -> closeParenToken `pSeq` pReturn join));
+            in
+                child_join_node `pBind` (\ leftNode ->
+                join_type `pBind` (\joinType ->
+                child_join_node `pBind` (\rightNode ->
+                k_ON `pSeq`
+                boolean_expression `pBind` (\linkingExpr ->
+                pReturn (Sql.JoinSubtree leftNode rightNode linkingExpr joinType)))));
+ 
+        odbc_oj_table_join = 
+            let
+                oj_join_expression = 
+                    source_table `pBind` (\leftTable ->
+                    join_type `pBind` (\joinType -> 
+                    (try oj_join_expression `pOr` try source_table) `pBind` (\rightTable ->
+                    k_ON `pSeq`
+                    boolean_expression `pBind` (\linkingExpr ->
+                    pReturn (Sql.JoinSubtree leftTable rightTable linkingExpr joinType)))));
+            in
+                openBraceToken `pSeq` specificNameToken "oj" `pSeq`
+                oj_join_expression `pBind` (\join ->
+                closeBraceToken `pSeq`
+                pReturn join);
+
+        join_node_parens = openParenToken `pSeq` join_node `pBind` (\j -> closeParenToken `pSeq` pReturn j);
+    in
+        try odbc_oj_table_join `pOr` try ansi92_table_join `pOr` try source_table `pOr` try join_node_parens;
+
+/**
+ * Extracts both regular restriction expressions and outer join expressions from the WHERE clause body.
+ * 
+ * TODO: this code only handles outer join expressions that are ANDed with the other top-level expressions.
+ *       Perhaps ORed outer join expressions should be supported as well.
+ */
+where_clause_info query = 
+    let
+        check_single_table_expression expr = 
+            let
+                expressionTables = Sql.getExpressionTables False expr;
+            in
+                if (isSingletonList expressionTables) then
+                    pReturn (expr, head expressionTables)
+                else 
+                    pFail "not a singleton";
+
+        single_table_expression = scalar_expression `pBind` check_single_table_expression;
+
+        makeJoinInfo joinType leftExprAndTable rightExprAndTable = 
+            let
+                leftExpr  = fst leftExprAndTable;
+                rightExpr = fst rightExprAndTable;
+
+                leftTable  = snd leftExprAndTable;
+                rightTable = snd rightExprAndTable;
+
+                linkingExpr = Sql.toTypedExpr (Sql.untypedFunctionExpr Sql.OpEq [leftExpr, rightExpr]);
+            in
+                Sql.makeJoinInfo2 leftTable rightTable linkingExpr joinType;
+
+        // Treat a comparison in the WHERE clause as an inner join if it involved exactly 2 tables and both are from the current query
+        // (not an outer query).
+        comparison_to_inner_join_expression expr = 
+            let
+                queryTables :: [QueryTable];
+                queryTables = removeDuplicates (concatMap Sql.getJoinTreeTables (Sql.joins query));
+
+                expressionTables = Sql.getExpressionTables False (toUntypedExpr expr);
+
+                leftTable  = head expressionTables;
+                rightTable = head (tail expressionTables);
+
+                joinInfo = Sql.makeJoinInfo2 leftTable rightTable expr Sql.InnerJoin;
+
+                allExprTablesFromCurrentQuery = all (\t -> isElem t queryTables) expressionTables;
+            in
+                if (length expressionTables != 2 || not allExprTablesFromCurrentQuery) then
+                    pFail "Join expression invalid"
+                else 
+                    pReturn joinInfo;
+
+        sql_inner_join_expression = comparison_expression `pBind` comparison_to_inner_join_expression;
+
+        sql_loj_expression = 
+            single_table_expression `pBind` (\expr1 -> 
+            starEqualsToken `pSeq`
+            single_table_expression `pBind` (\expr2 ->
+            pReturn (makeJoinInfo Sql.LeftOuterJoin expr1 expr2)));
+        
+        sql_roj_expression = 
+            single_table_expression `pBind` (\expr1 -> 
+            equalsStarToken `pSeq`
+            single_table_expression `pBind` (\expr2 -> 
+            pReturn (makeJoinInfo Sql.RightOuterJoin expr1 expr2)));
+        sql_foj_expression = 
+            single_table_expression `pBind` (\expr1 -> 
+            starEqualsStarToken `pSeq`
+            single_table_expression `pBind` (\expr2 ->
+            pReturn (makeJoinInfo Sql.FullOuterJoin expr1 expr2)));
+
+        // TODO: check that the following 2 options are not backwards...
+        oracle_loj_expression = 
+            single_table_expression `pBind` (\expr1 ->
+            eqToken `pSeq`
+            (single_table_expression `pBind` (\expr -> oracleOjToken `pSeq` pReturn expr)) `pBind` (\expr2 -> 
+            pReturn (makeJoinInfo Sql.RightOuterJoin expr1 expr2)));
+        
+        oracle_roj_expression = 
+            (single_table_expression `pBind` (\expr -> oracleOjToken `pSeq` pReturn expr)) `pBind` (\expr -> 
+            eqToken `pSeq`
+            single_table_expression `pBind` (\table -> 
+            pReturn (makeJoinInfo Sql.LeftOuterJoin expr table)));
+
+        outer_join_expression_parens = 
+            openParenToken `pSeq`
+            outer_join_expression `pBind` (\value ->
+            closeParenToken `pSeq`
+            pReturn value);
+
+        outer_join_expression = 
+            try sql_loj_expression `pOr` 
+            try sql_roj_expression `pOr` 
+            try sql_foj_expression `pOr` 
+            try oracle_loj_expression `pOr` 
+            try oracle_roj_expression `pOr` 
+            try sql_inner_join_expression `pOr` 
+            try outer_join_expression_parens;
+
+        outer_join_or_boolean_expression = 
+            (try outer_join_expression `pBind` (\v -> pReturn (Prelude.Right v))) `pOr` 
+            (try boolean_expression `pBind` (\v -> pReturn (Prelude.Left v)));
+//            (try boolean_factor `pBind` (\v -> pReturn (Prelude.Left v)));
+        
+        parts = sepBy1 outer_join_or_boolean_expression k_AND;
+
+        merge_info :: (Sql.TypedExpr Boolean, [a]) -> Either (Sql.TypedExpr Boolean) a -> (Sql.TypedExpr Boolean, [a]);
+        merge_info currentInfo boolOrOj = 
+            case boolOrOj of
+            Prelude.Left boolExpr -> (Sql.andExpr (fst currentInfo) boolExpr, snd currentInfo);
+            Prelude.Right joinNode -> (fst currentInfo, snd currentInfo ++ [joinNode]);
+            ;
+
+        where_clause_info_parens = 
+            openParenToken `pSeq` 
+            where_clause_info query `pBind` (\result -> 
+            closeParenToken `pSeq`
+            pReturn result);
+        
+    in
+        try (parts `pBind` (\parts -> pReturn (foldLeft merge_info (Sql.trueConstant, []) parts))) `pOr`
+        try where_clause_info_parens;

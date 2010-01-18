@@ -1,0 +1,1207 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Dynamic.cal
+ * Created: Oct 27, 2005
+ * By: Bo Ilic
+ */
+
+
+/**
+ * Defines the {@link typeConstructor = Dynamic@} type along with a variety of functions
+ * for working with it. Based on the Dynamics module in Hugs and GHC, and the paper 
+ * "Scrap your boilerplate: a practical design for generic programming".
+ * 
+ * @author Bo Ilic
+ * @author James Wright 
+ */
+module Cal.Core.Dynamic;
+import Cal.Core.Prelude using
+    typeClass = Typeable;
+    typeConstructor =
+        Boolean, CalValue, Char, Int, JList, JObject, Maybe, RecordType, 
+        String, TypeRep;
+    dataConstructor =
+        False, True, Nothing, Just, EQ, RecordTypeRep, FunctionTypeRep, 
+        ListTypeRep;
+    function =
+        add, assert, concat, error, fromInteger, fromJust, fst, input, 
+        isNothing, isRecordType, orderingToInt, output, recordType_fieldTypes, 
+        recordType_getNthFieldType, snd, stringToInteger, toCalValue, typeOf, 
+        unsafeCoerce, unsafeFromCalValue;
+    ;
+import Cal.Collections.List using
+    function = foldLeftStrict, length, map, subscript, zipWith;
+    ;
+import Cal.Core.String using
+    function = substring;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+import Cal.Core.Record;
+    
+//we want to maintain the generality and functional independence of the Dynamic module.
+//Please do not add more imports.    
+    
+/**
+ * The {@code Dynamic@} type is a type used for holding values of a variety of CAL types.
+ * Dynamic values can be created using the toDynamic function and can be extracted 
+ * via the {@link fromDynamicWithDefault@} and {@link fromDynamic@} functions. The set of types that
+ * can be dynamically represented by the {@code Dynamic@} type is extensible. Any type that
+ * is an instance of the {@link Typeable@} type class can be used dynamically.
+ * 
+ * Note: using the {@code Dynamic@} type is generally considered poor functional programming
+ * practice, and frequently there are ways to re-express a solution to avoid its use.
+ * However, {@code Dynamic@} is actually type-safe in the sense that run-time errors cannot
+ * occur because of the use of the "wrong" type. The reason using {@code Dynamic@} is frowned
+ * upon somewhat is that the type system is not able to help the user with the process
+ * of his or her construction of CAL code as much. There is also a (small) performance
+ * penalty of carrying type information at runtime.
+ */
+data public Dynamic = 
+    /**
+     * @arg type type representation of the value
+     * @arg untypedValue placeholder for the untyped value
+     */
+    private Dynamic 
+        type         :: TypeRep
+        untypedValue :: CalValue;
+
+/**
+ * Creates a {@link typeConstructor = Dynamic@} value.
+ * 
+ * @arg v the value to be encapsulated in a {@link typeConstructor = Dynamic@} value.
+ * @return a {@link typeConstructor = Dynamic@} value encapsulating {@code v@}.
+ */
+toDynamic :: Typeable a => a -> Dynamic;
+public toDynamic v =
+    Dynamic (typeOf v) (toCalValue v);
+
+/**
+ * One of the ways to extract a value from a {@link typeConstructor = Dynamic@} value.
+ * If the underlying type of the dynamic value is the same as that of
+ * the {@code defaultValue@}, then the underlying value is returned. Otherwise
+ * {@code defaultValue@} is returned.
+ * 
+ * @arg dynamicValue the {@code Dynamic@} value whose underlying value is to be extracted.
+ * @arg defaultValue the default value to be returned if {@code dynamicValue@}'s underlying ytpe
+ *                   is not the same as the type of this argument.
+ * @return the underlying value if its type matches that of {@code defaultValue@}, or {@code defaultValue@} otherwise.
+ */
+fromDynamicWithDefault :: Typeable a => Dynamic -> a -> a;
+public fromDynamicWithDefault !dynamicValue defaultValue =
+    case dynamicValue of
+    Dynamic type underlyingValue ->
+        if typeOf defaultValue == type then
+            unsafeFromCalValue underlyingValue
+        else
+            defaultValue;
+    ;
+
+/**
+ * One of the ways to extract a value from a {@link typeConstructor = Dynamic@} value.
+ * Extracts {@code {@link Just@} underlyingValue@} from the {@link typeConstructor = Dynamic@} value if the type of the underlying
+ * value matches what is required of the context in which {@code fromDynamic@} is used.
+ * Otherwise {@link Nothing@} is returned.
+ * 
+ * @arg dynamicValue the {@code Dynamic@} value whose underlying value is to be extracted.
+ * @return {@code {@link Just@} v@}, where {@code v@} is the underlying value, if its type matches what is required of the context,
+ *         or {@link Nothing@} otherwise.
+ */
+fromDynamic :: Typeable a => Dynamic -> Maybe a;
+public fromDynamic !dynamicValue =
+    case dynamicValue of
+    Dynamic type underlyingValue ->
+        let
+            fromUnderlyingValue :: Typeable a => a -> Maybe a;
+            fromUnderlyingValue value =
+                if (type == typeOf value) then
+                    Just value
+                else
+                    Nothing;
+        in
+            fromUnderlyingValue (unsafeCoerce underlyingValue);
+    ;            
+
+/**
+ * Returns the {@link typeConstructor = TypeRep@} value representing the type of the underlying value of a
+ * {@link typeConstructor = Dynamic@} value.
+ * 
+ * @arg dynamicValue the {@code Dynamic@} value.
+ * @return the {@code TypeRep@} value representing the type of the underlying value of a {@link typeConstructor = Dynamic@} value.
+ */
+dynamicUnderlyingType :: Dynamic -> TypeRep;
+public dynamicUnderlyingType !dynamicValue = dynamicValue.Dynamic.type;
+
+/**
+ * If {@code dynamicValue@} is actually a list, then it return {@link Just@} (the list, with elements wrapped in a Dynamic value)
+ * otherwise, the function returns {@link Nothing@}.
+ * 
+ * @arg dynamicValue the {@code Dynamic@} value.
+ * @return {@link Just@} (the list, with elements wrapped in a Dynamic value), if {@code dynamicValue@} is actually a list,
+ *         or {@link Nothing@} otherwise.
+ */
+fromDynamicList :: Dynamic -> Maybe [Dynamic];
+public fromDynamicList !dynamicValue =
+    case dynamicValue of
+    Dynamic type underlyingValue ->
+        case type of
+        ListTypeRep elementType ->
+            Just (map (Dynamic elementType) (unsafeCoerce underlyingValue :: [CalValue]));
+        _ -> Nothing;
+        ;
+    ;
+
+/* @example */
+fromDynamicListExamples :: Boolean;
+fromDynamicListExamples =
+    assert 
+    (
+        length (fromJust (fromDynamicList (toDynamic [20.0, 5.0, 10.0, 12.0])))
+        == 4
+    )
+    &&
+    assert
+    (
+        map (\v -> fromDynamicWithDefault v 0.0) (fromJust (fromDynamicList (toDynamic [20.0, 5.0, 10.0, 12.0])))
+        == [20.0, 5.0, 10.0, 12.0]
+    )
+    &&
+    assert
+    (
+        map (\v -> fromDynamicWithDefault v 0.0) (map (\w -> fromJust (fromDynamic w) :: Dynamic) (fromJust (fromDynamicList (toDynamic [toDynamic 20.0, toDynamic 5.0, toDynamic "Fred", toDynamic 12.0]))))
+        == [20.0, 5.0, 0.0, 12.0]
+    )
+    ;
+
+/**
+ * If {@code dynamicValue@} is actually a record, then return {@link Just@} the list of field names of the record.
+ * The values in the list are in field-name order of the orginal record.
+ * @see Record.fieldNames
+ * 
+ * @arg dynamicValue the {@code Dynamic@} value.
+ * @return {@link Just@} (the list of field names of the record), if {@code dynamicValue@} is actually a record,
+ *         or {@link Nothing@} otherwise. 
+ */
+dynamicRecordFieldNames :: Dynamic -> Maybe [String];
+public dynamicRecordFieldNames !dynamicValue =
+    
+    case dynamicValue of    
+    Dynamic type underlyingValue ->
+        if isRecordType type then
+            Just (Record.fieldNames (unsafeCoerce underlyingValue :: {r}))
+        else
+            Nothing;       
+    ;
+
+/* @example */
+dynamicRecordFieldNamesExamples :: Boolean;
+dynamicRecordFieldNamesExamples =
+    assert
+    (
+        dynamicRecordFieldNames (toDynamic {})
+        == Just []
+    )       
+    && 
+    assert
+    (
+        dynamicRecordFieldNames (toDynamic {(2.0, "abc") | #3 = True})
+        == Just ["#1", "#2", "#3"]
+    )         
+    &&
+    assert 
+    (
+        dynamicRecordFieldNames (toDynamic {#2 = 2.0, #20 = "abc"})
+        == Just ["#2", "#20"]
+    )                
+    && 
+    assert
+    (
+        dynamicRecordFieldNames (toDynamic {(2.0, "abc") | #3 = True, name = "Anton", age = 2.0})
+        == Just ["#1", "#2", "#3", "age", "name"]
+    )        
+    &&
+    assert
+    (
+        dynamicRecordFieldNames (toDynamic {(2.0, "abc") | #10 = True, name = "Anton", age = 2.0})
+        == Just ["#1", "#2", "#10", "age", "name"]
+    )        
+    && 
+    assert
+    (
+        dynamicRecordFieldNames (toDynamic {{name = "Anton", age = 2.0} | fruit = "a" ++ "pple"})
+        == Just ["age", "fruit", "name"]
+    )        
+    && 
+    assert 
+    (
+        dynamicRecordFieldNames (toDynamic (1.0 + 2.0))
+        == Nothing
+    )
+    ;
+            
+    
+/**
+ * If {@code dynamicValue@} is actually a record, then return {@link Just@} the list of field values of the record, wrapped in
+ * {@link typeConstructor = Dynamic@} values. Otherwise, return {@link Nothing@}. The values in the list are in field-name order
+ * of the orginal record.
+ * 
+ * @see fieldValues
+ * 
+ * @arg dynamicValue the {@code Dynamic@} value.
+ * @return {@link Just@} (the list of field values of the record, wrapped in {@link typeConstructor = Dynamic@} values), if
+ *         {@code dynamicValue@} is actually a record, or {@link Nothing@} otherwise.  
+ */
+dynamicRecordFieldValues :: Dynamic -> Maybe [Dynamic];
+public dynamicRecordFieldValues !dynamicValue =
+    case dynamicValue of
+    Dynamic type underlyingValue ->
+        case type of
+        RecordTypeRep dictionary ->
+            Just $ zipWith Dynamic (recordType_fieldTypes dictionary) (fieldValues (unsafeCoerce underlyingValue :: {r}));
+        
+        _ -> Nothing;
+        ;
+    ;
+
+/* @example */
+dynamicRecordFieldValuesExamples :: Boolean;
+dynamicRecordFieldValuesExamples =
+    let        
+        list1 :: [Dynamic];
+        list1 = fromJust (dynamicRecordFieldValues (toDynamic {}));
+        
+        test1 :: Boolean;
+        test1 = assert (length list1 == 0);
+        
+        list2 :: [Dynamic];
+        list2 = fromJust (dynamicRecordFieldValues (toDynamic {(2.0, "abc") | #3 = True}));
+        
+        test2 :: Boolean;
+        test2 =
+            assert (length list2 == 3)
+            && assert (fromDynamic (subscript list2 0) == Just 2.0)
+            && assert (fromDynamic (subscript list2 1) == Just "abc")
+            && assert (fromDynamic (subscript list2 2) == Just True)
+            ;
+        
+        list3 :: [Dynamic];
+        list3 = fromJust (dynamicRecordFieldValues (toDynamic {#2 = 2.0, #20 = "def"}));
+        
+        test3 :: Boolean;
+        test3 =
+            assert (length list3 == 2)
+            && assert (fromDynamic (subscript list3 0) == Just 2.0)
+            && assert (fromDynamic (subscript list3 1) == Just "def")
+            ;
+        
+        list4 :: [Dynamic];
+        list4 = fromJust (dynamicRecordFieldValues (toDynamic {(2.0, "abc") | #3 = True, name = "Anton", age = 5.0}));
+        
+        test4 :: Boolean;
+        test4 =
+            assert (length list4 == 5)
+            && assert (fromDynamic (subscript list4 0) == Just 2.0)
+            && assert (fromDynamic (subscript list4 1) == Just "abc")
+            && assert (fromDynamic (subscript list4 2) == Just True)   
+            && assert (fromDynamic (subscript list4 3) == Just 5.0)
+            && assert (fromDynamic (subscript list4 4) == Just "Anton")
+            ;  
+        
+        list5 :: [Dynamic];
+        list5 = fromJust (dynamicRecordFieldValues (toDynamic {(10.0, "abc") | #10 = True, name = "Anton", age = 2.0}));
+        
+        test5 :: Boolean;
+        test5 =
+            assert (length list5 == 5)
+            && assert (fromDynamic (subscript list5 0) == Just 10.0)
+            && assert (fromDynamic (subscript list5 1) == Just "abc")
+            && assert (fromDynamic (subscript list5 2) == Just True)
+            && assert (fromDynamic (subscript list5 3) == Just 2.0)
+            && assert (fromDynamic (subscript list5 4) == Just "Anton")
+            ;          
+        
+        list6 :: [Dynamic];
+        list6 = fromJust (dynamicRecordFieldValues (toDynamic {{name = "Anton", age = 2.0} | fruit = "a" ++ "pple"}));
+        
+        test6 :: Boolean;
+        test6 =
+            assert (length list6 == 3)
+            && assert (fromDynamic (subscript list6 0) == Just 2.0)
+            && assert (fromDynamic (subscript list6 1) == Just "apple")
+            && assert (fromDynamic (subscript list6 2) == Just "Anton")
+            ;                     
+    in
+        assert test1
+        && assert test2
+        && assert test3
+        && assert test4
+        && assert test5
+        && assert test6
+        ;                 
+
+/**
+ * Takes a function wrapped in a {@link typeConstructor = Dynamic@} value and attempts to apply it to an argument
+ * wrapped in a {@link typeConstructor = Dynamic@} value.
+ * 
+ * @arg dynamicFunction {@code Dynamic@} value containing the function to apply
+ * @arg arg {@code Dynamic@} value containing the value to apply dynamicFunction to
+ * @return {@code {@link Maybe@} {@link typeConstructor = Dynamic@}@} which will be {@link Nothing@} if the type of
+ *         {@code dynamicFunction@}'s wrapped value is not compatible with arg's wrapped value, or
+ *         {@code {@link Just@} dynamicResult@}, where {@code dynamicResult@} is a {@link typeConstructor = Dynamic@}
+ *         value wrapping the result of the application.
+ */
+dynamicApply :: Dynamic -> Dynamic -> Maybe Dynamic;
+public dynamicApply !dynamicFunction arg =
+    case dynamicFunction of
+    Dynamic {type = dynamicFunctionType, untypedValue = dynamicFunctionValue} ->
+        case dynamicFunctionType of
+        FunctionTypeRep {domainType, codomainType} ->
+            case arg of
+            Dynamic {type = argType, untypedValue = argValue} ->
+                if domainType == argType then
+                    Just (Dynamic codomainType ((unsafeCoerce dynamicFunctionValue) argValue))
+                else
+                    Nothing;
+            ;
+        _ -> Nothing;
+        ;
+    ;
+    
+/* @example */
+dynamicApplyExamples :: Boolean;
+dynamicApplyExamples =
+    assert
+    (
+        fromDynamic (fromJust (dynamicApply (toDynamic (add 5.0)) (toDynamic 5.0)))
+        == Just 10.0
+    )
+    &&
+    assert 
+    (
+        fromDynamic (fromJust (dynamicApply (toDynamic orderingToInt) (toDynamic EQ)))
+        == Just (0 :: Int)
+    )
+    &&
+    assert
+    (
+        fromDynamic (fromJust (dynamicApply (toDynamic (fst :: (Char, String) -> Char)) (toDynamic ('c', "S"))))
+        == Just 'c'
+    )
+    &&
+    assert
+    (
+        isNothing (dynamicApply (toDynamic (add 5.0)) (toDynamic (5 :: Int)))
+    )
+    &&
+    assert
+    (
+        isNothing (dynamicApply (toDynamic (add (5 :: Int))) (toDynamic 5.0))
+    )
+    &&
+    assert
+    (
+        isNothing (dynamicApply (toDynamic 5.0) (toDynamic (add 5.0)))
+    )
+    ;
+
+/**
+ * Takes a function wrapped in a {@link typeConstructor = Dynamic@} value and applies it to an argument
+ * wrapped in a {@link typeConstructor = Dynamic@} value.  An error will be signalled if the types of the
+ * underlying values are not compatible.
+ * 
+ * @arg dynamicFunction {@code Dynamic@} value containing the function to apply
+ * @arg arg {@code Dynamic@} value containing the value to apply {@code dynamicFunction@} to
+ * @return a {@code Dynamic@} value wrapping the result of the application.
+ */
+dynamicApp :: Dynamic -> Dynamic -> Dynamic;
+public dynamicApp !dynamicFunction arg =
+    case dynamicFunction of
+    Dynamic {type = dynamicFunctionType, untypedValue = dynamicFunctionValue} ->
+        case dynamicFunctionType of
+        FunctionTypeRep {domainType, codomainType} ->
+            case arg of
+            Dynamic {type = argType, untypedValue = argValue} ->
+                if domainType == argType then
+                    Dynamic codomainType ((unsafeCoerce dynamicFunctionValue) argValue)
+                else
+                    error "Incompatible types in dynamic application";
+            ;
+        _ -> error "Attempt to perform a dynamic application with a non-function type";
+        ;
+    ;
+    
+/* @example */
+dynamicAppExamples :: Boolean;
+dynamicAppExamples =
+    assert (fromDynamic (dynamicApp (toDynamic (add 5.0)) (toDynamic 5.0)) == Just 10.0) &&
+    assert (fromDynamic (dynamicApp (toDynamic orderingToInt) (toDynamic EQ)) == Just (0 :: Int)) &&
+    assert (fromDynamic (dynamicApp (toDynamic (snd :: (Char, String) -> String)) (toDynamic ('c', "S"))) == Just "S")
+    ;
+
+/**
+ * Given a record value and a field name, returns a {@link typeConstructor = Dynamic@} value representing the
+ * specified field in the record.  A runtime error is signalled if the record does
+ * not contain the specified field.
+ * @arg recordValue The record to extract a field from
+ * @arg fieldName Name of the field to extract
+ * @return {@code Dynamic@} value containing the field's value
+ */
+recordFieldValue :: Typeable r => {r} -> String -> Dynamic;
+public recordFieldValue !recordValue !fieldName =
+    let
+        index :: Int;
+        index = recordFieldIndex recordValue fieldName;
+    in
+        if (index == -1) then
+            error ("record does not have a field named " ++ fieldName)
+        else
+            Dynamic (unsafeCoerce (recordFieldTypePrimitive recordValue index)) (recordFieldValuePrimitive recordValue index)
+        ;  
+
+/* @example */
+recordFieldValueExamples :: Boolean;
+recordFieldValueExamples =
+    assert
+    (
+        fromDynamic (recordFieldValue {a = "a value", b = "b value"} "a")
+        == Just "a value"
+    )
+    && 
+    assert
+    (
+        fromDynamic (recordFieldValue {#1 = "first value", #3 = "third value"} "#3")
+        == Just "third value"
+    )
+    && 
+    assert
+    (
+        fromDynamic (recordFieldValue (99.1, 98.3) "#1")
+        == Just 99.1
+    )
+    && 
+    assert
+    (
+        fromDynamic (recordFieldValue {#1 = "first ordinal", #2 = "second ordinal", leftField = "first textual"} "#1")
+        == Just "first ordinal"
+    )
+    &&
+    assert
+    (
+        fromDynamic (recordFieldValue {#1 = "first ordinal", #2 = "second ordinal", leftField = "first textual"} "leftField")
+        == Just "first textual"
+    )
+    &&
+    assert
+    (
+        fromDynamic (recordFieldValue {#1 = "first ordinal", #3 = 'C', leftField = "first textual"} "#1")
+        == Just "first ordinal"
+    )
+    &&
+    assert
+    (
+        fromDynamic (recordFieldValue {#1 = "first ordinal", #3 = 'C', leftField = "first textual"} "leftField")
+        == Just "first textual"
+    )
+    ;
+    
+    
+/** 
+ * @see dynamicRecordFieldValue
+ * @arg dynamicValue the {@code Dynamic@} value to test.
+ * @arg fieldName 
+ * @return {@link True@} if {@code dynamicValue@} is a dynamic record with the given field name and false otherwise.
+ */
+dynamicRecordHasField :: Dynamic -> String -> Boolean;
+public dynamicRecordHasField !dynamicValue !fieldName =    
+    case dynamicValue of    
+    Dynamic type underlyingValue ->
+        isRecordType type && (Record.hasField (unsafeCoerce underlyingValue) fieldName);
+    ; 
+    
+/**
+ * Accepts a {@link typeConstructor = Dynamic@} value that contains a record and the name of a field,
+ * and returns a {@link typeConstructor = Dynamic@} value that represents the value of the specified
+ * field of the record.  A runtime error is signalled if {@code dynamicRecord@} does not
+ * contain a record, or if the record does not have the specified field.
+ * @arg dynamicRecord value that contains a record
+ * @arg fieldName Name of field to extract
+ * @return {@code Dynamic@} value of the value of the field specified by {@code fieldName@} in the
+ *          record contained by {@code dynamicRecord@}.
+ */
+dynamicRecordFieldValue :: Dynamic -> String -> Dynamic;
+public dynamicRecordFieldValue !dynamicRecord !fieldName =
+    case dynamicRecord of
+    Dynamic type value -> 
+        case type of
+        RecordTypeRep dictionary ->
+            let
+                index :: Int;
+                index = recordFieldIndex (unsafeCoerce value) fieldName;
+            in
+                if index == -1 then
+                    error ("record does not have a field named " ++ fieldName)
+                else
+                    Dynamic (recordType_getNthFieldType dictionary index) (recordFieldValuePrimitive (unsafeCoerce value) index);
+       _ -> error "dynamicRecord must contain a record";
+       ;
+   ;
+    
+/* @example */
+dynamicRecordFieldValueExamples :: Boolean;
+dynamicRecordFieldValueExamples =
+    assert
+    (
+        fromDynamic (dynamicRecordFieldValue (toDynamic {a = "a value", b = "b value"}) "a")
+        == Just "a value"
+    )
+    && 
+    assert
+    (
+        fromDynamic (dynamicRecordFieldValue (toDynamic {#1 = "first value", #3 = "third value"}) "#3") 
+        == Just "third value"
+    )
+    && 
+    assert
+    (
+        fromDynamic (dynamicRecordFieldValue (toDynamic (99.1, 98.3)) "#1") 
+        == Just 99.1
+    )
+    && 
+    assert
+    (
+        fromDynamic (dynamicRecordFieldValue (toDynamic {#1 = "first ordinal", #2 = "second ordinal", leftField = "first textual"}) "#1")
+        == Just "first ordinal"
+    ) 
+    &&
+    assert
+    (
+        fromDynamic (dynamicRecordFieldValue (toDynamic {#1 = "first ordinal", #2 = "second ordinal", leftField = "first textual"}) "leftField")
+        == Just "first textual"
+    )
+    &&
+    assert 
+    (
+        fromDynamic (dynamicRecordFieldValue (toDynamic {#1 = "first ordinal", #3 = 'C', leftField = "first textual"}) "#1")
+        == Just "first ordinal"
+    ) 
+    &&
+    assert (
+        fromDynamic (dynamicRecordFieldValue (toDynamic {#1 = "first ordinal", #3 = 'C', leftField = "first textual"}) "leftField")
+        == Just "first textual"
+    )
+    ;
+
+/**
+ * @return A new {@link RecordType@} containing the union of the fields of the two argument {@link RecordType@}s.
+ *          If both {@link RecordType@} arguments contain the same field, the first {@link RecordType@} argument
+ *          is given precedence.  (This is the same rule as for {@link appendRecord@})
+ */
+foreign unsafe import jvm "method appendRecordType"
+    private recordType_appendRecordType :: RecordType -> RecordType -> RecordType;
+
+/**
+ * @return A new {@link RecordType@} containing all the fields of the {@link RecordType@} argument, plus a new
+ *          field whose name and value are specified by the {@link typeConstructor = String@} and {@link JObject@} arguments
+ *          respectively.
+ *          If the {@link RecordType@} argument already contains the field specified by the string argument, the new
+ *          {@link RecordType@} will contain the value specified by the {@link JObject@} argument rather than the value from
+ *          the {@link RecordType@} argument.
+ */
+foreign unsafe import jvm "method insertRecordTypeField"
+    private recordType_insertRecordTypeField :: RecordType -> String -> JObject -> RecordType;
+
+/**
+ * Converts an ordinal field name to a corresponding {@link Int@} value.
+ * Eg, {@code fieldOrdinal "#3" == 3.@}
+ * A runtime error will be signalled if the field name is not a valid ordinal
+ * field name.
+ * @arg fieldName An ordinal field name to convert to an integer.
+ * @return the {@link Int@} value represented by fieldName
+ */
+fieldOrdinal :: String -> Int;
+private fieldOrdinal !fieldName =
+    fromInteger (stringToInteger (substring fieldName 1 (String.length fieldName)));
+
+/* @example */
+fieldOrdinalExamples :: Boolean;
+fieldOrdinalExamples =
+    assert (fieldOrdinal "#1" == 1) &&
+    assert (fieldOrdinal "#9204" == 9204);
+
+/**
+ * Takes a record, a field name, and a value, and returns a {@link typeConstructor = Dynamic@} value containing
+ * a new record that extends the old record with a field of the specified name having
+ * the specified value.
+ * @arg recordValue The record to extend
+ * @arg fieldName The name of the field to add
+ * @arg fieldValue The value of the field to add
+ * @return A {@link typeConstructor = Dynamic@} containing an extention of {@code recordValue@} that has the field named by
+ *         {@code fieldName@} with a value of {@code fieldValue@}.
+ */    
+insertRecordField :: (Typeable r, Typeable a) => {r} -> String -> a -> Dynamic; 
+public insertRecordField !recordValue !fieldName fieldValue =
+    insertRecordFieldHelper recordValue (typeOf recordValue) fieldName fieldValue (typeOf fieldValue);
+
+/**
+ * Helper for {@link insertRecordField@} and {@link insertDynamicRecordField@}.  Accepts a record, a
+ * {@link typeConstructor = TypeRep@} for the record, a field name for the new field, and a value to set
+ * the new field to, and the TypeRep of the field.
+ * If the field name is already present in the record, a new record will be
+ * returned that contains the new value in place of the old value.  If {@code recordType@} does 
+ * not represent a record type, a runtime error will be signalled.
+ * 
+ * @arg recordValue Record to use as a base record
+ * @arg recordType {@code TypeRep@} of recordValue
+ * @arg fieldName Name of the new field
+ * @arg fieldValue Value to set the new field to
+ * @arg fieldType TypeRep of fieldValue
+ * @return {@code Dynamic@} containing a new record extended by a field called fieldName having
+ *          the value fieldValue.
+ */
+insertRecordFieldHelper :: {r} -> TypeRep -> String -> a -> TypeRep -> Dynamic; 
+private insertRecordFieldHelper recordValue !recordType !fieldName fieldValue fieldType =
+    case recordType of
+    RecordTypeRep dictionary ->
+        let
+            fromTypeRepHelper :: TypeRep -> a -> TypeRep;
+            fromTypeRepHelper !typeRep ignored =
+                typeRep;
+        
+            fromTypeRep :: TypeRep -> JObject;
+            fromTypeRep !typeRep =
+                output (toCalValue (fromTypeRepHelper typeRep)); 
+            
+            newDictionary :: RecordType;
+            newDictionary = recordType_insertRecordTypeField dictionary fieldName (fromTypeRep fieldType);
+        in
+            if isOrdinalFieldName fieldName then
+                Dynamic (RecordTypeRep newDictionary) (insertOrdinalRecordFieldPrimitive recordValue (fieldOrdinal fieldName) fieldValue)
+            else
+                Dynamic (RecordTypeRep newDictionary) (insertTextualRecordFieldPrimitive recordValue fieldName fieldValue);
+        
+        _ -> error "recordType must represent the type of a record value";
+        ;
+        
+/* @example */
+insertRecordFieldExamples :: Boolean;
+insertRecordFieldExamples =
+    assert 
+    (
+        fromDynamic (insertRecordField {} "newField" "new value")
+        == Just {newField = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertRecordField {oldField = "old value"} "newField" "new value")
+        == Just {oldField = "old value", newField = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertRecordField {oldField = "old value"} "oldField" "new value")
+        == Just {oldField = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertRecordField ('a', 'b') "#3" "new value")
+        == Just ('a', 'b', "new value")
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertRecordField ('a', 'b') "#9" "new value")
+        == Just {#1 = 'a', #2 = 'b', #9 = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertRecordField ('a', 'b') "#2" (Just 18.9))
+        == Just ('a', Just 18.9)
+    )
+    ;
+
+/**
+ * Takes a {@link typeConstructor = Dynamic@} value containing a record, a field name, and a value, and returns a
+ * {@link typeConstructor = Dynamic@} value containing a new record that extends the old record with a field of the
+ * specified name having the specified value.  A runtime error is signalled if {@code dynamicRecordValue@} does not
+ * contain a record.
+ * @arg dynamicRecordValue {@code Dynamic@} containing the record to extend
+ * @arg fieldName The name of the field to add
+ * @arg fieldValue The value of the field to add
+ * @return {@link typeConstructor = Dynamic@} A {@link typeConstructor = Dynamic@} containing an extention of
+ *         {@code recordValue@} that has the field named by {@code fieldName@} with a value of {@code fieldValue@}.
+ */    
+insertDynamicRecordField :: Typeable a => Dynamic -> String -> a -> Dynamic;
+public insertDynamicRecordField !dynamicRecordValue !fieldName fieldValue =
+    case dynamicRecordValue of
+    Dynamic type underlyingValue ->
+        if isRecordType type then
+            insertRecordFieldHelper (unsafeFromCalValue underlyingValue) type fieldName fieldValue (typeOf fieldValue)
+        else
+            error "dynamicRecordValue does not wrap a record";
+    ;
+
+/* @example */
+insertDynamicRecordFieldExamples :: Boolean;
+insertDynamicRecordFieldExamples =
+    assert
+    (
+        fromDynamic (insertDynamicRecordField (toDynamic {}) "newField" "new value")
+        == Just {newField = "new value"}
+    )
+    && 
+    assert
+    (
+        fromDynamic (insertDynamicRecordField (toDynamic {oldField = "old value"}) "newField" "new value")
+        == Just {oldField = "old value", newField = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordField (toDynamic {oldField = "old value"}) "oldField" "new value")
+        == Just {oldField = "new value"}
+    ) 
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordField (toDynamic ('a', 'b')) "#3" "new value")
+        == Just ('a', 'b', "new value")
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordField (toDynamic ('a', 'b')) "#9" "new value")
+        == Just {#1 = 'a', #2 = 'b', #9 = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordField (toDynamic ('a', 'b')) "#2" (Just 18.9))
+        == Just ('a', Just 18.9)
+    )
+    ;
+
+
+/**
+ * Takes a {@link typeConstructor = Dynamic@} value containing a record, a field name, and a dynamic value, and returns a
+ * {@link typeConstructor = Dynamic@} value containing a new record that extends the old record with a field of the
+ * specified name having the specified value.  A runtime error is signalled if {@code dynamicRecordValue@} does not
+ * contain a record.
+ * @arg dynamicRecordValue {@code Dynamic@} containing the record to extend
+ * @arg fieldName The name of the field to add
+ * @arg dynamicFieldValue Dynamic wrapper for the underlying field value to add
+ * @return {@link typeConstructor = Dynamic@} A {@link typeConstructor = Dynamic@} containing an extention of
+ *         {@code recordValue@} that has the field named by {@code fieldName@} with a value of {@code dynamicFieldValue@}.
+ */    
+insertDynamicRecordDynamicField :: Dynamic -> String -> Dynamic -> Dynamic;
+public insertDynamicRecordDynamicField !dynamicRecordValue !fieldName dynamicFieldValue =
+    case dynamicRecordValue of
+    Dynamic type underlyingValue ->
+        if isRecordType type then
+            case dynamicFieldValue of
+            Dynamic fieldType fieldValue ->
+                insertRecordFieldHelper (unsafeCoerce underlyingValue) type fieldName (unsafeCoerce fieldValue) fieldType; 
+        else
+            error "dynamicRecordValue does not wrap a record";
+    ;
+
+/* @example */
+insertDynamicRecordDynamicFieldExamples :: Boolean;
+insertDynamicRecordDynamicFieldExamples =
+    assert
+    (
+        fromDynamic (insertDynamicRecordDynamicField (toDynamic {}) "newField" (toDynamic "new value"))
+        == Just {newField = "new value"}
+    )
+    && 
+    assert
+    (
+        fromDynamic (insertDynamicRecordDynamicField (toDynamic {oldField = "old value"}) "newField" (toDynamic "new value"))
+        == Just {oldField = "old value", newField = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordDynamicField (toDynamic {oldField = "old value"}) "oldField" (toDynamic "new value"))
+        == Just {oldField = "new value"}
+    ) 
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordDynamicField (toDynamic ('a', 'b')) "#3" (toDynamic "new value"))
+        == Just ('a', 'b', "new value")
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordDynamicField (toDynamic ('a', 'b')) "#9" (toDynamic "new value"))
+        == Just {#1 = 'a', #2 = 'b', #9 = "new value"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (insertDynamicRecordDynamicField (toDynamic ('a', 'b')) "#2" (toDynamic (Just 18.9)))
+        == Just ('a', Just 18.9)
+    )
+    ;
+    
+/**
+ * Combine two records into a single record containing the fields of both.
+ * @arg record1 First record to combine
+ * @arg record2 Second record to combine
+ * @return {@code Dynamic@} containing the record that has all the fields of {@code record1@} and {@code record2@}.
+ *          The fields from {@code record1@} will be used for field names that both records contain.
+ */
+appendRecord :: (Typeable r, Typeable s) => {r} -> {s} -> Dynamic;
+public appendRecord !record1 !record2 =
+    Dynamic (appendRecordTypeRep (typeOf record1) (typeOf record2)) (unsafeCoerce (appendRecordPrimitive record1 record2));
+
+/* @example */
+appendRecordExamples :: Boolean;
+appendRecordExamples =
+    assert 
+    (
+        fromDynamic (appendRecord {leftField = "left one"} {rightField = "right one"})
+        == Just {leftField = "left one", rightField = "right one"}
+    )
+    &&
+    assert 
+    (
+        fromDynamic (appendRecord {leftField = "left one", midField = "midfield left"} {midField = "midfield right", rightField = "right one"})
+        == Just {leftField = "left one", midField = "midfield left", rightField = "right one"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendRecord {} {})
+        == Just {}
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendRecord {} {a = "AA"})
+        == Just {a = "AA"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendRecord ("first", "second") {#3 = "third", #4 = "fourth"})
+        == Just ("first", "second", "third", "fourth")
+    ) 
+    &&
+    assert
+    (
+        fromDynamic (appendRecord ("first", "second") {#4 = "fourth", #5 = "fifth"}) 
+        == Just {#1 = "first", #2 = "second", #4 = "fourth", #5 = "fifth"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendRecord ("first", "second") {a = "Ath", b = "Bth"}) 
+        == Just {#1 = "first", #2 = "second", a = "Ath", b = "Bth"}
+    );
+    
+    
+/**
+ * Combine two records contained by {@link typeConstructor = Dynamic@}s into a single record containing the fields of both.
+ * A runtime error is signalled if either {@code dynamicRecord1@} or {@code dynamicRecord2@} contain non-record values.
+ * @arg dynamicRecord1 {@code Dynamic@} containing a record
+ * @arg dynamicRecord2 {@code Dynamic@} containing a record
+ * @return {@code Dynamic@} containing a record that has all the fields of the records contained by
+ *          dynamicRecord1 and dynamicRecord2.  The fields of {@code dynamicRecord1@} are used for field
+ *          names shared by both records.
+ */
+appendDynamicRecord :: Dynamic -> Dynamic -> Dynamic;
+public appendDynamicRecord !dynamicRecord1 !dynamicRecord2 =
+    case dynamicRecord1 of
+    Dynamic type1 record1 ->
+        case dynamicRecord2 of
+        Dynamic type2 record2 ->
+            Dynamic (appendRecordTypeRep type1 type2) (appendRecordPrimitive (unsafeCoerce record1) (unsafeCoerce record2));
+        ;
+    ;
+
+/* @example */
+appendDynamicRecordExamples :: Boolean;
+appendDynamicRecordExamples =
+    assert
+    (
+        fromDynamic (appendDynamicRecord (toDynamic {leftField = "left one"}) (toDynamic {rightField = "right one"})) 
+        == Just {leftField = "left one", rightField = "right one"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendDynamicRecord (toDynamic {leftField = "left one", midField = "midfield left"}) (toDynamic {midField = "midfield right", rightField = "right one"})) 
+        == Just {leftField = "left one", midField = "midfield left", rightField = "right one"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendDynamicRecord (toDynamic {}) (toDynamic {})) 
+        == Just {}
+    ) 
+    &&
+    assert
+    (
+        fromDynamic (appendDynamicRecord (toDynamic {}) (toDynamic {a = "AA"})) 
+        == Just {a = "AA"}
+    ) 
+    &&
+    assert
+    (
+        fromDynamic (appendDynamicRecord (toDynamic ("first", "second")) (toDynamic {#3 = "third", #4 = "fourth"})) 
+        == Just ("first", "second", "third", "fourth")
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendDynamicRecord (toDynamic ("first", "second")) (toDynamic {#4 = "fourth", #5 = "fifth"})) 
+        == Just {#1 = "first", #2 = "second", #4 = "fourth", #5 = "fifth"}
+    )
+    &&
+    assert
+    (
+        fromDynamic (appendDynamicRecord (toDynamic ("first", "second")) (toDynamic {a = "Ath", b = "Bth"})) 
+        == Just {#1 = "first", #2 = "second", a = "Ath", b = "Bth"}
+    )
+    ;
+
+/**
+ * Helper for {@link appendRecord@} and {@link appendDynamicRecord@}.  Accepts two {@link typeConstructor = TypeRep@}s 
+ * representing record types and returns the {@link typeConstructor = TypeRep@} representing the type of the 
+ * record that contains the union of the fields of the two records.  A runtime error
+ * is signalled if either {@code typeRep1@} or {@code typeRep2@} do not represent record types.
+ * @arg typeRep1 First {@code TypeRep@} to add to the combined {@code TypeRep@}
+ * @arg typeRep2 Second {@code TypeRep@} to add to the combined {@code TypeRep@}
+ * @return {@code TypeRep@} of a record containing the union of the fields of {@code typeRep1@} and {@code typeRep2@}
+ *          (favouring the fields of {@code typeRep1@} in case of overlap).
+ */
+appendRecordTypeRep :: TypeRep -> TypeRep -> TypeRep;
+appendRecordTypeRep !typeRep1 !typeRep2 =
+    case typeRep1 of
+    RecordTypeRep dictionary1 ->
+        case typeRep2 of 
+        RecordTypeRep dictionary2 ->
+            RecordTypeRep (recordType_appendRecordType dictionary1 dictionary2);
+        
+        _ -> error "Both typeRep arguments should represent a record type";
+        ;
+    _ -> error "Both typeRep arguments should represent a record type";
+    ;
+    
+
+/*
+ * Dynamic records are very nearly instances of Appendable.  Along with appendDynamicRecord,
+ * the other Appendable methods can be implemented as well (see just below this comment).
+ * The only reason that there is no Appendable instance currently is that the Dynamic type
+ * can contain other types than just record types.  If we ever make a DynamicRecord type that
+ * is restricted to just containing record values, then we should make it an Appendable instance.
+ */    
+isEmptyDynamicRecord :: Dynamic -> Boolean;
+isEmptyDynamicRecord !dynamicRecord =
+    case dynamicRecord of
+    Dynamic type _ -> type == (typeOf {});
+    ;
+
+emptyDynamicRecord :: Dynamic;
+emptyDynamicRecord = toDynamic {};
+
+concatDynamicRecord :: [Dynamic] -> Dynamic;
+concatDynamicRecord !recordList =
+    foldLeftStrict appendDynamicRecord emptyDynamicRecord recordList;
+
+instance Show Dynamic where
+    show = showDynamic;
+    ;
+
+showDynamic :: Dynamic -> String;
+private showDynamic !dynamicValue =
+    case dynamicValue of
+    Dynamic {type, untypedValue} ->    
+        concat ["(Cal.Core.Dynamic.Dynamic ", Debug.showInternal untypedValue, " :: ", show (Dynamic.dynamicUnderlyingType dynamicValue), ")"];
+    ;
+
+/* @example */
+showExamples :: Boolean;
+showExamples =
+    assert 
+    (
+        show (toDynamic 2.1)
+        == "(Cal.Core.Dynamic.Dynamic 2.1 :: Cal.Core.Prelude.Double)"
+    )
+    &&
+    assert
+    (
+        show (toDynamic "str") 
+        == "(Cal.Core.Dynamic.Dynamic str :: Cal.Core.Prelude.String)"
+    )
+    &&
+    assert 
+    (
+        show (toDynamic String.substring) 
+        == "(Cal.Core.Dynamic.Dynamic Cal.Core.String.substring :: Cal.Core.Prelude.String -> Cal.Core.Prelude.Int -> Cal.Core.Prelude.Int -> Cal.Core.Prelude.String)"
+    )
+    ;
+
+/** 
+ * Primitive function for adding a textually-named field to a record.
+ * Accepts a record value, a field name, and a value, and returns an {@link CalValue@}
+ * that represents a record extension of the record with the specified
+ * field.
+ */
+primitive private insertTextualRecordFieldPrimitive :: {r} -> String -> a -> CalValue; 
+
+/** 
+ * Primitive function for adding an ordinally-named field to a record.
+ * Accepts a record value, a field name, and a value, and returns an {@link CalValue@}
+ * that represents a record extension of the record with the specified
+ * field.
+ */
+primitive private insertOrdinalRecordFieldPrimitive :: {r} -> Int -> a -> CalValue; 
+
+/** 
+ * Primitive function for appending two records together, yielding a single
+ * record whose fields are a union of the field names of the two records.
+ * Returns an {@link CalValue@} representing a record containing the union
+ * of the fields of the two records.  If field names overlap, then the field
+ * value of the first record will be chosen for each field.
+ */
+primitive private appendRecordPrimitive :: {r} -> {s} -> CalValue;
+
+/** 
+ * {@code fieldValues@} returns the list of field values of a record, ordered by field-name order.
+ * Ordinal field names, such as {@code "#1"@}, {@code "#2"@} etc, are first, in ordinal order.
+ * Textual field names such as {@code "orderDate"@}, {@code "shipDate"@} are next, in alphabetical order.
+ * 
+ * @arg recordValue the record whose field values are to be returned.
+ * @return the field values of the record, in field-name order.
+ */
+fieldValues :: {r} -> [CalValue];
+private fieldValues !recordValue = input (output (fieldValuesPrimitive recordValue));
+
+/**
+ * {@code fieldNamesPrimitive@} takes a record, and returns a {@link JList@} that is actually a 
+ * {@code java.util.List@} of {@link Prelude.CalValue@} objects representing the field values of the record
+ * in field-name order.
+ */
+primitive private fieldValuesPrimitive :: {r} -> JList;
+
+
+/**
+ * WARNING- this function must not be public. 
+ * 
+ * A helper function to extract the index of a field name from a record.
+ * This is useful for implementing certain primitives in the Prelude so that we do not need
+ * to repeatedly look up and validate field names.
+ * 
+ * @arg recordValue the record to be checked for the index of a field of the given name.
+ * @arg fieldName the field name to find the index of e.g. {@code "#2"@}, {@code "orderDate"@}.
+ * @return zero-based index of the field in the record, or -1 if the field is not in the record.
+ */
+primitive private recordFieldIndex :: {r} -> String -> Int;
+
+/**
+ * WARNING- this function must not be public. 
+ *
+ * Primitive function for extracting a value from a record at a given index.
+ * Note that the function terminates in an error if the record does not in fact have given field index.  
+ * 
+ * @arg recordValue the record from which to extract a field.
+ * @arg fieldIndex the field index for a given field name in a record (as returned by {@link recordFieldIndex@}
+ *                 for the record).
+ * @return an un-typed representation of the value of the supplied field.
+ */
+primitive private recordFieldValuePrimitive :: {r} -> Int -> CalValue;
+
+/**
+ * WARNING- this function must not be public. 
+ *  
+ * Primitive function for extracting a value from a record at a given index.
+ * Note that the function terminates in an error if the record does not in fact have given field index.  
+ * @arg recordValue the record from which to extract a type.
+ * @arg fieldIndex the field index for a given field name in a record (as returned by {@link recordFieldIndex@} for the record).
+ * @return an un-typed representation of the type of the field at the given index. Will be of type
+ *         {@link typeConstructor = TypeRep@}.
+ */
+primitive private recordFieldTypePrimitive :: Typeable r => {r} -> Int -> CalValue;
+
+/**
+ * @return {@link True@} if the provided string represents an ordinal field name, or {@link False@} otherwise. 
+ */
+foreign unsafe import jvm "static method org.openquark.cal.compiler.FieldName$Ordinal.isValidCalSourceForm"
+    private isOrdinalFieldName :: String -> Boolean;
+    
+/* @example */
+isOrdinalFieldNameExamples :: Boolean;
+isOrdinalFieldNameExamples =
+    assert (isOrdinalFieldName "#1" == True) &&
+    assert (isOrdinalFieldName "#9204" == True) &&
+    assert (isOrdinalFieldName "#0" == False) &&
+    assert (isOrdinalFieldName "#-19" == False) &&
+    assert (isOrdinalFieldName "9204" == False) &&
+    assert (isOrdinalFieldName "#fifty-five" == False) &&
+    assert (isOrdinalFieldName "fifty-five" == False) &&
+    assert (isOrdinalFieldName "#99999999999" == False) && // Not valid because it won't fit into an Int
+    assert (isOrdinalFieldName "" == False);
+
+    
+/**
+ * @return {@link True@} if the testing predicates in this module all run successfully.
+ */
+/* @test */
+testModule :: Boolean;
+public testModule =
+    assert appendDynamicRecordExamples
+    && assert appendRecordExamples
+    && assert dynamicAppExamples
+    && assert dynamicApplyExamples
+    && assert dynamicRecordFieldNamesExamples
+    && assert dynamicRecordFieldValueExamples
+    && assert dynamicRecordFieldValuesExamples
+    && assert fieldOrdinalExamples       
+    && assert fromDynamicListExamples
+    && assert insertDynamicRecordDynamicFieldExamples
+    && assert insertDynamicRecordFieldExamples
+    && assert insertRecordFieldExamples
+    && assert recordFieldValueExamples 
+    && assert isOrdinalFieldNameExamples
+    && assert showExamples
+    ;
+//please leave testModule last! It makes it easy to see what tests are hooked up.
+

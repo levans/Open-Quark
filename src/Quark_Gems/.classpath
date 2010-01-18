@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry excluding="lecc_runtime/" kind="src" output="test" path="test"/>
+	<classpathentry excluding="lecc_runtime/" kind="src" output="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="/Utilities"/>
+	<classpathentry kind="lib" path="Help/GemCutterHelpFiles.jar"/>
+	<classpathentry kind="src" path="/CAL_Platform"/>
+	<classpathentry kind="src" path="/CAL_Libraries"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/commons-collections-3.1.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/icu4j.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/junit.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/xercesImpl.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/xmlParserAPIs.jar"/>
+	<classpathentry kind="lib" path="/import/Main/PI/External/Sun/JavaHelp/2.0_02/jh.jar" sourcepath="/import/Main/PI/External/Sun/JavaHelp/2.0_02/src.jar"/>
+	<classpathentry kind="lib" path="/import/Titan_Research/win32_x86/release/bin/External/java/antlr.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/CAL_Runtime"/>
+	<classpathentry kind="output" path="src"/>
+</classpath>

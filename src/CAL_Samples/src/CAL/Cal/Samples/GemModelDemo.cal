@@ -1,0 +1,161 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * GemModelDemo.cal
+ * Creation date: July 29, 2005.
+ * By: Bo Ilic
+ */
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Contains a variety of "demo" gems. In this module the gems are expressed using
+ * CAL text. In other places, they are expressed
+ * {@unorderedList
+ *  {@item programatically using a SourceModel@}
+ *  {@item programatically using a GemGraph@}
+ *  {@item via a Gem design (in the GemCutter, with its XML persistence model)@}
+ * @}
+ * 
+ * @author Bo Ilic
+ */
+module Cal.Samples.GemModelDemo;
+import Cal.Core.Prelude using
+    function = id, seq, error, add, upFromTo, or, not, and, equals, greaterThan, 
+        snd, compose, fst, upFrom, isEven, field3, compare, minBound, maxBound, input, 
+        output;
+    typeConstructor = Int, Double, String, Boolean, Maybe, Ordering, Char, Long, JObject, JList;
+    dataConstructor = True, False, Nothing, Just, LT, EQ, GT;
+    typeClass = Eq, Ord, Num, Bounded;    
+    typeConstructor = Integer;
+    ;
+import Cal.Collections.List using
+    function = head, last, length, map, filter, replicate, sortBy, foldLeftStrict, foldRight, 
+        repeat, zip, isElemBy, drop, take, partition, foldLeft, sum, unzip3, groupBy, unzip;
+    function = inputList, outputList, product;
+    ;
+import Cal.Core.String;       
+import Cal.Utilities.Summary;
+    
+
+/**
+ * A simple (but scalable) implementation of the factorial function.
+ * The factorial of a natural number n is defined to be factorial(n) = n! = 1 * 2 * ... * n.
+ * 
+ * @arg n number whose factorial is to be returned.
+ * @return the factorial of the specified number.
+ */    
+factorial :: Integer -> Integer;    
+public factorial n = product (upFromTo 1 n);
+
+/**
+ * Filters {@code sourceData@} to include only those values that are {@code nStdDev@} or more above the average.
+ * 
+ * @arg sourceData source data to be filtered.
+ * @arg nStdDev number of standard deviations above the average for a data point to be considered to be an outlier.
+ * @return {@code sourceData@} filtered to include only thos values that are {@code nStdDev@} or more above the average.
+ */
+positiveOutlierDetector :: [Double] -> Double -> [Double];
+public positiveOutlierDetector sourceData nStdDev =
+    let  
+        avg = Summary.average sourceData;
+        stdDev = Summary.populationStandardDeviation sourceData;
+        
+        isPositiveOutlier :: Double -> Boolean;
+        isPositiveOutlier !value = (value - avg) >= nStdDev * stdDev;
+    in
+        filter isPositiveOutlier sourceData;
+     
+/**
+ * Filters {@code sourceData@} to include only those values that are {@code nStdDev@} or more above the average.
+ * This differs from {@link positiveOutlierDetector@} in that it works over an arbitrary list, where the numerical
+ * component is identified via a projection function.
+ * 
+ * Here is a usage example for this function:
+ * {@code
+ * aboveAverageSalaries =
+ *    let
+ *        salaryData =
+ *            [{name = "John",  salary=90000},  {name = "Jane",  salary=30000},
+ *             {name = "Bob",   salary=110000}, {name = "Karen", salary=100000},
+ *             {name = "Jack",  salary=40000},  {name = "Alan",  salary=45000}];
+ *        
+ *        // We use a standard deviation of 0 to obtain all above-average salaries.
+ *        nStdDev = 0;
+ *    in
+ *        filterPositiveOutliers (\x -> x.salary) salaryData nStdDev;
+ * @}
+ * 
+ * Running the above example should yield the result:
+ * {@code
+ * [[John, 90000.0], [Bob, 110000.0], [Karen, 100000.0]]
+ * @}
+ * 
+ * @arg projectionFunction used to determine a numerical value from a {@code sourceData@} list element to do the numerical computations on.
+ * @arg sourceData source data to be filtered.
+ * @arg nStdDev number of standard deviations above the average for a data point to be considered to be an outlier.
+ * @return {@code sourceData@} filtered to include only those values that are {@code nStdDev@} or more above the average.
+ */
+filterPositiveOutliers :: (a -> Double) -> [a] -> Double -> [a];
+public filterPositiveOutliers projectionFunction sourceData nStdDev =
+    let 
+        projectedData = List.map projectionFunction sourceData;
+        avg = Summary.average projectedData;
+        stdDev = Summary.populationStandardDeviation projectedData;
+        
+        //isPositiveOutlier :: a -> Boolean;
+        isPositiveOutlier !value = (projectionFunction value - avg) >= nStdDev * stdDev;
+    in
+        filter isPositiveOutlier sourceData;     
+      
+/**
+ * This is just a duplicate of {@link List.map@}.
+ *  
+ * {@code demoMap mapFunction list@} applies the function {@code mapFunction@} to each element of the list and returns the resulting list.
+ * 
+ * @arg mapFunction
+ *        a function to be applied to each element of the list.
+ * @arg list
+ *        the list.
+ * @return the list obtained by applying {@code mapFunction@} to each element of the list.
+ */     
+demoMap :: (a -> b) -> [a] -> [b];
+public demoMap mapFunction !list =
+    case list of
+    []     -> [];
+    listHead : listTail -> mapFunction listHead : demoMap mapFunction listTail;
+    ; 
+     
+     
+
+

@@ -1,0 +1,631 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * CollectionUtilities.cal
+ * Creation date: Aug 15, 2007.
+ * By: Andrew Casey
+ */
+
+/**
+ * Utilities for manipulating collections.
+ *
+ * Collected from other modules by a variety of authors.
+ */
+module Cal.Experimental.Utilities.CollectionUtilities;
+
+/* 
+ * Import declarations
+ */
+import Cal.Core.Prelude using
+    typeClass = Eq, Ord;
+    typeConstructor = Boolean, Int, Maybe, String;
+    dataConstructor = False, Just, Nothing, True;
+    function =
+        equals, error, fromJust, fromMaybe, fst, induceComparator, isEmpty,
+        isJust, not, snd;
+    ;
+
+import Cal.Core.String using
+    function = dropWhile, startsWith;
+    ;
+
+import Cal.Collections.List;
+
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
+
+import Cal.Collections.Set using
+    typeConstructor = Set;
+    ;
+
+import Cal.Collections.Map using
+    typeConstructor = Map;
+    ;
+
+import Cal.Utilities.Random;
+
+/**
+ * Insert each element in a list into a set.
+ * 
+ * @arg valueList the elements to insert.
+ * @arg set the set into which to insert the elements.
+ * 
+ * @return a new set containing all elements of the list, in addition to the
+ *   contents of the original set.
+ */
+insertListIntoSet :: Ord a => [a] -> Set a -> Set a;
+public insertListIntoSet valueList set = 
+    Set.union (Set.fromList valueList) set;
+
+/**
+ * Apply a transformation function to each value in a {@link typeConstructor=Map@}.
+ * If the function returns {@link Nothing@} for some map entry, then remove that 
+ * entry.
+ * 
+ * @arg mapFunction the transformation function.
+ * @arg map the map to transform.
+ * 
+ * @return the transformed map.
+ */
+// TODO: make this a mapJust method in the Map module...
+mapJustOverMap :: (a -> Maybe b) -> Map k a -> Map k b;
+public mapJustOverMap mapFunction = 
+    Map.map fromJust # Map.filter isJust # Map.map mapFunction;
+
+/**
+ * Randomly reorders the elements of a list.
+ * 
+ * @arg lst the list to reorder.
+ * 
+ * @return a random reordering of the list.
+ */
+randomizeListOrder :: [a] -> [a];
+public randomizeListOrder !lst = 
+    List.map snd $ List.sortBy (induceComparator fst) $ List.zip (Random.randomInts Random.initialSeed) lst;
+
+/**
+ * Replaces items at the specified indices.
+ * 
+ * @arg lst the list to modify.
+ * @arg replacementIndices the indices of elements to modify.  The elements must
+ *   be distinct, valid indices.
+ * @arg replacementValues the values with which to replace the list elements at
+ *   the corresponding indices.  Must be the same length as replacementIndices.
+ *   
+ * @return the modified list.
+ */
+substituteListValues :: [a] -> [Int] -> [a] -> [a];
+public substituteListValues !lst !replacementIndices !replacementValues = 
+    let
+        replacementValueMap = List.zip replacementIndices replacementValues;
+
+        substituteItem val index = 
+            fromMaybe val $ List.lookup index replacementValueMap;
+    in
+        List.mapIndexed substituteItem lst;
+
+/**
+ * Replaces items at the specified indices.
+ * 
+ * @arg lst the list to modify.
+ * @arg replacementIndices the indices of elements to modify.  The elements must
+ *   be distinct, valid indices.
+ * @arg replacementValues the values with which to replace the list elements at
+ *   the corresponding indices.  Must be the same length as replacementIndices.
+ *   
+ * @return the modified list.
+ */
+substituteArrayValues :: Prelude.Typeable a => Array a -> [Int] -> [a] -> Array a;
+public substituteArrayValues !lst !replacementIndices !replacementValues = 
+    let
+        replacementValueMap = List.zip replacementIndices replacementValues;
+
+        substituteItem val index = 
+            fromMaybe val $ List.lookup index replacementValueMap;
+    in
+        Array.mapIndexed substituteItem lst;
+
+/**
+ * Determines whether all elements in a list are equal.
+ * 
+ * @arg elements the list to examine.
+ * 
+ * @return {@link True@} if no two elements in the list have different values;
+ *   {@link False@} otherwise.
+ */
+allEquals :: Eq a => [a] -> Boolean;
+public allEquals elements =
+    case elements of
+    [] -> True;
+    x : xs -> List.all (equals x) xs;
+    ;
+
+/**
+ * Extracts the first element of the list for which the predicate function
+ * returns {@link True@}.
+ * 
+ * @arg predicate the predicate function for extracting an element.
+ * @arg list the list from which to extract the element.
+ * 
+ * @return {@code ({@link Just@} element, otherElements)@} if such an element
+ *   exists; {@code ({@link Nothing@}, allElements)@} otherwise.
+ */
+//TODO: move to List module?
+extractFirst :: (a -> Boolean) -> [a] -> (Maybe a, [a]);
+public extractFirst predicate !list = 
+    case List.break predicate list of
+    (allFalse, firstTrue) ->
+        case firstTrue of
+        [] -> (Nothing, list);
+        trueElement : remainingElements -> (Just trueElement, allFalse ++ remainingElements);
+        ;
+    ;
+
+/**
+ * Performs an unordered comparison of two lists, after discarding duplicates
+ * from both.
+ * 
+ * @arg lst1 the first list to compare.
+ * @arg lst2 the second list to compare.
+ * 
+ * @return {@link True@} if the list contain the same elements, disregarding
+ *   order and duplication; {@link False@} otherwise.
+ */
+//TODO: move to List module?
+equalsListUnordered :: Eq a => [a] -> [a] -> Boolean;
+public equalsListUnordered !lst1 !lst2 = 
+    let
+        distinctLst1 = List.removeDuplicates lst1;
+        distinctLst2 = List.removeDuplicates lst2;
+    in
+        List.length distinctLst1 == List.length distinctLst2
+            && isEmpty (List.deleteFirsts distinctLst1 distinctLst2);
+
+
+/**
+ * Removes the specified string from the beginning of another string if it is
+ * a prefix and does nothing otherwise.
+ * 
+ * @arg str the string to have its prefix removed.
+ * @arg prefix the string to remove, if it is a prefix.
+ * 
+ * @return the string with the prefix removed, if it was a valid prefix, and
+ *   the original string, otherwise.
+ */
+removePrefix :: String -> String -> String;
+public removePrefix !str !prefix = 
+    if String.startsWith prefix str then
+        String.substring str (String.length prefix) (String.length str)
+    else
+        str;
+
+/**
+ * Finds the first element in the first list for which the predicate function
+ * returns {@link True@}, if any, and returns the corresponding element in the
+ * second list.
+ * 
+ * @arg matchFn a predicate function that will return {@link True@} when an
+ *   element of the desired form is tested.
+ * @arg lst1 the list in which to search.
+ * @arg lst2 the list from which to return an element.
+ * 
+ * @return {@code {@link Just@} element@} if {@code matchFn element@} returns
+ *   {@link True@} and {@link Nothing @} otherwise.
+ */
+findInCorrespondingList :: (a -> Boolean) -> [a] -> [b] -> Maybe b;
+public findInCorrespondingList !matchFn !lst1 !lst2 = 
+    case lst1 of
+    [] -> Nothing;
+    lst1Head : lst1Tail -> 
+        case lst2 of
+        [] -> Nothing;
+        lst2Head : lst2Tail -> 
+            if (matchFn lst1Head) then Just lst2Head
+            else findInCorrespondingList matchFn lst1Tail lst2Tail;
+        ;
+    ;
+
+/**
+ * Filters the elements of the first list using a predicate function and returns
+ * the corresponding elements of the second list.
+ * 
+ * @arg matchFn a predicate function that will return {@link True@} when an
+ *   element of the desired form is tested.
+ * @arg lst1 the list to filter with the predicate function.
+ * @arg lst2 the list of corresponding elements.
+ * 
+ * @return the elements of the second list corresponding to the elements of the
+ *   first list for which the predicate function returns {@link True@}.
+ */
+filterCorrespondingList :: (a -> Boolean) -> [a] -> [b] -> [b];
+public filterCorrespondingList !matchFn !lst1 !lst2 = 
+    case lst1 of
+    [] -> [];
+    lst1Head : lst1Tail -> 
+        case lst2 of
+        [] -> [];
+        lst2Head : lst2Tail -> 
+            if (matchFn lst1Head) then lst2Head : filterCorrespondingList matchFn lst1Tail lst2Tail
+            else filterCorrespondingList matchFn lst1Tail lst2Tail;
+        ;
+    ;
+
+/**
+ * Given a function and a domain, returns the inverse of the function over the
+ * image of the domain.  If two values in the domain have the same image, then
+ * either one may be returned by the inverse (i.e. behaviour unspecified).
+ * 
+ * @arg func the function to invert.
+ * @arg domain the domain over which to evaluate the function.
+ * 
+ * @return the inverse of the function - returns {@code {@link Just@} x@} if the
+ *   argument is {@code x@}'s image for some {@code x@} in the domain and 
+ *   {@link Nothing@} otherwise.
+ */
+makeInverse :: Ord b => (a -> b) -> [a] -> (b -> Maybe a);
+public makeInverse func domain = 
+    let
+        // TODO: is there a more efficient way to construct this mapping?
+        //       The map isn't exposed, so it doesn't need to be immutable.
+        lookupMap = Map.fromList $ List.map (\!val -> (func val, val)) domain;
+    in
+        (\!k -> Map.lookup k lookupMap);
+
+/**
+ * A convenience constant for representing an uninitialized value of any type.
+ * Will throw an error if it is evaluated.
+ * 
+ * @return an uninitialized value of any type.
+ */
+uninitializedValue :: a;
+public uninitializedValue = error "This value has not been initialized.";
+
+
+/**
+ * Transforms each element of a list into an appendable value, intersperses a
+ * constant separator between them, and then concatenates them.
+ * 
+ * @arg mapFn a transformation function that makes each list element appendable.
+ * @arg separator a separator to be inserted between each pair of list elements.
+ * @arg lst the list to be transformed and joined.
+ * 
+ * @return the transformed and joined list.
+ */
+joinMap :: Prelude.Appendable b => (a -> b) -> b -> [a] -> b;
+public joinMap mapFn !separator !lst = 
+    List.join separator (List.map mapFn lst);
+
+/**
+ * Lazily filters an array.
+ * 
+ * {@strong Note@}: returns a list rather than an array to prevent eager evaluation.
+ * 
+ * @arg filterFn the filter function (determines which array elements are present
+ *   in the returned list).
+ * @arg array the array to be filtered.
+ * 
+ * @return a filtered list.
+ */
+filterArrayToList :: (a -> Boolean) -> Array a -> [a];
+public filterArrayToList filterFn array =
+    let
+        length = Array.length array;
+        
+        internalFilter index =
+            if index == length then
+                []
+            else
+                let
+                    current = Array.subscript array index;
+                    rest = internalFilter (index+1);
+                in
+                    if filterFn current then
+                        current : rest
+                    else
+                        rest;   
+    in
+        internalFilter 0;
+
+/**
+ * Retrieve part of an array as a list
+ * @arg array the array we're going to create a part of
+ * @arg fromIndex the first item in the array to retrive
+ * @arg toIndex the exclusive index of the item beyond the last ont to retrieve 
+ */
+arraySubList :: Array a -> Int -> Int -> [a];
+public arraySubList !array !fromIndex !toIndex = 
+    if fromIndex >= toIndex then []
+    else Array.subscript array fromIndex : arraySubList array (fromIndex+1) toIndex;
+
+/**
+ * Returns a portion of the argument list as a new list.
+ * 
+ * If {@code fromIndex < 0@}, {@code fromIndex > toIndex@}, or {@code toIndex > length list@}, the function
+ * terminates returns the empty list.
+ * 
+ * @arg list to extract a sub-list from
+ * @arg fromIndex inclusive 0-based index. 
+ * @arg toIndex exclusive 0-based index
+ * @return copy of the list from {@code fromIndex@} (inclusive) to {@code toIndex@} (exclusive).
+ * 
+ * @see function=List.subList
+ */
+subListSafe :: [a] -> Int -> Int -> [a];
+public subListSafe list !fromIndex !toIndex =
+    if (fromIndex > toIndex) || (fromIndex < 0) || (not $ List.lengthAtLeast toIndex list) then
+        []
+    else
+        List.drop fromIndex $ List.take toIndex list;
+
+/**
+ * Folds a function over the specified list, passing the list index to the folding function.
+ * This is the same as {@link List.foldLeftStrict@}, except for the additional argument in the folding function.
+ * @arg foldFunction  the function to be used in folding the list.
+ * @arg initialValue  the initial value for the folding process.
+ * @arg list          the list to be folded over.
+ * @return            the single result obtained from folding {@code foldFunction@} over the list.
+ * @see List.foldLeftStrict
+ */
+foldLeftStrictIndexed ::  (a -> b -> Int -> a) -> a -> [b] -> a;
+public foldLeftStrictIndexed foldFunction !initialValue !list = 
+    let
+        foldHelper !initialValue !list !index = 
+            case list of
+            [] -> initialValue;
+            listHead : listTail -> foldHelper (foldFunction initialValue listHead index) listTail (index + 1);
+            ;       
+    in
+        foldHelper initialValue list 0;
+
+/**
+ * Folds a function over the 2 specified lists.
+ * This is the same as {@link List.foldLeftStrict@}, except that 2 lists are folded instead of one.
+ * The folding will stop when the end of either of the lists is reached.
+ * @arg foldFunction  the function to be used in folding the lists
+ * @arg initialValue  the initial value for the folding process
+ * @arg list1         the first list to be folded over
+ * @arg list2         the second list to be folded over
+ * @return            the single result obtained from folding {@code foldFunction@} over the lists
+ * @see List.foldLeftStrict
+ */
+fold2LeftStrict ::  (a -> b -> c -> a) -> a -> [b] -> [c] -> a;
+public fold2LeftStrict foldFunction !initialValue !list1 !list2 =
+    case list1 of
+    [] -> initialValue;
+    listHead1 : listTail1 -> 
+        case list2 of
+        [] -> initialValue;
+        listHead2 : listTail2 -> 
+            fold2LeftStrict foldFunction (foldFunction initialValue listHead1 listHead2) listTail1 listTail2;
+        ;
+    ;
+
+/**
+ * Generates combinations of values where the values at each level are based on the preceding values in the combination.
+ * The first level of values will be obtained by calling the first levelValueFn with an empty list argument.
+ * For each of these values, the 2nd level of values will be generated by calling the 2nd levelValueFn with the a list containing the 
+ * first level value, and so on....
+ * @arg levelValueFns  the functions to generate the values for each level based on the previous values in the combination
+ * @return             combinations of values where the values at each level are based on the preceding values in the combination;
+ *                     if the list of levelValueFns is empty, then [[]] will be returned
+ */
+combinationsBy :: [[a] -> [a]] -> [[a]];
+public combinationsBy !levelValueFns = 
+    let
+        // Iterate over the last list values first.
+        combinationsHelper curPath fns accum = 
+            case fns of
+            [] -> (List.reverse curPath) : accum;
+            headFn : tailFns -> 
+                List.foldRight (\val -> combinationsHelper (val : curPath) tailFns) accum (headFn curPath);
+            ;
+    in
+        combinationsHelper [] levelValueFns [];
+
+//combinationsBy_test :: [[Int]];
+//combinationsBy_test = 
+//    combinationsBy [\vals -> [1, 2, 3, 4],
+//                    \vals -> Prelude.upFromTo 1 (List.head vals), 
+//                    \vals -> Prelude.upFromTo 1 (List.sum vals)
+//                   ];
+
+
+/**
+ * Groups all elements in a list.  The {@link List.groupBy@} function will only
+ * group adjacent items in the list.  Since calculations are not orderable we
+ * can't sort and then call {@code groupBy@}.  Instead we need a function 
+ * to group all items in a list regardless of whether they are adjacent.
+ * 
+ * @arg eqFunc used to determine whether two elements belong in the same group.
+ * @arg lst the list of elements to be grouped
+ * 
+ * @return a list of groups of elements.
+ */
+//TODO: move to List module?
+groupAllBy :: (a -> a -> Boolean) -> [a] -> [[a]];
+public groupAllBy eqFunc !lst =
+    let
+        groupValue :: (a -> a -> Boolean) -> [[a]] -> a -> [[a]];
+        groupValue eqFunc groups value =
+        case groups of
+        [] -> [[value]];
+        x : xs -> 
+            if (eqFunc value (List.head x)) then ((value : x) : xs) 
+            else (x : (groupValue eqFunc xs value));
+        ;
+    in
+        List.foldLeft (groupValue eqFunc) [] lst;
+
+/**
+ * Given a list of tuples, group elements by their first components, regardless
+ * of their adjacency in the original list.
+ * 
+ * For example, {@code groupByFirst [(1,2), (2,4), (1,5)]@} yields 
+ * {@code [(1,[2,5]), (2,[4])]@}.
+ * 
+ * @arg eq used to determine whether two elements belong in the same group.
+ * @arg tuples the list of tuples to be grouped.
+ * 
+ * @return the list of grouped tuples.
+ */
+groupByFirst :: (a -> a -> Boolean) -> [(a, b)] -> [(a, [b])];
+public groupByFirst eq tuples =
+    case tuples of
+    [] -> [];
+    tuples_head : tuples_tail ->
+        let
+            comparisonTarget = fst tuples_head;
+            (eqTuples, notEqTuples) = List.partition (\x -> eq comparisonTarget (fst x)) tuples;
+            eqCombinedTuple = (comparisonTarget, List.map snd eqTuples);
+        in
+            eqCombinedTuple : groupByFirst eq notEqTuples;
+    ;
+
+/**
+ * Given a list of tuples, group elements by their first components, regardless
+ * of their adjacency in the original list.
+ * 
+ * For example, {@code groupByFirst2 [(1,2), (2,4), (1,5)]@} yields 
+ * {@code [(1,[2,5]), (2,[4])]@}.
+ * 
+ * @arg eqFunc used to determine whether two elements belong in the same group.
+ * @arg lst the list of tuples to be grouped.
+ * 
+ * @return the list of grouped tuples.
+ */
+groupByFirst2 :: (a -> a -> Boolean) -> [(a, b)] -> [(a, [b])];
+public groupByFirst2 eqFunc !lst = 
+    let   
+        groupByFirstHelper :: (a -> a -> Boolean) -> (a, b) -> [(a, [b])] ->  [(a, [b])];
+        groupByFirstHelper eqFunc nextTuple !tuples  = 
+            case tuples of
+            [] -> [(fst nextTuple, [snd nextTuple])];
+            tuples_head : tuples_tail ->        
+                let            
+                    (key, values) = tuples_head;
+                    (nextKey, nextValue) = nextTuple;
+                in
+                    if (eqFunc key nextKey) then
+                        (key, (nextValue : values)) : tuples_tail             
+                    else                 
+                        tuples_head : groupByFirstHelper eqFunc nextTuple tuples_tail;
+            ;
+    in
+        List.foldRight (groupByFirstHelper eqFunc) [] lst;   
+
+/**
+ * Given a list of tuples, group elements by their second components, regardless
+ * of their adjacency in the original list.
+ * 
+ * For example, {@code groupBySecond [(2,1), (4,2), (5,1)]@} yields 
+ * {@code [([2,5], 1), ([4],2)]@}.
+ * 
+ * @arg eq used to determine whether two elements belong in the same group.
+ * @arg tuples the list of tuples to be grouped.
+ * 
+ * @return the list of grouped tuples.
+ */
+groupBySecond :: (b -> b -> Boolean) -> [(a, b)] -> [([a], b)];
+public groupBySecond eq tuples  =
+    case tuples of
+    [] -> [];
+    tuples_head : tuples_tail ->
+        let
+            comparisonTarget = snd tuples_head;
+            (eqTuples, notEqTuples) = List.partition (\x -> eq comparisonTarget (snd x)) tuples;
+            eqCombinedTuple = (List.map fst eqTuples, comparisonTarget);
+        in
+            eqCombinedTuple : groupBySecond  eq notEqTuples;
+    ;
+
+/**
+ * Given a list of tuples, group elements by their second components, regardless
+ * of their adjacency in the original list.
+ * 
+ * For example, {@code groupBySecond2 [(2,1), (4,2), (5,1)]@} yields 
+ * {@code [([2,5], 1), ([4],2)]@}.
+ * 
+ * @arg eqFunc used to determine whether two elements belong in the same group.
+ * @arg lst the list of tuples to be grouped.
+ * 
+ * @return the list of grouped tuples.
+ */
+groupBySecond2 :: (b -> b -> Boolean) -> [(a, b)] -> [([a], b)];
+public groupBySecond2 eqFunc !lst = 
+    let   
+        groupBySecondHelper :: (b -> b -> Boolean) -> (a, b) -> [([a], b)] ->  [([a], b)];
+        groupBySecondHelper eqFunc nextTuple !tuples  = 
+            case tuples of
+            [] -> [([fst nextTuple], snd nextTuple)];
+            tuples_head : tuples_tail ->        
+                let            
+                    (values, key) = tuples_head; 
+                    (nextValue, nextKey) = nextTuple;
+                in
+                    if eqFunc key nextKey then
+                        (nextValue : values, key) : tuples_tail             
+                    else                 
+                        tuples_head : groupBySecondHelper eqFunc nextTuple tuples_tail;
+            ;
+    in
+        List.foldRight (groupBySecondHelper eqFunc) [] lst;
+
+
+/**
+ * {@code findIndexAndValue predicate list@} returns the first index of list for which the 
+ * predicate function is {@link True@} along with the matching list item,
+ * if there is one, or {@link Nothing@} otherwise. The index is 0-based.
+ * 
+ * e.g. {@code findIndex {@link Prelude.isEven@} [1, 1, 4, 1, 2, 1, 1, 6] == {@link Just@} (2, 4)@}
+ * 
+ * @arg predicate  a predicate function to be applied to the elements of the list.
+ * @arg list       the list to be searched.
+ * @return         the first index of list for which the predicate function is {@link True@} along with the 
+ *                 matching list item, if there is one, or {@link Nothing@} otherwise.
+ * @see List.findIndex
+ */
+findIndexAndValue :: (a -> Boolean) -> [a] -> Maybe (Int, a);
+public findIndexAndValue predicate !list =
+    let
+        // findHelper :: (a -> Boolean) -> Int -> [a] -> Maybe (Int, a);
+        findHelper predicate !currentIndex !list = 
+            case list of
+            [] -> Nothing;
+            listHead : listTail ->
+                if predicate listHead then
+                    Just (currentIndex, listHead)
+                else
+                    findHelper predicate (currentIndex + 1) listTail;
+            ;
+    in
+        findHelper predicate 0 list;

@@ -1,0 +1,123 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * cal.platform.test.cws
+ * Creation date: Mar 16, 2005.
+ * By: Edward Lam
+ */
+
+/**
+ * The test workspace for the core CAL platform.
+ *
+ * Modules are specified as: VaultType ModuleName [LocationString [RevisionNumber]].
+ * Workspaces specified as:  import VaultType WorkspaceName [LocationString [RevisionNumber]].
+ *   where LocationString is a vault-specific identifier
+ *
+ * Module precedence is textual order.  
+ * eg. suppose this declaration contains the line "VaultA ModuleName", and an imported declaration contains the line "VaultB ModuleName"
+ *     If "VaultA ModuleName" appears before the import, the VaultA module is used.  If it appears after the import, the VaultB module is used.
+ *
+ * Java-style comments (slash-slash and slash-star) are treated as such.
+ * Use single- and double-quotes to enclose strings with whitespace and comment tokens.
+ * The usual escape characters (such as "\n") are recognized and converted within strings.
+ */
+//SimpleCALFile Prelude "file:///C:/dev/cal/Prelude.cal"
+
+StandardVault Cal.Test.Core.Prelude_Tests
+StandardVault Cal.Test.Core.Array_Tests
+StandardVault Cal.Test.Core.Bits_Tests
+StandardVault Cal.Test.Core.Record_Tests
+StandardVault Cal.Test.JUnitSupport.CALRenaming_Test_Support1
+StandardVault Cal.Test.JUnitSupport.CALRenaming_Test_Support2
+StandardVault Cal.Test.Core.Char_Tests
+StandardVault Cal.Test.Core.Dynamic_Tests
+StandardVault Cal.Test.Core.Debug_Tests
+StandardVault Cal.Test.Utilities.Decimal_Tests
+StandardVault Cal.Test.JUnitSupport.ImportCleaner_Test_Support1
+StandardVault Cal.Test.JUnitSupport.ImportCleaner_Test_Support2
+StandardVault Cal.Test.Collections.List_Tests
+StandardVault Cal.Test.Core.String_Tests
+StandardVault Cal.Test.Utilities.Random_Tests
+StandardVault Cal.Test.General.GemScopeTestModule
+StandardVault Cal.Test.General.GetNthPrime
+StandardVault Cal.Test.General.LegacyTuple
+StandardVault Cal.Test.General.M1
+StandardVault Cal.Test.General.M2
+StandardVault Cal.Test.General.M3
+StandardVault Cal.Test.General.Nofib
+StandardVault Cal.Collections.Queue
+StandardVault Cal.Test.General.RecordTests
+StandardVault Cal.Test.General.RefactoringTests
+StandardVault Cal.Test.General.InliningTests
+StandardVault Cal.Test.General.Regression
+StandardVault Cal.Collections.Sequence
+StandardVault Cal.Test.General.RuntimeRegression
+StandardVault Cal.Test.General.Shape
+StandardVault Cal.Test.General.Circle
+StandardVault Cal.Test.General.Rectangle
+StandardVault Cal.Test.General.Shape_Tests
+StandardVault Cal.Test.General.Shapes
+StandardVault Cal.Test.JUnitSupport.SourceMetricFinder_Test_Support
+StandardVault Cal.Test.JUnitSupport.TypeDeclarationInserter_Test_Support
+StandardVault Cal.Test.JUnitSupport.ErrorTest
+StandardVault Cal.Test.General.CALDocTest
+StandardVault Cal.Test.Core.Memoize_Tests
+StandardVault Cal.Test.JUnitSupport.DerivedInstanceFunctionGenerator_Test_Support
+StandardVault UserGuide
+StandardVault Cal.Test.Collections.IntMap_Tests
+StandardVault Cal.Test.Collections.LongMap_Tests
+StandardVault Cal.Test.Collections.Map_Tests
+StandardVault Cal.Test.Collections.Set_Tests
+StandardVault Cal.Core.Functor
+StandardVault Cal.Core.Monad
+StandardVault Cal.Test.Core.Functor_Tests
+StandardVault Cal.Test.Core.Monad_Tests
+StandardVault Cal.Test.Core.System_Tests
+StandardVault Cal.Test.Utilities.Locale_Tests
+StandardVault Cal.Test.Utilities.MessageFormat_Tests
+StandardVault Cal.Test.Utilities.MessageFormat_TestSupport
+StandardVault Cal.Test.Core.Exception_Tests
+StandardVault Cal.Test.Utilities.QuickCheck_Tests
+StandardVault Cal.Test.General.HierarchicalModuleName.Test.Alpha
+StandardVault Cal.Test.General.HierarchicalModuleName.Test.Beta
+StandardVault Cal.Test.General.HierarchicalModuleName.Test.Alpha.Beta
+StandardVault Cal.Test.General.HierarchicalModuleName.Test.Alpha.Gamma.Beta
+StandardVault Cal.Test.JUnitSupport.Deprecation_Test_Support1
+StandardVault Cal.Test.JUnitSupport.Deprecation_Test_Support2
+StandardVault Cal.Test.General.LocalPatternMatch
+StandardVault Cal.Test.General.DerivedInstance
+StandardVault Cal.Test.CAL_Platform_TestSuite
+StandardVault Cal.Test.JUnitSupport.FormatterTestModule
+StandardVault Cal.Test.JUnitSupport.StandaloneJarBuilder_Test_Support
+StandardVault Cal.Test.JUnitSupport.TypeExpr_Test_Support
+import StandardVault cal.platform.cws

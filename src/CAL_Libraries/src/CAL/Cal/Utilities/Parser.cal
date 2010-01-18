@@ -1,0 +1,3283 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Parser.cal
+ * Created: June 2005
+ * By: Greg McClement. 
+ */
+
+/**
+ * This module defines a parser combinator library which can be used to define parsers for both
+ * context-free and context-sensitive grammars.
+ * 
+ * {@strong A short introduction@}
+ * 
+ * {@em Terminology@}
+ * 
+ * In this document, we follow the Haskell/Parsec convention of referring to functions that operate on parsers to
+ * produce new parsers as {@em parser combinators@} or {@em combinators@} for short. By definition, "combinator"
+ * is simply another word for a higher-order function.
+ * 
+ * {@em Defining a simple parser@}
+ * 
+ * Let's start with a simple parser: a parser that recognizes the single character 'X':
+ * 
+ * {@code
+ * simple :: {@link GenParser@} Char st Char
+ * simple = {@link char@} 'X';
+ * @}
+ * 
+ * The type of the parser 'simple' can be read as such: it is a parser that processes tokens of type {@code Char@} (the first
+ * Char in the type signature), that can deal with any user state of type {@code st@}, and that returns a result of type
+ * {@code Char@} (the second Char).
+ * 
+ * {@em Sequencing@}
+ * 
+ * To define a parser that recognizes the two-token sequence ['X', 'Y'], we can use the sequencing combinator {@link pSeq@},
+ * as in:
+ * 
+ * {@code
+ * xy :: GenParser Char st Char
+ * xy = char 'X' `{@link pSeq@}` char 'Y';
+ * @}
+ * 
+ * {@em Alternatives@}
+ * 
+ * To define a parser that recognizes either 'X' or 'Y', we can use the combinator {@link pOr@}:
+ * 
+ * {@code
+ * xOrY :: GenParser Char st Char
+ * xOrY = char 'X' `{@link pOr@}` char 'Y';
+ * @}
+ * 
+ * {@em Predictive parsers@}
+ * 
+ * For performance reasons, the {@link pOr@} combinator is {@em predictive@}, meaning that it will only try its second
+ * parser if the first parser has not consumed any input.
+ * 
+ * What this means is that a parser such as:
+ * {@code
+ * testOr = {@link exactString@} "(a)" `{@link pOr@}` {@link exactString@} "(b)";
+ * @}
+ * will {@em not@} accept the input {@code "(b)"@}, since the first parser would have consumed the {@code '('@} character
+ * before failing, and thus {@link pOr@} would not have tried the parser {@code {@link exactString@} "(b)"@}.
+ * 
+ * To make the parser accept both {@code "(a)"@} and {@code "(b)"@}, the {@link try@} combinator needs to be used for the
+ * first parser, as in:
+ * {@code
+ * testOr = ({@link try@} {@link exactString@} "(a)") `{@link pOr@}` {@link exactString@} "(b)";
+ * @}
+ * 
+ * For any parser {@code p@}, the augmented parser {@code ({@link try@} p)@} behaves just like {@code p@} except
+ * that it pretends that it has not consumed any input whenever {@code p@} fails. In combination with {@link pOr@}
+ * this allows for infinite look-ahead in the grammar. 
+ * 
+ * Finally, we have the combinator {@link pOrT@} which provides an optimized implementation of this common scenario.
+ * With it, the previous example can be rewritten as:
+ * {@code
+ * testOr = {@link exactString@} "(a)" `{@link pOrT@}` {@link exactString@} "(b)";
+ * @}
+ * 
+ * {@em Capturing values returned by parsers in a sequence@}
+ * 
+ * When parsers are sequenced using {@link pSeq@}, only the result of the last parser is kept and returned -
+ * the results of the preceding parsers are discarded. To capture the values returned by these intermediate
+ * parsers, the {@link pBind@} combinator can be used.
+ * 
+ * For example, here is a parser that returns a pair containing the results of the two intermediate parsers:
+ * {@code
+ * parserPair p q =
+ *     p `{@link pBind@}` (\x ->
+ *     q `{@link pBind@}` (\y ->
+ *     {@link pReturn@} (x, y)));
+ * @}
+ * 
+ * [Note: the above is the convention for formatting a sequence of parsers joined using {@link pBind@}.]
+ * 
+ * Here, the example can be read in an imperative fashion:
+ * {@orderedList
+ * {@item First, parser {@code p@} is applied, and its result is bound to {@code x@}.@}
+ * {@item Then, parser {@code q@} is applied, and its result is bound to {@code y@}.@}
+ * {@item Finally, {@link pReturn@} returns the pair {@code (x, y)@}.@}
+ * @}
+ * 
+ * {@strong Converting Parsec's Haskell syntax to CAL@}
+ * 
+ * Here are some rules for converting between the Haskell notation to the CAL notation.
+ * 
+ * {@unorderedList
+ * {@item
+ * Haskell:
+ * {@code
+ *    testOr1 = do{ char '('
+ *                ; char 'a' <|> char 'b'
+ *                ; char ')'
+ *                }
+ * @}
+ * CAL:
+ * {@code
+ *    testOr1 =
+ *        {@link char@} '(' `{@link pSeq@}`                         
+ *        ({@link char@} 'a' `{@link pOr@}` {@link char@} 'b') `{@link pSeq@}`
+ *        {@link char@} ')'
+ * @}
+ * @}
+ * 
+ * {@item
+ * Haskell:
+ * {@code
+ *    nesting :: Parser Int
+ *    nesting = do{ char '('
+ *                ; n <- nesting
+ *                ; char ')'
+ *                ; m <- nesting
+ *                ; return (max (n+1) m)
+ *                }
+ *            <|> return 0        
+ * @}
+ * CAL:
+ * {@code
+ *    nesting = 
+ *        (
+ *        {@link char@} '(' `{@link pSeq@}`
+ *        nesting `{@link pBind@}` (\n ->    // bind the output of nesting to n (analogous to n <- nesting)
+ *        {@link char@} ')' `{@link pSeq@}`
+ *        nesting `{@link pBind@}` (\m ->    // bind the output of nesting to m
+ *        {@link pReturn@} (max (n+1) m)))
+ *        ) `{@link pOr@}`
+ *        {@link pReturn@} 0;
+ * @}
+ * @}
+ * 
+ * {@item
+ * Haskell:
+ * {@code
+ *    word = many1 letter <?> "word"
+ * @}
+ * CAL:
+ * {@code
+ *    word = {@link many1@} {@link letter@} `{@link label@}` "word"; // label the parser with the given string for error messages
+ * @}
+ * @}
+ * @}
+ * 
+ * 
+ * {@strong Basic parser combinators@}
+ * {@unorderedList
+ * {@item {@link pSeq@} = used to sequence parsers@}
+ * {@item {@link pBind@} = used to sequence parsers and access the values returned by the parser@}
+ * {@item {@link pReturn@} = used to indicate a return value@}
+ * {@item {@link pFail@} = fail the parse with the specified error message@}
+ * {@item {@link pOr@} = operator for parser choice.@}
+ * {@item {@link label@} = used to provide a label for error messages@}
+ * @}
+ * 
+ * This module is a port of the Haskell based {@em Parsec@}
+ * framework by Daan Leijen. Documentation for Parsec can be found at: {@url http://www.cs.uu.nl/~daan/parsec.html@}.
+ * The use of the CAL version of Parsec is similar to that described in the manual.
+ * See the file {@code ThirdPartyComponents/ThirdPartyComponents.txt@} for the Parsec license.
+ */
+ 
+// IMPORTANT: Before making any modifications to this library, please read
+// Leijen and Meijer's "Parsec: Direct Style Monadic Parser Combinators For The
+// Real World" (http://research.microsoft.com/users/daan/download/papers/parsec-paper.pdf).
+// Parsec, and hence this port, have subtle space and error-detection
+// behaviours that must be understood when changing or adding code.
+
+//-----------------------------------------------------------------------------
+//-- |
+//-- Module      :  Text.ParserCombinators.Parsec.Prim
+//-- Copyright   :  (c) Daan Leijen 1999-2001
+//-- License     :  BSD-style (see the file libraries/parsec/LICENSE)
+//-- 
+//-- Maintainer  :  daan@cs.uu.nl
+//-- Stability   :  provisional
+//-- Portability :  portable
+//--
+//-- The primitive parser combinators.
+//-- 
+//-----------------------------------------------------------------------------
+//
+//module Text.ParserCombinators.Parsec.Prim
+//                   ( -- operators: label a parser, alternative
+//                     (<?>), (<|>)
+//
+//                   -- basic types
+//                   , Parser, GenParser
+//                   , runParser, parse, parseFromFile, parseTest
+//                   
+//                   -- primitive parsers:
+//                   -- instance Functor Parser     : fmap
+//                   -- instance Monad Parser       : return, >>=, fail
+//                   -- instance MonadPlus Parser   : pZero (pzero), mplus (<|>)
+//                   , token, tokens, tokenPrim, tokenPrimEx
+//                   , try, label, labels, unexpected, pzero
+//
+//                   -- primitive because of space behaviour
+//                   , many, skipMany
+//                                
+//                   -- user state manipulation
+//                   , getState, setState, updateState
+//
+//                   -- state manipulation
+//                   , getPosition, setPosition
+//                   , getInput, setInput                   
+//                   , getParserState, setParserState 
+//                 ) where
+//
+//import Prelude
+//import Text.ParserCombinators.Parsec.Pos
+//import Text.ParserCombinators.Parsec.Error
+//import Control.Monad
+//
+//{-# INLINE parsecMap    #-}
+//{-# INLINE parsecReturn #-}
+//{-# INLINE parsecBind   #-}
+//{-# INLINE parsecZero   #-}
+//{-# INLINE parsecPlus   #-}
+//{-# INLINE token        #-}
+//{-# INLINE tokenPrim    #-}
+
+module Cal.Utilities.Parser;
+
+import Cal.Core.Prelude using
+    typeClass = Appendable, Eq, Ord;
+    typeConstructor = Boolean, Char, Either, Int, Maybe, Ordering, String;
+    dataConstructor = False, True, Left, Right, Nothing, Just, EQ;
+    function = compare, concat, const, equals, error, id, intToString, isEmpty, not, seq;
+    ;
+import Cal.Core.Char using
+    function = isDigit, isLetter, isLetterOrDigit, isLowerCase, isUpperCase, toLowerCase, toUpperCase;
+    ;
+import Cal.Collections.List using
+    function = 
+        filter, foldLeft, foldRight, foldRight1, head, init, isElem, last, map, removeDuplicates, replicate, reverse, 
+        sortBy, span, tail;
+    ;
+import Cal.Core.String using
+    function = fromList;
+    ;
+import Cal.Core.Debug using
+    typeClass = Show;
+    function = show;
+    ;
+    
+//
+// NOTE: Do not add friend modules to access the private implementation details of this module.
+//       The exposed monadic API should be sufficient for everything you can do with this module.
+//
+//       For example, the functions getInput, setInput, getState, setState and updateState provide
+//       everything you need for playing with the parser's internal state.
+//
+
+    /* ***************************************************************************
+     * 
+     * File: ParsecPos.cal
+     * 
+     * ***************************************************************************/
+
+//        -----------------------------------------------------------
+//        -- Source Positions, a file name, a line and a column.
+//        -- upper left is (1,1)
+//        -----------------------------------------------------------
+//        type SourceName = String
+//        type Line = Int
+//        type Column = Int
+
+//        data SourcePos = SourcePos SourceName !Line !Column
+//                   deriving (Eq,Ord)
+
+/**
+ * The abstract data type {@code SourcePos@} represents source positions. It contains the name of
+ * the source, a line number and a column number.
+ * 
+ * {@code SourcePos@} has derived instances of the type classes {@link Eq@} and {@link Ord@}.
+ */
+data public SourcePos = 
+    /**
+     * Encapsulates a source position.
+     * 
+     * Note that {@code line@} and {@code column@} are plinged, so Parsec's forcePos is not
+     * required. 
+     * 
+     * @arg name the name of the source.
+     * @arg line the line number.
+     * @arg column the column number.
+     */
+    private SourcePos 
+        name    :: String 
+        line    :: !Int 
+        column  :: !Int
+    deriving Eq, Ord;     
+
+instance Show SourcePos where
+    show = showSourcePos;
+    ;
+
+//        newPos :: SourceName -> Line -> Int -> SourcePos
+//        newPos sourceName line column
+//            = SourcePos sourceName line column
+
+/**
+ * Constructs a {@link typeConstructor = SourcePos@} with the given source name, line and column.
+ * 
+ * @arg sourceName the name of the source.
+ * @arg line the line number.
+ * @arg column the column number.
+ */
+newPos :: String -> Int -> Int -> SourcePos;
+public newPos sourceName !line !column = SourcePos sourceName line column;
+
+//        initialPos sourceName
+//            = newPos sourceName 1 1
+
+/**
+ * Constructs a {@link typeConstructor = SourcePos@} with the given source name, for the position of line 1, column 1.
+ * 
+ * @arg sourceName the name of the source.
+ */
+initialPos :: String -> SourcePos;
+public initialPos sourceName = newPos sourceName 1 1;
+
+//        sourceName (SourcePos name line column) = name
+
+/**
+ * Extracts the name of the source from a source position.
+ */
+sourceName :: SourcePos -> String;
+public sourceName !sp = sp.SourcePos.name;
+            
+//        sourceLine (SourcePos name line column) = line
+
+/**
+ * Extracts the line number from a source position.
+ */
+sourceLine :: SourcePos -> Int;        
+public sourceLine !sp = sp.SourcePos.line;
+    
+//        sourceColumn (SourcePos name line column) = column
+
+/**
+ * Extracts the column number from a source position.
+ */
+sourceColumn :: SourcePos -> Int;
+public sourceColumn !sp = sp.SourcePos.column;
+
+//        incSourceLine (SourcePos name line column) n = SourcePos name (line+n) column
+
+/**
+ * Increments the line number of a source position by the given amount.
+ */
+incSourceLine :: SourcePos -> Int -> SourcePos;
+public incSourceLine !sp !n = 
+    case sp of
+    SourcePos {name, line, column} -> SourcePos name (line+n) column;
+    ;
+
+//        incSourceColumn (SourcePos name line column) n = SourcePos name line
+//         (column+n)
+
+/**
+ * Increments the column number of a source position by the given amount.
+ */
+incSourceColumn :: SourcePos -> Int -> SourcePos;
+public incSourceColumn !sp !n =
+    case sp of
+    SourcePos {name, line, column} -> SourcePos name line (column+n);
+    ;
+
+//        setSourceName (SourcePos name line column) n = SourcePos n line column
+
+/**
+ * Sets the source name of a source position to the given string.
+ */
+setSourceName :: SourcePos -> String -> SourcePos;
+public setSourceName sp n =
+    case sp of
+    SourcePos {line, column} -> SourcePos n line column;
+    ;
+        
+//        setSourceLine (SourcePos name line column) n = SourcePos name n column
+
+/**
+ * Sets the line number of a source position to the given value.
+ */
+setSourceLine :: SourcePos -> Int -> SourcePos;
+public setSourceLine !sp !n =
+    case sp of
+    SourcePos {name, column} -> SourcePos name n column;
+    ;
+    
+//        setSourceColumn (SourcePos name line column) n = SourcePos name line n
+
+/**
+ * Sets the column number of a source position to the given value.
+ */
+setSourceColumn :: SourcePos -> Int -> SourcePos;
+public setSourceColumn !sp !n = 
+    case sp of
+    SourcePos {name, line} -> SourcePos name line n;
+    ;
+
+//        -----------------------------------------------------------
+//        -- Update source positions on characters
+//        -----------------------------------------------------------
+//        updatePosString :: SourcePos -> String -> SourcePos
+//        updatePosString pos string
+//            = forcePos (foldl updatePosChar pos string)
+
+/**
+ * The expression {@code updatePosString pos s@} updates the source position {@code pos@}
+ * by calling {@link updatePosChar@} on every character in {@code s@}.
+ */
+updatePosString :: SourcePos -> [Char] -> SourcePos;
+public updatePosString pos aString
+    = foldLeft updatePosChar pos aString;
+
+//        updatePosChar :: SourcePos -> Char -> SourcePos
+//        updatePosChar pos@(SourcePos name line column) c
+//            = forcePos $
+//              case c of
+//                '\n' -> SourcePos name (line+1) 1
+//                '\t' -> SourcePos name line (column + 8 - ((column-1) `mod` 8))
+//                _ -> SourcePos name line (column + 1)
+            
+/**
+ * Updates the source position given a character.
+ * {@unorderedList
+ *  {@item
+ *    If the character is a newline ({@code '\n'@}) the line number is incremented by 1.
+ *    (Note {@code '\r'@} and {@code "\r\n"@} are not recognized as newlines.)
+ *  @}
+ *  {@item
+ *    If the character is a tab ({@code '\t'@}) the column number is incremented to the next nearest
+ *    multiple of 8, i.e. {@code (column + 8 - ((column-1) `mod` 8))@}.
+ *  @}
+ *  {@item
+ *    In all other cases, the column is incremented by 1.
+ *  @}
+ * @}
+ */
+updatePosChar   :: SourcePos -> Char -> SourcePos;
+public updatePosChar !pos !c =
+    case pos of 
+    SourcePos {name, line, column} ->
+        case c of
+        '\n' -> SourcePos name (line+1) 1;
+        '\t' -> SourcePos name line (column + 8 - ((column-1) % 8));
+        _ -> SourcePos name line (column + 1);
+        ;
+    ;
+  
+
+//        forcePos :: SourcePos -> SourcePos
+//        forcePos pos@(SourcePos name line column)
+//            = seq line (seq column (pos))
+
+// CAL: no need for forcePos, since SourcePos' data constructor already has line and column as *strict* arguments
+
+//        -----------------------------------------------------------
+//        -- Show positions
+//        -----------------------------------------------------------
+//        instance Show SourcePos where
+//          show (SourcePos name line column)
+//            | null name = showLineColumn
+//            | otherwise = "\"" ++ name ++ "\" " ++ showLineColumn
+//            where
+//              showLineColumn = "(line " ++ show line ++
+//                                  ", column " ++ show column ++
+//                                  ")"
+
+/**
+ * Formats the given {@link typeConstructor = SourcePos@} into a string for display.
+ */
+showSourcePos :: SourcePos -> String;
+public showSourcePos !sp = 
+    let
+        showLineColumn :: Int -> Int -> String;
+        showLineColumn line column = "(line " ++ (intToString line) ++ ", column " ++ (intToString column) ++ ")";
+    in
+    case sp of
+    SourcePos {name, line, column} ->
+        if isEmpty name then
+            showLineColumn line column
+        else
+            "\"" ++ name ++ "\" " ++ (showLineColumn line column);
+    ;
+
+/* ***************************************************************************
+ * 
+ * File: ParsecError.cal
+ * 
+ * ***************************************************************************/
+    
+//      -----------------------------------------------------------
+//      -- Messages
+//      -----------------------------------------------------------                         
+//      data Message        = SysUnExpect !String   --library generated unexpect            
+//                          | UnExpect    !String   --unexpected something     
+//                          | Expect      !String   --expecting something
+//                          | Message     !String   --raw message
+
+/**
+ * This {@code Message@} type represents parse error messages.
+ */
+data public Message =
+    /**
+     * A {@code SysUnExpect@} message is generated internally by the {@link satisfy@}
+     * combinator.
+     * 
+     * @arg msg the unexpected input.
+     */
+    public SysUnExpect msg::!String |
+    
+    /**
+     * An {@code UnExpect@} message is generated by the {@link unexpected@} combinator.
+     * 
+     * @arg msg a description of the unexpected item.
+     */
+    public UnExpect    msg::!String |
+    
+    /**
+     * An {@code Expect@} message is generated by the {@link label@} combinator.
+     * 
+     * @arg msg a description of the expected item.
+     */
+    public Expect      msg::!String |
+    
+    /**
+     * A {@code Message@} message is generated by the {@link pFail@} combinator.
+     * 
+     * @arg msg a message string.
+     */
+    public Message     msg::!String;
+              
+//      messageToEnum msg
+//          = case msg of SysUnExpect _ -> 0
+//                        UnExpect _    -> 1
+//                        Expect _      -> 2
+//                        Message _     -> 3                                  
+
+messageToEnum :: Message -> Int;
+messageToEnum !msg = 
+    case msg of 
+    SysUnExpect {} -> 0;
+    UnExpect {}    -> 1;
+    Expect {}      -> 2;
+    Message {}     -> 3;
+    ;
+                                        
+//      messageCompare :: Message -> Message -> Ordering
+//      messageCompare msg1 msg2
+//          = compare (messageToEnum msg1) (messageToEnum msg2)
+
+/**
+ * Compares two error messages without regards to their content. Only the
+ * data constructors are used in the ordering:
+ * 
+ * {@link SysUnExpect@} < {@link UnExpect@} < {@link Expect@} < {@link dataConstructor = Message@}
+ */
+messageCompare :: Message -> Message -> Ordering;
+public messageCompare msg1 msg2 = 
+    compare (messageToEnum msg1) (messageToEnum msg2);
+    
+//      messageString :: Message -> String
+//      messageString msg
+//          = case msg of SysUnExpect s -> s
+//                        UnExpect s    -> s
+//                        Expect s      -> s
+//                        Message s     -> s                                  
+
+/**
+ * Extracts the message string from an error message.
+ */
+messageString :: Message -> String;
+public messageString !msg =
+    case msg of
+    (SysUnExpect | UnExpect | Expect | Message) {msg} -> msg;
+    ;
+
+instance Show Message where
+    show = messageString;
+    ;
+      
+//      messageEq :: Message -> Message -> Bool
+//      messageEq msg1 msg2
+//          = (messageCompare msg1 msg2 == EQ)
+
+/**
+ * {@code messageEq m1 m2@} equals {@link True@} if {@code {@link messageCompare@} m1 m2@} equals {@link EQ@},
+ * in all other cases it equals {@link False@}.
+ */
+messageEq :: Message -> Message -> Boolean;
+public messageEq msg1 msg2 = (messageCompare msg1 msg2 == EQ);
+      
+      
+//      -----------------------------------------------------------
+//      -- Parse Errors
+//      -----------------------------------------------------------                           
+//      data ParseError     = ParseError !SourcePos [Message]
+/**
+ * The abstract data type {@code ParseError@} represents parse errors. It provides the source position
+ * ({@link typeConstructor = SourcePos@}) of the error and a list of error messages ({@link typeConstructor = Message@}).
+ * A {@code ParseError@} can be returned by the function {@link parse@}.
+ */
+data public ParseError =
+    /**
+     * A parse error consists of a source position and a list of error messages.
+     * 
+     * @arg sourcePos the source position.
+     * @arg messages the list of error messages.
+     */
+    private ParseError 
+        sourcePos :: !SourcePos 
+        messages  :: [Message];
+
+parseErrorShow !pe =
+    case pe of
+    ParseError {sourcePos, messages} ->
+        "ParseError" ++ show sourcePos ++ show messages;
+    ;
+
+instance Show ParseError where
+    show = parseErrorShow;
+    ;
+      
+//      errorPos :: ParseError -> SourcePos
+//      errorPos (ParseError pos msgs)
+//          = pos
+
+/**
+ * Extracts the source position from the parse error.
+ */    
+errorPos :: ParseError -> SourcePos;
+public errorPos !parser = parser.ParseError.sourcePos;
+                    
+//      errorMessages :: ParseError -> [Message]
+//      errorMessages (ParseError pos msgs)
+//          = sortBy messageCompare msgs      
+
+/**
+ * Extracts the list of error messages from the parse error, sorted according to ordering function {@link messageCompare@}.
+ */
+errorMessages :: ParseError -> [Message];
+public errorMessages !parser =
+    case parser of
+    ParseError {sourcePos, messages} -> sortBy messageCompare messages;
+    ;
+          
+//      errorIsUnknown :: ParseError -> Bool
+//      errorIsUnknown (ParseError pos msgs)
+//          = null msgs
+
+/**
+ * @return {@link True@} iff the error is an unknown error.
+ */
+errorIsUnknown :: ParseError -> Boolean;
+public errorIsUnknown !parser =
+    case parser of
+    ParseError {sourcePos, messages} -> isEmpty messages;
+    ;
+              
+              
+//      -----------------------------------------------------------
+//      -- Create parse errors
+//      -----------------------------------------------------------                         
+//      newErrorUnknown :: SourcePos -> ParseError
+//      newErrorUnknown pos
+//          = ParseError pos []
+
+/**    
+ * Constructs a {@link typeConstructor = ParseError@} representing an unknown error at the given source position.
+ */
+newErrorUnknown :: SourcePos -> ParseError;
+public newErrorUnknown pos = ParseError pos [];
+      
+//      newErrorMessage :: Message -> SourcePos -> ParseError
+//      newErrorMessage msg pos  
+//          = ParseError pos [msg]
+
+/**    
+ * Constructs a {@link typeConstructor = ParseError@} representing an error at the given source position with the given message.
+ */
+newErrorMessage :: Message -> SourcePos -> ParseError;
+public newErrorMessage msg pos = ParseError pos [msg];
+
+//      addErrorMessage :: Message -> ParseError -> ParseError
+//      addErrorMessage msg (ParseError pos msgs)
+//          = ParseError pos (msg:msgs)
+
+/**
+ * Adds an error message to the given {@link typeConstructor = ParseError@}.
+ */
+addErrorMessage :: Message -> ParseError -> ParseError;
+public addErrorMessage msg parser =
+    case parser of
+    ParseError pos msgs -> ParseError pos (msg:msgs);
+    ;
+      
+//      setErrorPos :: SourcePos -> ParseError -> ParseError
+//      setErrorPos pos (ParseError _ msgs)
+//          = ParseError pos msgs
+
+/**
+ * Sets the source position of the given {@link typeConstructor = ParseError@}.
+ */
+setErrorPos :: SourcePos -> ParseError -> ParseError;
+public setErrorPos pos parser =
+    case parser of
+    ParseError {messages} -> ParseError pos messages;
+    ;
+      
+//      setErrorMessage :: Message -> ParseError -> ParseError
+//      setErrorMessage msg (ParseError pos msgs)
+//          = ParseError pos (msg:filter (not . messageEq msg) msgs)
+
+/**      
+ * Sets the error message of the given {@link typeConstructor = ParseError@}.
+ */
+setErrorMessage :: Message -> ParseError -> ParseError;
+public setErrorMessage msg !parser =
+    case parser of
+    ParseError pos msgs ->
+        ParseError pos (msg:filter (not # messageEq msg) msgs);
+    ;
+   
+      
+//      mergeError :: ParseError -> ParseError -> ParseError
+//      mergeError (ParseError pos msgs1) (ParseError _ msgs2)
+//          = ParseError pos (msgs1 ++ msgs2)
+
+/**
+ * Merges the two given {@link typeConstructor = ParseError@} values into one.
+ */
+mergeError :: ParseError -> ParseError -> ParseError;
+public mergeError !error1 !error2 =
+    case error1 of
+    ParseError pos msgs1 ->
+        case error2 of
+        ParseError _ msgs2 ->
+            ParseError pos (msgs1 ++ msgs2);
+        ;
+    ;
+      
+
+
+//      -----------------------------------------------------------
+//      -- Show Parse Errors
+//      -----------------------------------------------------------                         
+
+/**
+ * Formats the given {@link typeConstructor = ParseError@} into a string for display.
+ */
+showParseError :: ParseError -> String;
+public showParseError err =
+    showSourcePos (errorPos err) ++ ":" ++ 
+    showErrorMessages "or" "unknown parse error" "expecting" "unexpected" "end of input" (errorMessages err);
+
+
+//      -- | Language independent show function
+//      showErrorMessages ::
+//          String -> String -> String -> String -> String -> [Message] -> String
+//      showErrorMessages msgOr msgUnknown msgExpecting msgUnExpected msgEndOfInput msgs
+//          | null msgs = msgUnknown
+//          | otherwise = concat $ map ("\n"++) $ clean $
+//                       [showSysUnExpect,showUnExpect,showExpect,showMessages]
+//          where
+//            (sysUnExpect,msgs1)   = span (messageEq (SysUnExpect "")) msgs
+//            (unExpect,msgs2)      = span (messageEq (UnExpect "")) msgs1
+//            (expect,messages)     = span (messageEq (Expect "")) msgs2
+//          
+//            showExpect        = showMany msgExpecting expect
+//            showUnExpect      = showMany msgUnExpected unExpect
+//            showSysUnExpect   | not (null unExpect) ||
+//                                null sysUnExpect       = ""
+//                              | null firstMsg          = msgUnExpected ++ " " ++ msgEndOfInput
+//                              | otherwise              = msgUnExpected ++ " " ++ firstMsg
+//                              where
+//                                firstMsg  = messageString (head sysUnExpect)
+//                              
+//            showMessages      = showMany "" messages
+  //
+//            
+//            //--helpers                                                                                                                                        
+//            showMany pre msgs = case (clean (map messageString msgs)) of
+//                                  [] -> ""
+//                                  ms | isEmpty pre  -> commasOr ms
+//                                     | otherwise -> pre ++ " " ++ commasOr ms
+//                                  
+//            commasOr []       = ""                
+//            commasOr [m]      = m                
+//            commasOr ms       = commaSep (init ms) ++ " " ++ msgOr ++ " " ++ last ms
+//              
+//            commaSep          = seperate ", " . clean
+//            semiSep           = seperate "; " . clean       
+//              
+//            seperate sep []   = ""
+//            seperate sep [m]  = m
+//            seperate sep (m:ms) = m ++ sep ++ seperate sep ms                            
+//            
+//            clean             = nub . filter (not.isEmpty)                  
+
+/**
+ * The standard function for showing error messages. Formats a list of error messages with
+ * the given set of keywords in the desired language.
+ * 
+ * @arg msgOr the string in the desired language equivalent to the English string "or".
+ * @arg msgUnknown the string in the desired language equivalent to the English string "unknown parse error".
+ * @arg msgExpecting the string in the desired language equivalent to the English string "expecting".
+ * @arg msgUnExpected the string in the desired language equivalent to the English string "unexpected".
+ * @arg msgEndOfInput the string in the desired language equivalent to the English string "end of input".
+ * @arg msgs the list of error messages.
+ * @return the error messages formatted as a string.
+ */
+showErrorMessages :: String -> String -> String -> String -> String -> [Message] -> String;
+public showErrorMessages msgOr msgUnknown msgExpecting msgUnExpected msgEndOfInput msgs =
+    let
+        (sysUnExpect, msgs1) = span (messageEq (SysUnExpect "")) msgs;
+          
+        (unExpect, msgs2) = span (messageEq (UnExpect "")) msgs1;
+
+        (expect, messages) = span (messageEq (Expect "")) msgs2;
+        
+        showExpect = showMany msgExpecting expect;
+        showUnExpect = showMany msgUnExpected unExpect;
+        showSysUnExpect =
+            let
+                firstMsg = messageString (head sysUnExpect);
+            in
+                if not (isEmpty unExpect) || isEmpty sysUnExpect then
+                    ""
+                else if isEmpty firstMsg then
+                    msgUnExpected ++ " " ++ msgEndOfInput
+                else
+                    msgUnExpected ++ " " ++ firstMsg;
+                          
+        showMessages = showMany "" messages;    
+          
+          //--helpers                                                                                                                                        
+        showMany pre msgs =
+            let
+                ms = clean (map messageString msgs);
+            in
+                if isEmpty ms then
+                    ""
+                else if isEmpty pre then
+                    commasOr ms
+                else
+                    pre ++ " " ++ commasOr ms;
+
+        commasOr ms =
+            if ms == [] then
+                ""
+            else if (List.isSingletonList ms) then
+                head ms
+            else
+                commaSep (init ms) ++ " " ++ msgOr ++ " " ++ last ms;           
+            
+        commaSep = seperate ", " # clean;
+        semiSep = seperate "; " # clean;      
+            
+        seperate sep ms =
+            if ms == [] then
+                ""
+            else if (List.isSingletonList ms) then
+                head ms
+            else
+                (head ms) ++ sep ++ seperate sep (tail ms);
+          
+        clean = removeDuplicates # filter (not # isEmpty);
+    in
+        if isEmpty msgs then
+            msgUnknown
+        else
+            concat ( map (Prelude.append "\n") ( clean (
+                 [showSysUnExpect,showUnExpect,showExpect,showMessages])));
+        
+
+/* ***************************************************************************
+ * 
+ * File: ParsecPrim.cal
+ * 
+ * ***************************************************************************/
+    
+//-----------------------------------------------------------
+//-- Operators:
+//-- <?>  gives a name to a parser (which is used in error messages)
+//-- <|>  is the choice operator
+//-----------------------------------------------------------
+//infix  0 <?>
+//infixr 1 <|>
+
+//(<?>) :: GenParser tok st a -> String -> GenParser tok st a
+//p <?> msg           = label p msg
+
+
+//(<|>) :: GenParser tok st a -> GenParser tok st a -> GenParser tok st a
+//p1 <|> p2           = mplus p1 p2
+
+//-----------------------------------------------------------
+//-- User state combinators
+//-----------------------------------------------------------
+//getState :: GenParser tok st st
+//getState        = do{ state <- getParserState
+//                    ; return (stateUser state)
+//                    }
+
+/**
+ * A parser that returns the current user state.
+ */
+getState :: GenParser tok st st;
+public getState =
+    getParserState `pBind` (\state ->
+    pReturn (stateUser state));
+                    
+
+//setState :: st -> GenParser tok st ()
+//setState st     = do{ updateParserState (\(State input pos _) -> State input pos st)
+//                    ; return ()
+//                    }
+
+/**
+ * The parser {@code setState st@} sets the user state to {@code st@}.
+ */
+setState :: st -> GenParser tok st ();
+public setState st = 
+    updateParserState 
+        (\!state ->
+            case state of
+            State {input, pos} -> State input pos st;
+        )
+    `pSeq`
+    pReturn ();
+        
+
+//updateState :: (st -> st) -> GenParser tok st ()
+//updateState f   = do{ updateParserState (\(State input pos user) -> State input pos (f user))
+//                    ; return ()
+//                    }
+
+/**
+ * The parser {@code updateState f@} updates the user state by applying the update function {@code f@}
+ * on it. In other words, it is equivalent to:
+ * {@code
+ * {@link getState@} `pBind` (\st ->
+ * {@link setState@} (f st))
+ * @}
+ */
+updateState :: (st -> st) -> GenParser tok st ();
+public updateState f =
+    updateParserState 
+        (\!state ->
+            case state of
+            State {input, pos, user} -> State input pos (f user);
+        )
+    `pSeq`
+    pReturn ();
+
+/**
+ * The parser {@code translateState inputFn outputFn parser@} updates the user state by 
+ * applying the first function {@code inputFn@} to it, applies the parser {@code p@}, 
+ * updates the user state by applying the second function {@code outputFn@} to the original
+ * state and the new state, then returns the value returned by {@code p@}. In other words, 
+ * it is equivalent to the following (which does not type-check successfully because of
+ * the mismatched state types):
+ * 
+ * {@code
+ * {@link getState@} `pBind` (\stateBefore ->
+ * {@link setState@} (inputFn stateBefore) `pSeq`
+ * p `pBind` (\x ->
+ * {@link getState@} `pBind` (\stateAfter ->
+ * {@link setState@} (outputFn stateBefore stateAfter) `pSeq`
+ * {@link pReturn@} x)))
+ * @}
+ * 
+ * This is the most primitive combinator for combining parsers with different user state types.
+ * One common approach is to ignore the outer state and pass a fixed initial state "s" to the
+ * wrapped parser "p", and then to ignore the inner state and reset the outer state afterwards, 
+ * effectively allowing the outer state to "pass through" the wrapped parser: 
+ * 
+ * {@code
+ * {@link translateState@} ({@link Prelude.const@} s) {@link Prelude.const@} p
+ * @}
+ * 
+ * Alternatively, two complimentary functions "f" and "g" can be used to map the user state
+ * from one type to another and then back again, ignoring the original state when mapping back:
+ * 
+ * {@code
+ * {@link translateState@} f ({@link Prelude.const@} g) p
+ * @}
+ */
+translateState :: (a -> b) -> (a -> b -> a) -> GenParser tok b c -> GenParser tok a c;
+public translateState inputFn outputFn p  =
+    Parser (\outerState ->
+        let
+            setUserState !state userState =
+                case state of
+                    State {input, pos} -> State input pos userState;
+                ;
+            
+            translateReply =
+                mapConsumed (\!reply ->
+                    case reply of
+                    Ok x state err ->
+                        case state of
+                        State {input, pos, user} -> Ok x (setUserState state (outputFn (stateUser outerState) user)) err;
+                        ;
+                    Error err -> Error err;);
+        in
+            translateReply (p.Parser.parseFunction (setUserState outerState (inputFn (stateUser outerState)))));
+
+
+/**
+ * A sequence of tokens, supporting head, tail, and isEmpty. May be represented
+ * internally by a list of tokens, or in the case of TokenSequence Char, by a
+ * String. To construct a {@code TokenSequence@}, use {@link makeTSList@} or
+ * {@link makeTSString@}.
+ */
+data public TokenSequence tok =
+    private TSList
+        ts :: [tok] |
+    private TSString
+        subscript :: (String -> Int -> tok)
+        s :: String
+    ;
+
+/**
+ * Constructs a token sequence using the input list as its internal representation.
+ * For character tokens, better performance is available by using {@link makeTSString@}
+ * if the input is available as a {@link typeConstructor = String@}.
+ * 
+ * @arg ts the list whose elements will be the tokens of the sequence.
+ * @return a token sequence providing access to the elements of the list.
+ */
+makeTSList :: [tok] -> TokenSequence tok;
+public makeTSList ts =
+    TSList ts;
+
+/**
+ * Constructs a token sequence using the input string as its internal representation.
+ * This gives better performance than {@link makeTSList@} if the input is available as
+ * a {@link typeConstructor = String@}.
+ * 
+ * @arg s the string whose characters will be the tokens of the sequence.
+ * @return a token sequence providing access to the characters of the string.
+ */
+makeTSString :: String -> TokenSequence Char;
+public makeTSString s =
+    TSString Cal.Core.String.subscript s;
+
+/**
+ * Returns the first token of the specified token sequence. Terminates in an error
+ * on an empty sequence.
+ * 
+ * @arg tokseq the token sequence whose first token is to be returned.
+ * @return the first token of the sequence.
+ */
+tsHead :: TokenSequence tok -> tok;
+private tsHead tokseq =
+    case tokseq of
+    TSList ts -> head ts;
+    TSString subscript s -> subscript s 0;
+    ;
+
+/**
+ * Returns a sequence of the tokens after the first token in the sequence. Terminates
+ * in an error on an empty sequence.
+ * 
+ * @arg tokseq the token sequence whose tail is to be returned.
+ * @return a sequence of the tokens after the first token in the sequence.
+ */
+tsTail :: TokenSequence tok -> TokenSequence tok;
+private tsTail tokseq =
+    case tokseq of
+    TSList ts -> TSList (tail ts);
+    TSString subscript s -> TSString subscript (Cal.Core.String.substring s 1 (Cal.Core.String.length s));
+    ;
+
+/**
+ * Returns whether the token sequence is empty.
+ * 
+ * @arg tokseq the token sequence to check.
+ * @return {@link True@} if the token sequence is empty; {@link False@} otherwise.
+ */
+tsIsEmpty :: TokenSequence tok -> Boolean;
+private tsIsEmpty tokseq =
+    case tokseq of
+    TSList ts -> isEmpty ts;
+    TSString _ s -> 0 == Cal.Core.String.length s;
+    ;
+
+/**
+ * Converts a token sequence to a list of tokens.
+ * 
+ * @arg tokseq the token sequence to convert.
+ * @return a list containing the tokens in the sequence.
+ */
+tokenSequenceToList :: TokenSequence tok -> [tok];
+public tokenSequenceToList tokseq =
+    if tsIsEmpty tokseq
+    then []
+    else tsHead tokseq : tokenSequenceToList (tsTail tokseq);
+
+//-----------------------------------------------------------
+//-- Parser state combinators
+//-----------------------------------------------------------
+//getPosition :: GenParser tok st SourcePos
+//getPosition         = do{ state <- getParserState; return (statePos state) }
+
+/**
+ * A parser that returns the current source position.
+ */
+getPosition :: GenParser tok st SourcePos;
+public getPosition =
+    getParserState `pBind` (\state ->
+    pReturn (statePos state));
+
+//getInput :: GenParser tok st [tok]
+//getInput            = do{ state <- getParserState; return (stateInput state) }
+
+/**
+ * A parser that returns the current input.
+ */
+getInputSeq :: GenParser tok st (TokenSequence tok);
+public getInputSeq =
+    getParserState `pBind` (\state ->
+    pReturn (stateInput state));
+
+/**
+ * Same as {@link getInputSeq@}, but with a list of tokens instead of a token sequence.
+ */
+getInput :: GenParser tok st [tok];
+public getInput =
+    getInputSeq `pBind` (\input ->
+    pReturn (tokenSequenceToList input));
+
+//setPosition :: SourcePos -> GenParser tok st ()
+//setPosition pos     = do{ updateParserState (\(State input _ user) -> State input pos user)
+//                        ; return ()
+//                        }
+
+/**
+ * The parser {@code setPosition pos@} sets the current source position to {@code pos@}.
+ */
+setPosition :: SourcePos -> GenParser tok st ();
+public setPosition pos = 
+    updateParserState 
+        (\!state ->
+            case state of
+            State {input, user} -> State input pos user;
+        )
+    `pSeq`
+    pReturn ();
+                        
+//setInput :: [tok] -> GenParser tok st ()
+//setInput input      = do{ updateParserState (\(State _ pos user) -> State input pos user)
+//                        ; return ()
+//                        }
+
+/**
+ * The parser {@code setInput input@} continues parsing with {@code input@}. An example use for the
+ * {@link getInput@} and {@code setInput@} functions is to deal with {@em include files@}.
+ */
+setInputSeq :: TokenSequence tok -> GenParser tok st ();
+public setInputSeq input = 
+    updateParserState 
+        (\state ->
+            case state of
+            State {pos, user} -> State input pos user;
+        )
+    `pSeq`
+    pReturn ();
+
+/**
+ * Same as {@link setInputSeq@}, but with a list of tokens instead of a token sequence.
+ */
+setInput :: [tok] -> GenParser tok st ();
+public setInput input =
+    setInputSeq (makeTSList input);
+      
+//getParserState        :: GenParser tok st (State tok st)
+//getParserState      =  updateParserState id    
+
+/**
+ * A parser that returns the current complete state of the parser.
+ */
+getParserState        :: GenParser tok st (State tok st);
+public getParserState = updateParserState id;
+
+//setParserState        :: State tok st -> GenParser tok st (State tok st)
+//setParserState st = updateParserState (const st)
+
+/**
+ * The parser {@code setParserState st@} sets the parser's state to {@code st@}.
+ */
+setParserState :: State tok st -> GenParser tok st (State tok st);
+public setParserState st = updateParserState (const st);
+
+
+
+//-----------------------------------------------------------
+//-- Parser definition.
+//-- GenParser tok st a:
+//--  General parser for tokens of type "tok", 
+//--  a user state "st" and a result type "a"
+//-----------------------------------------------------------
+
+//type Parser a           = GenParser Char () a
+//
+//newtype GenParser tok st a = Parser (State tok st -> Consumed (Reply tok st a))
+
+/**
+ * The {@code GenParser tok st a@} type represents a parser that handles tokens of type {@code tok@}
+ * with a user supplied state {@code st@} and returns a value of type {@code a@} on success.
+ */
+data public GenParser tok st a =
+    /**
+     * The parser is embodied in a parsing function.
+     * 
+     * @arg parseFunction the parsing function.
+     */
+    private Parser
+        parseFunction :: !(State tok st -> Consumed (Reply tok st a));
+
+//runP (Parser p)            = p
+
+//runP :: GenParser tok st a -> State tok st -> Reply Consumed tok st a;
+//public runP parser = parser.Parser.parseFunction;
+
+// The structure of the following data definitions is very important!
+// Before making any modifications to them, please read
+// Leijen and Meijer's "Parsec: Direct Style Monadic Parser Combinators For The
+// Real World" (http://research.microsoft.com/users/daan/download/papers/parsec-paper.pdf).
+
+//data Consumed a         = Consumed a                --input is consumed
+//                        | Empty !a                  --no input is consumed
+
+/**
+ * This type represents the notion of whether input is consumed or not in the application
+ * of a parser.
+ */
+data private Consumed a =
+    /** Represents that input is consumed. */
+    private Consumed
+        reply :: a |
+    /** Represents that no input is consumed. */
+    private Empty
+        reply :: !a
+    ;
+
+mapConsumed :: (a -> b) -> Consumed a -> Consumed b;
+private mapConsumed f !consumed =
+    case consumed of
+    Consumed reply -> Consumed (f reply);
+    Empty reply -> Empty (f reply);
+    ;
+
+//data Reply tok st a     = Ok !a !(State tok st) ParseError    --parsing succeeded with "a"
+//                        | Error ParseError                    --parsing failed
+
+/**
+ * This type represents the result returned by the underlying parsing function encapsulated by a {@link GenParser@}.
+ */
+data private Reply tok st a =
+    /**
+     * Represents that the parsing has succeeded.
+     * 
+     * @arg x the intended result of the parser.
+     * @arg state the new state of the parser.
+     * @arg err the parse error accumulated by the parser.
+     */
+    private Ok
+        x               :: !a 
+        state           :: !(State tok st) 
+        err             :: ParseError |
+    /**
+     * Represents that the parsing has failed.
+     * 
+     * @arg err the parse error accumulated by the parser.
+     */
+    private Error
+        err             :: ParseError;    
+
+//data State tok st       = State { stateInput :: [tok]
+//                                , statePos   :: !SourcePos
+//                                , stateUser  :: !st
+//                                }
+
+/**
+ * The abstract data type {@code State@} represents the internal state of the parser. It contains the list of input
+ * tokens that is to be parsed, the current source position, and the current user state.
+ */
+data public State tok st =
+    /**
+     * Represents the internal state of the parser.
+     * 
+     * @arg input the input to be parsed.
+     * @arg pos the current source position.
+     * @arg user the current user state.
+     */
+    private State 
+        input :: (TokenSequence tok) 
+        pos   :: SourcePos 
+        user  :: st;
+
+statePos :: State tok st -> SourcePos;
+private statePos !state = state.State.pos;
+
+stateInput :: State tok st -> TokenSequence tok;
+private stateInput !state = state.State.input;
+
+stateUser :: State tok st -> st;
+private stateUser !state = state.State.user;
+
+//-----------------------------------------------------------
+//-- run a parser
+//-----------------------------------------------------------
+//parseFromFile :: Parser a -> SourceName -> IO (Either ParseError a)
+//parseFromFile p fname
+//    = do{ input <- readFile fname
+//        ; return (parse p fname input)
+//        }
+
+/*
+parseFromFile :: GenParser Char () a -> File.FileName -> Either ParseError a;
+parseFromFile p fname =
+    case File.readFile fname of
+    Left err -> error $ show err;
+    Right input -> parse p (File.getNameFromPath fname) (String.toList input);
+    ;
+*/
+        
+//parseTest :: Show a => GenParser tok () a -> [tok] -> IO ()
+//parseTest p input
+//    = case (runParser p () "" input) of
+//        Left err -> do{ putStr "parse error at "
+//                      ; print err
+//                      }
+//        Right x  -> print x
+
+/**
+ * {@code parseTestSeq p input@} applies a parser {@code p@} against input {@code input@}
+ * and returns the result as a string. Useful for testing parsers.
+ */
+parseTestSeq :: Show a => GenParser tok () a -> TokenSequence tok -> String;
+public parseTestSeq p input = 
+    case (runParserSeq p () "" input) of
+    Left err ->
+        "parse error at " ++ (showParseError err);
+    Right x  -> show x;
+    ;
+
+/**
+ * Same as {@link parseTestSeq@}, but with a list of tokens instead of a token sequence.
+ */
+parseTest :: Show a => GenParser tok () a -> [tok] -> String;
+public parseTest p input
+    = parseTestSeq p (makeTSList input);
+
+//parse :: GenParser tok () a -> SourceName -> [tok] -> Either ParseError a
+//parse p name input
+//    = runParser p () name input
+
+/**
+ * {@code parseSeq p name input@} runs a parser {@code p@} without user state. The {@code name@}
+ * is only used in error messages and may be the empty string.
+ * 
+ * @return either a {@link typeConstructor = ParseError@} via {@link Left@}, or a value of type {@code a@} via {@link Right@}.
+ * 
+ * @see runParser
+ */
+parseSeq :: GenParser tok () a -> String -> TokenSequence tok -> Either ParseError a;
+public parseSeq p name input
+    = runParserSeq p () name input;
+
+/**
+ * Same as {@link parseSeq@}, but with a list of tokens instead of a token sequence.
+ */
+parse :: GenParser tok () a -> String -> [tok] -> Either ParseError a;
+public parse p name input
+    = parseSeq p name (makeTSList input);
+
+//runParser :: GenParser tok st a -> st -> SourceName -> [tok] -> Either ParseError a
+//runParser p st name input
+//    = case parserReply (runP p (State input (initialPos name) st)) of
+//        Ok x _ _    -> Right x
+//        Error err   -> Left err
+
+/**
+ * {@code runParserSeq p state name input@} runs parser {@code p@} on the input token sequence
+ * {@code input@}, obtained from source named by {@code name@} with the initial user state {@code st@}.
+ * The {@code name@} is only used in error messages and may be the empty string.
+ * 
+ * @return either a {@link typeConstructor = ParseError@} via {@link Left@}, or a value of type {@code a@} via {@link Right@}.
+ */
+runParserSeq :: GenParser tok st a -> st -> String -> TokenSequence tok -> Either ParseError a;
+public runParserSeq p st name input =
+    case parserReply (p.Parser.parseFunction (State input (initialPos name) st)) of
+    Ok {x}        -> Right x;
+    Error {err}   -> Left err;
+    ;
+
+/**
+ * Same as {@link runParserSeq@}, but with a list of tokens instead of a token sequence.
+ */
+runParser :: GenParser tok st a -> st -> String -> [tok] -> Either ParseError a;
+public runParser p st name input =
+    runParserSeq p st name (makeTSList input);
+
+//parserReply result     
+//    = case result of
+//        Consumed reply -> reply
+//        Empty reply    -> reply
+
+parserReply result =
+    case result of
+    Consumed reply -> reply;
+    Empty reply -> reply;
+    ;
+
+//-----------------------------------------------------------
+//-- Functor: fmap
+//-----------------------------------------------------------
+//instance Functor (GenParser tok st) where
+//  fmap f p  = parsecMap f p
+
+//parsecMap :: (a -> b) -> GenParser tok st a -> GenParser tok st b
+//parsecMap f (Parser p)
+//    = Parser (\state -> 
+//        case (p state) of
+//          Consumed reply -> Consumed (mapReply reply)
+//          Empty    reply -> Empty    (mapReply reply)
+//      )
+//    where
+//      mapReply reply
+//        = case reply of
+//            Ok x state err -> let fx = f x 
+//                              in seq fx (Ok fx state err)
+//            Error err      -> Error err
+
+/**
+ * The parser {@code pMap f parser@} is an optimized implementation of
+ * {@code
+ * parser `pBind` (\x ->
+ * pReturn (f x))
+ * @}
+ */
+pMap :: (a -> b) -> GenParser tok st a -> GenParser tok st b;
+public pMap f parser =
+    let
+        mapReply reply =
+            case reply of
+            Ok x state err -> let fx = f x; in seq fx (Ok fx state err);
+            Error err      -> Error err;
+            ;
+    in
+        Parser (\state ->
+            mapConsumed mapReply (parser.Parser.parseFunction state));
+
+//-----------------------------------------------------------
+//-- Monad: return, sequence (>>=) and fail
+//-----------------------------------------------------------    
+//instance Monad (GenParser tok st) where
+//  return x   = parsecReturn x  
+//  p >>= f    = parsecBind p f
+//  fail msg   = parsecFail msg
+//  p1 >> p2   = parsecBind2 p1 p2
+
+/*
+instance Monad (GenParser tok st) where
+  return = parsecReturn; 
+  p >>= f    = parsecBind;
+  fail   = parsecFail;
+  ;
+*/
+
+//parsecReturn :: a -> GenParser tok st a
+//parsecReturn x
+//  = Parser (\state -> Empty (Ok x state (unknownError state)))   
+
+/**
+ * The parser {@code pReturn x@} always succeeds with value {@code x@} without consuming any input.
+ * 
+ * @arg x the value to be returned by the parser.
+ */
+pReturn :: a -> GenParser tok st a;
+public pReturn x =
+    Parser (\state -> Empty (Ok x state (unknownError state)));
+
+/**
+ * {@summary
+ * {@code pSeq@} implements a parser combinator for sequencing. The parser {@code p `pSeq` q@}
+ * first applies the parser {@code p@}, then applies the parser {@code q@}, discarding the value
+ * returned by the first parser.
+ * @}
+ * 
+ * The parser {@code p `pSeq` q@} is an optimized implementation of {@code p `pBind` (\unused -> q)@}.
+ * 
+ * @arg parser the first parser in the sequence.
+ * @arg k the second parser in the sequence.
+ * @return a parser which will apply the two parsers in sequence.
+ */
+pSeq :: GenParser tok st a -> GenParser tok st b -> GenParser tok st b;
+public pSeq parser !k =
+    Parser (\state ->
+        case parser.Parser.parseFunction state of
+        Consumed reply1 ->
+            Consumed (
+                case reply1 of
+                Ok {state=state1, err=err1} ->
+                    case k.Parser.parseFunction state1 of
+                    Empty reply2    -> mergeErrorReply err1 reply2;
+                    Consumed reply2 -> reply2;
+                    ;
+                Error err1 -> Error err1;);
+        Empty reply1 ->
+            case reply1 of
+            Ok {state=state1, err=err1} ->
+                case k.Parser.parseFunction state1 of
+                Empty reply2 -> Empty (mergeErrorReply err1 reply2);
+                Consumed reply2 -> Consumed reply2;
+                ;
+            Error err1 -> Empty (Error err1);
+            ;);
+
+/**
+ * The parser {@code p `pAppend` q@} first applies the parser {@code p@}, then applies the parser {@code q@},
+ * and finally returns the concatenation of the {@link Appendable@} results of the parsers {@code p@} and {@code q@}.
+ */
+pAppend :: Appendable a => GenParser tok st a -> GenParser tok st a -> GenParser tok st a;
+public pAppend p1 p2 =
+    p1 `pBind` (\v1 ->
+    p2 `pBind` (\v2 ->
+    pReturn (v1 ++ v2)));
+
+//parsecBind :: GenParser tok st a -> (a -> GenParser tok st b) -> GenParser tok st b
+//parsecBind (Parser p) f
+//    = Parser (\state ->
+//        case (p state) of                 
+//          Consumed reply1 
+//            -> Consumed $
+//               case (reply1) of
+//                 Ok x state1 err1 -> case runP (f x) state1 of
+//                                       Empty reply2    -> mergeErrorReply err1 reply2
+//                                       Consumed reply2 -> reply2
+//                 Error err1       -> Error err1
+//
+//          Empty reply1    
+//            -> case (reply1) of
+//                 Ok x state1 err1 -> case runP (f x) state1 of
+//                                       Empty reply2 -> Empty (mergeErrorReply err1 reply2)
+//                                       other        -> other                                                    
+//                 Error err1       -> Empty (Error err1)
+//      )                                                              
+
+/**
+ * {@summary
+ * {@code pBind@} implements a parser combinator for sequencing. The parser {@code p `pBind` f@}
+ * first applies parser {@code p@}, then applies {@code f@} to the returned value of {@code p@},
+ * and finally applies the parser returned by {@code f@}.
+ * @}
+ * 
+ * Since the second parser can depend on the result of the first parser, this allows {@em context
+ * sensitive@} grammars to be parsed.
+ * 
+ * @arg parser the first parser in the sequence.
+ * @arg f the function which is to consume the result returned by {@code parser@} and then generate
+ *        the second parser to be applied in the sequence.
+ * @return a parser which will apply the two parsers in sequence.
+ */
+pBind :: GenParser tok st a -> (a -> GenParser tok st b) -> GenParser tok st b;
+public pBind !parser f =
+    Parser (\state ->
+        case parser.Parser.parseFunction state of
+        Consumed reply1 ->
+            Consumed (
+                case reply1 of
+                Ok x state1 err1 ->
+                    case (f x).Parser.parseFunction state1 of
+                    Empty reply2 -> mergeErrorReply err1 reply2;
+                    Consumed reply2 -> reply2;
+                    ;
+                Error err1 -> Error err1;);
+        Empty reply1 ->
+            case reply1 of
+            Ok x state1 err1 ->
+                case (f x).Parser.parseFunction state1 of
+                Empty reply2 -> Empty (mergeErrorReply err1 reply2);
+                Consumed reply2 -> Consumed reply2;
+                ;
+            Error err1 -> Empty (Error err1);
+            ;);
+
+//mergeErrorReply err1 reply
+//  = case reply of
+//      Ok x state err2 -> Ok x state (mergeError err1 err2)
+//      Error err2      -> Error (mergeError err1 err2)
+
+private mergeErrorReply err1 reply =
+    case reply of
+    Ok x state err2 -> Ok x state (mergeError err1 err2);
+    Error err2      -> Error (mergeError err1 err2);
+    ;
+
+
+//parsecFail :: String -> GenParser tok st a
+//parsecFail msg
+//  = Parser (\state -> 
+//      Empty (Error (newErrorMessage (Message msg) (statePos state))))
+
+/**
+ * The parser {@code pFail msg@} always fails with the error message {@code msg@}
+ * without consuming any input.
+ * 
+ * @arg msg the error message.
+ */
+pFail :: String -> GenParser tok st a;
+public pFail msg =
+    Parser (\state -> Empty (Error (newErrorMessage (Message msg) (statePos state))));
+
+//-----------------------------------------------------------
+//-- MonadPlus: alternative (mplus) and pZero
+//-----------------------------------------------------------
+//instance MonadPlus (GenParser tok st) where
+//  pZero         = parsecZero
+//  mplus p1 p2   = parsecPlus p1 p2
+  
+/*    
+instance MonadPlus (GenParser tok st) where
+  pZero         = parsecZero;
+  mplus p1 p2   = parsecPlus p1 p2;
+  ;
+*/
+
+//pzero :: GenParser tok st a
+//pzero = parsecZero
+
+//parsecZero :: GenParser tok st a
+//parsecZero
+//    = Parser (\state -> Empty (Error (unknownError state)))
+
+/**
+ * The parser {@code pZero@} always fails without consuming any input. To report an error with a message,
+ * use {@link pFail@} instead.
+ */
+pZero :: GenParser tok st a;
+public pZero =
+    Parser (\state -> Empty (Error (unknownError state)));
+
+//parsecPlus :: GenParser tok st a -> GenParser tok st a -> GenParser tok st a
+//parsecPlus (Parser p1) (Parser p2)
+//    = Parser (\state ->
+//        case (p1 state) of        
+//          Empty (Error err) -> case (p2 state) of
+//                                 Empty reply -> Empty (mergeErrorReply err reply)
+//                                 consumed    -> consumed
+//          other             -> other
+//      )
+
+/**
+ * {@summary
+ * This parser combinator implements an alternative. The parser {@code p `pOr` q@} first applies
+ * {@code p@}. If it succeeds, the value of {@code p@} is returned. If {@code p@} fails
+ * {@em without consuming any input@}, then parser {@code q@} is tried.
+ * @}
+ * 
+ * The parser is {@em predictive@} since {@code q@} is tried only when parser {@code p@} does
+ * not consume any input. This non-backtracking behaviour allows for both an efficient implementation
+ * of the parser combinators and the generation of good error messages.
+ * 
+ * @arg parser1 the parser for the first alternative.
+ * @arg parser2 the parser for the second alternative, which is tried only if {@code parser1@} fails.
+ */
+pOr :: GenParser tok st a -> GenParser tok st a -> GenParser tok st a;
+public pOr parser1 parser2 =
+    Parser (\state ->
+        case parser1.Parser.parseFunction state of
+        Empty reply1 ->
+            case reply1 of
+            Error err ->
+                case parser2.Parser.parseFunction state of
+                Empty reply2 ->
+                    Empty (mergeErrorReply err reply2);
+                Consumed reply2 -> Consumed reply2;
+                ;
+            _ -> Empty reply1;
+            ;
+        Consumed reply1 ->
+            Consumed reply1;);
+
+//-----------------------------------------------------------
+//-- Primitive Parsers: 
+//--  try, token(Prim), label, unexpected and updateState
+//-----------------------------------------------------------
+//try :: GenParser tok st a -> GenParser tok st a
+//try (Parser p)
+//    = Parser (\state@(State input pos user) ->     
+//        case (p state) of
+//          Consumed (Error err)  -> Empty (Error (setErrorPos pos err))
+//          Consumed ok           -> Consumed ok    -- was: Empty ok
+//          empty                 -> empty
+//      )
+
+/**
+ * The parser {@code try p@} behaves like the parser {@code p@}, except that it pretends that
+ * it has not consumed any input when an error occurs.
+ * 
+ * This combinator can be used whenever arbitrary lookahead is needed. A typical usage pattern
+ * is {@code (try parser1) `pOr` parser2@}, although in practice it is more efficient to use the equivalent
+ * optimized form {@code parser1 `{@link pOrT@}` parser2@}.
+ * 
+ * In the above example, if {@code parser1@} fails, {@code (try parser1)@} pretends that it has not consumed
+ * any input, and the {@link pOr@} combinator will then try {@code parser2@}.
+ * 
+ * @see pOrT
+ */
+try :: GenParser tok st a -> GenParser tok st a;
+public try parser =
+    Parser (\state ->
+        case state of
+        State {pos} ->
+            case parser.Parser.parseFunction state of
+            Consumed reply ->
+                case reply of
+                Error err -> Empty (Error (setErrorPos pos err));
+                Ok x state err -> Consumed (Ok x state err);
+                ;
+            Empty reply -> Empty reply;
+            ;);
+
+/**
+ * The parser {@code p `{@link pOrT@}` q@} is exactly the same as {@code ({@link try@} p) `{@link pOr@}` q@}.
+ * In particular, the parser will attempt to apply parser {@code p@}. If {@code p@} fails, the parser {@code q@} is attempted
+ * on the same input.
+ * 
+ * In the future, pOrT may be optimized.
+ * 
+ * @see try, pOr
+ */
+pOrT :: GenParser tok st a -> GenParser tok st a -> GenParser tok st a;
+public pOrT parser1 parser2 = try parser1 `pOr` parser2;
+
+/**
+ * The parser {@code {@link pOrT3@} p1 p2 p3@} is exactly the same as
+ * {@code
+ * ({@link try@} p1) `{@link pOr@}`
+ * ({@link try@} p2) `{@link pOr@}`
+ * p3
+ * @}
+ * 
+ * @see try, pOr
+ */
+pOrT3 :: GenParser tok st a -> GenParser tok st a -> GenParser tok st a -> GenParser tok st a;
+public pOrT3 parser1 parser2 parser3 =
+    parser1 `pOrT` 
+    parser2 `pOrT` 
+    parser3;
+
+/**
+ * The parser {@code {@link pOrT4@} p1 p2 p3 p4@} is exactly the same as
+ * {@code
+ * ({@link try@} p1) `{@link pOr@}`
+ * ({@link try@} p2) `{@link pOr@}`
+ * ({@link try@} p3) `{@link pOr@}`
+ * p4
+ * @}
+ * 
+ * @see try, pOr
+ */
+pOrT4 :: GenParser tok st a -> GenParser tok st a -> GenParser tok st a -> GenParser tok st a -> GenParser tok st a;
+public pOrT4 parser1 parser2 parser3 parser4 =
+    parser1 `pOrT`
+    parser2 `pOrT`
+    parser3 `pOrT`
+    parser4;
+
+/**
+ * The parser {@code {@link pOrT5@} p1 p2 p3 p4 p5@} is exactly the same as
+ * {@code
+ * ({@link try@} p1) `{@link pOr@}`
+ * ({@link try@} p2) `{@link pOr@}`
+ * ({@link try@} p3) `{@link pOr@}`
+ * ({@link try@} p4) `{@link pOr@}`
+ * p5
+ * @}
+ * 
+ * @see try, pOr
+ */
+pOrT5 :: GenParser tok st a -> GenParser tok st a -> GenParser tok st a -> GenParser tok st a -> GenParser tok st a -> GenParser tok st a;
+public pOrT5 parser1 parser2 parser3 parser4 parser5 =
+    parser1 `pOrT`
+    parser2 `pOrT`
+    parser3 `pOrT`
+    parser4 `pOrT`
+    parser5;
+
+/**
+ * The parser {@code {@link pOrT6@} p1 p2 p3 p4 p5 p6@} is exactly the same as
+ * {@code
+ * ({@link try@} p1) `{@link pOr@}`
+ * ({@link try@} p2) `{@link pOr@}`
+ * ({@link try@} p3) `{@link pOr@}`
+ * ({@link try@} p4) `{@link pOr@}`
+ * ({@link try@} p5) `{@link pOr@}`
+ * p6
+ * @}
+ * 
+ * @see try, pOr
+ */
+pOrT6 :: GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a;
+public pOrT6 parser1 parser2 parser3 parser4 parser5 parser6 =
+    parser1 `pOrT`
+    parser2 `pOrT`
+    parser3 `pOrT`
+    parser4 `pOrT`
+    parser5 `pOrT`
+    parser6;
+
+/**
+ * The parser {@code {@link pOrT7@} p1 p2 p3 p4 p5 p6 p7@} is exactly the same as
+ * {@code
+ * ({@link try@} p1) `{@link pOr@}`
+ * ({@link try@} p2) `{@link pOr@}`
+ * ({@link try@} p3) `{@link pOr@}`
+ * ({@link try@} p4) `{@link pOr@}`
+ * ({@link try@} p5) `{@link pOr@}`
+ * ({@link try@} p6) `{@link pOr@}`
+ * p7
+ * @}
+ * 
+ * @see try, pOr
+ */
+pOrT7 :: GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a
+      -> GenParser tok st a;
+public pOrT7 parser1 parser2 parser3 parser4 parser5 parser6 parser7 =
+    parser1 `pOrT`
+    parser2 `pOrT`
+    parser3 `pOrT`
+    parser4 `pOrT`
+    parser5 `pOrT`
+    parser6 `pOrT`
+    parser7;
+
+
+//token :: (tok -> String) -> (tok -> SourcePos) -> (tok -> Maybe a) -> GenParser tok st a    
+//token show tokpos test
+//  = tokenPrim show nextpos test
+//  where
+//    nextpos _ _   (tok:toks)  = tokpos tok
+//    nextpos _ tok []          = tokpos tok
+
+/**
+ * {@summary
+ * The parser {@code token showTok posFromTok testTok@} accepts a token {@code t@} with
+ * result {@code x@} when the function {@code testTok t@} returns {@code {@link Just@} x@}.
+ * The source position of {@code t@} should be returned by {@code posFromTok t@} and the token can be shown
+ * using {@code showTok t@}.
+ * @}
+ * 
+ * This combinator is meant to be used as a building block for defining parsers that work on user-defined token streams.
+ * 
+ * @see tokenPrim, tokenPrimEx, tokenSatisfy
+ */
+token :: (tok -> String) -> (tok -> SourcePos) -> (tok -> Maybe a) -> GenParser tok st a;
+public token show tokpos test = 
+    tokenPrim 
+        show 
+        (\unused tok !toks ->
+            case toks of
+            t:_ -> tokpos t;
+            [] -> tokpos tok;            
+        )
+        test;
+
+/**
+ * Convert a nextpos function from accepting a list of tokens to accepting a token sequence.
+ */
+wrapNextPos :: (SourcePos -> tok -> [tok] -> SourcePos) -> (SourcePos -> tok -> TokenSequence tok -> SourcePos);
+private wrapNextPos nextpos =
+    (\pos t ts -> nextpos pos t (tokenSequenceToList ts));
+
+//tokenPrim :: (tok -> String) -> (SourcePos -> tok -> [tok] -> SourcePos) -> (tok -> Maybe a) -> GenParser tok st a
+//tokenPrim show nextpos test
+//    = tokenPrimEx show nextpos Nothing test
+
+/**
+ * {@summary
+ * The parser {@code tokenPrim showTok nextPos testTok@} accepts a token {@code t@} with result
+ * {@code x@} when the function {@code testTok t@} returns {@code {@link Just@} x@}. The token can
+ * be shown using {@code showTok t@}. The position of the {@em next@} token should be returned when
+ * {@code nextPos@} is called with the current source position {@code pos@}, the current token {@code t@}
+ * and the rest of the token {@code toks@}, i.e. {@code (nextPos pos t toks)@}.
+ * @}
+ * 
+ * This is one of the most primitive combinators for accepting tokens, and is meant to be used as a building block for
+ * defining parsers that work on user-defined token streams.
+ * 
+ * For example, the {@link char@} parser could be implemented as:
+ * {@code
+ * char :: Char -> GenParser Char st Char
+ * char c =
+ *     let
+ *         showChar x       = "'" ++ x ++ "'";
+ *         testChar x       = if (x == c) then Just x else Nothing;
+ *         nextPos pos x xs = {@link updatePosChar@} pos x;
+ *     in
+ *         tokenPrim showChar nextPos testChar;
+ * @}
+ * 
+ * @see token, tokenPrimEx, tokenSatisfy
+ */
+tokenPrimSeq :: (tok -> String) -> (SourcePos -> tok -> TokenSequence tok -> SourcePos) -> (tok -> Maybe a) -> GenParser tok st a;
+public tokenPrimSeq show nextpos test
+    = tokenPrimExSeq show nextpos Nothing test;
+
+/**
+ * Same as {@link tokenPrimSeq@}, but with a list of tokens instead of a token sequence.
+ */
+tokenPrim :: (tok -> String) -> (SourcePos -> tok -> [tok] -> SourcePos) -> (tok -> Maybe a) -> GenParser tok st a;
+public tokenPrim show nextpos test
+    = tokenPrimSeq show (wrapNextPos nextpos) test;
+
+/**
+ * This parser combinator is exactly the same as:
+ * {@code
+ * satisfy f =
+ *     tokenPrim
+ *         (\c -> String.fromChar c)
+ *         (\pos c cs -> updatePosChar pos c)
+ *         (\c -> if (f c) then Just c else Nothing)
+ * @}
+ */
+satisfyInternal :: (Char -> Boolean) -> GenParser Char st Char;
+private satisfyInternal f =
+    tokenPrimSeq
+        (\c -> String.fromChar c)
+        (\pos c cs -> updatePosChar pos c)
+        (\c -> if (f c) then Just c else Nothing);
+
+/**
+ * {@summary
+ * The parser {@code tokenSatisfy showTok nextPos f@} accepts and returns token {@code t@} when the function
+ * {@code f t@} returns {@link True@}. The token can be shown using {@code showTok t@}. The position of the
+ * {@em next@} token should be returned when {@code nextPos@} is called with the current source position
+ * {@code pos@}, the current token {@code t@} and the rest of the token {@code toks@}, i.e. {@code (nextPos pos t toks)@}.
+ * @}
+ * 
+ * {@strong Note:@} this parser combinator has slightly different error reporting semantics when compared to this
+ * alternate implementation:
+ * {@code
+ * tokenSat showTok nextPos f = tokenPrim showTok nextPos (\x -> if (f x) then Just x else Nothing);
+ * @}
+ * in that the position reported for an unexpected token is the position where the token is found, and not
+ * the starting position of the parser before the rule is applied.
+ * 
+ * @see token, tokenPrim, tokenPrimEx
+ */
+tokenSatisfySeq :: (tok -> String) -> (SourcePos -> tok -> TokenSequence tok -> SourcePos) -> (tok -> Boolean) -> GenParser tok st tok;    
+public tokenSatisfySeq show nextpos f =
+    Parser.Parser (\!state ->
+    case state of
+    State {input, pos, user} ->
+        if tsIsEmpty input
+        then Empty (sysUnExpectError "" pos)
+        else
+            let
+                t = tsHead input;
+                ts = tsTail input;
+                newpos = nextpos pos t ts;
+            in
+                if f t then
+                    let
+                        newstate = State ts newpos user;
+                    in 
+                        newpos `seq` newstate `seq` 
+                        Consumed (Ok t newstate (newErrorUnknown newpos))
+                else
+                    Empty (sysUnExpectError (show t) newpos); // this is pos (not newpos) in tokenPrimEx
+    );
+
+/**
+ * Same as {@link tokenSatisfySeq@}, but with a list of tokens instead of a token sequence.
+ */
+tokenSatisfy :: (tok -> String) -> (SourcePos -> tok -> [tok] -> SourcePos) -> (tok -> Boolean) -> GenParser tok st tok;    
+public tokenSatisfy show nextpos f =
+    tokenSatisfySeq show (wrapNextPos nextpos) f;
+
+//-- | The most primitive token recogniser. The expression @tokenPrimEx show nextpos mbnextstate test@,
+//-- recognises tokens when @test@ returns @Just x@ (and returns the value @x@). Tokens are shown in
+//-- error messages using @show@. The position is calculated using @nextpos@, and finally, @mbnextstate@,
+//-- can hold a function that updates the user state on every token recognised (nice to count tokens :-).
+//-- The function is packed into a 'Maybe' type for performance reasons.
+//tokenPrimEx :: (tok -> String) -> 
+//               (SourcePos -> tok -> [tok] -> SourcePos) -> 
+//               Maybe (SourcePos -> tok -> [tok] -> st -> st) ->
+//               (tok -> Maybe a) -> 
+//               GenParser tok st a
+//tokenPrimEx show nextpos mbNextState test
+//    = case mbNextState of
+//        Nothing 
+//          -> Parser (\state@(State input pos user) -> 
+//              case input of
+//                (c:cs) -> case test c of
+//                            Just x  -> let newpos   = nextpos pos c cs
+//                                           newstate = State cs newpos user
+//                                       in seq newpos $ seq newstate $ 
+//                                          Consumed (Ok x newstate (newErrorUnknown newpos))
+//                            Nothing -> Empty (sysUnExpectError (show c) pos)
+//                []     -> Empty (sysUnExpectError "" pos)
+//             )
+//        Just nextState
+//          -> Parser (\state@(State input pos user) -> 
+//              case input of
+//                (c:cs) -> case test c of
+//                            Just x  -> let newpos   = nextpos pos c cs
+//                                           newuser  = nextState pos c cs user
+//                                           newstate = State cs newpos newuser
+//                                       in seq newpos $ seq newstate $ 
+//                                          Consumed (Ok x newstate (newErrorUnknown newpos))
+//                            Nothing -> Empty (sysUnExpectError (show c) pos)
+//                []     -> Empty (sysUnExpectError "" pos)
+//             )
+
+/**
+ * {@summary
+ * The parser {@code tokenPrimEx show nextpos mbnextstate test@}, recognises tokens when {@code test@} returns
+ * {@code {@link Just@} x@} (and returns the value {@code x@}). Tokens are shown in error messages using {@code show@}.
+ * The position is calculated using {@code nextpos@}, and finally, {@code mbnextstate@}, can hold a function that updates
+ * the user state on every token recognised (e.g. for counting tokens).
+ * @}
+ * 
+ * The {@code mbNextState@} function is packed into a {@link Maybe@} type for performance reasons.
+ * 
+ * This is the most primitive combinator for accepting tokens, and is meant to be used as a building block for
+ * defining parsers that work on user-defined token streams.
+ * 
+ * @see token, tokenPrimSeq, tokenSatisfy
+ */
+tokenPrimExSeq :: (tok -> String) ->
+               (SourcePos -> tok -> TokenSequence tok -> SourcePos) ->
+               Maybe (SourcePos -> tok -> TokenSequence tok -> st -> st) ->
+               (tok -> Maybe a) ->
+               GenParser tok st a;
+public tokenPrimExSeq show nextpos !mbNextState test =
+    case mbNextState of
+    Nothing -> Parser (\state ->
+        case state of
+        State input pos user ->
+            if tsIsEmpty input
+            then Empty (sysUnExpectError "" pos)
+            else
+                let
+                    c = tsHead input;
+                    cs = tsTail input;
+                in
+                    case test c of
+                    Just x ->
+                        let
+                            newpos = nextpos pos c cs;
+                            newstate = State cs newpos user;
+                        in
+                            newpos `seq` newstate `seq`
+                            Consumed (Ok x newstate (newErrorUnknown newpos));
+                    Nothing -> Empty (sysUnExpectError (show c) pos);
+                    ;
+        );
+    Just nextState -> Parser (\state ->
+        case state of
+        State input pos user ->
+            if tsIsEmpty input
+            then Empty (sysUnExpectError "" pos)
+            else
+                let
+                    c = tsHead input;
+                    cs = tsTail input;
+                in
+                    case test c of
+                    Just x ->
+                        let
+                            newpos = nextpos pos c cs;
+                            newuser = nextState pos c cs user;
+                            newstate = State cs newpos newuser;
+                        in
+                            newpos `seq` newstate `seq`
+                            Consumed (Ok x newstate (newErrorUnknown newpos))
+                        ;
+                    Nothing -> Empty (sysUnExpectError (show c) pos);
+                    ;
+        );
+    ;
+
+/**
+ * Same as {@link tokenPrimExSeq@}, but with a list of tokens instead of a token sequence.
+ */
+tokenPrimEx :: (tok -> String) ->
+               (SourcePos -> tok -> [tok] -> SourcePos) ->
+               Maybe (SourcePos -> tok -> [tok] -> st -> st) ->
+               (tok -> Maybe a) ->
+               GenParser tok st a;
+public tokenPrimEx show nextpos !mbNextState test =
+    let
+        mbWrappedNextState =
+            case mbNextState of
+            Just nextState ->
+                Just (\pos t ts st ->
+                    nextState pos t (tokenSequenceToList ts) st);
+            Nothing ->
+                Nothing;
+            ;
+    in
+        tokenPrimExSeq show (wrapNextPos nextpos) mbWrappedNextState test;
+
+//label :: GenParser tok st a -> String -> GenParser tok st a    
+//label p msg
+//  = labels p [msg]
+  
+/**
+ * The parser {@code p `label` msg@} behaves as the parser {@code p@}, but whenever the parser {@code p@}
+ * fails {@em without consuming any input@}, it replaces the {@em expected@} error messages with the message
+ * {@code msg@}.
+ * 
+ * This is normally used at the end of a set of alternatives where it would be desirable to return an error
+ * message in terms of a higher level construct rather than returning all possible tokens.
+ */
+label :: GenParser tok st a -> String -> GenParser tok st a;
+public label p msg
+  = labels p [msg];
+
+//labels :: GenParser tok st a -> [String] -> GenParser tok st a
+//labels (Parser p) msgs
+//    = Parser (\state -> 
+//        case (p state) of
+//          Empty reply -> Empty $ 
+//                         case (reply) of
+//                           Error err        -> Error (setExpectErrors err msgs)
+//                           Ok x state1 err  | errorIsUnknown err -> reply
+//                                            | otherwise -> Ok x state1 (setExpectErrors err msgs)
+//          other       -> other
+//      )
+
+labels :: GenParser tok st a -> [String] -> GenParser tok st a;
+labels !parser msgs =
+    Parser (\!state ->
+        case parser.Parser.parseFunction state of
+        Empty reply ->
+            Empty (
+                case reply of
+                Error err -> Error (setExpectErrors err msgs);
+                Ok x state1 err ->
+                    if errorIsUnknown err then
+                        reply
+                    else
+                        Ok x state1 (setExpectErrors err msgs)
+                ;);
+        Consumed reply -> Consumed reply;);
+
+//updateParserState :: (State tok st -> State tok st) -> GenParser tok st (State tok st)
+//updateParserState f 
+//    = Parser (\state -> let newstate = f state
+//                        in Empty (Ok state newstate (unknownError newstate)))
+
+updateParserState :: (State tok st -> State tok st) -> GenParser tok st (State tok st);
+updateParserState f =
+    Parser (\state ->
+        let
+            newstate = f state;
+        in
+            Empty (Ok state newstate (unknownError newstate))
+        );
+    
+    
+//unexpected :: String -> GenParser tok st a
+//unexpected msg
+//    = Parser (\state -> Empty (Error (newErrorMessage (UnExpect msg) (statePos state))))
+    
+/**
+ * The parser {@code unexpected msg@} always fails with an {@em unexpected@} error message
+ * {@code msg@} without consuming any input.
+ * 
+ * The functions {@link pFail@}, {@link label@} and {@code unexpected@} are the three parser
+ * combinators used for generating error messages. Of these, {@link label@} is the one
+ * that is most commonly applicable.
+ */
+unexpected :: String -> GenParser tok st a;
+public unexpected msg =
+    Parser (\state -> Empty (Error (newErrorMessage (UnExpect msg) (statePos state))));
+    
+
+//setExpectErrors err []         = setErrorMessage (Expect "") err
+//setExpectErrors err [msg]      = setErrorMessage (Expect msg) err
+//setExpectErrors err (msg:msgs) = foldr (\msg err -> addErrorMessage (Expect msg) err) 
+//                                       (setErrorMessage (Expect msg) err) msgs
+
+setExpectErrors err !msgs =
+    case msgs of
+    [] -> setErrorMessage (Expect "") err;
+    msg:msgs ->
+        if msgs == [] then
+            setErrorMessage (Expect msg) err
+        else
+            foldRight (\msg err -> addErrorMessage (Expect msg) err) (setErrorMessage (Expect msg) err) msgs
+        ;
+    ;
+
+//sysUnExpectError msg pos  = Error (newErrorMessage (SysUnExpect msg) pos)
+private sysUnExpectError msg pos = Error (newErrorMessage (SysUnExpect msg) pos);
+
+//unknownError state        = newErrorUnknown (statePos state)
+private unknownError state = newErrorUnknown (statePos state);
+
+//-----------------------------------------------------------
+//-- Parsers unfolded for space:
+//-- if many and skipMany are not defined as primitives,
+//-- they will overflow the stack on large inputs
+//-----------------------------------------------------------    
+//many :: GenParser tok st a -> GenParser tok st [a]
+//many p
+//  = do{ xs <- manyAccum (:) p
+//      ; return (reverse xs)
+//      }
+
+/**
+ * The parser {@code {@link many@} p@} applies the parser {@code p@} {@em zero@} or more times, and returns
+ * a list of the values returned by applications of {@code p@}.
+ * 
+ * @see many1
+ */
+/* @implementation this is Parsec's "many" */
+many :: GenParser tok st a -> GenParser tok st [a];
+public many p =
+    manyAccum Prelude.Cons p `pBind` (\xs ->
+    pReturn (reverse xs));
+
+//skipMany :: GenParser tok st a -> GenParser tok st ()
+//skipMany p
+//  = do{ manyAccum (\x xs -> []) p
+//      ; return ()
+//      }
+
+/**
+ * The parser {@code {@link skipMany@} p@} applies the parser {@code p@} {@em zero@} or more times, but discarding the results
+ * returned by {@code p@}. In other words, it is a more efficient way of specifying:
+ * {@code
+ * {@link many@} p `pSeq`
+ * pReturn ()
+ * @}
+ * 
+ * @see skipMany1
+ */
+/* @implementation this is Parsec's "skipMany" */
+skipMany :: GenParser tok st a -> GenParser tok st ();
+public skipMany p =
+    manyAccum (\x xs -> []) p `pSeq`
+    pReturn ();
+
+//manyAccum :: (a -> [a] -> [a]) -> GenParser tok st a -> GenParser tok st [a]
+//manyAccum accum (Parser p)
+//  = Parser (\state -> 
+//    let walk xs state r = case r of
+//                           Empty (Error err)          -> Ok xs state err
+//                           Empty ok                   -> error "Text.ParserCombinators.Parsec.Prim.many: combinator 'many' is applied to a parser that accepts an empty string."
+//                           Consumed (Error err)       -> Error err
+//                           Consumed (Ok x state' err) -> let ys = accum x xs
+//                                                         in seq ys (walk ys state' (p state'))
+//    in case (p state) of
+//         Empty reply  -> case reply of
+//                           Ok x state' err -> error "Text.ParserCombinators.Parsec.Prim.many: combinator 'many' is applied to a parser that accepts an empty string."
+//                           Error err       -> Empty (Ok [] state err)
+//         consumed     -> Consumed $ walk [] state consumed)
+
+
+manyAccum :: (a -> [a] -> [a]) -> GenParser tok st a -> GenParser tok st [a];
+manyAccum accum parser =
+    let
+        // Access the parser definition just once instead of every time through
+        // the loop.
+        parserp = parser.Parser.parseFunction;
+    in
+        Parser (\state ->
+            let
+                walk !xs state !consumed2 = 
+                    case consumed2 of
+                    Consumed reply2 ->
+                        case reply2 of
+                        Ok x statePrime _ ->
+                            // Important: since walk's 'xs' argument is plinged,
+                            // (accum x xs) will be evaluated immediately. By doing
+                            // this instead of an explicit seq, we avoid having to
+                            // give (accum x xs) a name using a let, which incurs
+                            // a speed penalty.
+                            walk (accum x xs) statePrime (parserp statePrime);
+                        Error err -> Error err;
+                        ;
+                    Empty reply2 ->
+                        case reply2 of
+                        Error err -> Ok xs state err;
+                        _ -> error "Combinator 'many' is applied to a parser that accepts an empty string.";
+                        ;
+                    ;
+            in
+                case parserp state of
+                Empty reply1 ->
+                    case reply1 of
+                    Ok x statePrime err ->
+                        error "Combinator 'many' is applied to a parser that accepts an empty string.";
+                    Error err ->
+                        Empty (Ok [] state err);
+                    ;
+                Consumed reply1 ->
+                    Consumed (walk [] state (Consumed reply1));
+            );
+
+
+
+//-----------------------------------------------------------
+//-- Parsers unfolded for speed: 
+//--  tokens
+//-----------------------------------------------------------    
+
+/* specification of @tokens@:
+tokens showss nextposs s
+  = scan s
+  where
+    scan []       = return s
+    scan (c:cs)   = do{ token show nextpos c <?> shows s; scan cs }                      
+
+    show c        = shows [c]
+    nextpos pos c = nextposs pos [c]
+*/
+
+//tokens :: Eq tok => ([tok] -> String) -> (SourcePos -> [tok] -> SourcePos) -> [tok] -> GenParser tok st [tok]
+//tokens shows nextposs s
+//    = Parser (\state@(State input pos user) -> 
+//       let
+//        ok cs             = let newpos   = nextposs pos s
+//                                newstate = State cs newpos user
+//                            in seq newpos $ seq newstate $ 
+//                               (Ok s newstate (newErrorUnknown newpos))
+//                               
+//        errEof            = Error (setErrorMessage (Expect (shows s))
+//                                     (newErrorMessage (SysUnExpect "") pos))
+//        errExpect c       = Error (setErrorMessage (Expect (shows s))
+//                                     (newErrorMessage (SysUnExpect (shows [c])) pos))
+//
+//        walk [] cs        = ok cs
+//        walk xs []        = errEof
+//        walk (x:xs) (c:cs)| x == c        = walk xs cs
+//                          | otherwise     = errExpect c
+//
+//        walk1 [] cs        = Empty (ok cs)
+//        walk1 xs []        = Empty (errEof)
+//        walk1 (x:xs) (c:cs)| x == c        = Consumed (walk xs cs)
+//                           | otherwise     = Empty (errExpect c)
+//
+//       in walk1 s input)
+
+/**
+ * This parser combinator is an optimized implementation of the following specification.
+ * {@code
+ * tokens shows nextposs s =
+ *     let
+ *         show c = shows [c];
+ *         nextpos pos c cs = nextposs pos [c];
+ *         testtok x = if (x == c) then Just c else Nothing;
+ *         
+ *         scan toks =
+ *             case toks of
+ *             []   -> pReturn s;
+ *             c:cs -> ({@link tokenPrim@} show nextpos testtok `label` shows s) `pSeq`
+ *                     (scan cs);
+ *             ;
+ *     in
+ *         scan s;
+ * @}
+ */
+tokens :: Eq tok => ([tok] -> String) -> (SourcePos -> [tok] -> SourcePos) -> [tok] -> GenParser tok st [tok];
+public tokens shows nextposs s =
+    tokensCompare shows nextposs (equals) s;
+
+/**
+ * This parser combinator is an optimized implementation of the following specification.
+ * {@code
+ * tokensCompare shows nextposs compareToken s =
+ *     let
+ *         show c = shows [c];
+ *         nextpos pos c cs = nextposs pos [c];
+ *         testtok x = if (compareToken x c) then Just c else Nothing;
+ *         
+ *         scan toks =
+ *             case toks of
+ *             []   -> pReturn s;
+ *             c:cs -> ({@link tokenPrim@} show nextpos testtok `label` shows s) `pSeq`
+ *                     (scan cs);
+ *             ;
+ *     in
+ *         scan s;
+ * @}
+ */
+tokensCompare :: ([tok] -> String) -> (SourcePos -> [tok] -> SourcePos) -> (tok->tok->Boolean) -> [tok] -> GenParser tok st [tok];
+public tokensCompare shows nextposs compareToken s =
+    Parser (\!state ->
+        case state of
+        State input pos user ->
+            let
+                ok cs = 
+                    let
+                        newpos = nextposs pos s;
+                        newstate = State cs newpos user;
+                    in
+                        newpos `seq` newstate `seq`
+                        Ok s newstate (newErrorUnknown newpos);
+                    
+                errEof =
+                    Error (setErrorMessage (Expect (shows s)) (newErrorMessage (SysUnExpect "") pos));
+                
+                errExpect c =
+                    Error (setErrorMessage (Expect (shows s)) (newErrorMessage (SysUnExpect (shows [c])) pos));
+                
+                walk xs cs = 
+                    if isEmpty xs then
+                        ok cs
+                    else if tsIsEmpty cs then
+                        errEof
+                    else if compareToken (head xs) (tsHead cs) then
+                        walk (tail xs) (tsTail cs)
+                    else
+                        errExpect (tsHead cs);
+                
+                walk1 xs cs = 
+                    if isEmpty xs then
+                        Empty (ok cs)
+                    else if tsIsEmpty cs then
+                        Empty (errEof)
+                    else if compareToken (head xs) (tsHead cs) then
+                        Consumed (walk (tail xs) (tsTail cs))
+                    else
+                        Empty (errExpect (tsHead cs));
+            in
+                walk1 s input;
+        );
+
+/* ***************************************************************************
+ * 
+ * File: ParsecCombinator.cal
+ * 
+ * ***************************************************************************/
+
+//      ----------------------------------------------------------------
+//      --
+//      ----------------------------------------------------------------
+//      choice :: [GenParser tok st a] -> GenParser tok st a
+//      choice ps =  foldr (<|>) pZero ps
+
+/**
+ * The parser {@code {@link choice@} ps@} tries to apply the parsers in the list {@code ps@} in order using
+ * the {@link pOr@} combinator, until one of them succeeds. It returns the value of the succeeding parser.
+ * 
+ * @see choiceT, pOr
+ */
+choice :: [GenParser tok st a] -> GenParser tok st a;
+public choice !ps =
+    foldRight pOr pZero ps;
+
+/**
+ * The parser {@code {@link choiceT@} ps@} tries to apply the parsers in the list {@code ps@} in order using
+ * the {@link pOrT@} combinator, until one of them succeeds. It returns the value of the succeeding parser.
+ * 
+ * @see choice, pOrT
+ */
+choiceT :: [GenParser tok st a] -> GenParser tok st a;
+public choiceT !ps =
+    foldRight pOrT pZero ps;
+
+//      option :: a -> GenParser tok st a -> GenParser tok st a
+//      option x p          = p <|> return x
+
+/**
+ * {@summary
+ * The parser {@code {@link option@} x p@} tries to apply parser {@code p@}. If {@code p@} fails without consuming
+ * input, it returns the value {@code x@}, otherwise it returns the value returned by {@code p@}.
+ * @}
+ */
+option :: a -> GenParser tok st a -> GenParser tok st a;
+public option x p = p `pOr` pReturn x;
+
+//      optional :: GenParser tok st a -> GenParser tok st ()
+//      optional p          = do{ p; return ()} <|> return ()
+
+/**
+ * The parser {@code {@link optional@} p@} tries to apply parser {@code p@}. If {@code p@} fails without consuming
+ * input, it returns {@code Nothing@}, otherwise it returns the application of {@link dataConstructor = Just@}
+ * to the value returned by {@code p@}.
+ */
+/* @implementation this is Parsec's "optional", modified to return a Maybe value instead of () */
+optional :: GenParser tok st a -> GenParser tok st (Maybe a);
+public optional p = 
+    Just `pMap` p `pOr`
+    pReturn Nothing;
+
+//      between :: GenParser tok st open -> GenParser tok st close 
+//                  -> GenParser tok st a -> GenParser tok st a
+//      between open close p
+//                          = do{ open; x <- p; close; return x }
+
+/**
+ * The parser {@code {@link between@} open close p@} parses {@code open@}, followed by {@code p@} and {@code close@},
+ * and returns the value returned by {@code p@}.
+ */
+between :: GenParser tok st open -> GenParser tok st close -> GenParser tok st a -> GenParser tok st a;
+public between open close p = 
+    open `pSeq`
+    (p `pBind` (\x ->
+    close `pSeq`
+    pReturn x));
+
+                  
+//      skipMany1 :: GenParser tok st a -> GenParser tok st ()
+//      skipMany1 p         = do{ p; skipMany p }
+
+/**
+ * The parser {@code {@link skipMany1@} p@} applies the parser {@code p@} {@em one@} or more times, but discarding the results
+ * returned by {@code p@}. In other words, it is a more efficient way of specifying:
+ * {@code
+ * {@link many1@} p `pSeq`
+ * pReturn ()
+ * @}
+ * 
+ * @see skipMany
+ */
+skipMany1 :: GenParser tok st a -> GenParser tok st ();
+public skipMany1 p = p `pSeq` skipMany p;
+
+  /*
+  skipMany p          = scan
+                      where
+                        scan  = do{ p; scan } <|> return ()
+  */
+
+//      many1 :: GenParser tok st a -> GenParser tok st [a]
+//      many1 p             = do{ x <- p; xs <- many p; return (x:xs) }
+
+/**
+ * The parser {@code {@link many1@} p@} applies the parser {@code p@} {@em one@} or more times, and returns
+ * a list of the values returned by applications of {@code p@}.
+ * 
+ * @see many
+ */
+many1 :: GenParser tok st a -> GenParser tok st [a];
+public many1 p = 
+    p `pBind` (\x ->
+    many p `pBind` (\xs ->
+    pReturn (x:xs)));
+
+  /*
+  many p              = scan id
+                      where
+                        scan f    = do{ x <- p
+                                      ; scan (\tail -> f (x:tail))
+                                      }
+                                  <|> return (f [])
+  */
+
+//      sepBy1,sepBy :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a]
+//      sepBy p sep         = sepBy1 p sep <|> return []
+//      sepBy1 p sep        = do{ x <- p
+//                              ; xs <- many (sep >> p)
+//                              ; return (x:xs)
+//                              }
+
+/**
+ * The parser {@code {@link sepBy@} p sep@} parses {@em zero@} or more occurrences of {@code p@},
+ * separated by {@code sep@}, and returns a list of the values returned by the applications of {@code p@}.
+ * 
+ * For example:
+ * {@code
+ * commaSep p = p `{@link sepBy@}` {@link char@} ',';
+ * @}
+ * 
+ * @see sepBy1, endBy, sepEndBy
+ */
+sepBy :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a];
+public sepBy p sep = sepBy1 p sep `pOr` pReturn [];
+
+/**
+ * The parser {@code {@link sepBy1@} p sep@} parses {@em one@} or more occurrences of {@code p@},
+ * separated by {@code sep@}, and returns a list of the values returned by the applications of {@code p@}.
+ * 
+ * @see sepBy, endBy1, sepEndBy1
+ */
+sepBy1 :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a];
+public sepBy1 p sep = 
+    p `pBind` (\x ->
+    many (sep `pSeq` p) `pBind` (\xs ->
+    pReturn (x:xs)));
+
+
+//      sepEndBy1, sepEndBy :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a]
+//      sepEndBy1 p sep     = do{ x <- p
+//                              ; do{ sep
+//                                  ; xs <- sepEndBy p sep
+//                                  ; return (x:xs)
+//                                  }
+//                                <|> return [x]
+//                              }
+                          
+/**
+ * The parser {@code {@link sepEndBy1@} p sep@} parses {@em one@} or more occurrences of {@code p@},
+ * separated and {@em optionally@} ended by {@code sep@}, and returns a list of values returned by the applications
+ * of {@code p@}.
+ * 
+ * @see sepEndBy, sepBy1, endBy1
+ */
+sepEndBy1 :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a];
+public sepEndBy1 !p !sep = 
+    p `pBind` (\x ->
+        (
+            sep `pSeq`
+            sepEndBy p sep `pBind` (\xs ->
+            pReturn (x:xs))
+        )
+        `pOr` pReturn [x]);
+
+//      sepEndBy p sep      = sepEndBy1 p sep <|> return []
+//      public sepEndBy !p !sep = (sepEndBy1 p sep) `pOr` parsecReturn [];
+
+/**
+ * The parser {@code {@link sepEndBy@} p sep@} parses {@em zero@} or more occurrences of {@code p@},
+ * separated and {@em optionally@} ended by {@code sep@}, and returns a list of values returned by the applications
+ * of {@code p@}.
+ * 
+ * @see sepEndBy1, sepBy, endBy
+ */
+sepEndBy :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a];
+public sepEndBy p sep = sepEndBy1 p sep `pOr` pReturn [];
+
+//      endBy1,endBy :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a]
+//      endBy1 p sep        = many1 (do{ x <- p; sep; return x })
+//      endBy p sep         = many (do{ x <- p; sep; return x })
+
+/**
+ * The parser {@code {@link endBy1@} p sep@} parses {@em one@} or more occurrences of {@code p@},
+ * separated and ended by {@code sep@}, and returns a list of values returned by the applications of {@code p@}.
+ * 
+ * @see endBy, sepBy1, sepEndBy1
+ */
+endBy1 :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a];
+public endBy1 p sep = 
+    many1 (p `pBind` (\x -> (sep `pSeq` pReturn x)));
+
+/**
+ * The parser {@code {@link endBy@} p sep@} parses {@em zero@} or more occurrences of {@code p@},
+ * separated and ended by {@code sep@}, and returns a list of values returned by the applications of {@code p@}.
+ * 
+ * @see endBy1, sepBy, sepEndBy
+ */
+endBy :: GenParser tok st a -> GenParser tok st sep -> GenParser tok st [a];
+public endBy p sep = many (p `pBind` (\x -> (sep `pSeq` pReturn x)));
+
+//      count :: Int -> GenParser tok st a -> GenParser tok st [a]
+//      count n p           | n <= 0    = return []
+//                          | otherwise = sequence (replicate n p)
+
+//      sequence       :: Monad m => [m a] -> m [a]
+
+/**
+ * The parser {@code {@link sequence@} list@} applies the parsers in {@code list@} in sequence, and returns
+ * a list containing the values returned by each parser.
+ */
+sequence :: [GenParser tok st a] -> GenParser tok st [a];
+public sequence !list =
+    case list of
+    [] -> pReturn [];
+    c:cs ->
+        c `pBind` (\x ->
+        sequence cs `pBind` (\xs ->
+        pReturn (x:xs)));
+    ;
+
+/**
+ * The parser {@code {@link count@} n p@} parses {@code n@} occurrences of {@code p@}. If {@code n <= 0@},
+ * the parser returns the empty list {@code []@}, otherwise it returns a list of {@code n@} values returned
+ * by applications of {@code p@}.
+ */
+count :: Int -> GenParser tok st a -> GenParser tok st [a];
+public count !n p =
+    if n <= 0 then
+        pReturn []
+    else
+        sequence (replicate n p);
+
+//      chainr,chainl :: GenParser tok st a -> GenParser tok st (a -> a -> a) -> a -> GenParser tok st a
+//      chainr p op x       = chainr1 p op <|> return x
+//      chainl p op x       = chainl1 p op <|> return x
+
+/**
+ * The parser {@code {@link chainRight@} p op x@} parses {@em zero@} or more occurrences of {@code p@},
+ * separated by {@code op@}, and returns a value obtained by {@em right@}-associative applications
+ * of the function returned by {@code op@} to the values returned by {@code p@}. If there are zero
+ * occurrences of {@code p@}, the value {@code x@} is returned.
+ * 
+ * @see chainRight1, chainLeft
+ */
+/* @implementation this is Parsec's "chainr" */ 
+chainRight :: GenParser tok st a -> GenParser tok st (a -> a -> a) -> a -> GenParser tok st a;
+public chainRight p op x = chainRight1 p op `pOr` pReturn x;
+
+/**
+ * The parser {@code {@link chainLeft@} p op x@} parses {@em zero@} or more occurrences of {@code p@},
+ * separated by {@code op@}, and returns a value obtained by {@em left@}-associative applications
+ * of the function returned by {@code op@} to the values returned by {@code p@}. If there are zero
+ * occurrences of {@code p@}, the value {@code x@} is returned.
+ * 
+ * @see chainLeft1, chainRight
+ */
+/* @implementation this is Parsec's "chainl" */ 
+chainLeft :: GenParser tok st a -> GenParser tok st (a -> a -> a) -> a -> GenParser tok st a;
+public chainLeft p op x = chainLeft1 p op `pOr` pReturn x;
+
+//      chainr1,chainl1 :: GenParser tok st a -> GenParser tok st (a -> a -> a) -> GenParser tok st a
+//      chainl1 p op        = do{ x <- p; rest x }
+//                          where
+//                            rest x    = do{ f <- op
+//                                          ; y <- p
+//                                          ; rest (f x y)
+//                                          }
+//                                      <|> return x
+
+/**
+ * The parser {@code {@link chainLeft1@} p op@} parses {@em one@} or more occurrences of {@code p@},
+ * separated by {@code op@}, and returns a value obtained by {@em left@}-associative applications
+ * of the function returned by {@code op@} to the values returned by {@code p@}.
+ * 
+ * {@code {@link chainLeft1@}@} is useful for eliminating left recursion which typically occurs in expression
+ * grammars. For example:
+ * {@code
+ * expr   = term   `{@link chainLeft1@}` mulop;
+ * term   = factor `{@link chainLeft1@}` addop;
+ * factor = ({@link between@} (char '(') (char ')') expr) `pOr`
+ *          ({@link many1@} digit `pBind` (\digits ->
+ *           pReturn $ stringToInt $ String.fromList digits));
+ * 
+ * mulop  = (char '*' `pSeq` pReturn multiply) `pOr`
+ *          (char '/' `pSeq` pReturn divide);
+ * addop  = (char '+' `pSeq` pReturn add) `pOr`
+ *          (char '-' `pSeq` pReturn subtract);
+ * @}
+ * 
+ * @see chainLeft, chainRight1
+ */
+/* @implementation this is Parsec's "chainl1" */ 
+chainLeft1 :: GenParser tok st a -> GenParser tok st (a -> a -> a) -> GenParser tok st a;
+public chainLeft1 p op = 
+    let
+        rest x = 
+            (
+                op `pBind` (\f ->
+                p `pBind` (\y ->
+                rest (f x y)))
+            )
+            `pOr` pReturn x;
+    in
+        p `pBind` rest;
+                                
+//      chainr1 p op        = scan
+//                          where
+//                            scan      = do{ x <- p; rest x }
+//                            
+//                            rest x    = do{ f <- op
+//                                          ; y <- scan
+//                                          ; return (f x y)
+//                                          }
+//                                      <|> return x
+
+/**
+ * The parser {@code {@link chainRight1@} p op@} parses {@em one@} or more occurrences of {@code p@},
+ * separated by {@code op@}, and returns a value obtained by {@em right@}-associative applications
+ * of the function returned by {@code op@} to the values returned by {@code p@}.
+ * 
+ * @see chainRight, chainLeft1
+ */
+/* @implementation this is Parsec's "chainr1" */ 
+chainRight1 :: GenParser tok st a -> GenParser tok st (a -> a -> a) -> GenParser tok st a;
+public chainRight1 p op = 
+    let
+        scan = p `pBind` rest;
+                      
+        rest x = 
+            (
+                op `pBind` (\f ->
+                scan `pBind` (\y ->
+                pReturn (f x y)))
+            )
+            `pOr` (pReturn x);
+    in
+        scan;
+
+//      -----------------------------------------------------------
+//      -- Tricky combinators
+//      -----------------------------------------------------------
+//      anyToken :: Show tok => GenParser tok st tok
+//      anyToken            = tokenPrim show (\pos tok toks -> pos) Just
+
+/**
+ * The parser {@code {@link anyToken@} showTok@} accepts any kind of token (that can
+ * be shown using {@code showTok@}), and returns the accepted token.
+ */
+anyToken :: (tok -> String) -> GenParser tok st tok;
+public anyToken show = tokenPrim show (\pos tok toks -> pos) Just;
+
+//      instance Show Char where
+//          show = showChar;
+//          ;
+      
+//      eof :: Show tok => GenParser tok st ()
+//      eof                 = notFollowedBy anyToken <?> "end of input"   
+
+/**
+ * A parser that only succeeds at the end of the input.
+ */
+eof :: GenParser tok st ();
+public eof = notFollowedBy (anyToken (\tok -> "a token")) `label` "end of input";
+
+//      notFollowedBy :: Show tok => GenParser tok st tok -> GenParser tok st ()   
+//      notFollowedBy p     = try (do{ c <- p; unexpected (show [c]) }
+//                                 <|> return ()
+//                                )
+
+/**
+ * {@summary
+ * The parser {@code {@link notFollowedBy@} p@} only succeeds when parser {@code p@} fails.
+ * This parser does not consume any input.
+ * @}
+ * 
+ * This parser can be used to implement the {@em longest match@} rule. For example, to recognize
+ * the keyword "let" but not the identifiers "lets" or "let3", the parser can be written as:
+ * {@code
+ * keywordLet = {@link try@} ({@link exactString@} (String.toList "let") `pSeq` {@link notFollowedBy@} {@link alphaNum@});
+ * @}
+ */
+notFollowedBy :: GenParser tok st a -> GenParser tok st ();
+public notFollowedBy p = 
+    try (
+        p `pBind` (\tok -> unexpected "unexpected token")
+        `pOr`
+        pReturn ()
+    );
+
+
+//      manyTill :: GenParser tok st a -> GenParser tok st end -> GenParser tok st [a]
+//      manyTill p end      = scan
+//                          where
+//                            scan  = do{ end; return [] }
+//                                  <|>
+//                                    do{ x <- p; xs <- scan; return (x:xs) }
+
+//-----------------------------------------------------------
+//-- Another parser unfolded for space:
+//-- if manyTill is not defined as a primitive,
+//-- it will overflow the stack on large inputs
+//-----------------------------------------------------------    
+
+/**
+ * {@summary
+ * The parser {@code {@link manyTill@} p end@} applies parser {@code p@} {@em zero@} or more times until parser
+ * {@code end@} succeeds. It returns the list of values returned by applications of {@code p@}.
+ * @}
+ * 
+ * {@summary
+ * This parser combinator is an optimized implementation of the following specification:
+ * {@code
+ * {@link manyTill@} p end =
+ *     (end `pSeq` pReturn []) `pOr`
+ *     (p `pBind` (\x ->
+ *      {@link manyTill@} p end `pBind` (\xs ->
+ *      pReturn (x:xs)
+ *     )));
+ * @}
+ * @}
+ * 
+ * An example for parsing comments:
+ * {@code
+ * xmlComment =
+ *     {@link exactString@} (String.toList "<!--") `pSeq`
+ *     {@link manyTill@} {@link anyChar@} ({@link try@} (exactString (String.toList "-->")));
+ * @}
+ */
+manyTill :: GenParser tok st a -> GenParser tok st end -> GenParser tok st [a];
+public manyTill p end =
+    manyTillAccum Prelude.Cons p end `pBind` (\xs ->
+    pReturn (reverse xs));
+
+manyTillAccum :: (a -> [a] -> [a]) -> GenParser tok st a -> GenParser tok st end -> GenParser tok st [a];
+manyTillAccum accum parser end =
+    let
+        parserp = parser.Parser.parseFunction;
+        endp = end.Parser.parseFunction;
+    in
+        Parser (\state ->
+            let
+                walk !xs !endConsumed parserConsumed =
+                    // Ensure that the most common case (consuming body and continuing) is the topmost branch.
+                    case endConsumed of
+                    Empty reply1 ->
+                        case reply1 of
+                        Error _ ->
+                            case parserConsumed of
+                            Consumed reply2 ->
+                                case reply2 of
+                                Ok x statePrime _ ->
+                                    walk (accum x xs) (endp statePrime) (parserp statePrime);
+                                Error err2 ->
+                                    // If 'parser' consumes input and fails, return its error only, corresponding to 'pOr' behaviour.
+                                    Error err2;
+                                ;
+                            Empty reply2 ->
+                                case reply2 of
+                                Error err2 ->
+                                    // If 'parser' and 'end' fail without consuming input, merge errors, corresponding to 'pOr' behaviour.
+                                    mergeErrorReply reply1.Error.err (Error err2);
+                                Ok _ _ _ ->
+                                    error "Combinator 'manyTill' is applied to a parser that accepts an empty string.";
+                                ;
+                            ;
+                        Ok _ statePrime err ->
+                            // If 'end' succeeds, we are done.
+                            Ok xs statePrime err;
+                        ;
+                    Consumed reply1 ->
+                        case reply1 of
+                        Ok _ statePrime err ->
+                            // If 'end' succeeds, we are done.
+                            Ok xs statePrime err;
+                        Error err ->
+                            // If 'end' consumes input and fails, return its error only, corresponding to 'pOr' behaviour.
+                            Error err;
+                        ;
+                    ;
+            in
+                case endp state of
+                Empty reply1 ->
+                    case reply1 of
+                    Error _ ->
+                        case parserp state of
+                        Consumed reply2 ->
+                            Consumed (walk [] (Empty reply1) (Consumed reply2));
+                        Empty reply2 ->
+                            case reply2 of
+                            Error err2 ->
+                                // If 'parser' and 'end' fail without consuming input, merge errors.
+                                Empty (mergeErrorReply reply1.Error.err (Error err2));
+                            Ok x statePrime err2 ->
+                                error "Combinator 'manyTill' is applied to a parser that accepts an empty string.";
+                            ;
+                        ;
+                    Ok _ statePrime err ->
+                        // 'pSeq' would merge the errors of 'end' and 'pReturn []'; however, since
+                        // 'pReturn []' returns no error messages, no merging needs to be done here.
+                        Empty (Ok [] statePrime err);
+                    ;
+                Consumed reply1 ->
+                    case reply1 of
+                    Ok _ statePrime err ->
+                        Consumed (Ok [] statePrime err);
+                    Error err ->
+                        Consumed (Error err);
+                    ;
+        );
+
+/**
+ * {@summary
+ * The parser {@code {@link manyUntil@} p end@} applies parser {@code p@} {@em zero@} or more times until either
+ * 1) the parser {@code end@} would succeed if applied on the remaining input, or
+ * 2) the end of the input is reached.
+ * It returns the list of values returned by applications of {@code p@}.
+ * @}
+ * 
+ * {@summary
+ * This parser combinator is exactly the same as:
+ * {@code
+ * {@link manyUntil@} p end =
+ *     {@link many@} (({@link notFollowedBy@} end) `pSeq` p)
+ * @}
+ * @}
+ */
+manyUntil :: GenParser tok st a -> GenParser tok st end -> GenParser tok st [a];
+public manyUntil p end =
+    many ((notFollowedBy end) `pSeq` p);
+    
+//      lookAhead :: GenParser tok st a -> GenParser tok st a
+//      lookAhead p         = do{ state <- getParserState
+//                              ; x <- p
+//                              ; setParserState state
+//                              ; return x
+//                              }
+
+/**
+ * The parser {@code {@link lookAhead@} p@} implements the functionality of lookahead: it applies parser {@code p@} and
+ * captures its return value {@em without changing the parser's state and without consuming input@}.  
+ */
+lookAhead :: GenParser tok st a -> GenParser tok st a;
+public lookAhead p = 
+    getParserState `pBind` (\state ->
+    p `pBind` (\x ->
+    setParserState state `pSeq`
+    pReturn x));        
+    
+
+/* ***************************************************************************
+ * 
+ * File: ParsecChar.cal
+ * 
+ * ***************************************************************************/
+
+isAlphaNum = isLetterOrDigit;
+isAlpha = isLetter;
+
+isOctDigit :: Char -> Boolean;
+isOctDigit !c = c >= '0' && c <= '7';
+
+isHexDigit :: Char -> Boolean;
+isHexDigit !c = c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+
+//        -----------------------------------------------------------
+//        -- Type of character parsers
+//        -----------------------------------------------------------
+//        type CharParser st a    = GenParser Char st a
+
+//        -----------------------------------------------------------
+//        -- Character parsers
+//        -----------------------------------------------------------
+//        oneOf, noneOf :: [Char] -> CharParser st Char
+//        oneOf cs            = satisfy (\c -> elem c cs)
+//        noneOf cs           = satisfy (\c -> not (elem c cs))
+
+/**
+ * The parser {@code oneOf cs@} succeeds if the current character is in the supplied list of characters
+ * {@code cs@}, and returns the parsed character.
+ * 
+ * @see satisfy
+ */
+oneOf :: [Char] -> GenParser Char st Char;
+public oneOf cs = satisfy (\c -> isElem c cs);
+
+/**
+ * The parser {@code noneOf cs@} succeeds if the current character is {@em not@} in the supplied list of characters
+ * {@code cs@}, and returns the parsed character.
+ * 
+ * @see satisfy
+ */
+noneOf :: [Char] -> GenParser Char st Char;
+public noneOf cs = satisfy (\c -> not (isElem c cs));
+
+//        spaces :: CharParser st ()
+//        spaces              = skipMany space        <?> "white space"          
+
+/**
+ * A parser that parses {@em zero@} or more whitespace characters and discards the result.
+ * 
+ * @see skipMany, space, spaces1
+ */
+spaces :: GenParser Char st ();
+public spaces = skipMany space `label` "white space";
+
+/**
+ * A parser that parses {@em one@} or more whitespace characters and discards the result.
+ * 
+ * @see skipMany1, space, spaces
+ */
+spaces1 :: GenParser Char st ();
+public spaces1 = skipMany1 space `label` "white space";
+
+//        space, newline, tab :: CharParser st Char
+//        space               = satisfy (isSpace)     <?> "space"
+//        newline             = char '\n'             <?> "new-line"
+//        tab                 = char '\t'             <?> "tab"
+
+/**
+ * A parser that parses a whitespace character (according to {@link Char.isWhitespace@}), and returns the
+ * parsed character.
+ */
+space :: GenParser Char st Char;
+public space = satisfy (Char.isWhitespace) `label` "space";
+//        public space               = satisfy (Char.isWhitespace) `label` "space";
+
+/**
+ * A parser that parses a newline character ({@code '\n'@}), and returns the parsed character.
+ * 
+ * Note this parser does {@em not@} accept other variations on the concept of "newline", e.g.
+ * {@code '\r'@} and {@code "\r\n"@}.
+ */
+newline :: GenParser Char st Char;
+public newline = char '\n' `label` "new-line";
+
+/**
+ * A parser that parses a tab character ({@code '\t'@}), and returns the parsed character.
+ */
+tab :: GenParser Char st Char;
+public tab = char '\t' `label` "tab";
+
+//        upper, lower, alphaNum, letter, digit, hexDigit, octDigit :: CharParser st Char
+//        upper               = satisfy (isUpper)     <?> "uppercase letter"
+//        lower               = satisfy (isLower)     <?> "lowercase letter"
+//        alphaNum            = satisfy (isAlphaNum)  <?> "letter or digit"
+//        letter              = satisfy (isAlpha)     <?> "letter"
+//        digit               = satisfy (isDigit)     <?> "digit"
+//        hexDigit            = satisfy (isHexDigit)  <?> "hexadecimal digit"
+//        octDigit            = satisfy (isOctDigit)  <?> "octal digit"
+
+/**
+ * A parser that parses an uppercase letter (according to {@link Char.isUpperCase@}) and returns the parsed character.
+ */
+upper :: GenParser Char st Char;
+public upper = satisfy (isUpperCase) `label` "uppercase letter";
+
+/**
+ * A parser that parses a lowercase letter (according to {@link Char.isLowerCase@}) and returns the parsed character.
+ */
+lower :: GenParser Char st Char;
+public lower = satisfy (isLowerCase) `label` "lowercase letter";
+
+/**
+ * A parser that parses a letter or digit (according to {@link Char.isLetterOrDigit@}) and returns the parsed character.
+ */
+alphaNum :: GenParser Char st Char;
+public alphaNum = satisfy (isAlphaNum) `label` "letter or digit";
+
+/**
+ * A parser that parses a letter (according to {@link Char.isLetter@}) and returns the parsed character.
+ */
+letter :: GenParser Char st Char;
+public letter = satisfy (isAlpha) `label` "letter";
+
+/**
+ * A parser that parses a digit (according to {@link Char.isDigit@}) and returns the parsed character.
+ */
+digit :: GenParser Char st Char;
+public digit = satisfy (isDigit) `label` "digit";
+
+/**
+ * A parser that parses a hexadecimal digit (a {@link digit@} or a letter between {@code 'a'@} and {@code 'f'@} or
+ * {@code 'A'@} and {@code 'F'@}), and returns the parsed character.
+ */
+hexDigit :: GenParser Char st Char;
+public hexDigit = satisfy (isHexDigit) `label` "hexadecimal digit";
+
+/**
+ * A parser that parses an octal digit (a character between {@code '0'@} and {@code '7'@}), and returns the parsed
+ * character.
+ */
+octDigit :: GenParser Char st Char;
+public octDigit = satisfy (isOctDigit) `label` "octal digit";
+
+//        char :: Char -> CharParser st Char
+//        char :: Char -> (State Char st -> (Reply Consumed Char st Char))
+//        char c              = satisfy (==c)  <?> show [c]
+
+/**
+ * The parser {@code char c@} parses a single character {@code c@}, and returns the parsed character (i.e. {@code c@}).
+ */
+char :: Char -> GenParser Char st Char;
+public char c = satisfy (equals c) `label` String.fromChar c;
+
+/**
+ * The parser {@code {@link caseChar@} c@} parses a single character {@code x@} where {@code ({@link toLowerCase@} x) == c@},
+ * and returns the parsed character (i.e. {@code x@}).
+ */
+caseChar :: Char -> GenParser Char st Char;
+public caseChar c = satisfy (equals c # toLowerCase) `label` String.fromChar c;
+
+//        anyChar :: CharParser st Char
+//        anyChar             = satisfy (const True)
+
+/**
+ * A parser that succeeds for any character and returns the parsed character.
+ */
+anyChar :: GenParser Char st Char;
+public anyChar = satisfy (const True);
+
+//        -----------------------------------------------------------
+//        -- Primitive character parsers
+//        -----------------------------------------------------------
+//        satisfy :: (Char -> Bool) -> CharParser st Char
+//        satisfy f           = tokenPrim (\c -> show [c])
+//                                        (\pos c cs -> updatePosChar pos c) 
+//                                        (\c -> if f c then Just c else Nothing)
+
+/**
+ * The parser {@code satisfy f@} succeeds for any character for which the supplied predicate
+ * {@code f@} returns {@link True@}, and returns the parsed character.
+ * 
+ * For example, {@link oneOf@} can be defined as:
+ * {@code
+ * oneOf = satisfy (\c -> {@link isElem@} c cs);
+ * @}
+ */
+satisfy :: (Char -> Boolean) -> GenParser Char st Char;
+public satisfy f = satisfyInternal f;
+
+//        string :: String -> CharParser st String
+//        string s            = tokens show updatePosString s
+
+/**
+ * The parser {@code {@link caseString@} s@} parses a sequence of characters {@code chars@} satisfying
+ * {@code ({@link map@} {@link toLowerCase@} chars) == s@}, and returns the parsed characters in a list.
+ */
+caseString :: [Char] -> GenParser Char st [Char];
+public caseString s = tokensCompare fromList updatePosString (\x y -> x == (toLowerCase y)) s;
+
+/**
+ * The parser {@code {@link caseStringU@} s@} parses a sequence of characters {@code chars@} satisfying
+ * {@code ({@link map@} {@link toUpperCase@} chars) == s@}, and returns the parsed characters in a list.
+ */
+caseStringU :: [Char] -> GenParser Char st [Char];
+public caseStringU s = tokensCompare fromList updatePosString (\x y -> x == (toUpperCase y)) s;
+
+/**
+ * The parser {@code {@link exactString@} s@} parses a sequence of characters given by {@code s@}, and returns
+ * the parsed characters in a list.
+ */
+/* @implementation this is Parsec's "string" */
+exactString :: [Char] -> GenParser Char st [Char];
+public exactString s = tokens fromList updatePosString s;

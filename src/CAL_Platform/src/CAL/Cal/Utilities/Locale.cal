@@ -1,0 +1,995 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * Locale.cal
+ * Creation date: May 31, 2006.
+ * By: Joseph Wong
+ */
+
+/**
+ * This module defines the {@link typeConstructor=Locale@} type, and provides functions for
+ * working with locale values, accessing locale properties of the system, and performing
+ * locale-sensitive string comparisons through the use of {@link Collator@} and {@link CollationKey@}.
+ * 
+ * @author Joseph Wong
+ */
+module Cal.Utilities.Locale;
+
+import Cal.Core.Prelude using
+    function = compare, input, output, seq, eager;
+    dataConstructor = False, True, LT, EQ, GT;
+    typeConstructor = Boolean, Int, String, Ordering, JList;
+    typeClass = Eq, Ord, Enum, Inputable, Outputable;
+    ;
+
+import Cal.Core.Debug using
+    typeClass = Show;
+    ;
+
+import Cal.Core.System using
+    function = executionContextProperties;
+    typeConstructor = ExecutionContextProperties;
+    ;
+
+/**
+ * A {@link typeConstructor=Locale@} can represent:
+ * {@unorderedList
+ * {@item a language,@}
+ * {@item a language in a particular country/region, or@}
+ * {@item a language in a particular country/region, in a particular variant.@}
+ * @}
+ * 
+ * The language is to be specified using an ISO 639 code:
+ * {@url http://www.loc.gov/standards/iso639-2/langcodes.html@}
+ * 
+ * The country/region is to be specified using an ISO 3166 code:
+ * {@url http://www.iso.org/iso/en/prods-services/iso3166ma/02iso-3166-code-lists/list-en1.html@}
+ * 
+ * The variant is an OS/vendor specific code that can be any string.
+ * 
+ * This is a CAL foreign type corresponding to the Java type {@code java.util.Locale@}.
+ */
+data foreign unsafe import jvm public "java.util.Locale"
+    public Locale deriving Eq, Inputable, Outputable;
+
+
+////
+/// Constructors
+//
+
+/**
+ * Constructs a {@link typeConstructor=Locale@} from a two-letter ISO 639 language code.
+ * 
+ * Note that ISO 639 is not a stable standard, and for compatibility reasons the language code
+ * returned by the {@link language@} function may correspond to an {@em older@} code for the language.
+ * 
+ * ISO 639 standard: {@url http://www.loc.gov/standards/iso639-2/langcodes.html@}
+ * 
+ * @arg language a two-letter ISO 639 language code, in lowercase.
+ * @return a locale representing the language.
+ */
+foreign unsafe import jvm "constructor"
+    public makeLocaleFromLanguage :: String -> Locale;
+
+/**
+ * Constructs a {@link typeConstructor=Locale@} from a two-letter ISO 639 language code and a two-letter
+ * ISO 3166 country/region code.
+ * 
+ * Note that the ISO standards are not stable, and for compatibility reasons the language code
+ * returned by the {@link language@} function may correspond to an {@em older@} code for the language.
+ * 
+ * ISO 639 standard: {@url http://www.loc.gov/standards/iso639-2/langcodes.html@}
+ * 
+ * ISO 3166 standard: {@url http://www.iso.org/iso/en/prods-services/iso3166ma/02iso-3166-code-lists/list-en1.html@}
+ * 
+ * @arg language a two-letter ISO 639 language code, in lowercase.
+ * @arg country a two-letter ISO 3166 country/region code, in uppercase.
+ * @return a locale representing the language and country/region.
+ */
+foreign unsafe import jvm "constructor"
+    public makeLocaleFromLanguageCountry :: String -> String -> Locale;
+
+/**
+ * Constructs a {@link typeConstructor=Locale@} from a two-letter ISO 639 language code, a two-letter
+ * ISO 3166 country/region code, and a variant.
+ * 
+ * Note that the ISO standards are not stable, and for compatibility reasons the language code
+ * returned by the {@link language@} function may correspond to an {@em older@} code for the language.
+ * 
+ * ISO 639 standard: {@url http://www.loc.gov/standards/iso639-2/langcodes.html@}
+ * 
+ * ISO 3166 standard: {@url http://www.iso.org/iso/en/prods-services/iso3166ma/02iso-3166-code-lists/list-en1.html@}
+ * 
+ * @arg language a two-letter ISO 639 language code, in lowercase.
+ * @arg country a two-letter ISO 3166 country/region code, in uppercase.
+ * @arg variant an OS/vendor specific code, which can be any string.
+ * @return a locale representing the language, country/region and variant.
+ */
+foreign unsafe import jvm "constructor"
+    public makeLocaleFromLanguageCountryVariant :: String -> String -> String -> Locale;
+
+
+////
+/// Accessors
+//
+
+/**
+ * Returns the language code for the locale, which can be an empty string if no language
+ * is specified by the locale (for example in the case of the {@link invariantLocale@}).
+ *
+ * Note that ISO 639 is not a stable standard, and for compatibility reasons the language code
+ * returned by this function may correspond to an {@em older@} code for the language. Therefore,
+ * to check the language of a locale, do not use a simply string comparison:
+ * {@code
+ * // incorrect way of comparing locale languages
+ * language locale == "he"
+ * @}
+ * but rather do this:
+ * {@code
+ * // the correct way of comparing locale languages
+ * language locale == language ({@link makeLocaleFromLanguage@} "he")
+ * @}
+ * 
+ * @arg locale the locale to query.
+ * @return the language code for the locale, which can be an empty string.
+ * 
+ * @see iso3Language, displayLanguageInLocale, displayLanguageInCurrentLocale
+ */
+foreign unsafe import jvm "method getLanguage"
+    public language :: Locale -> String;
+
+/**
+ * Returns the country/region code for the locale, which can be an empty string if no country/region
+ * is specified by the locale.
+ * 
+ * @arg locale the locale to query.
+ * @return the country/region code for the locale, which can be an empty string.
+ * 
+ * @see iso3Country, displayCountryInLocale, displayCountryInCurrentLocale
+ */
+foreign unsafe import jvm "method getCountry"
+    public country :: Locale -> String;
+
+/**
+ * Returns the variant for the locale, which can be an empty string if no variant is specified
+ * by the locale.
+ * 
+ * @arg locale the locale to query.
+ * @return the variant for the locale, which can be an empty string.
+ * 
+ * @see displayVariantInLocale, displayVariantInCurrentLocale
+ */
+foreign unsafe import jvm "method getVariant"
+    public variant :: Locale -> String;
+
+
+////
+/// ISO 3-letter abbreviations
+//
+
+/**
+ * Returns a three-letter abbreviation for the locale's language. If the locale does not specify a language
+ * (e.g. the {@link invariantLocale@}), an empty string is returned. Otherwise, the returned string is a lowercase
+ * ISO 639-2/T language code.
+ * 
+ * ISO 639 standard: {@url http://www.loc.gov/standards/iso639-2/langcodes.html@}
+ * 
+ * @arg locale the locale to query.
+ * @return the language code for the locale, which can be an empty string.
+ * 
+ * @see language, displayLanguageInLocale, displayLanguageInCurrentLocale
+ */
+foreign unsafe import jvm "method getISO3Language"
+    public iso3Language :: Locale -> String;
+
+/**
+ * Returns a three-letter abbreviation for the locale's country/region. If the locale does not specify a country/region,
+ * an empty string is returned. Otherwise, the returned string is an uppercase ISO 3166 alpha-3 country/region code.
+ * 
+ * @arg locale the locale to query.
+ * @return the country/region code for the locale, which can be an empty string.
+ * 
+ * @see country, displayCountryInLocale, displayCountryInCurrentLocale
+ */
+foreign unsafe import jvm "method getISO3Country"
+    public iso3Country :: Locale -> String;
+
+
+////
+/// String representation
+//
+
+/**
+ * Constructs a locale based on its canonical string representation: <language>[_<country/region>[_<variant>]]
+ * 
+ * @arg canonicalString the locale's canonical string representation.
+ * @return the corresponding locale.
+ * 
+ * @see canonicalString
+ */
+foreign unsafe import jvm "static method org.openquark.cal.services.LocaleUtilities.localeFromCanonicalString"
+    public fromCanonicalString :: String -> Locale;
+
+/**
+ * Returns the canonical string representation of a given locale: <language>[_<country/region>[_<variant>]]
+ * 
+ * @arg locale the locale.
+ * @return the canonical string representation of the locale.
+ * 
+ * @see fromCanonicalString
+ */
+foreign unsafe import jvm "static method org.openquark.cal.services.LocaleUtilities.localeToCanonicalString"
+    public canonicalString :: Locale -> String;
+
+/**
+ * Returns a string representation of the locale for the purpose of debugging.
+ * For the {@link invariantLocale@}, the string "(invariantLocale)" is returned. For other locales,
+ * the returned string is the canonical form returned by {@link canonicalString@}.
+ * 
+ * @arg locale the locale whose string representation is to be returned.
+ * @return a string representation of the locale.
+ */
+showLocale :: Locale -> String;
+private showLocale !locale =
+    if locale == invariantLocale then
+        "(invariantLocale)"
+    else
+        canonicalString locale;
+
+instance Show Locale where
+    /**
+     * Returns a string representation of the locale for the purpose of debugging.
+     * For the {@link invariantLocale@}, the string "(invariantLocale)" is returned. For other locales,
+     * the returned string is the canonical form returned by {@link canonicalString@}.
+     * 
+     * @arg locale the locale whose string representation is to be returned.
+     * @return a string representation of the locale.
+     */
+    show = showLocale;
+    ;
+
+
+////
+/// Localized names of locales, languages, countries and variants
+//
+
+/**
+ * Returns a display name for the locale, localized in the given display locale.
+ * 
+ * @arg locale the locale whose display name is to be returned.
+ * @arg displayLocale the locale in which the name should be localized.
+ * @return the display name of {@code locale@} localized in {@code displayLocale@}.
+ * 
+ * @see displayLanguageInLocale, displayCountryInLocale, displayVariantInLocale
+ */
+foreign unsafe import jvm "method getDisplayName"
+    public displayNameInLocale :: Locale -> Locale -> String;
+
+/**
+ * Returns a display name for the locale's language, localized in the given display locale.
+ * 
+ * @arg locale the locale whose language's display name is to be returned.
+ * @arg displayLocale the locale in which the name should be localized.
+ * @return the display name of {@code locale@}'s language localized in {@code displayLocale@}.
+ * 
+ * @see language, iso3Language, displayLanguageInCurrentLocale
+ */
+foreign unsafe import jvm "method getDisplayLanguage"
+    public displayLanguageInLocale :: Locale -> Locale -> String;
+
+/**
+ * Returns a display name for the locale's country/region, localized in the given display locale.
+ * 
+ * @arg locale the locale whose country/region's display name is to be returned.
+ * @arg displayLocale the locale in which the name should be localized.
+ * @return the display name of {@code locale@}'s country/region localized in {@code displayLocale@}.
+ * 
+ * @see country, iso3Country, displayCountryInCurrentLocale
+ */
+foreign unsafe import jvm "method getDisplayCountry"
+    public displayCountryInLocale :: Locale -> Locale -> String;
+
+/**
+ * Returns a display name for the locale's variant, localized in the given display locale.
+ * 
+ * @arg locale the locale whose variant's display name is to be returned.
+ * @arg displayLocale the locale in which the name should be localized.
+ * @return the display name of {@code locale@}'s variant localized in {@code displayLocale@}.
+ * 
+ * @see variant, displayVariantInCurrentLocale
+ */
+foreign unsafe import jvm "method getDisplayVariant"
+    public displayVariantInLocale :: Locale -> Locale -> String;
+
+/**
+ * Returns a display name for the locale, localized in the current locale.
+ * 
+ * @arg locale the locale whose display name is to be returned.
+ * @return the display name of {@code locale@} localized in {@link currentLocale@}.
+ * 
+ * @see displayNameInLocale, displayLanguageInCurrentLocale, displayCountryInCurrentLocale, displayVariantInCurrentLocale
+ */
+displayNameInCurrentLocale :: Locale -> String;
+public displayNameInCurrentLocale !locale = displayNameInLocale locale currentLocale;
+
+/**
+ * Returns a display name for the locale's language, localized in the current locale.
+ * 
+ * @arg locale the locale whose language's display name is to be returned.
+ * @return the display name of {@code locale@}'s language localized in {@link currentLocale@}.
+ * 
+ * @see language, iso3Language, displayLanguageInLocale
+ */
+displayLanguageInCurrentLocale :: Locale -> String;
+public displayLanguageInCurrentLocale !locale = displayLanguageInLocale locale currentLocale;
+
+/**
+ * Returns a display name for the locale's country/region, localized in the current locale.
+ * 
+ * @arg locale the locale whose country/region's display name is to be returned.
+ * @return the display name of {@code locale@}'s country/region localized in {@code currentLocale@}.
+ * 
+ * @see country, iso3Country, displayCountryInLocale
+ */
+displayCountryInCurrentLocale :: Locale -> String;
+public displayCountryInCurrentLocale !locale = displayCountryInLocale locale currentLocale;
+
+/**
+ * Returns a display name for the locale's variant, localized in the current locale.
+ * 
+ * @arg locale the locale whose variant's display name is to be returned.
+ * @return the display name of {@code locale@}'s variant localized in {@code currentLocale@}.
+ * 
+ * @see variant, displayVariantInLocale
+ */
+displayVariantInCurrentLocale :: Locale -> String;
+public displayVariantInCurrentLocale !locale = displayVariantInLocale locale currentLocale;
+
+/**
+ * A foreign type for Java's {@code Object[]@} array tupe.
+ */
+data foreign unsafe import jvm private "java.lang.Object[]"
+    private JObjectArray;
+
+/**
+ * Converts a {@link JObjectArray@} to a {@link JList@}.
+ * 
+ * @arg objectArray the array of Java objects.
+ * @return the corresponding list.
+ */
+foreign unsafe import jvm "static method java.util.Arrays.asList"
+    private jArrayToList :: JObjectArray -> JList;
+
+/**
+ * Returns an array of all installed locales for the {@code java.util.Locale@} class.
+ * 
+ * @return an array of locales.
+ */
+foreign unsafe import jvm "static method java.util.Locale.getAvailableLocales"
+    private jLocaleGetAvailableLocales :: JObjectArray;
+
+/**
+ * Returns a list of all locales that are supported by the various display name functions.
+ * 
+ * @return a list of all supported display locales. 
+ */
+availableDisplayLocales :: [Locale];
+public availableDisplayLocales = (input $ output $ jArrayToList jLocaleGetAvailableLocales) :: [Locale];
+
+////
+/// Locale-valued properties of the system
+//
+
+/**
+ * Returns the locale defined in the given set of properties of an execution context.
+ * 
+ * @arg executionContextProperties the set of system properties.
+ * @return the locale defined in the system properties.
+ */
+foreign unsafe import jvm "method getLocale"
+    private jGetLocale :: ExecutionContextProperties -> Locale;
+
+/**
+ * Returns the locale associated with the current execution context. This is a constant for
+ * a particular execution context.
+ * 
+ * @return the locale associated with the current execution context.
+ */
+currentLocale :: Locale;
+public currentLocale = jGetLocale executionContextProperties;
+
+/**
+ * Returns the default locale of the underlying virtual machine. This may be different from the
+ * {@link currentLocale@}.
+ * 
+ * @return the default locale.
+ * 
+ * @see currentLocale
+ */
+// TODO-JW rename this to systemLocale? machineLocale? runtimeLocale? (javaLocale? jvmLocale?)
+foreign unsafe import jvm "static method java.util.Locale.getDefault"
+    public defaultLocale :: Locale;
+
+
+////
+/// Locale constants
+//
+
+/**
+ * The locale constant for the {@em invariant locale@}, which is treated by the CAL platform
+ * as the final fallback locale for the lookup of localized resources.
+ * 
+ * The invariant locale has the canonical string representation of the empty string (""), and
+ * is not associated with any language or country.
+ */
+/*
+ * @implementation
+ * 
+ * While Java does not have a built-in notion of the invariant locale, other systems do, including:
+ * {@unorderedList
+ *  {@item .NET's CultureInfo.InvariantCulture@}
+ *  {@item WinXP's LOCALE_INVARIANT@}
+ *  {@item the C locale/POSIX locale (e.g. ICU: {@url http://icu.sourceforge.net/userguide/locale.html#canonicalization@})@}
+ * @}
+ */
+foreign unsafe import jvm "static field org.openquark.cal.services.LocaleUtilities.INVARIANT_LOCALE"
+    public invariantLocale :: Locale;
+
+/**
+ * The locale "en".
+ */
+foreign unsafe import jvm "static field java.util.Locale.ENGLISH"
+    public englishLocale :: Locale;
+
+/**
+ * The locale "fr".
+ */
+foreign unsafe import jvm "static field java.util.Locale.FRENCH"
+    public frenchLocale :: Locale;
+
+/**
+ * The locale "de".
+ */
+foreign unsafe import jvm "static field java.util.Locale.GERMAN"
+    public germanLocale :: Locale;
+
+/**
+ * The locale "it".
+ */
+foreign unsafe import jvm "static field java.util.Locale.ITALIAN"
+    public italianLocale :: Locale;
+
+/**
+ * The locale "ja".
+ */
+foreign unsafe import jvm "static field java.util.Locale.JAPANESE"
+    public japaneseLocale :: Locale;
+
+/**
+ * The locale "ko".
+ */
+foreign unsafe import jvm "static field java.util.Locale.KOREAN"
+    public koreanLocale :: Locale;
+
+/**
+ * The locale "zh".
+ */
+foreign unsafe import jvm "static field java.util.Locale.CHINESE"
+    public chineseLocale :: Locale;
+
+/**
+ * The locale "zh_CN".
+ */
+foreign unsafe import jvm "static field java.util.Locale.SIMPLIFIED_CHINESE"
+    public simplifiedChineseLocale :: Locale;
+
+/**
+ * The locale "zh_TW".
+ */
+foreign unsafe import jvm "static field java.util.Locale.TRADITIONAL_CHINESE"
+    public traditionalChineseLocale :: Locale;
+
+/**
+ * The locale "fr_FR".
+ */
+foreign unsafe import jvm "static field java.util.Locale.FRANCE"
+    public franceFrenchLocale :: Locale;
+
+/**
+ * The locale "de_DE".
+ */
+foreign unsafe import jvm "static field java.util.Locale.GERMANY"
+    public germanyGermanLocale :: Locale;
+
+/**
+ * The locale "it_IT".
+ */
+foreign unsafe import jvm "static field java.util.Locale.ITALY"
+    public italyItalianLocale :: Locale;
+
+/**
+ * The locale "ja_JP".
+ */
+foreign unsafe import jvm "static field java.util.Locale.JAPAN"
+    public japanJapaneseLocale :: Locale;
+
+/**
+ * The locale "ko_KR".
+ */
+foreign unsafe import jvm "static field java.util.Locale.KOREA"
+    public koreaKoreanLocale :: Locale;
+
+/**
+ * The locale "zh_CN".
+ */
+foreign unsafe import jvm "static field java.util.Locale.CHINA"
+    public chinaChineseLocale :: Locale;
+
+/**
+ * The locale "zh_TW".
+ */
+foreign unsafe import jvm "static field java.util.Locale.TAIWAN"
+    public taiwanChineseLocale :: Locale;
+
+/**
+ * The locale "en_GB".
+ */
+foreign unsafe import jvm "static field java.util.Locale.UK"
+    public ukEnglishLocale :: Locale;
+
+/**
+ * The locale "en_US".
+ */
+foreign unsafe import jvm "static field java.util.Locale.US"
+    public usEnglishLocale :: Locale;
+
+/**
+ * The locale "en_CA".
+ */
+foreign unsafe import jvm "static field java.util.Locale.CANADA"
+    public canadaEnglishLocale :: Locale;
+
+/**
+ * The locale "fr_CA".
+ */
+foreign unsafe import jvm "static field java.util.Locale.CANADA_FRENCH"
+    public canadaFrenchLocale :: Locale;
+
+
+////
+/// Fallback mechanism
+//
+
+/**
+ * Returns the {@em fallback@} locale of the given locale.
+ * 
+ * The CAL locale fallback mechanism operates by removing the finest level of detail
+ * from a locale:
+ * {@unorderedList
+ * {@item <language>_<country/region>_<variant> -> <language>_<country/region>@}
+ * {@item <language>_<country/region> -> <language>@}
+ * {@item <language> -> {@link invariantLocale@}@}
+ * {@item invariantLocale -> invariantLocale@}
+ * @}
+ * 
+ * @arg locale the locale whose fallback locale is to be returned.
+ * @return the corresponding fallback locale.
+ */
+fallback :: Locale -> Locale;
+public fallback !locale =
+    let
+        lang :: String;
+        lang = language locale;
+        
+        cntry :: String;
+        cntry = country locale;
+        
+        var :: String;
+        var = variant locale;
+    in
+        if var != "" then
+            makeLocaleFromLanguageCountry lang cntry
+        else if cntry != "" then
+            makeLocaleFromLanguage lang
+        else
+            invariantLocale;
+
+
+////
+/// Collation support
+//
+
+/// Collator
+//
+
+/**
+ * A collator's function is to support locale-sensitive string comparisons. Using a collator one can
+ * implement searching and sorting of text in a locale-sensitive manner.
+ */
+/*
+ * @implementation private implementation scope used because underlying Java type is mutable
+ */
+data foreign unsafe import jvm private "java.text.Collator"
+    public Collator deriving Eq;
+
+/**
+ * Constructs a collator for the given locale.
+ * 
+ * @arg locale the desired locale.
+ * @return a collator for the given locale.
+ */
+foreign unsafe import jvm "static method java.text.Collator.getInstance"
+    public makeCollator :: Locale -> Collator;
+
+/**
+ * A collator for the current locale.
+ * 
+ * @return a collator for the current locale.
+ */
+currentLocaleCollator :: Collator;
+public currentLocaleCollator = makeCollator currentLocale;
+
+/**
+ * Returns an array of all installed locales for the {@code java.text.Collator@} class.
+ * 
+ * @return an array of locales.
+ */
+foreign unsafe import jvm "static method java.text.Collator.getAvailableLocales"
+    private jCollatorGetAvailableLocales :: JObjectArray;
+
+/**
+ * Returns a list of all locales that are supported by the various collator functions.
+ * 
+ * @return a list of locales. 
+ */
+availableCollatorLocales :: [Locale];
+public availableCollatorLocales = (input $ output $ jArrayToList jCollatorGetAvailableLocales) :: [Locale];
+
+/// Collator strength
+//
+/**
+ * Represents the {@em strength@} of a {@link Collator@}. This property of a collator determines the level of
+ * difference considered significant in comparisons.
+ */
+data public CollatorStrength =
+    /**
+     * The weakest collator strength. For example, "e" and "f" are considered primary differences
+     * but not "e" and "\u00ea" (e with acute accent).
+     */
+    public CollatorStrengthPrimary |
+    /**
+     * A collator strength that commonly discerns different accented forms, but does not discern case differences.
+     * For example, "e" and "\u00ea" (e with acute accent) are considered secondary differences but not "e" and "E".
+     */
+    public CollatorStrengthSecondary |
+    /**
+     * A collator strength that commonly discerns case differences. For example, "e" and "E" are considered tertiary differences,
+     * but not "\u0001" and "\u0002" (both are control characters).
+     */
+    public CollatorStrengthTertiary |
+    /**
+     * The strongest collator strength. Two strings must be identical for the collator to deem them the same.
+     */
+    public CollatorStrengthIdentical
+    deriving Eq, Show;
+
+/** Java constant for primary collator strength. */
+foreign unsafe import jvm "static field java.text.Collator.PRIMARY"
+    private jCollatorStrengthPrimary :: Int;
+
+/** Java constant for secondary collator strength. */
+foreign unsafe import jvm "static field java.text.Collator.SECONDARY"
+    private jCollatorStrengthSecondary :: Int;
+
+/** Java constant for tertiary collator strength. */
+foreign unsafe import jvm "static field java.text.Collator.TERTIARY"
+    private jCollatorStrengthTertiary :: Int;
+
+/** Java constant for identical collator strength. */
+foreign unsafe import jvm "static field java.text.Collator.IDENTICAL"
+    private jCollatorStrengthIdentical :: Int;
+
+/**
+ * Converts {@link CollatorStrength@} values to Java collator strength constants.
+ */
+collatorStrengthToInt :: CollatorStrength -> Int;
+private collatorStrengthToInt !strength =
+    case strength of
+    CollatorStrengthPrimary   -> jCollatorStrengthPrimary;
+    CollatorStrengthSecondary -> jCollatorStrengthSecondary;
+    CollatorStrengthTertiary  -> jCollatorStrengthTertiary;
+    CollatorStrengthIdentical -> jCollatorStrengthIdentical;
+    ;
+
+/**
+ * Converts Java collator strength constants to {@link CollatorStrength@} values.
+ */
+intToCollatorStrength :: Int -> CollatorStrength;
+private intToCollatorStrength !value =
+    case value of
+    0 /*jCollatorStrengthPrimary*/   -> CollatorStrengthPrimary;
+    1 /*jCollatorStrengthSecondary*/ -> CollatorStrengthSecondary;
+    2 /*jCollatorStrengthTertiary*/  -> CollatorStrengthTertiary;
+    3 /*jCollatorStrengthIdentical*/ -> CollatorStrengthIdentical;
+    ;
+
+/**
+ * Sets the strength of a collator. Not a pure function.
+ */
+foreign unsafe import jvm "method setStrength"
+    private jSetStrength :: Collator -> Int -> ();
+
+/**
+ * Gets the strength of a collator as a Java constant.
+ */
+foreign unsafe import jvm "method getStrength"
+    private jGetStrength :: Collator -> Int;
+
+/**
+ * Constructs a collator for the given locale and with the given collator strength.
+ * 
+ * @arg locale the desired locale.
+ * @arg strength the desired strength.
+ * @return a collator for the given locale and strength.
+ */
+makeCollatorWithStrength :: Locale -> CollatorStrength -> Collator;
+public makeCollatorWithStrength !locale !strength =
+    let
+        collator :: Collator;
+        collator = eager $ makeCollator locale;
+    in
+        jSetStrength collator (collatorStrengthToInt strength)
+        `seq`
+        collator;
+
+/**
+ * Returns the strength of the given collator.
+ * 
+ * @arg collator the collator to query.
+ * @return the strength of the collator.
+ */
+collatorStrength :: Collator -> CollatorStrength;
+public collatorStrength !collator =
+    intToCollatorStrength $ jGetStrength collator;
+
+/// Collator decomposition mode
+//
+/**
+ * Represents the {@em decomposition mode@} of a {@link Collator@}. This property of a collator determines how Unicode composed
+ * characters are handled. The different decomposition modes allow the user to make a speed/completeness tradeoff decision with regards
+ * to collation behavior.
+ */
+data public CollatorDecompositionMode =
+    /**
+     * In this mode, accented characters will not be decomposed for collation. This is the default decomposition
+     * mode for a collator, and provides the fastest collation. However, a collator in this mode will only produce
+     * correct results for texts containing no accents.
+     */
+    public NoDecomposition |
+    /**
+     * In this mode, characters that are canonical variants according to the Unicode standard will be decomposed for collation.
+     * Accented characters are collated properly in this mode.
+     * 
+     * This mode corresponds to Normalization Form D as described in Unicode Technical Report #15:
+     * {@url http://www.unicode.org/unicode/reports/tr15/@}
+     */
+    public CanonicalDecomposition |
+    /**
+     * In this mode, both Unicode canonical variants and Unicode compatibility variants will be decomposed for collation.
+     * 
+     * This is the most complete and the slowest decomposition mode.
+     * 
+     * This mode corresponds to Normalization Form KD as described in Unicode Technical Report #15:
+     * {@url http://www.unicode.org/unicode/reports/tr15/@}
+     */
+    public FullDecomposition
+    deriving Eq, Show;
+
+/** Java constant for no decomposition. */
+foreign unsafe import jvm "static field java.text.Collator.NO_DECOMPOSITION"
+    private jNoDecomposition :: Int;
+
+/** Java constant for canonical decomposition. */
+foreign unsafe import jvm "static field java.text.Collator.CANONICAL_DECOMPOSITION"
+    private jCanonicalDecomposition :: Int;
+
+/** Java constant for full decomposition. */
+foreign unsafe import jvm "static field java.text.Collator.FULL_DECOMPOSITION"
+    private jFullDecomposition :: Int;
+
+/**
+ * Converts {@link CollatorDecompositionMode@} values to Java collator decomposition mode constants.
+ */
+collatorDecompositionModeToInt :: CollatorDecompositionMode -> Int;
+private collatorDecompositionModeToInt !mode =
+    case mode of
+    NoDecomposition        -> jNoDecomposition;
+    CanonicalDecomposition -> jCanonicalDecomposition;
+    FullDecomposition      -> jFullDecomposition;
+    ;
+
+/**
+ * Converts Java collator decomposition mode constants to {@link CollatorDecompositionMode@} values.
+ */
+intToCollatorDecompositionMode :: Int -> CollatorDecompositionMode;
+private intToCollatorDecompositionMode !value =
+    case value of
+    0 /*jNoDecomposition*/        -> NoDecomposition;
+    1 /*jCanonicalDecomposition*/ -> CanonicalDecomposition;
+    2 /*jFullDecomposition*/      -> FullDecomposition;
+    ;
+
+/**
+ * Sets the decomposition mode of a collator. Not a pure function.
+ */
+foreign unsafe import jvm "method setDecomposition"
+    private jSetDecomposition :: Collator -> Int -> ();
+
+/**
+ * Gets the decomposition mode of a collator as a Java constant.
+ */
+foreign unsafe import jvm "method getDecomposition"
+    private jGetDecomposition :: Collator -> Int;
+
+/**
+ * Constructs a collator for the given locale and with the given collator decomposition mode.
+ * 
+ * @arg locale the desired locale.
+ * @arg mode the desired decomposition mode.
+ * @return a collator for the given locale and decomposition mode.
+ */
+makeCollatorWithDecompositionMode :: Locale -> CollatorDecompositionMode -> Collator;
+public makeCollatorWithDecompositionMode !locale !mode =
+    let
+        collator :: Collator;
+        collator = eager $ makeCollator locale;
+    in
+        jSetDecomposition collator (collatorDecompositionModeToInt mode)
+        `seq`
+        collator;
+
+/**
+ * Constructs a collator for the given locale and with the given collator strength and decomposition mode.
+ * 
+ * @arg locale the desired locale.
+ * @arg strength the desired strength.
+ * @arg mode the desired decomposition mode.
+ * @return a collator for the given locale, strength, and decomposition mode.
+ */
+makeCollatorWithStrengthAndDecompositionMode :: Locale -> CollatorStrength -> CollatorDecompositionMode -> Collator;
+public makeCollatorWithStrengthAndDecompositionMode !locale !strength !mode =
+    let
+        collator :: Collator;
+        collator = eager $ makeCollator locale;
+    in
+        jSetStrength collator (collatorStrengthToInt strength)
+        `seq`
+        jSetDecomposition collator (collatorDecompositionModeToInt mode)
+        `seq`
+        collator;
+
+/**
+ * Returns the decomposition mode of the given collator.
+ * 
+ * @arg collator the collator to query.
+ * @return the decomposition mode of the collator.
+ */
+collatorDecompositionMode :: Collator -> CollatorDecompositionMode;
+public collatorDecompositionMode !collator =
+    intToCollatorDecompositionMode $ jGetDecomposition collator;
+
+/// Collator-based comparison functions
+//
+/**
+ * Compares the equality of two strings based on the given collator's collation rules.
+ * 
+ * @arg collator the collator to use.
+ * @arg x the first string to be compared.
+ * @arg y the second string to be compared.
+ * @return {@link True@} if the argument strings are equal, according to the collator; {@link False@} otherwise.
+ */
+foreign unsafe import jvm "method equals"
+    public equalsByCollator :: Collator -> String -> String -> Boolean;
+
+/**
+ * Compares the relative order of two strings based on the given collator's collation rules.
+ * 
+ * @arg collator the collator to use.
+ * @arg x the first string to be compared.
+ * @arg y the second string to be compared.
+ * @return an integer <0, =0, or >0 depending on whether {@code x@} is less than, equal to, or greater than {@code y@} according
+ *         to the collator.
+ */
+foreign unsafe import jvm "method compare"
+    private jCompareByCollator :: Collator -> String -> String -> Int;
+
+/**
+ * Compares the relative order of two strings based on the given collator's collation rules.
+ * 
+ * @arg collator the collator to use.
+ * @arg x the first string to be compared.
+ * @arg y the second string to be compared.
+ * @return {@link LT@}, {@link EQ@}, {@link GT@} depending on whether {@code x@} is less than, equal to, or greater than {@code y@}
+ *         according to the collator.
+ */
+compareByCollator :: Collator -> String -> String -> Ordering;
+public compareByCollator !collator !x !y =
+    let
+        result :: Int;
+        result = eager $ jCompareByCollator collator x y;
+    in
+        if result < 0 then
+            LT
+        else if result == 0 then
+            EQ
+        else
+            GT;
+
+
+/// CollationKey
+//
+
+/**
+ * Represents a string under the rules of a specific {@link Collator@}.
+ * 
+ * In particular, the following identity holds:
+ * {@code
+ * {@link compareByCollator@} x y == {@link compare@} ({@link makeCollationKey@} x) (makeCollationKey y)
+ * @}
+ * When strings must be compared multiple times (e.g. when sorting), it is more efficient to
+ * first convert the strings to {@code CollationKey@}s.
+ */
+/*
+ * @implementation private implementation scope used because underlying Java type is mutable
+ */
+data foreign unsafe import jvm private "java.text.CollationKey"
+    public CollationKey deriving Eq, Ord;
+
+/**
+ * Constructs a collation key based on a given collator and a given string.
+ * 
+ * @arg collator the collator whose rules are to be used.
+ * @arg source the string to be represented by a collation key.
+ * @return the corresponding collation key. 
+ */
+foreign unsafe import jvm "method getCollationKey"
+    public makeCollationKey :: Collator -> String -> CollationKey;
+
+/**
+ * Returns the source string represented by a collation key.
+ * 
+ * @arg collationKey the collation key whose source string is to be returned.
+ * @return the corresponding source string.
+ */
+foreign unsafe import jvm "method getSourceString"
+    public collationKeySourceString :: CollationKey -> String;

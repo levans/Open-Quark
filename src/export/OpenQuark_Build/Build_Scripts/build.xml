@@ -1,0 +1,165 @@
+<?xml version="1.0"?>
+<!--
+    Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+    All rights reserved.
+    
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+    
+        * Redistributions of source code must retain the above copyright notice,
+          this list of conditions and the following disclaimer.
+     
+        * Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in the
+          documentation and/or other materials provided with the distribution.
+     
+        * Neither the name of Business Objects nor the names of its contributors
+          may be used to endorse or promote products derived from this software
+          without specific prior written permission.
+     
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+    ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+    LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+    CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+    INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+    CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+    ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+-->
+<!--
+    build.xml
+    Creation date: Sep 14, 2007.
+    By: Edward Lam
+-->
+
+<!-- 
+================================================================================================= 
+     build.xml                                                                                         
+                                                                                                       
+     The ant file to build OpenQuark from the unzipped source distributions.
+                                                                                                       
+     To customize, the following properties may be defined:
+     
+       quark.src.folder        The folder containing the unzipped platform and plugin sources.
+                               This folder is typically the "src" folder whose parent is named "Quark".
+
+       build.outputfolder      The folder to which build artifacts will be written.
+                               
+       eclipse.plugins.dir     The plugins folder the required Eclipse distribution.
+                               Eclipse 3.3.0 is currently required.
+                                                                                                       
+================================================================================================= 
+-->
+
+<project name="OpenQuark_Build" default="main" basedir=".">
+
+    <property name="quarkfolder" location="..\..\..\.." />
+    <property name="quark.src.folder" location="${quarkfolder}\src" />
+    <property name="build.outputfolder" location="${quarkfolder}\..\QuarkBuild" />
+
+    <property name="eclipse.plugins.dir" location="C:\eclipse\plugins" />
+
+    <target name="main" depends="checkInputProperties,copyToExpectedFolderStructure,callBuildOpenQuark,moveOutputToBaseFolder" />
+
+    <target name="deleteTempFolder">
+        <echo>Deleting temp folder: ${build.outputfolder}</echo>
+        <delete dir="${build.outputfolder}" />
+    </target>
+
+    <target name="checkInputProperties">
+        <available file="${quark.src.folder}/CAL_Platform" property="quarkSrcFolderFound" />
+        <fail unless="quarkSrcFolderFound">
+            This folder does not appear to have the Quark Platform sources: ${quark.src.folder}
+            This is specified by setting the ant property "quark.src.folder".
+            (This folder should have subfolders such as CAL_Platform, CAL_Libraries etc.)
+        </fail>
+
+        <available file="${quark.src.folder}/CAL_Eclipse_Core" property="quarkEclipseSrcFolderFound" />
+        <fail unless="quarkEclipseSrcFolderFound">
+            This folder does not appear to have the Quark Platform Eclipse Plug-in sources: ${quark.src.folder}
+            This is specified by setting the ant property "quark.src.folder".
+            (This folder should have subfolders such as CAL_Eclipse_Core, CAL_Eclipse_UI etc.)
+        </fail>
+
+        <available file="${eclipse.plugins.dir}/org.eclipse.jdt.core_3.3.0.v_771.jar" property="eclipseFound" />
+        <fail unless="eclipseFound">
+            This folder does not appear to have Eclipse 3.3.0 plugins: ${eclipse.plugins.dir}
+            This is specified by setting the ant property "eclipse.plugins.dir".
+            (This folder should be named "plugins").
+        </fail>
+    </target>
+
+    <target name="copyToExpectedFolderStructure">
+        <copy todir="${build.outputfolder}\Quark_Platform">
+            <fileset dir="${quark.src.folder}">
+                <include name="CAL_Libraries/" />
+                <include name="CAL_Platform/" />
+                <include name="CAL_Runtime/" />
+                <include name="export/" />
+                <include name="Utilities/" />
+            </fileset>
+        </copy>
+        <copy todir="${build.outputfolder}\Quark_Platform\export">
+            <fileset dir="${quark.src.folder}">
+                <include name="import/*" />
+                <include name="import/META-INF/" />
+            </fileset>
+        </copy>
+
+        <copy todir="${build.outputfolder}\Research">
+            <fileset dir="${quark.src.folder}">
+                <include name="BAM_Sample/" />
+                <include name="CAL_Benchmarks/" />
+                <include name="CAL_Eclipse_Archived_Update_Site/" />
+                <include name="CAL_Eclipse_Branding/" />
+                <include name="CAL_Eclipse_Bridge/" />
+                <include name="CAL_Eclipse_Bridge_Example/" />
+                <include name="CAL_Eclipse_Core/" />
+                <include name="CAL_Eclipse_Feature/" />
+                <include name="CAL_Eclipse_Help/" />
+                <include name="CAL_Eclipse_UI/" />
+                <include name="CAL_Samples/" />
+                <include name="IO_Source_Generator/" />
+                <include name="OpenQuark/" />
+                <include name="OpenQuark_Doc_Source/" />
+                <include name="OpenQuark_Website/" />
+                <include name="Quark_Gems/" />
+            </fileset>
+        </copy>
+
+        <copy todir="${build.outputfolder}\External">
+            <fileset dir="${quark.src.folder}/import/Main/PI/External/" />
+        </copy>
+        <copy todir="${build.outputfolder}\release">
+            <fileset dir="${quark.src.folder}/import/Titan_Research/win32_x86/release/" />
+        </copy>
+    </target>
+
+    <target name="callBuildOpenQuark">
+        <dirname property="OpenQuark_Build.basedir" file="${ant.file.OpenQuark_Build}" />
+        <ant antfile="build-OpenQuarkGroup.xml" dir="${OpenQuark_Build.basedir}">
+            <property name="src.dir" value="${build.outputfolder}" />
+            <property name="out.dir" value="${build.outputfolder}" />
+            <property name="openQuarkBuild" value="true" />
+        </ant>
+    </target>
+
+    <target name="gen-parser" description="Generate the CAL Lexer/Parser from the antlr grammar.">
+        <dirname property="OpenQuark_Build.basedir" file="${ant.file.OpenQuark_Build}" />
+        <ant antfile="build-OpenQuarkGroup.xml" dir="${OpenQuark_Build.basedir}" target="gen-parser">
+            <property name="cal.platform.src.dir" value="${quark.src.folder}/CAL_Platform"/>
+            <property name="outbin.dir" value="${quark.src.folder}/import/Titan_Research/win32_x86/release/bin" />
+            <property name="openQuarkBuild" value="true" />
+        </ant>
+    </target>
+
+    <target name="moveOutputToBaseFolder">
+        <move todir="${build.outputfolder}">
+            <fileset dir="${build.outputfolder}/release/bin/OpenQuarkGroup" includes="*.zip" />
+        </move>
+    </target>
+
+</project>

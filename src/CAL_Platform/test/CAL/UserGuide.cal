@@ -1,0 +1,2141 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * UserGuide.cal
+ * Creation date: Jan 2006
+ * By: James Wright
+ */
+
+/**
+ * This module contains all the code examples given in the UserGuide document. 
+ * The intent is that whenever
+ * changes are made to CAL which affect the examples in the UserGuide, this file will 
+ * fail to compile, indicating that the UserGuide document must be updated
+ * to reflect the changes. Whenever new samples are added to the UserGuide documentation
+ * they must also be added to this file.
+ * 
+ * This file also serves as a convenient location to find all of the example code
+ * from the UserGuide, and provides sample output.
+ * 
+ * @author James Wright
+ */
+module UserGuide;
+import Cal.Core.Prelude using
+    typeConstructor = AlgebraicValue, Int, Double, String, Boolean, 
+                      Char, Either, Integer, JObject, JList, Maybe, 
+                      Ordering;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just,
+                      Left, Right;
+    typeClass = Bounded, Enum, Eq, Ord, Num, Inputable, Outputable;
+    function = 
+        add, append, compare, compose, concat, const, 
+        doubleToString, equals, 
+        error, fromJust, fst, input, intToString, isNothing, 
+        isEmpty, max, mod, not, output, round, seq, snd, 
+        toDouble, field1, field2, field3, upFrom, upFromTo;
+    ;
+import Cal.Collections.List using
+    function = 
+        all, break, chop, filter, foldLeft, foldLeftStrict, foldRight, 
+        head, intersperse, last, list2, map, product, reverse,
+        subscript, sum, tail, take, zip, zip3, zipWith;
+    ;
+import Cal.Collections.Array;
+import Cal.Core.Bits;
+import Cal.Core.Debug;
+import Cal.Core.Dynamic using
+    typeConstructor = Dynamic;
+    function = fromDynamic, fromDynamicWithDefault, toDynamic;
+    ;
+import Cal.Utilities.Math using
+    function = truncate;
+    ;
+import Cal.Utilities.StringNoCase;
+import Cal.Core.String;
+
+myFactorial :: Integer -> Integer;
+myFactorial n =
+    product (upFromTo 1 n);
+
+/*
+:rc
+myFactorial 5
+1.2 + 5.0
+returns 6.2
+5.0 * 10.0 / 2.5
+returns 20.0
+"One string " ++ "Another string"
+returns "One string Another string"
+1.2 + 5.0
+returns 6.2
+:t "One string " ++ " another"
+outputs String
+:t 1.2 + 5.0
+outputs Double
+1.2 + "hello"
+Error: Type error applying the operator "+" to its second argument. Caused by: Type clash: type constructor Prelude.Double does not match Prelude.String
+5 * 8
+Error: Ambiguous type signature in inferred type (Prelude.Num a, Prelude.Outputable a) => a
+:t 5 * 8
+outputs Num a => a
+5 * 8 :: Integer
+returns 40
+5 * 8 :: Double
+returns 40.0
+(5 :: Integer) * 8
+returns 40
+:t (5 :: Integer) * 8
+outputs Integer
+["list", "of", "strings"]
+returns ["list", "of", "strings"]
+["invalid", 'L', 10]
+Error: Type error. All elements of a list must have compatible types. Caused by: Type clash: type constructor Prelude.String does not match Prelude.Char
+"a" : ["list", "of", "strings"]
+returns ["a", "list", "of", "strings"]
+5.0 : [4.0]
+returns [5.0, 4.0]
+[1.0, 2.0, 3.0] ++ [0.4, 0.9]
+returns [1.0, 2.0, 3.0, 0.4, 0.9]
+10.5 : []
+returns [10.5]
+
+['a', 'b', 'c'] ++ []
+returns ['a', 'b', 'c']
+[] ++ ["val1", "val2"]
+returns ["val1", "val2"]
+[]
+Error: Ambiguous type signature in inferred type Prelude.Outputable a => a
+[] :: [Char]
+returns []
+:t ["Jack", "Tom"]
+outputs [String]
+:t ["Simone", "Sally", "Sarah"]
+outputs [String]
+:t [3.0, 1.0, 1.0, 2.0]
+outputs [Double]
+:t [[1.1, 1.2], [0.0, 0.3], [], [-3.0]]
+outputs [[Double]]
+[1.0, [1.2], 1.1]
+Error: Type error. All elements of a list must have compatible types. Caused by: Type clash: type constructor Prelude.Double does not match Prelude.List
+(0.0, 0.0)
+(-13.9, 50.0, 12.5)
+("James", 27.0)
+('A', "Bob")
+:t ("James", 27.0)
+outputs (String, Double)
+:t (61.0, "Bob")
+outputs (Double, String)
+:t (0.0, 0.0)
+outputs (Double, Double)
+:t (-13.9, 50.0, 12.5)
+outputs (Double, Double, Double)
+:t ("Origin", (0.0, 0.0))
+outputs (String, (Double, Double))
+:t (['a', 'b', 'c], 3.0)
+outputs ([Char], Double)
+:t ([('a', 1.0), ('b', 2.0), ('c', 3.0)], True)
+outputs ([(Char, Double)], Boolean)
+*/
+
+//--- 2.2.4 Case expressions, part 1
+isOrigin :: Num a => (a, a, a) -> Boolean;
+public isOrigin point =
+    case point of
+    (x, y, z) -> x==0 && y==0 && z==0;
+    ;
+
+myFst :: (a,b) -> a;
+public myFst pair =
+    case pair of 
+    (ret, _) -> ret;
+    ;
+    
+mySnd :: (a,b) -> b;
+public mySnd pair =
+    case pair of 
+    (_, ret) -> ret;
+    ;
+    
+any :: (a -> Boolean) -> [a] -> Boolean;
+public any p list =
+    case list of
+    [] -> False;
+    listHead : listTail -> p listHead || any p listTail;
+    ;
+
+//--- 2.3 Functions
+/*
+max 1.5 0.3
+returns 1.5
+id "ahoy"
+returns "ahoy"
+head ["top", "middle", "bottom"]
+returns "top"
+pi
+returns 3.141592653589793
+isEven 9
+returns False
+isEven 10
+returns True
+power 2 0.5
+returns 1.4142135623730951
+String.subscript "a modern Major-General" 9
+returns 'M'
+:t pi
+outputs Double
+:t isEven
+outputs Int -> Boolean
+:t power
+outputs Double -> Double -> Double
+:t String.subscript
+outputs String -> Int -> Char;
+:t id
+outputs a -> a
+:t head
+outputs [a] -> a
+fst ("foo", 2.0)
+returns "foo"
+snd ("foo", 2.0)
+returns 2.0
+:t fst
+outputs (a,b) -> a
+:t snd
+outputs (a,b) -> b
+:t max
+outputs Ord a => a -> a -> a
+:t map
+outputs (a -> b) -> [a] -> [b]
+map isEven [9, 8, 7, 6]
+returns [False, True, False, True]
+map head [['H', 'T'], ['1', '2'], ['a', 'b', 'c']]
+returns ['H', '1', 'a']
+map fst [("Q1",True), ("Q2",False), ("Q3",False), ("Q4", True)]
+returns ["Q1", "Q2", "Q3", "Q4"]
+map fst [['H', 'T'], ['1', '2'], ['a', 'b', 'c']]
+Error: Type Error during an application. Caused by: Type clash: type constructor Prelude.Tuple2 does not match Prelude.List.
+:t filter
+outputs (a -> Boolean) -> [a] -> [a]
+filter isEven [9, 8, 7, 6, 5, 4]
+returns [8, 6, 4]
+filter head [['H', 'T'], ['1', '2']]
+Error: Type Error during an application. Caused by: Type clash: type constructor Prelude.Boolean does not match Prelude.Char.
+fst (1::Int, 'E')
+returns 1
+isEven 1
+returns False
+isEven (fst (1::Int, 'E'))
+returns False
+(compose isEven fst) (1::Int, 'E')
+returns False
+(compose fst isEven) (1::Int, 'E')
+Error: Type Error during an application. Caused by: Type clash: type constructor Prelude.Boolean does not match a record type.
+:t fst
+outputs (a,b) -> a
+:t isEven
+outputs Int -> Boolean
+:t (compose isEven fst)
+outputs (Int,a) -> Boolean
+*/
+  
+//--- 2.3.3 Defining functions
+    
+
+public square1 n =
+    n * n;
+
+public removeEmptyElements1 list =
+    filter (compose not isEmpty) list;
+
+/*
+square1 2.1
+returns 4.41
+removeEmptyElements1 [['a', 'b', 'c'], [], ['d', 'e'], []]
+returns [['a', 'b', 'c'], ['d', 'e']]
+*/
+    
+square :: Num a => a -> a;
+public square x =
+    x * x;
+
+removeEmptyElements :: [[a]] -> [[a]];
+public removeEmptyElements x =
+    filter (compose not isEmpty) x;
+
+//--- 2.3.4 Lambda expressions
+/*
+\x y -> (y,x)
+:t \x y -> (y,x)
+outputs a -> b -> (b,a)
+*/
+
+maxList :: Ord a => [a] -> a;
+maxList valueList = 
+    List.foldRight1 max valueList;
+
+normalizeScores :: [Double] -> [Double];
+normalizeScores rawScores =
+    let
+        maxScore :: Double;
+        maxScore = maxList rawScores;
+    in
+      map (\x -> x / maxScore) rawScores;
+
+//--- 2.4 User-defined types    
+    
+/**
+ * Represents an ordering relationship between two values: less 
+ * than, equal to, or greater than.
+ * 
+ * @see typeClass = Ord
+ * @see function = compare
+ */
+data public MyOrdering =
+    /**
+     * A data constructor that represents the ordering 
+     * relationship of "less than".
+     */
+    public MyLT |
+    /**
+     * A data constructor that represents the ordering 
+     * relationship of "equal to".
+     */
+    public MyEQ |
+    /**
+     * A data constructor that represents the ordering
+     * relationship of "greater than".
+     */
+    public MyGT
+    deriving Eq, Ord, Enum, Bounded, Outputable; 
+
+comparePoints :: Num a => (a, a) -> (a, a) -> MyOrdering;
+public comparePoints point1 point2 =
+    case point1 of
+    (x1,y1) ->
+        case point2 of
+        (x2,y2) ->
+            if x1 > x2 then
+                MyGT
+            else if x1 < x2 then
+                MyLT
+            else if y1 > y2 then
+                MyGT
+            else if y1 < y2 then
+                MyLT
+            else
+                MyEQ;
+        ;
+    ;
+    
+/*
+comparePoints (1.0, 2.0) (5.0, 6.0)
+returns MyLT
+comparePoints (1.0, 2.0) (-4.0, 1.0)
+returns MyGT
+comparePoints (1.0, 2.0) (1.0, 1.0)
+returns MyGT
+comparePoints (9.0, 9.5) (9.0, 9.5)
+returns MyEQ
+*/
+    
+data public MyMaybe a = 
+    public MyNothing | 
+    public MyJust
+        value :: a;
+/*
+:t Just 50.0
+outputs (Maybe Double)
+:t Just (10 :: Int)
+outputs (Maybe Int)
+:t Just "ahoy"
+outputs (Maybe String)
+:t Nothing
+outputs (Maybe a)
+Just 50.0
+returns Just 50.0
+Nothing
+Error: Ambiguous type signature in inferred type Prelude.Outputable a => a
+(Nothing :: Maybe Char)
+returns Nothing
+*/
+
+data public MyEither a b = 
+    public MyLeft     value :: a | 
+    public MyRight    value :: b;
+// compiles without error
+
+data public Value = 
+    public StringValue    strValue :: String |
+    public IntValue       intValue :: Int |
+    public BooleanValue   boolValue :: Boolean |
+    public DoubleValue    dblValue :: Double;
+// compiles without error
+
+/*
+data public Broken1 = 
+    public Simple | 
+    public BrokenWildcard    arg :: a;
+Error: The type variable a must appear on the left-hand side of the data declaration.
+data public Broken2 a = 
+    public BrokenLeft     value :: a | 
+    public BrokenRight    value :: b;
+Error: The type variable b must appear on the left-hand side of the data declaration.
+*/
+
+//--- 2.4.1 Case expressions, part 2
+
+maybeToList :: Maybe a -> [a];
+public maybeToList m =
+    case m of
+    Nothing -> [];
+    Just value  -> [value];
+    ;
+
+/*
+maybeToList (Just 'c')
+returns ['c']
+maybeToList (Nothing :: Maybe Int)
+returns []
+maybeToList (Just 12.2)
+returns [12.2]
+*/
+
+data public TripleType a b c =
+    public TripleDC
+        field1 :: a
+        field2 :: b
+        field3 :: c;
+
+public addFirstAndThird tripleType =
+    case tripleType of
+    TripleDC {field1, field3} -> field1 + field3; 
+    ;
+    
+/*    
+addFirstAndThird (TripleDC 2.0 "String" 3.0)
+returns 5.0
+*/
+    
+pointGreaterThan :: Num a => (a, a) -> (a, a) -> Boolean;
+pointGreaterThan p1 p2 =
+    case comparePoints p1 p2 of
+    MyGT -> True;
+    _ -> False;
+    ;
+
+/*    
+5.0 		// Compiler ignores this text, but processes the 5.0
+*/
+/* Comments in the slash-star style
+   may span
+   multiple lines */
+/*
+()
+digits[.[digits]]
+50
+50.0
+digits[.[digits]] e digits[.[digits]]
+5.0e2		// 5.0 * 10^2    == 500.0
+5.0E-1	// 5.0 * 10^(-1) == 0.5
+{fieldname = expression [, fieldname = expression ...] }
+{ x=1.0, y=0.5 }.y
+returns 0.5
+{ name="Fred", age=22.0, #1='a', #2='b' }.#1
+returns 'a'
+{ name="Jack" }.age
+Error: Type error. Invalid record selection for field age. Caused by: the record type {name :: Prelude.String} is missing the fields [age] from the record type a\age => {a | age :: b}.
+{{x = 1.0, y = 1.0} | z = 2.0}
+returns {x = 1.0, y = 1.0, z = 2.0}
+case {x = 1.0, y = 1.0} of {x = x1, y = y1} -> {x = x1, y = y1, z = 2.0};
+returns {x = 1.0, y = 1.0, z = 2.0}
+{{x = 1.0, y = 1.0} | y := 2.0}
+returns {x = 1.0, y = 2.0}
+case {x = 1.0, y = 1.0} of {x = x1, y = _} -> {x = x1, y = 2.0};
+returns {x = 1.0, y = 2.0}
+{ #1=10.0, #2='a' }.#1
+returns 10.0
+(10.0, 'a').#1
+returns 10.0
+("s", [], "s2").#3
+returns "s2"
+("s", [], "s2").#4
+Error: Type error. Invalid record selection for field #4. Caused by: the record type (Prelude.Char, Prelude.Char, Prelude.Char) is missing the fields [#4] from the record type a\#4 => {a | #4 :: b}.
+"this is a string"
+"This \"string\" prints\n on two lines"
+fcn_name [arg1 [arg2 ... [argn]...]]
+pi
+returns 3.141592653589793
+
+sin 0.0
+returns 0.0
+
+append "first string" " second string"
+returns "first string second string"
+let
+    x = 9.0;
+in
+    max x + 5.0 6.0
+Error: Type error applying the operator "+" to its first argument. Caused by: Type clash: type Prelude.Double -> Prelude.Double is not a member of type class Prelude.Num
+let 
+    x = 9.0;
+in
+    max (x + 5.0) 6.0
+returns 14.0
+newMax = max 10.0;
+newMax 6.0
+returns 10.0
+newMax (-2.0)
+returns 10.0
+newMax 12.0
+returns 12.0
+1.0 + 2.0
+returns 3.0
+4.0 * 5.0
+returns 20.0
+1.0 + 2.0 * 2.0
+30.0 / 20.0 / 10.0
+subscript (subscript listOfLists 3) 5
+listOfLists `subscript` 3 `subscript` 5
+:t ['a'] `zip3` ['b']
+outputs [a] -> [(Char, Char, a)]
+(['a'] `zip3` ['b']) ['c']
+returns [('a', 'b', 'c')]
+1.0 `negate` 2.0
+Error: Type Error during an application. Caused by: Type clash: type constructor Prelude.Double does not match Prelude.Function.
+if condition_expression then 
+    if_true_expression 
+else 
+    if_false_expression
+if x > 0 then
+    "positive"
+else
+    "negative or zero";
+let definition ;
+    [type_declaration ; ...]
+    [definition ; ...]
+in
+    expression ;
+*/    
+
+//--- 3.2.11 Let expressions
+    
+/*
+public properFraction x =
+    let 
+        t :: Double;
+        t = truncate x;
+        
+        r :: Double;
+        r = x - t;
+    in 
+        (t, r);
+*/
+
+public properFraction x =
+    let 
+        r :: Double;
+        r = x - t;
+        
+        t :: Double;
+        t = truncate x;
+    in 
+        (t, r);
+
+//--- 3.2.12 Case expressions    
+/*    
+case condition_expression of
+pattern -> expression1 ;
+[pattern -> expression2 ; ... ]
+*/
+    
+myListSubscript :: [a] -> Int -> a;
+public myListSubscript !list !index =
+    case list of
+    x : xs -> 
+        if index == 0 then 
+            x
+        else if index > 0 then 
+            myListSubscript xs (index - 1)
+        else 
+            error "negative index.";
+    [] -> 
+        error "index out of bounds.";
+    ;
+/*    
+myListSubscript ['a', 'q', 'b'] 0
+returns 'a'
+
+myListSubscript ['a', 'q', 'b'] 2
+returns 'b'
+
+myListSubscript ['a', 'q', 'b'] 3
+Error: index out of bounds.
+*/
+    
+length1 :: [a] -> Int;
+public length1 !list =
+    let
+        lengthHelper !list !acc = 
+            case list of
+            first : rest -> lengthHelper rest (acc + 1);
+            [] -> acc;
+            ;
+    in
+        lengthHelper list 0;
+
+length2 :: [a] -> Int;
+public length2 !list =
+    let
+        lengthHelper !list !acc = 
+            case list of
+            _ : rest -> lengthHelper rest (acc + 1);
+            [] -> acc;
+            ;
+    in
+        lengthHelper list 0;
+/*    
+length1 ['x', 'y', 'z', 'a', 'b']
+returns 5
+length2 ['x', 'y', 'z', 'a', 'b']
+returns 5
+*/
+    
+extractTail :: [a] -> [a];
+public extractTail list =
+    case list of
+    [] -> error "empty lists have no tail";
+    x : y -> y;
+    ;
+/*    
+extractTail []
+Error: empty lists have no tail
+extractTail ['a']
+returns []
+extractTail ['a','b']
+returns ['b']
+extractTail ['a', 'b', 'c']
+returns ['b', 'c']
+*/
+    
+public vectorLength vector =
+    case vector of
+    (x,y) -> Math.sqrt (x*x + y*y);
+    ;
+    
+/*    
+vectorLength (3.0, 4.0)
+returns 5.0
+vectorLength 3.0 4.0
+Error: Type Error during an application. Caused by: Type clash: type constructor Prelude.Double does not match Prelude.Function
+vectorLength (5, 12)
+returns 13.0
+{}
+{field_name1 [= pattern1] [, field_name2 [= pattern2] ...]}
+{ pattern0 | field_name1 [= pattern1] [, field_name2 [= pattern2] ...]}
+*/
+
+emptyRecordOnly :: {} -> String;
+emptyRecordOnly record =
+    case record of
+    {} -> "empty record";
+    ;
+
+/*
+showNameAgeRecord :: {name :: String, age :: Double} -> String;
+showNameAgeRecord record =
+    case record of
+    {name = nameValue, age = ageValue} -> 
+        concat ["Name =", nameValue, ". Age =", doubleToString ageValue];
+    ;
+*/
+    
+showNameAgeRecord :: {name :: String, age :: Double} -> String;
+showNameAgeRecord record =
+    case record of
+    {name, age} -> 
+        concat ["Name =", name, ". Age =", doubleToString age];
+    ;
+equalsNameAgeRecord :: {name :: String, age :: Double} -> {name :: String, age :: Double} -> Boolean;
+equalsNameAgeRecord record1 record2 =
+    case record1 of
+    {name = name1, age = age1} ->
+        case record2 of
+        {name = name2, age = age2} ->
+            name1 == name2 && age1 == age2;
+        ;
+    ;
+    
+/*    
+equalsNameAgeRecord {name = "Matt", age = 54} {age = 54, name = "Matt"}
+returns True
+equalsNameAgeRecord {name = "Jack", age = 54.0, profession = "blacksmith"} {name = "Jack", age = 54.0, profession = "blacksmith"}
+Error: Type Error during an application. Caused by: the fields of the two record type {age :: Prelude.Double, name :: Prelude.String} and {age :: Prelude.Double, name :: Prelude.String, profession :: Prelude.String} must match exactly.
+*/
+    
+normalizeVectorRecord :: {#1 :: Double, #2 :: Double, isNormalized :: Boolean} -> {#1 :: Double, #2 :: Double, isNormalized :: Boolean};
+normalizeVectorRecord vector =
+    case vector of
+    {#1 = x, #2 = y, isNormalized} ->
+        if isNormalized then
+            vector
+        else
+            let
+                length :: Double;
+                length = vectorLength (x, y);
+            in
+                {#1 = x / length, #2 = y / length, isNormalized = True};
+    ;
+    
+/*
+normalizeVectorRecord {#1 = 3.0, #2 = 4.0, isNormalized = False}
+returns {#1 = 0.6, #2 = 0.8, isNormalized = True}
+
+extractJob :: r\job => {r | job :: a} -> a;
+extractJob record =
+    case record of
+    {rest | job = jobValue} -> jobValue;
+    ;
+*/
+    
+extractJob :: r\job => {r | job :: a} -> a;
+extractJob record =
+    case record of
+    {_ | job } -> job;
+    ;
+
+/*    
+extractJob {job = "pilot"}
+returns "pilot"
+extractJob {job = "telephone sanitizer", location = (3.0, 1.2)}
+returns "telephone sanitizer"
+*/
+    
+removeJob :: r\job => {r | job :: String} -> {r};
+removeJob record =
+    case record of
+    {rest | job = _} -> rest;
+    ;
+    
+/*
+removeJob {name = "Ford", job = "hitchhiker", age = 32.0, location = "Earth"}
+returns {name = "Ford", age = 32.0, location = "Earth"}
+constructor_name [identifier [identifier ...]...]
+constructor_name {[field_name1 [, field_name2 ...]]}
+constructor_name {field_name1 = identifier1 [, field_name2 = identifier2 ...]}
+*/
+    
+data public MyTuple a b =
+    public MyTuple
+        field1 :: a
+        field2 :: b;
+    
+public myFst1 myTuple =
+    case myTuple of
+    MyTuple elem1 elem2 -> elem1;
+    ;
+    
+public myFst2 myTuple =
+    case myTuple of
+    MyTuple elem _ -> elem; 
+    ;
+    
+public myFst3 myTuple =
+    case myTuple of
+    MyTuple {field1} -> field1; 
+    ;
+    
+public myFst4 myTuple =
+    case myTuple of
+    MyTuple {field1=elem} -> elem; 
+    ;
+    
+/*    
+myFst1 (MyTuple 2.0 "String")
+returns 2.0
+myFst3 (MyTuple Nothing 2.0)
+returns Nothing
+(constructor_name1 [| constructor_name2 ...]) [identifier [identifier ...]...]
+(constructor_name1 [| constructor_name2 ...]) {[field_name1 [, field_name2 ...]]}
+(constructor_name1 [| constructor_name2 ...]) {field_name1 = identifier1 [, field_name2 = identifier2 ...]}
+*/
+    
+data public MyPairOrTriple a b c =
+    public MyPair
+        field1 :: a
+        field2 :: b |
+    public MyDifferentPair
+        elem1  :: a
+        elem2  :: b |
+    public MyTriple
+        field1 :: a
+        field2 :: b
+        field3 :: c;
+
+public myFirstElem myPairOrTriple =
+    case myPairOrTriple of
+    (MyPair | MyDifferentPair) elem _ -> elem; 
+    MyTriple elem _ _ -> elem; 
+    ;
+    
+public myField1 myPairOrTriple =
+    case myPairOrTriple of
+    (MyPair | MyTriple) {field1} -> field1;
+    MyDifferentPair {elem1} -> elem1;
+    ;
+    
+/*    
+myFirstElem (MyPair 2.0 "Str")
+returns 2.0
+myField1 (MyTriple Nothing 2.0 "three")
+returns Nothing
+intValue
+(intValue1 [| intValue2 ...])
+*/
+    
+public isOneOrTwoOrMinusThree intVal =
+    case intVal of
+    1 -> True;
+    (2 | -3) -> True;
+    _ -> False;
+    ;
+    
+/*    
+isOneOrTwoOrMinusThree 1
+returns True
+isOneOrTwoOrMinusThree 4
+returns False
+*/
+    
+public isBigNum intVal =
+    case intVal of
+    2147483647 -> True;
+    _ -> False;
+    ;
+/*    
+charValue
+(charValue1 [| charValue2 ...])
+*/
+    
+public isAorBorC charVal =
+    case charVal of
+    'a' -> True;
+    ('b' | 'c') -> True;
+    _ -> False;
+    ;
+/*    
+isAorBorC 'a'
+returns True
+isAorBorC 'd'
+returns False
+*/
+    
+public isPercent1 charVal =
+    case charVal of
+    '%' -> True;
+    _ -> False;
+    ;
+public isPercent2 charVal =
+    case charVal of
+    '\045' -> True;
+    _ -> False;
+    ;
+public isPercent3 charVal =
+    case charVal of
+    '\u0025' -> True;
+    _ -> False;
+    ;
+
+/*
+expression.constructor_name.field_name
+(Just 2.0).Just.value     // The arg to Just is named 'value'
+returns 2.0
+(Nothing :: Maybe Double).Just.value
+Error: Wrong data constructor value selected.  Expecting: Prelude.Just, found: Prelude.Nothing.
+\arg1 [arg2 ...] -> expression 
+*/
+    
+doubleList :: [Double] -> [Double];
+public doubleList list =
+    map (\x -> x*2.0) list;
+
+/*
+doubleList [1.0, 8.0, 4.5]
+returns [2.0, 16.0, 9.0]
+doubleList []
+returns []
+[ type_name ]
+:t ["foo", "bar"]
+outputs [String]
+:t [1.0, 2.0, 3.0]
+outputs [Double]
+:t [(1::Integer), 7, 7, 5]
+outputs [Integer]
+:t [["foo 1", "foo 2"], [], ["bar", "baz"], ["quux"]]
+outputs [[String]]
+:t [("foo", (1::Integer)), ("bar", 2), ("bar", 1)]
+outputs [(String, Integer)]
+( type_name, type_name [, type_name ...] )
+:t (55.1, 55.2)
+outputs (Double, Double)
+:t (0.9, "foo", 'Z')
+outputs (Double, String, Char)
+:t ('C', 'A', "baz", "qux")
+outputs (Char, Char, String, String)
+:t ('m', ['a', 'c', 'b'])
+outputs (Char, [Char])
+:t (["str1", "str2"], 'c', (2.2, 1.3))
+outputs ([String], Char, (Double, Double))
+{ field1_name :: field1_type [, field2_name :: field2_type ...] }
+:t {name = "bill", job = "janitor", age = 25.0}
+outputs {age :: Double, job :: String, name :: String}
+:t {x = 12.7, y = (-19.0)}
+outputs {x :: Double, y :: Double}
+:t {a = "foo", #1 = 'N', #2 = 0.0, #3 = 1.0}
+outputs {#1 :: Char, #2 :: Double, #3 :: Double, a :: String}
+(a, a)
+*/
+
+appendList :: [a] -> [a] -> [a];
+private appendList !list1 list2 =
+    case list1 of
+    []     -> list2;
+    head : rest -> head : appendList rest list2;
+    ;
+/*    
+appendList ['x', 'w', 'a'] ['b', 'c']
+returns ['x', 'w', 'a', 'b', 'c']
+appendList [[1.0, 2.0], [1.0, 3.0]] [[3.1, 3.2]]
+returns [[1.0, 2.0], [1.0, 3.0], [3.1, 3.2]]
+
+appendList [1.0, 2.0, 3.0] ['a', 'b', 'c']
+Error: Type Error during an application. Caused by: Type clash: type constructor Prelude.Double does not match Prelude.Char.
+param1_type [ -> param2_type ...] -> return_type
+type_constructor [type1 [type2 ...]]
+constraint => type_signature
+(constraint [, constraint [, constraint ...]]
+type_class type_variable 
+type_variable \ field_name
+[visibility] name [param1_name [param2_name ...]] = expression ;
+*/
+    
+public e = 2.718281828459045;
+
+public squareOf x = x * x;
+
+private cube x = x * square x;
+
+public distance loc1 loc2 =
+    case loc1 of
+    (x1,y1) -> case loc2 of
+               (x2,y2) -> vectorLength (x1-x2, y1-y2);
+               ;
+    ;
+    
+/*    
+:t []
+outputs [a]
+:t [] == []
+Error: Ambiguous type signature in inferred type Prelude.Eq a => a.
+expression :: type ;
+pi :: Double;
+
+sqrt :: Double -> Double;
+
+equalsMaybe :: Eq a => Maybe a -> Maybe a -> Boolean;
+:t []
+outputs [a]
+:t [] :: [Int]
+outputs [Int]
+:t ([] :: [Int]) == []
+outputs Boolean
+:t 55 + 5
+outputs Num a => a
+:t 55 + 5 :: Eq a => a
+Error: The declared type of the expression is not compatible with its inferred type Prelude.Num a => a. Caused by: Type clash: The type declaration Prelude.Eq a => a does not match Prelude.Num a => a.
+*/
+    
+notEqualsOrdering :: Ordering -> Ordering -> Boolean;
+private notEqualsOrdering !x !y = not (equalsOrdering x y);
+
+equalsOrdering :: Ordering -> Ordering -> Boolean;
+private equalsOrdering !x !y =
+    case x of
+    LT ->
+        case y of 
+        LT -> True;
+        _ -> False;
+        ;
+    EQ ->
+        case y of 
+        EQ -> True;
+        _ -> False;
+        ;
+    GT ->
+        case y of 
+        GT -> True;
+        _ -> False;
+        ;
+    ;
+
+/*
+data [visibility] type_name [type_variable [type_variable ... ]] = 
+   [visibility] constructor_name [arg_name :: arg_type ...]
+   [ | [visibility] constructor_name [arg_name :: arg_type ...] ...]
+   [deriving type_class [, type_class ...]]
+   ;
+*/
+
+data public Location = 
+    public Nowhere |
+    public Everywhere |
+    public Cartesian 
+        x :: Double 
+        y :: Double |
+    public Polar 
+        theta :: Double 
+        r :: Double
+    deriving Eq;
+//compiles without error
+
+data public Directions = public North | public South | public East | public West
+                       deriving Prelude.Eq, Prelude.Ord;
+//compiles without error 
+
+data public Temperature = private Hot | private Cold;
+//compiles without error
+
+data public Message = 
+    public Warning 
+        message :: String |
+    public Error 
+        message :: String ;
+//compiles without error
+
+data public Tree a =
+    Leaf |
+    Node 
+        value :: a
+        leftChild :: (Tree a)
+        rightChild :: (Tree a);
+//compiles without error
+
+//data public Broken = 
+//    public Wrong    value :: a;
+//Error: The type variable a must appear on the left-hand side of the data declaration.
+
+/*
+data foreign unsafe import jvm [i_visibility] "qualified_name" 
+ c_visibility type_identifier [deriving type_class [, type_class]];
+data foreign unsafe import jvm "java.math.BigInteger" 
+public Integer;
+// --- Module Color ---
+module Color;
+import Cal.Core.Prelude;
+friend Color_Tests;
+*/
+
+data foreign unsafe import jvm public "java.awt.Color" 
+public JColor;
+
+data foreign unsafe import jvm protected "java.awt.Color"
+public TestableColor;
+data foreign unsafe import jvm private "java.awt.Color" 
+public Color;
+
+/*
+// --- Module Color_Tests ---
+module Color_Tests;
+import Cal.Core.Prelude;
+import Color;
+
+foreign unsafe import jvm "method getRed" 
+private getRed :: Color -> Int;	// !!! Won't compile, Color 
+ 						//  is private implementation
+
+foreign unsafe import jvm "method getRed" 
+private t_getRed :: TestableColor -> Int; // OK, TestableColor is
+ 						// protected implementation 
+                                    // and we're a
+                                    // friend module
+
+// --- Module Draw ---
+import Color using
+    typeConstructor = JColor, Color;
+;
+
+foreign unsafe import jvm "method getRed" 
+private jColor_getRed :: JColor -> Int;	// OK, JColor is public
+ 							//  implementation
+
+foreign unsafe import jvm "method getRed" 
+private t_getRed :: TestableColor -> Int; // !!! Won't compile,
+                                    // TestableColor is
+ 						// protected implementation 
+                                    // and we're not a
+                                    // friend module
+foreign unsafe import jvm "method getRed" 
+private getRed :: Color -> Int;	// !!! Won't compile, Color 
+ 						//  is private implementation
+foreign unsafe import jvm "entity_type qualified_name"
+  visibility function_identifier :: function_type ;
+foreign unsafe import jvm "constructor java.math.BigInteger"
+public stringToInteger :: String -> Integer;
+
+foreign unsafe import jvm "method abs"
+private absInteger :: Integer -> Integer;
+
+foreign unsafe import jvm "static method java.math.BigInteger.valueOf"
+public longToInteger :: Long -> Integer;
+foreign unsafe import source "entity_type qualified_name"
+  [visibility] function_identifier :: function_type ;
+*/
+foreign unsafe import jvm "static field java.lang.Double.NaN"
+public notANumber :: Double;
+
+/*
+[visibility] class class_name class_variable where
+    [visibility] method_name :: method_type
+        [default default_implementation_function_name];
+    [[visibility] method_name :: method_type 
+        [default default_implementation_function_name]; ...]
+    ;
+
+*/    
+    
+public class MyAppendable a where    
+    public myEmpty :: a;    
+    public myIsEmpty :: a -> Boolean;
+    public myAppend :: a -> a -> a; 
+    public myConcat :: [a] -> a
+        default myConcatDefault;
+    ;
+
+myConcatDefault :: MyAppendable a => [a] -> a;
+private myConcatDefault = List.foldRight myAppend myEmpty;
+
+public class Formatter a where
+    public formatBoolean :: a -> Boolean -> String;
+    public formatChar :: a -> Char -> String;
+    public formatNum :: Num b => a -> b -> String;
+    ;
+
+/*    
+instance class_name type_signature where
+    method_name = function_name ;
+    [ method_name = function_name ; ]
+instance class_name class_name where
+    method_name = function_name ;
+    [ method_name = function_name ; ]
+*/
+    
+public class MyEq a where
+    public myEquals :: a -> a -> Boolean;
+    public myNotEquals :: a -> a -> Boolean;
+    ;
+    
+equalsInt :: Int -> Int -> Boolean;
+private equalsInt !x !y =
+    x == y;
+
+notEqualsInt :: Int -> Int -> Boolean;
+private notEqualsInt !x !y = 
+    x != y;
+    
+// Int is an instance of MyEq
+instance MyEq Int where
+    myEquals = equalsInt;
+    myNotEquals = notEqualsInt;
+    ;
+
+public class MyEq2 a where
+    public myEquals2 :: a -> a -> Boolean;
+    public myNotEquals2 :: a -> a -> Boolean
+        default defaultNotMyEquals2;
+    ;
+    
+defaultNotMyEquals2 :: MyEq2 a => a -> a -> Boolean;
+private defaultNotMyEquals2 !x !y = 
+    not (myEquals2 x y);
+    
+equalsInt2 :: Int -> Int -> Boolean;
+private equalsInt2 !x !y =
+    x == y;
+
+// Int is an instance of MyEq2
+instance MyEq2 Int where
+    myEquals2 = equalsInt2;
+    ;
+
+//instance MyEq Ord where
+//    myEquals = myEqualsOrd;
+//    myNotEquals = myNotEqualsOrd;
+//    ;
+//    
+//myNotEqualsOrd :: Ord a => a -> a -> Boolean;
+//myNotEqualsOrd !x !y =
+//    x > y || x < y;
+//    
+//myEqualsOrd :: Ord a => a -> a -> Boolean;
+//myEqualsOrd !x !y =
+//     not (myNotEqualsOrd x y);
+//    
+//instance MyOrd Int where
+//    myLessThan = lessThanInt;
+//    myLessThanEquals = lessThanEqualsInt;
+//    myGreaterThanEquals = greaterThanEqualsInt;
+//    myGreaterThan = greaterThanInt;
+//    myCompare = compareInt;
+//    myMax = maxInt;
+//    myMin = minInt;
+//    ;
+//
+//lessThanInt :: Int -> Int -> Boolean;
+//private lessThanInt !intVal1 !intVal2 =
+//    intVal1 < intVal2;
+//
+//lessThanEqualsInt :: Int -> Int -> Boolean;
+//private lessThanEqualsInt !intVal1 !intVal2 =
+//    intVal1 <= intVal2;
+//
+//greaterThanEqualsInt :: Int -> Int -> Boolean;
+//private greaterThanEqualsInt !intVal1 !intVal2 =
+//    intVal1 >= intVal2;
+//
+//greaterThanInt :: Int -> Int -> Boolean;
+//private greaterThanInt !intVal1 !intVal2 =
+//    intVal1 > intVal2;
+//
+//compareInt :: Int -> Int -> Ordering;
+//private compareInt !intVal1 !intVal2 =
+//    if intVal1 < intVal2 then
+//        LT
+//    else if intVal1 > intVal2 then
+//        GT
+//    else
+//        EQ;
+//
+//maxInt :: Int -> Int -> Int;
+//private maxInt !intVal1 !intVal2 =
+//    if intVal1 > intVal2 then
+//        intVal1
+//    else
+//        intVal2;
+//
+//minInt :: Int -> Int -> Int;
+//private minInt !intVal1 !intVal2 =
+//    if intVal1 < intVal2 then
+//        intVal1
+//    else
+//        intVal2;
+//    
+//instance MyEq MyOrdering where
+//    myEquals = equalsMyOrdering;
+//    myNotEquals = notEqualsMyOrdering;
+//    ;
+//    
+//equalsMyOrdering :: MyOrdering -> MyOrdering -> Boolean;
+//equalsMyOrdering !ordering1 !ordering2 =
+//    case ordering1 of
+//    MyLT ->
+//        case ordering2 of
+//        MyLT -> True;
+//        _ -> False;
+//        ;
+//    MyEQ ->
+//        case ordering2 of
+//        MyEQ -> True;
+//        _ -> False;
+//        ;
+//    MyGT ->
+//        case ordering2 of
+//        MyGT -> True;
+//        _ -> False;
+//        ;
+//    ; 
+//    
+//notEqualsMyOrdering :: MyOrdering -> MyOrdering -> Boolean;
+//notEqualsMyOrdering !ordering1 !ordering2 =
+//    case ordering1 of
+//    MyLT ->
+//        case ordering2 of
+//        MyLT -> False;
+//        _ -> True;
+//        ;
+//    MyEQ ->
+//        case ordering2 of
+//        MyEQ -> False;
+//        _ -> True;
+//        ;
+//    MyGT ->
+//        case ordering2 of
+//        MyGT -> False;
+//        _ -> True;
+//        ;
+//    ; 
+//    
+/*    
+instance constraints => class_name type_signature where
+    method_name = function_name ;
+    [ method_name = function_name ; ]
+*/    
+    
+instance Eq a => Eq (MyMaybe a) where
+    equals = equalsMyMaybe;
+    notEquals = notEqualsMyMaybe;
+    ;
+
+equalsMyMaybe :: Eq a => MyMaybe a -> MyMaybe a -> Boolean;
+equalsMyMaybe !myMaybe1 !myMaybe2 =
+    case myMaybe1 of
+    MyJust value1 ->
+        case myMaybe2 of
+        MyNothing -> False;
+        MyJust value2 -> value1 == value2;
+        ;
+    MyNothing ->
+        case myMaybe2 of
+        MyNothing -> True;
+        MyJust _ -> False;
+        ;
+    ;
+    
+notEqualsMyMaybe :: Eq a => MyMaybe a -> MyMaybe a -> Boolean;
+notEqualsMyMaybe !myMaybe1 !myMaybe2 =
+    case myMaybe1 of
+    MyJust value1 ->
+        case myMaybe2 of
+        MyNothing -> True;
+        MyJust value2 -> value1 != value2;
+        ;
+    MyNothing ->
+        case myMaybe2 of
+        MyNothing -> False;
+        MyJust _ -> True;
+        ;
+    ;
+    
+instance (Eq a, Eq b) => Eq (MyEither a b) where
+    equals = equalsMyEither;
+    notEquals = notEqualsMyEither;
+    ;
+
+equalsMyEither :: (Eq a, Eq b) => MyEither a b -> MyEither a b -> Boolean;
+equalsMyEither !myEither1 !myEither2 =
+    case myEither1 of
+    MyLeft value1 ->
+        case myEither2 of
+        MyLeft value2 -> value1 == value2;
+        MyRight _ -> False;
+        ;
+    MyRight value1 ->
+        case myEither2 of
+        MyLeft _ -> False;
+        MyRight value2 -> value1 == value2;
+        ;
+    ;
+    
+notEqualsMyEither :: (Eq a, Eq b) => MyEither a b -> MyEither a b -> Boolean;
+notEqualsMyEither !myEither1 !myEither2 =
+    case myEither1 of
+    MyLeft value1 ->
+        case myEither2 of
+        MyLeft value2 -> value1 != value2;
+        MyRight _ -> True;
+        ;
+    MyRight value1 ->
+        case myEither2 of
+        MyLeft _ -> True;
+        MyRight value2 -> value1 != value2;
+        ;
+    ;
+    
+/*    
+module module_name ;
+
+import_declaration ;
+[import_declaration ; ...]
+
+[friend_declaration ;
+[friend_declaration ; ...]]
+
+[definition ;
+[definition ; ...]]
+import module_name [ using 
+    using_clause ; 
+    [ using_clause ; ... ] ] 
+;
+module Example;
+import Cal.Core.Prelude;
+
+piSquare = Prelude.pi * Prelude.pi;	// OK
+
+circleArea r = pi * r * r;		// !!! Won't compile (unless
+ 						//  pi is also defined in the
+ 						//  Example module)
+itemKind = identifier [, identifier ...] ;
+import Cal.Core.Prelude using
+    typeConstructor = Int, Double, String, Boolean, Char;
+    dataConstructor = False, True, LT, EQ, GT, Nothing, Just;
+    typeClass = Eq, Ord, Num, Inputable, Outputable;
+    function = append, compare, concatl
+    function = toDouble, field1, field2, upFrom, upFromTo;
+    function = pi;
+;
+
+piSquare = Prelude.pi * Prelude.pi;	// Still OK
+
+circleArea r = pi * r * r;		// OK now, we've imported pi
+						//   as an unqualified
+						//   identifier (i.e., in a
+						//   using clause)
+// Shape module
+module Shape;
+import Cal.Core.Prelude;
+friend Shape_Tests; 
+
+drawGenericShape :: GenericShape -> String;
+protected drawGenericShape genericShape =
+    let
+        r = unwrapShape genericShape;
+    in
+        r.draw r.value;
+// Shape_Tests module
+module Shape_Tests;
+import Cal.Core.Prelude;
+import Shape;
+
+drawGeneric = Shape.drawGenericShape;  // OK, protected symbols
+                                       // in Shape module are
+                                       // usable from Shape_Tests
+                                       // because the Shape
+                                       // module declares
+                                       // Shape_Tests as a friend
+// ShapeConsumer module
+module ShapeConsumer;
+import Cal.Core.Prelude;
+import Shape;
+
+drawGeneric = Shape.drawGenericShape; // !!! Won't compile,
+                                      // ShapeConsumer is not a 
+                                      // friend of Shape module
+@version 37.2.1-beta2
+@return {@link LT@}, {@link EQ@}, or {@link GT@} if {@code x@} is
+        respectively less than, equal to, or greater than
+        {@code y@}.
+map round [1.2, 1.75, 3.0, 4.9]
+returns [1, 2, 3, 5]
+filter isJust [Just 'a', Just 'b', Nothing, Nothing, Just 'c']
+returns [Just 'a', Just 'b', Just 'c']
+map fromJust (filter isJust [Just 'a', Just 'b', Nothing, Nothing, Just 'c']) 	
+returns ['a','b','c']
+foldRight add 0.0 [5, 4, 6, 1]
+add 5 (add 4 (add 6 (add 1 0.0)))
+foldLeft add 0.0 [5, 4, 6, 1]
+add (add (add (add 0.0 5) 4) 6) 1
+foldRight add 0.0 [5, 4, 6, 1]
+add 5 (foldRight add 0.0 [4, 6, 1])
+foldLeft add 0.0 [5, 4, 6, 1]
+foldLeft add (add 0.0 5) [4, 6, 1]
+foldLeftStrict subtract 0.0 [1, 1, 1]
+returns -3.0
+foldRight subtract 0.0 [1, 1, 1]
+returns 1.0
+foldLeftStrict (flip subtract) 0.0 [1, 1, 1]
+returns 1.0
+foldRight (flip subtract) 0.0 [1, 1, 1]
+returns -3.0
+head [1,2,3]
+returns 1
+tail [1,2,3]
+returns [2,3]
+*/
+    
+sumList1 :: Num a => [a] -> a;
+public sumList1 list =
+    let
+        sumHelper list !acc =
+            case list of
+            [] -> 0;
+            head : rest -> sumHelper rest (acc + head);
+            ;
+    in
+        sumHelper list 0;
+
+sumList :: Num a => [a] -> a;
+public sumList list = foldLeftStrict add 0 list;
+
+/*
+{name = "Phillipe", age = 5.0}.age
+returns 5.0
+{name = "Phillipe", age = 5.0}.job
+Error: Type error. Invalid record selection for field job. Caused by: the record type {age :: Prelude.Double, name :: Prelude.String} is missing the fields [job] from the record type a\job => {a | job :: b}.
+*/
+
+recTo2DPoint rec =
+    case rec of
+    {_ | x, y} -> (x,y);
+    ;
+    
+/*    
+('C', 0.61, 0.65).#1
+returns 'C'
+('C', 0.61, 0.65).#4
+Error: Type error. Invalid record selection for field #4. Caused by: the record type (Prelude.Char, Prelude.Double, Prelude.Double) is missing the fields [#4] from the record type a\#4 => {a | #4 :: b}.
+*/
+    
+twoDPointToRec point =
+    case point of
+    (xVal, yVal) -> {x=xVal, y=yVal};
+    ;
+
+/*    
+field1 (1,2,3)
+returns 1
+field2 (1,2,3)
+returns 2
+field3 (1,2,3,4)
+returns 3
+field3 (1,2,3,4,5)
+returns 3
+fst (1,2) 
+returns 1
+snd (1,2)
+returns 2
+snd (1,2,3)
+Error: Type Error during an application. Caused by: the fields of the two record type (a, b) and (Prelude.Double, Prelude.Double, Prelude.Double) must match exactly.
+*/
+    
+data MyTupleType a =
+    MyTuple2 
+        elem1 :: a 
+        elem2 :: a |
+    MyTuple3
+        elem1 :: a 
+        elem2 :: a
+        elem3 :: a
+    ;
+
+addMyTupleElems :: Num a => MyTupleType a -> a;
+addMyTupleElems myTuple =
+    case myTuple of
+    MyTuple2 elem1 elem2 -> elem1 + elem2;
+    MyTuple3 elem1 elem2 elem3 -> elem1 + elem2 + elem3;
+    ;
+    
+/*    
+(Just 2.0).Just.value     // The arg to Just is named 'value'
+returns 2.0
+(Nothing :: Maybe Double).Just.value
+Error: Wrong data constructor value selected.  Expecting: Prelude.Just, found: Prelude.Nothing.
+increment :: Int -> Int;
+increment x = x + 1;
+increment (2 * 3)
+(2 * 3) + 1
+6 + 1
+7
+increment (2 * 3)
+increment 6
+6 + 1
+7
+head (45 : list1 (myFactorial 3))
+45
+head (45 : list1 (myFactorial 3))
+head (45 : list1 (3 * (myFactorial (3 - 1)))
+head (45 : list1 (3 * (myFactorial 2))
+head (45 : list1 (3 * 2 * (myFactorial (2 - 1)))
+head (45 : list1 (3 * 2 * (myFactorial 1))
+head (45 : list1 (3 * 2 * 1 * (myFactorial (1 - 1)))
+head (45 : list1 (3 * 2 * 1 * (myFactorial 0))
+head (45 : list1 (3 * 2 * 1 * 1))
+head (45 : list1 (6 * 1 * 1))
+head (45 : list1 (6 * 1))
+head (45 : list1 6)
+head (45 : [6])
+45
+head (45 : list1 (error "you should never see this")) :: Int
+returns 45
+*/
+    
+evensFrom :: Int -> [Int];
+evensFrom start =
+    start : evensFrom (start + 2);
+
+evens :: [Int];
+evens = evensFrom 0;
+
+/*
+take 5 evens
+returns [0, 2, 4, 6, 8]
+*/
+
+cons :: a -> [a] -> [a];
+cons x y = x : y;
+
+strictCons :: a -> [a] -> [a];
+strictCons x y = seq y (x : y);
+
+/*
+cons (myFactorial 3) (cons (3 + 4) [8, 9])
+(myFactorial 3) : (cons (3 + 4) [8, 9])
+(3 * (myFactorial (3 - 1)) : (cons (3 + 4) [8, 9])
+(3 * (myFactorial 2) : (cons (3 + 4) [8, 9])
+(3 * 2 * (myFactorial (2 - 1)) : (cons (3 + 4) [8, 9])
+(6 * (myFactorial (2 - 1)) : (cons (3 + 4) [8, 9])
+(6 * (myFactorial 1)) : (cons (3 + 4) [8, 9])
+(6 * 1 * (myFactorial (1 - 1))) : (cons (3 + 4) [8, 9])
+(6 * (myFactorial (1 - 1))) : (cons (3 + 4) [8, 9]) 
+(6 * (myFactorial 0)) : (cons (3 + 4) [8, 9])
+(6 * 1) : (cons (3 + 4) [8, 9])
+6 : (cons (3 + 4) [8, 9])
+6 : ((3 + 4) : [8, 9])
+6 : (7 : [8, 9])
+[6, 7, 8, 9] 
+strictCons (myFactorial 3) (strictCons (3 + 4) [8, 9])
+strictCons (myFactorial 3) ((3 + 4) : [8, 9])
+strictCons (myFactorial 3) (7 : [8, 9])
+strictCons (myFactorial 3) [7, 8, 9] 
+(myFactorial 3) : [7, 8, 9]
+(3 * myFactorial (3 - 1)) : [7, 8, 9]
+(3 * myFactorial 2) : [7, 8, 9]
+(3 * 2 * myFactorial (2 - 1)) : [7, 8, 9]
+(6 * myFactorial (2 - 1)) : [7, 8, 9]
+(6 * myFactorial 1) : [7, 8, 9]
+(6 * 1 * myFactorial (1 - 1)) : [7, 8, 9]
+(6 * myFactorial (1 - 1)) : [7, 8, 9]
+(6 * myFactorial 0) : [7, 8, 9]
+(6 * 1) : [7, 8, 9]
+6 : [7, 8, 9]
+[6, 7, 8, 9] 
+*/
+
+myHead :: [a] -> a;
+public myHead !list =
+    case list of
+    firstElement : _  -> firstElement;
+    []     -> error "empty list.";
+    ;
+    
+private notEqualsList1 !l1 !l2 = 
+    not (equalsList l1 l2);
+
+private notEqualsList2 l1 l2 = 
+    seq l1 
+    (seq l2
+    (not (equalsList l1 l2)));
+
+private equalsList !list1 !list2 =
+    case list1 of
+    h1 : t1 ->
+        case list2 of
+        h2 : t2 -> 
+            h1 == h2 && equalsList t1 t2;
+        [] -> False;
+        ;
+    [] ->
+        case list2 of
+        _ : _ -> False;
+        [] -> True;
+        ;
+    ;
+    
+
+and :: Boolean -> Boolean -> Boolean;
+public and !a b =
+    case a of
+    False -> False;
+    True -> b;
+    ;
+    
+/**
+ * 'myMap mapFunction list' applies the function mapFunction to 
+ * each element of the list and returns the resulting list.
+ * 
+ * @arg mapFunction
+ *        a function to be applied to each element of the list.
+ * @arg list
+ *        the list.
+ * @return the list obtained by applying mapFunction to each 
+ * element of the list.
+ */
+myMap :: (a -> b) -> [a] -> [b];
+public myMap mapFunction !list =
+    case list of
+    []     -> [];
+    listHead : listTail -> 
+        mapFunction listHead : myMap mapFunction listTail;
+    ;
+data MyLazyList a =
+    MyLazyNil |
+    MyLazyCons 
+        head :: a 
+        tail :: (MyLazyList a);
+
+data MyStrictList a =
+    MyStrictNil |
+    MyStrictCons 
+        head :: a 
+        tail :: !(MyStrictList a);
+
+makeMyLazyList :: [a] -> MyLazyList a;
+makeMyLazyList x =
+    case x of
+    [] -> MyLazyNil;
+    first : rest -> MyLazyCons first (makeMyLazyList rest);
+    ;
+    
+makeMyStrictList :: [a] -> MyStrictList a; 
+makeMyStrictList x =
+    case x of
+    [] -> MyStrictNil;
+    first : rest -> MyStrictCons first (makeMyStrictList rest);
+    ;
+
+/*    
+(makeMyLazyList (upFromTo 0 100000 :: [Int])).MyLazyCons.head
+returns 0
+(makeMyStrictList (upFromTo 0 100000 :: [Int])).MyStrictCons.head
+Error: The java virtual machine encountered an error.
+Caused by: java.lang.StackOverflowError,  Detail: null
+*/
+    
+sumIntList1 :: [Integer] -> Integer;
+sumIntList1 numList =
+    case numList of
+    [] -> 0;
+    first : rest -> first + sumIntList1 rest;
+    ;
+    
+sumIntList2 :: [Integer] -> Integer -> Integer;
+sumIntList2 numList accum =
+    case numList of
+    [] -> accum;
+    first : rest -> sumIntList2 rest (accum + first);
+    ;
+    
+/*    
+sumIntList2 [5, 6, 7, 8] 0
+sumIntList2 [6, 7, 8] (5 + 0)
+sumIntList2 [7, 8] (6 + (5 + 0))
+sumIntList2 [8] (7 + (6 + (5 + 0)))
+sumIntList2 [] (8 + (7 + (6 + (5 + 0))))
+(8 + (7 + (6 + (0 + 5))))
+*/
+
+sumIntList3 :: [Integer] -> Integer -> Integer;
+sumIntList3 numList !accum =
+    case numList of
+    [] -> accum;
+    first : rest -> sumIntList3 rest (accum + first);
+    ;
+
+/*
+sumIntList3 [5, 6, 7, 8] 0
+sumIntList3 [6, 7, 8] (5 + 0)
+sumIntList3 [6, 7, 8] 5
+sumIntList3 [7, 8] (6 + 5)
+sumIntList3 [7, 8] 11
+sumIntList3 [8] (7 + 11)
+sumIntList3 [8] 18
+sumIntList3 [] (8 + 18)
+sumIntList3 [] 26
+26
+sumIntList1 (upFromTo 0 5000)
+Error while executing: The java virtual machine encountered an error.
+Caused by: java.lang.StackOverflowError,  Detail: null
+sumIntList2 (upFromTo 0 5000) 0
+Error while executing: The java virtual machine encountered an error.
+Caused by: java.lang.StackOverflowError,  Detail: null
+sumIntList3 (upFromTo 0 20000) 0
+returns 200010000
+sumIntList3 (upFromTo 0 100000) 0
+returns 5000050000
+*/
+    
+processSomeDynamicValues :: Dynamic -> String;
+processSomeDynamicValues v =
+    let
+        intValue = fromDynamicWithDefault v (0 :: Int);
+        stringValue = fromDynamicWithDefault v "";
+        doubleValue = fromDynamicWithDefault v 0.0;
+    in
+        if (intValue != 0) then
+            intToString intValue
+        else if (stringValue != "") then
+            stringValue
+        else if (doubleValue != 0) then
+            doubleToString doubleValue
+        else
+            "unknown Dynamic value";
+/*    
+processSomeDynamicValues (toDynamic (35 :: Int))
+returns "35"
+map processSomeDynamicValues [toDynamic (16 :: Int), toDynamic "str", toDynamic 1.2, toDynamic 18.0, toDynamic (Just 'C')]
+returns ["16", "str", "1.2", "18.0", "unknown Dynamic value"]
+unwrapInt :: Dynamic -> Maybe Int;
+unwrapInt v =
+    fromDynamic v;
+unwrapInt (toDynamic (50 :: Int))
+returns Just 50
+unwrapInt (toDynamic 50.0)
+returns Nothing
+fromDynamic (toDynamic (50 :: Int)) :: Maybe Int
+returns Just 50
+fromDynamic (toDynamic 50.0) :: Maybe Int
+returns Nothing
+fromDynamic (toDynamic 50.0) :: Maybe Double
+returns Just 50.0
+fromDynamic (toDynamic 50.0)
+Error: Ambiguous type signature in inferred type (Prelude.Outputable a, Prelude.Typeable a) => a.
+*/
+    
+approxPi :: Double;
+approxPi = 3.14159;
+
+addOneInt :: Int -> Int;
+addOneInt x = x + 1;
+
+sunDiameter :: Num a => a;
+sunDiameter = 1380000;
+
+cafAdd10Int :: Int -> Int;
+cafAdd10Int = add 10;
+
+add10Int :: Int -> Int;
+add10Int x = add 10 x;
+
+second :: [a] -> a;
+second = head `compose` tail;
+
+secondOrderable :: Ord a => [a] -> a;
+secondOrderable = head `compose` tail;
+
+largeSum :: Integer;
+largeSum = sum (take 1000000 (List.repeat 1));
+
+/*
+largeSum
+returns 1000000
+largeSum
+returns 1000000
+*/
+
+listOfStringsAndNumbers :: [Dynamic];
+listOfStringsAndNumbers = [toDynamic "fifty-five", toDynamic 55.0, toDynamic (55 :: Int)];
+
+showStringOrDouble :: Dynamic -> String;
+showStringOrDouble x =
+    let
+        doubleValue :: Maybe Double;
+        doubleValue = fromDynamic x;
+    in
+        case doubleValue of
+        Nothing -> fromDynamicWithDefault x "(not a String or Double)";
+        Just value -> Debug.show value;
+        ;
+/*        
+map showStringOrDouble listOfStringsAndNumbers
+returns ["fifty-five", "55.0", "(not a String or Double)"]
+*/
+        
+data public IOErrorType =
+    private PermissionDenied |
+    private DeviceNotReady |
+    private NoSuchThing |
+    private ResourceBusy |
+    private ResourceExhausted |
+    private UnknownHost |
+    private UnhandledIOException
+    deriving Eq;
+
+/**
+ * Determine whether an (Either IOErrorType a) value represents an IO 
+ * error, i.e. in fact the value is of the form Left ioError. 
+ * This function is therefore analogous to Prelude.isJust.
+ * 
+ * @arg resultOrError an (Either IOErrorType a) value to be 
+ * processed.
+ * @return True if the IO operation succeeded, or False if the IO 
+ *         operation failed.
+ */
+isIOSuccess :: Either IOErrorType a -> Boolean;
+public isIOSuccess !resultOrError =
+    case resultOrError of
+    Left {} -> False;
+    _ -> True;
+    ; 
+    
+/**
+ * 'lookup key map' returns the value corresponding to key in the 
+ * map (association list).
+ * 
+ * @arg key the key for which the map is to be searched.
+ * @arg map the map (association list) to be searched.
+ * @return the value corresponding to key in the map.
+ */
+lookup :: (Eq a) => a -> [(a, b)] -> Maybe b;
+public lookup key !map =
+    case map of
+    [] -> Nothing;
+    mapHead : mapTail ->
+        if key == mapHead.#1 then
+            Just mapHead.#2
+        else
+            lookup key mapTail;
+    ;
+
+/*    
+lookup "apple" [("orange", 2.49), ("apple", 1.29), ("pear", 3.29)]
+returns Just 1.29
+lookup "pomegranate" [("orange", 2.49), ("apple", 1.29), ("pear", 3.29)]
+returns Nothing
+map (compare (0 :: Int)) (upFromTo (-2) 2)
+returns [LT, LT, EQ, GT, GT]
+typeOf "str1" == typeOf "str2"
+returns True
+typeOf EQ == typeOf LT
+returns True
+typeOf (4 + 5.0) == typeOf (4 + (5 :: Int))
+returns False
+"str1" == "str2"
+returns False
+EQ != LT
+returns True
+equals 'c' 'c'
+returns True
+LT <= EQ
+returns True
+0 :: Int > 10
+returns False
+"this" > "that"
+returns True
+max "this" "that"
+returns "this"
+compare 0.0 1.0
+returns LT
+negate 7 :: Int
+returns -7
+3 * 9.0
+returns 27.0
+signum (-900)
+returns -1
+fromInteger 500 :: Float
+returns 500.0
+minBound :: Byte
+returns -128
+maxBound :: Int
+returns 2147483647
+maxBound :: Ordering
+returns GT
+append [2, 1, 2] [4, 5, 6, 7, 8] :: [Int]
+returns [2, 1, 2, 4, 5, 6, 7, 8]
+concat ["string1", " ", "string 2", " ", "string 3"]
+returns "string1 string2 string3"
+concat [[12, 12], [6], [12, 12]]
+returns [12, 12, 6, 12, 12]
+empty :: String
+returns ""
+empty :: [Int]
+returns []
+isEmpty [1.0]
+returns False
+isEmpty ""
+returns True
+
+(typeOf "str") == (typeOf 'c')
+returns False
+(typeOf "string1") == (typeOf "string2")
+returns True
+zip ["item_id", "item_description", "order_id"] (upFrom 1 :: [Int])
+returns [("item_id", 1), ("item_description", 2), ("order_id", 3)]
+intToEnum (enumToInt x) == x
+data public MyColorEnum =
+    Red |
+    Green |
+    Blue |
+    Other
+    deriving Enum, IntEnum;
+enumToInt Red
+returns 0
+enumToInt Other
+returns 3
+intToEnum 2
+returns Blue
+intToEnum 500
+Error: argument (100) does not correspond to a value of type MyColorEnum
+*/
+    
+toEnumForOrdering :: Int -> Ordering;
+private toEnumForOrdering index = 
+    if index == 0 then
+        LT
+    else if index == 1 then
+        EQ
+    else if index == 2 then
+        GT
+    else
+        error "Prelude.toEnumForOrdering: the index is out of range."
+    ;
+
+maxOrd :: Ord a => a -> a -> a;
+public maxOrd x y = if x >= y then x else y;
+
+myZipWith :: (a -> b -> c) -> [a] -> [b] -> [c];
+public myZipWith z !xs !ys =
+    case xs of
+    xHead : xTail ->
+        case ys of
+        yHead : yTail -> z xHead yHead : myZipWith z xTail yTail;
+        [] -> [];
+        ;
+    [] -> [];
+    ;
+    
+foreign unsafe import jvm "static field java.util.Collections.EMPTY_LIST"
+    private jList0 :: JList;
+
+
+catMaybes :: [Maybe a] -> [a];
+public catMaybes ms =
+    case ms of
+    [] -> [];
+    x : xs ->
+        case x of
+        Nothing -> catMaybes xs;
+        Just b  -> b : catMaybes xs;
+        ;
+    ;
+
+//lines :: [Char] -> [[Char]];
+//public lines s = 
+//    case s of
+//    [] -> [];
+//    _ : _ ->
+//        let
+//            lineRestPair :: ([Char], [Char]);
+//            lineRestPair = break (\c -> '\n' == c) s;
+//
+//            line :: [Char];
+//            line = fst lineRestPair;
+//
+//            rest :: [Char];
+//            rest = snd lineRestPair;
+//            
+//            returnTail :: [Char];
+//        in
+//            line : 
+//                
+//                (if isNull rest then [] else lines (tail rest));
+//    ;
+        
+maximumBy :: (a -> a -> Ordering) -> [a] -> a;
+public maximumBy comparisonFunction list =
+    case list of
+    [] -> error "Prelude.maximumBy: empty list.";
+    _ : _ ->
+        let
+            max x y =
+                case (comparisonFunction x y) of
+                GT -> x;
+                _  -> y;
+                ;
+        in            
+            List.foldLeft1Strict max list;
+    ;
+
+//data public Attribute = 
+//    private ColourAttribute 
+//        attrName      :: String
+//        colours       :: [Color] |
+//    private BooleanAttribute 
+//        attrName      :: String
+//        boolVals      :: [Boolean] |
+//    private IntegerAttribute 
+//        attrName      :: String
+//        intVals       :: [Int] |
+//    private DoubleAttribute 
+//        attrName      :: String
+//        doubleVals    :: [Double] |
+//    private StringAttribute 
+//        attrName      :: String
+//        stringVals    :: [String] |
+//    private TimeAttribute 
+//        attrName      :: String
+//        timeVals      :: [Time] |
+//    private AttributeSetAttribute 
+//        attrName      :: String 
+//      childAttrSets :: [AttributeSet];
+//
+//public class NamedDataFacet a where
+//    public getDisplayName :: a -> String;
+//    public getUniqueIdentifier :: a -> UniqueIdentifier a;
+//    ;
+//    
+//instance NedDataFacet Field where
+//    getDisplName = getFieldDisplayName;
+//    getUniqueIntifier = getFieldUniqueIdentifier; 
+//    ;
+
+//    /** @see Ord */
+//
+//    /** @see typeClass = Ord */
+//
+//    /**
+//     * @see typeClass = Ord
+//     * @see function = compare
+//     */
+//
+//    /**
+//     * {@code map mapFunction list@} applies the function {@code mapFunction@}
+//     * to each element of the list and returns the resulting list.
+//     * 
+//     * @arg mapFunction a function to be applied to each element of the list.
+//     * @arg list the list.
+//     * @return the list obtained by applying {@code mapFunction@} to
+//     *         each element of the list.
+//     */
+//
+//    /**
+//     * This is a cross reference to Prelude.Right: {@link Right@}
+//     * 
+//     * This is how you would write "Maybe a": {@code {@link Maybe@} a@}.
+//     *
+//     * This is a nice example fragment:
+//     * {@code {@link List.map@} {@link truncate@} [2.6, -2.7] == [2, 2]@}
+//     * 
+//     * To disambiguate, you would write {@link typeConstructor = String@}
+//     * or {@link module = String@}.
+//     */
+//
+//    /**
+//     * @author Bo Ilic
+//     * @author Joseph Wong
+//     */

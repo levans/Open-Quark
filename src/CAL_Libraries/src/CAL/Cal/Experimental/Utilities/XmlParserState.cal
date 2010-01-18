@@ -1,0 +1,555 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * XmlParserState.cal
+ * Creation date: October 2007.
+ * By: Malcolm Sharpe
+ */
+
+/**
+ * This module implements the state for an XML 1.0 parser written using the
+ * {@link Parser@} library module. Also included are state-related functions,
+ * such as general entity expansion and attribute defaults.
+ *
+ * All the state is kept in a record, {@link typeConstructor = XmlParserState@},
+ * to make it simple to add new variables to the state. Nothing is exposed
+ * publically by this module, since it is an implementation detail of the XML
+ * parser.
+ *
+ * @author Malcolm Sharpe
+ */
+module Cal.Experimental.Utilities.XmlParserState;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Byte, Char, Either, Int, Maybe, String;
+    dataConstructor = False, Just, Left, Right, Nothing, True;
+    function =
+        abs, append, concat, const, equals, error, flip, fromJust, fromMaybe,
+        fst, id, isEmpty, isJust, maybeApply, maybeToList, not, seq, snd,
+        uncurry;
+    typeClass = Eq, Inputable, Outputable;
+    ;
+import Cal.Core.Exception using
+    typeClass = Exception;
+    function = catch;
+    ;
+import Cal.Collections.List using
+    function = any, concatMap, lengthAtLeast, list0, list1, map, take;
+    ;
+import Cal.Core.Char;
+import Cal.Core.String using
+    function = fromChar, fromList, toList, toLowerCase;
+    ;
+import Cal.Collections.Set using
+    ;
+import Cal.Collections.Map using
+    function = lookup;
+    ;
+import Cal.Utilities.Parser using
+    typeConstructor = GenParser, ParseError, TokenSequence;
+    function =
+        anyChar, between, char, choiceT, digit, exactString, getInput,
+        getInputSeq, getPosition, getState, hexDigit, initialPos, label, many,
+        many1, manyTill, newErrorMessage, notFollowedBy, oneOf, option,
+        optional, pBind, pFail, pMap, pOr, pReturn, pSeq, runParser, satisfy,
+        sepBy, sepBy1, sepEndBy, setInput, setInputSeq, setPosition, setState,
+        showParseError, skipMany, skipMany1, sourceColumn, spaces, try,
+        makeTSString, runParserSeq, eof, updateState;
+    dataConstructor = Message;
+    ;
+import Cal.Utilities.XmlBuilder using
+    typeConstructor = XmlAttribute;
+    function = attributeLocalName, makeXmlAttribute;
+    ;
+
+friend Cal.Experimental.Utilities.XmlParserEngine;
+friend Cal.Test.Experimental.Utilities.XmlParserEngine_Tests;
+
+/// Parser Utilities
+
+/**
+ * Run a parser but ignore its return value.
+ */
+pIgnore :: GenParser tok st a -> GenParser tok st ();
+private pIgnore = pMap (const ());
+
+/**
+ * Temporarily replaces the current parser input with {@code input@}, and runs
+ * the provided parser. After the parser completes, restores the old input.
+ */
+withInput :: TokenSequence tok -> String -> GenParser tok st a -> GenParser tok st a;
+private withInput input inputName p =
+    getInputSeq `pBind` (\oldInputSeq ->
+    getPosition `pBind` (\oldPos ->
+    setInputSeq input `pSeq`
+    setPosition (initialPos inputName) `pSeq`
+    p `pBind` (\x ->
+    setInputSeq oldInputSeq `pSeq`
+    setPosition oldPos `pSeq`
+    pReturn x)));
+
+/**
+ * If {@code cond@} returns true, take {@code ifBranch@}. Otherwise, take {@code elseBranch@}.
+ */
+pIf :: GenParser tok st Boolean -> GenParser tok st a -> GenParser tok st a -> GenParser tok st a;
+private pIf cond ifBranch elseBranch =
+    cond `pBind` (\x ->
+    if x
+    then ifBranch
+    else elseBranch);
+
+/**
+ * If {@code cond@} returns true, execute {@code body@} and ignore its return value. Otherwise, do nothing.
+ */
+pWhen :: GenParser tok st Boolean -> GenParser tok st a -> GenParser tok st ();
+private pWhen cond body =
+    cond `pBind` (\x ->
+    if x
+    then pIgnore body
+    else pReturn ());
+
+/// XML Parser State
+
+/**
+ * Indicate the type of an attribute for normalization purposes.
+ */
+data protected AttributeType =
+    protected CDATAType |
+    protected NonCDATAType;
+
+/**
+ * The various kinds of general entities.
+ */
+data protected GeneralEntity =
+    protected InternalGeneralEntity
+        replacementText :: String |
+    protected UnparsedEntity |
+    protected ExternalParsedGeneralEntity
+    deriving Eq;
+
+/**
+ * Whether the document is standalone, which affects whether undeclared entity
+ * references violate the Entity Declared WFC.
+ */
+data private Standalone =
+    /**
+     * This document was declared standalone using a 'standalone="yes"' declaration.
+     * In this case, undeclared entities violate the Entity Declared WFC.
+     * 
+     * Since a standalone declaration was used, this document continues to be considered
+     * standalone even if it has an external subset or references an external parameter
+     * entity.
+     */
+    private DeclaredStandalone |
+    /**
+     * No external subset or external parameter entity references have been encountered
+     * yet, so undeclared entities still violate the Entity Declared WFC.
+     */
+    private MaybeStandalone |
+    /**
+     * An external subset or an external parameter entity reference has been encountered,
+     * so undeclared entities do not violate the Entity Declared WFC.
+     */
+    private NotStandalone;
+
+/**
+ * The state of the XML parser.
+ * This is a place to hold any information that is most convenient to pass
+ * between parsers implicitly. As a result, some state may be the same
+ * across a parse, but other state may change.
+ */
+data protected XmlParserState =
+    /**
+     * maybeExpectedEncoding:
+     *   If set, the XML document was detected to have this encoding,
+     *   and xmldecl should check that this encoding is the same as
+     *   the declared encoding, if any.
+     *   
+     * parameterEntities:
+     *   A map from parameter entity names to their replacement texts.
+     *   External entities are represented by Nothing.
+     *   
+     * generalEntities:
+     *   A map from general entity names to general entities.
+     *   
+     * expandingEntities:
+     *   False if general entities should not be expanded. This is
+     *   used to test entity declarations for well-formedness. If
+     *   entity expansion were performed, as-yet undeclared entities
+     *   could not be referenced, but the spec allows documents to
+     *   do this.
+     * 
+     * entitiesBeingExpanded:
+     *   Contains the names of all entities that are currently
+     *   being expanded.
+     *   
+     * attributeTypes:
+     *   A nested map from element names, then attribute names, to
+     *   the attribute's type.
+     * 
+     * attributeDefaults:
+     *   A nested map from element names, then attribute names, to
+     *   the attribute's default value.
+     *   
+     * processingDeclarations:
+     *   Whether the parser is currently processing declarations in
+     *   the doctype declaration. This is switched off if an external
+     *   parameter entity is referenced.
+     * 
+     * standalone:
+     *   Whether this document is considered to be a standalone document,
+     *   which affects whether undeclared entities are fatal errors. See
+     *   {@link Standalone@} for details.
+     */
+    private XmlParserState
+        stateRecord :: {
+            maybeExpectedEncoding :: Maybe String,
+            parameterEntities :: Map.Map String (Maybe String),
+            generalEntities :: Map.Map String GeneralEntity,
+            entitiesBeingExpanded :: Set.Set String,
+            attributeTypes :: Map.Map String (Map.Map String AttributeType),
+            attributeDefaults :: Map.Map String (Map.Map String String),
+            processingDeclarations :: Boolean,
+            standalone :: Standalone
+            }
+    ;
+
+initialXmlParserState :: XmlParserState;
+protected initialXmlParserState =
+    XmlParserState
+        {
+            maybeExpectedEncoding = Nothing,
+            parameterEntities = Map.empty,
+            generalEntities = initialGeneralEntities,
+            entitiesBeingExpanded = Set.empty,
+            attributeTypes = Map.empty,
+            attributeDefaults = Map.empty,
+            processingDeclarations = True,
+            standalone = MaybeStandalone
+            }
+    ;
+
+initialGeneralEntities :: Map.Map String GeneralEntity;
+private initialGeneralEntities =
+    Map.insert "lt" (InternalGeneralEntity "&#60;") $
+    Map.insert "gt" (InternalGeneralEntity ">") $
+    Map.insert "amp" (InternalGeneralEntity "&#38;") $
+    Map.insert "apos" (InternalGeneralEntity "'") $
+    Map.insert "quot" (InternalGeneralEntity "\"") $
+    Map.empty;
+
+setMaybeExpectedEncoding :: Maybe String -> XmlParserState -> XmlParserState;
+protected setMaybeExpectedEncoding maybeExpectedEncoding state =
+    XmlParserState $ {state.XmlParserState.stateRecord | maybeExpectedEncoding := maybeExpectedEncoding };
+
+checkEncodingIsExpected :: String -> GenParser tok XmlParserState ();
+protected checkEncodingIsExpected encodingName =
+    getState `pBind` (\state ->
+    case state.XmlParserState.stateRecord.maybeExpectedEncoding of
+    Nothing -> pReturn ();
+    Just expectedEncoding ->
+        // Encoding names are case-insensitive.
+        if expectedEncoding `String.equalsIgnoreCase` encodingName
+        then pReturn ()
+        else pFail ("Encoding declaration was "++encodingName++", but expected "++expectedEncoding););
+
+/**
+ * Add a parameter entity to the XML parser state. If a parameter entity by that name
+ * already exists, does nothing.
+ * 
+ * Does nothing if declarations are not being processed.
+ */
+addParameterEntity :: String -> Maybe String -> GenParser tok XmlParserState ();
+protected addParameterEntity name maybeReplacementText =
+    pWhen isProcessingDeclarations $
+    updateState (\state ->
+        XmlParserState $
+        {state.XmlParserState.stateRecord
+         // Duplicate entity declarations are ignored.
+         | parameterEntities := Map.insertWith (const id) name maybeReplacementText state.XmlParserState.stateRecord.parameterEntities});
+
+/**
+ * Lookup a parameter entity in the XML parser state.
+ * 
+ * If the entity is not declared and the document is not standalone,
+ * the parser fails.
+ * Otherwise, if the entity is undeclared or external, the parser stops
+ * processing declarations if the document is not declared standalone,
+ * and the returned replacement text is empty.
+ * Otherwise, returns the replacement text of the entity.
+ */
+lookupParameterEntity :: String -> GenParser tok XmlParserState String;
+protected lookupParameterEntity name =
+    getState `pBind` (\state ->
+    case Map.lookup name state.XmlParserState.stateRecord.parameterEntities of
+    Nothing ->
+        pIf isStandalone
+        (pFail $ "Undeclared parameter entity: "++name)
+        (stopProcessingDeclarations `pSeq`
+         pReturn "");
+    Just maybeReplacementText ->
+        case maybeReplacementText of
+        Nothing ->
+            setNotStandalone `pSeq`
+            pWhen (pMap not isStandalone) stopProcessingDeclarations `pSeq`
+            pReturn "";
+        Just replacementText -> pReturn replacementText;
+        ;);
+
+/**
+ * Add a general entity to the XML parser state. If a general entity by that name
+ * already exists, does nothing.
+ * 
+ * In the case of predefined entities, checks that the declaration is correct.
+ * 
+ * Does nothing if declarations are not being processed.
+ */
+addGeneralEntity :: String -> GeneralEntity -> GenParser Char XmlParserState ();
+protected addGeneralEntity name generalEntity =
+    pWhen isProcessingDeclarations $
+    (if name == "lt" && generalEntity != InternalGeneralEntity "&#60;" then pFail "lt entity incorrectly defined"
+     else if name == "gt" && generalEntity != InternalGeneralEntity "&#62;" &&
+                             generalEntity != InternalGeneralEntity ">" then pFail "gt entity incorrectly defined"
+     else if name == "amp" && generalEntity != InternalGeneralEntity "&#38;" then pFail "amp entity incorrectly defined"
+     else if name == "apos" && generalEntity != InternalGeneralEntity "&#39;" &&
+                               generalEntity != InternalGeneralEntity "'" then pFail "apos entity incorrectly defined"
+     else if name == "quot" && generalEntity != InternalGeneralEntity "&#34;" &&
+                               generalEntity != InternalGeneralEntity "\"" then pFail "quot entity incorrectly defined"
+     else
+         (updateState (\state ->
+              XmlParserState $
+              {state.XmlParserState.stateRecord
+               // Duplicate entity declarations are ignored.
+               | generalEntities := Map.insertWith (const id) name generalEntity state.XmlParserState.stateRecord.generalEntities})));
+
+/**
+ * Lookup a general entity in the XML parser state.
+ * 
+ * If it is not declared and the document is standalone, the parser fails.
+ * If it is not declared and the document is not standalone, placeholder text is returned.
+ * If it is an external parsed entity and in content, placeholder text is returned.
+ * If it is an external parsed entity and in an attribute value, the parser fails.
+ * If it is an external unparsed entity, the parser fails.
+ */
+lookupGeneralEntity :: String -> ReferenceContext -> GenParser tok XmlParserState String;
+protected lookupGeneralEntity name context =
+    getState `pBind` (\state ->
+    case Map.lookup name state.XmlParserState.stateRecord.generalEntities of
+    Nothing ->
+        pIf isStandalone
+          (pFail ("Undeclared general entity: "++name))
+          (pReturn undeclaredEntityPlaceholder);
+    Just maybeReplacementText ->
+        case maybeReplacementText of
+        UnparsedEntity -> pFail ("Reference to unparsed entity: "++name);
+        ExternalParsedGeneralEntity ->
+            case context of
+            InContent -> pReturn externalEntityPlaceholder;
+            InAttributeValue ->
+                pFail ("Reference to external entity in attribute value: "++name);
+            InEntityValue ->
+                error "Entity references should not be expanded in entity values";
+            ;
+        InternalGeneralEntity replacementText -> pReturn replacementText;
+        ;);
+
+data protected ReferenceContext =
+    protected InEntityValue |
+    protected InAttributeValue |
+    protected InContent
+    deriving Eq;
+
+undeclaredEntityPlaceholder :: String;
+private undeclaredEntityPlaceholder =
+    " [note: this entity's replacement text is unknown, so is not included] ";
+
+externalEntityPlaceholder :: String;
+private externalEntityPlaceholder =
+    " [note: an external general entity was referenced here, but was not included] ";
+
+/**
+ * Expands a general entity using the given parser.
+ * 
+ * Raises a parse error on recursive entity expansion.
+ */
+expandEntity :: (String, String) -> GenParser Char XmlParserState a -> GenParser Char XmlParserState a;
+protected expandEntity nameAndReplacementText p =
+    let
+        name = fst nameAndReplacementText;
+        replacementText = snd nameAndReplacementText;
+    in
+        getState `pBind` (\state ->
+        if Set.member name state.XmlParserState.stateRecord.entitiesBeingExpanded
+        then pFail ("Entity defined recursively: "++name)
+        else pReturn ()) `pSeq`
+        updateState (\state ->
+            XmlParserState $
+            {state.XmlParserState.stateRecord
+             | entitiesBeingExpanded := Set.insert name state.XmlParserState.stateRecord.entitiesBeingExpanded }) `pSeq`
+        withInput (makeTSString replacementText) ("general entity: "++name) p `pBind` (\result ->
+        updateState (\state ->
+            XmlParserState $
+            {state.XmlParserState.stateRecord
+             | entitiesBeingExpanded := Set.delete name state.XmlParserState.stateRecord.entitiesBeingExpanded}) `pSeq`
+        pReturn result);
+
+/**
+ * Add a type for an attribute attached to the given element.
+ * 
+ * Does nothing if declarations are not being processed.
+ * 
+ * @arg elementName the element that can have this attribute.
+ * @arg attributeName the name of the attribute.
+ * @arg attributeType the type of the attribute. For example, CDATA.
+ */
+addAttributeType :: String -> String -> AttributeType -> GenParser tok XmlParserState ();
+protected addAttributeType elementName attributeName attributeType =
+    pWhen isProcessingDeclarations $
+    updateState (\state ->
+        XmlParserState $
+        {state.XmlParserState.stateRecord
+         | attributeTypes
+             := Map.insertWith
+                  // Attribute definitions for the same element are merged, preferring the earlier
+                  // definition when there are two definitions for the same attribute.
+                  (flip Map.union)
+                  elementName
+                  (Map.single attributeName attributeType)
+                  state.XmlParserState.stateRecord.attributeTypes});
+
+getAttributeTypes :: String -> GenParser tok XmlParserState (Map.Map String AttributeType);
+private getAttributeTypes elementName =
+    getState `pBind` (\state ->
+    pReturn $ Map.lookupWithDefault elementName state.XmlParserState.stateRecord.attributeTypes Map.empty);
+
+/**
+ * Add a default value for an attribute attached to the given element.
+ * 
+ * Does nothing if declarations are not being processed.
+ * 
+ * @arg elementName the element that can have this attribute.
+ * @arg attributeName the name of the attribute.
+ * @arg attributeDefault the default value of the attribute.
+ */
+addAttributeDefault :: String -> String -> String -> GenParser tok XmlParserState ();
+protected addAttributeDefault elementName attributeName attributeDefault =
+    pWhen isProcessingDeclarations $
+    updateState (\state ->
+        XmlParserState $
+        {state.XmlParserState.stateRecord
+         | attributeDefaults
+             := Map.insertWith
+                  // Attribute definitions for the same element are merged, preferring the earlier
+                  // definition when there are two definitions for the same attribute.
+                  (flip Map.union)
+                  elementName
+                  (Map.single attributeName attributeDefault)
+                  state.XmlParserState.stateRecord.attributeDefaults});
+
+getAttributeDefaults :: String -> GenParser tok XmlParserState (Map.Map String String);
+private getAttributeDefaults elementName =
+    getState `pBind` (\state ->
+    pReturn $ Map.lookupWithDefault elementName state.XmlParserState.stateRecord.attributeDefaults Map.empty);
+
+/**
+ * Fill the default attributes for the given element.
+ */
+applyDefaultAttributes :: String -> [XmlAttribute] -> GenParser tok XmlParserState [XmlAttribute];
+protected applyDefaultAttributes name attrs =
+    getAttributeDefaults name `pBind` (\attributeDefaultMap ->
+    let
+        existingAttrs = Map.fromList $ map (\attr -> (attributeLocalName attr, attr)) attrs;
+        defaultAttrs = Map.mapWithKey makeXmlAttribute attributeDefaultMap;
+        attrMap = Map.union existingAttrs defaultAttrs;
+    in
+        pReturn $ Map.elems attrMap);
+
+/**
+ * Get the type of an attribute on the specified element. This is used for normalization purposes, so the default
+ * is CDATAType.
+ */
+getAttributeType :: String -> String -> GenParser tok XmlParserState AttributeType;
+protected getAttributeType elementName attributeName =
+    getAttributeTypes elementName `pBind` (\attributeTypeMap ->
+    pReturn $ Map.lookupWithDefault attributeName attributeTypeMap CDATAType);
+
+/**
+ * Get whether the XML parser is currently processing declarations in the
+ * doctype declaration.
+ */
+isProcessingDeclarations :: GenParser tok XmlParserState Boolean;
+private isProcessingDeclarations =
+    getState `pBind` (\state ->
+    pReturn state.XmlParserState.stateRecord.processingDeclarations);
+
+/**
+ * Turn off the processingDeclarations flag.
+ */
+stopProcessingDeclarations :: GenParser tok XmlParserState ();
+private stopProcessingDeclarations =
+    updateState (\state ->
+        XmlParserState $
+        {state.XmlParserState.stateRecord
+         | processingDeclarations := False});
+
+/**
+ * Declare this document standalone.
+ */
+setDeclaredStandalone :: GenParser tok XmlParserState ();
+protected setDeclaredStandalone =
+    updateState (\state ->
+        XmlParserState $
+        {state.XmlParserState.stateRecord
+         | standalone := DeclaredStandalone});
+
+/**
+ * If this document is not declared standalone, then declare it not
+ * standalone.
+ */
+setNotStandalone :: GenParser tok XmlParserState ();
+protected setNotStandalone =
+    updateState (\state ->
+        XmlParserState $
+        {state.XmlParserState.stateRecord
+         | standalone := (case state.XmlParserState.stateRecord.standalone of
+                          DeclaredStandalone -> DeclaredStandalone;
+                          _ -> NotStandalone;)});
+
+/**
+ * Returns whether the document is not yet known to be non-standalone.
+ */
+isStandalone :: GenParser tok XmlParserState Boolean;
+private isStandalone =
+    getState `pBind` (\state ->
+        case state.XmlParserState.stateRecord.standalone of
+        NotStandalone -> pReturn False;
+        _ -> pReturn True;);

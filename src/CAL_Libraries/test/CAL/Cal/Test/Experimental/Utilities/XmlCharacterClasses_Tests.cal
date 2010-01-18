@@ -1,0 +1,155 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * XmlCharacterClasses_Tests.cal
+ * Creation date: September 2007.
+ * By: Malcolm Sharpe
+ */
+
+module Cal.Test.Experimental.Utilities.XmlCharacterClasses_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Char, Int, String;
+    dataConstructor = False, True, Left, Right;
+    function = assert, error, fst, not, snd;
+    ;
+import Cal.Core.Char using
+    function = fromInt;
+    ;
+import Cal.Collections.List using
+    function = any, map, replicate;
+    ;
+import Cal.Utilities.QuickCheck using
+    function = forAll, getBoundedInt, mapGen, quickCheck, makeBoundedIntGen;
+    typeClass = Arbitrary;
+    typeConstructor = Gen;
+    ;
+import Cal.Experimental.Utilities.XmlCharacterClasses using
+    function = isBaseChar, baseCharCharRanges,
+               isIdeographic, ideographicCharRanges,
+               isCombiningChar, combiningCharCharRanges,
+               isDigit, digitCharRanges,
+               isExtender, extenderCharRanges,
+               isLetter;
+    ;
+
+/**
+ * Test that Letter is correct.
+ */
+test_letter =
+    // Q is a Letter since it is a BaseChar.
+    assert (isLetter 'Q') &&
+    // #x4E00 is a Letter since it is an Ideographic.
+    assert (isLetter '\u4E00') &&
+    // #x0300 is a CombiningChar, not a Letter.
+    assert (not (isLetter '\u0300')) &&
+    // 0 is a Digit, not a Letter.
+    assert (not (isLetter '0')) &&
+    // #x00B7 is an Extender, not a Letter.
+    assert (not (isLetter '\u00B7'))
+    ;
+
+/**
+ * Test that #x00B7 is an Extender.
+ */
+test_extender = isExtender '\u00B7';
+
+/**
+ * Test that #x9FA6 is not an Ideographic.
+ * 
+ * This fails if the range list is not sorted.
+ */
+test_ideographic = not $ isIdeographic '\u9FA6';
+
+/**
+ * Brute force check for whether a character matches a production.
+ */
+inRangeList :: [(Char, Char)] -> Char -> Boolean;
+inRangeList rangeList c = any (\bounds -> fst bounds <= c && c <= snd bounds) rangeList;
+
+/**
+ * Generate a randomly chosen Unicode character in the range \u0000 to \uFFFF.
+ */
+unicodeGen :: Gen Char;
+unicodeGen = mapGen fromInt $ makeBoundedIntGen 0 65536;
+
+/**
+ * Check that isBaseChar is equivalent to its brute force definition.
+ */
+prop_isBaseChar = forAll unicodeGen (\c -> isBaseChar c == inRangeList baseCharCharRanges c);
+
+/**
+ * Check that isIdeographic is equivalent to its brute force definition.
+ */
+prop_isIdeographic = forAll unicodeGen (\c -> isIdeographic c == inRangeList ideographicCharRanges c);
+
+/**
+ * Check that isCombiningChar is equivalent to its brute force definition.
+ */
+prop_isCombiningChar = forAll unicodeGen (\c -> isCombiningChar c == inRangeList combiningCharCharRanges c);
+
+/**
+ * Check that isDigit is equivalent to its brute force definition.
+ */
+prop_isDigit = forAll unicodeGen (\c -> isDigit c == inRangeList digitCharRanges c);
+
+/**
+ * Check that isExtender is equivalent to its brute force definition.
+ */
+prop_isExtender = forAll unicodeGen (\c -> isExtender c == inRangeList extenderCharRanges c);
+
+/**
+ * Run all of the unit tests for the CharacterClasses module.
+ */
+unitTests :: Boolean;
+public unitTests =
+    assert test_letter &&
+    assert test_extender &&
+    assert test_ideographic &&
+    assert (quickCheck prop_isBaseChar) &&
+    assert (quickCheck prop_isIdeographic) &&
+    assert (quickCheck prop_isCombiningChar) &&
+    assert (quickCheck prop_isDigit) &&
+    assert (quickCheck prop_isExtender)
+    ;
+
+/// Benchmarks
+/**
+ * Benchmark for the performance of an optimized character range lookup function.
+ * For example, this is useful for measuring the speed-up offered by precomputing tables.
+ */
+benchmark_isBaseChar :: () -> Boolean;
+benchmark_isBaseChar =
+    let
+        input = replicate 1000000 '\uFFFD';
+    in
+        (\unused -> any isBaseChar input);

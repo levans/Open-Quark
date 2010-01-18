@@ -1,0 +1,261 @@
+/*
+ * Copyright (c) 2007 BUSINESS OBJECTS SOFTWARE LIMITED
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * Neither the name of Business Objects nor the names of its contributors
+ *       may be used to endorse or promote products derived from this software
+ *       without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+/*
+ * CellularAutomata.cal
+ * Creation date: Nov 2, 2003.
+ * By: Luke Evans
+ */
+
+/**
+ * This module contains an implementation of simple 1-dimensional cellular automata.
+ * 
+ * This is another toy sample that demonstrates CAL functions calling some Java code.
+ * In particular, we have some CAL that computes generations of binary cellular automata,
+ * and then plots these with a simple 'plotter' Java class.
+ *
+ * The main value of this sample is in the mechanics of 'importing' Java classes and methods into CAL
+ * (as foreign types and foreign functions respectively).    
+ *
+ * (The actual code is a little hoary and predates the {@link module = "Cal.Core.Bits"@} library - it could certainly do with being reworked.
+ * Similarly, the plotter could do with consolidating window refreshes, especially for an application like this,
+ * which resizes the window every generation.)
+ * 
+ * {@em To try this out in the GemCutter:@}
+ * 
+ * {@orderedList
+ *  {@item Drag the {@link plotCellularAutomaton@} Gem onto the Table Top@}
+ *  {@item Run this Gem with parameters numOfGenerations=100, ruleNumber=30@}
+ *  {@item A Plot window should appear and plot the pattern for this cellular automaton@}
+ * @}
+ * 
+ * @author Luke Evans
+ */
+module Cal.Samples.CellularAutomata;
+
+import Cal.Core.Prelude using
+    function = negate, upFrom, intToString, stringToIntRadix;
+    dataConstructor = False, True;
+    typeConstructor = Boolean, Int, String;
+    ;
+
+import Cal.Collections.List using
+    function = map, zip, zip3, iterate, foldLeftStrict, subscript, length, take, drop, repeat;
+    ;
+
+import Cal.Core.String;
+
+import Cal.Samples.Plot using
+    function = newPlotDocument, plotPoint;
+    typeConstructor = JPlotDoc;
+    ;
+
+/**
+ * Samples triples from a list, moving along the list one item at a time until the last full triple.
+ * 
+ * @arg list the list of items from which to sample successive triples.
+ * @return a list of triples sampled from the input list.
+ */
+windowedSample3 :: [a] -> [(a, a, a)];
+windowedSample3 list =   
+    let
+        listDrop1 = drop 1 list;
+    in
+        zip3 list listDrop1 (drop 1 listDrop1)
+    ;
+
+/**
+ * Determines the next generation of 1-dimensional cellular automaton, given a rule function that operates
+ * on three cells in the previous dimension.
+ * 
+ * @arg ruleFunction a rule function for creating a value from a sequence of three boolean values.
+ * @arg antecedentValues the antecedent generation of cell states.
+ * @return the next generation.
+ */
+nextGen :: ((Boolean, Boolean, Boolean) -> Boolean) -> [Boolean] -> [Boolean];
+nextGen ruleFunction antecedentValues =
+    map ruleFunction (windowedSample3 ([False, False] ++ antecedentValues ++ [False, False]));
+
+/**
+ * Converts an integer into a string representation of the integer in binary.
+ * 
+ * @arg integer the integer to be converted.
+ * @return the string representation of the integer in binary.
+ */ 
+foreign unsafe import jvm "static method java.lang.Integer.toBinaryString" private jToBinaryString :: Int -> String;
+
+/**
+ * Converts an integer to its binary representation (list of binary digits), with the least-significant bit first.
+ * The generated binary list is infinite - it ends in an infinite list of zeros.
+ * 
+ * @arg integer the integer to be converted.
+ * @return the binary representation of the integer, with least-significant bit first. 
+ */
+intToReverseBinary :: Int -> [Boolean];
+intToReverseBinary integer =
+    (map (\x -> x == '1') (String.toList (String.reverse (jToBinaryString integer)))) ++ (repeat False);
+
+/**
+ * Converts a binary number (list of binary digits) to an integer.
+ * 
+ * @arg binaryDigits the binary digits of the number.
+ * @return the corresponding integer value. 
+ */
+binaryToInt :: [Boolean] -> Int;
+binaryToInt binaryDigits =
+    stringToIntRadix (String.fromList (map (\value -> if value then '1' else '0') binaryDigits)) 2;
+
+/**
+ * Calculates the value of this cell, given the cells in the previous generation, according to the {@em rule number@}.
+ * 
+ * The rule number is really the 8-bit binary value that determines whether the generated bit is 'on' or 'off' depending
+ * on each of the possible states of the binary triplet.
+ * 
+ * @arg ruleNumber the rule number.
+ * @arg antecedentValues the antecedent boolean values used to calculate the boolean value in this generation.
+ */
+applyCellularAutomatonRule :: Int -> [Boolean] -> Boolean;
+applyCellularAutomatonRule ruleNumber antecedentValues =
+    subscript (intToReverseBinary ruleNumber) (binaryToInt antecedentValues);
+
+/**
+ * Converts a triple of items into a list of three items.
+ * 
+ * @arg triple the triple to be converted.
+ * @return a list of three items.
+ */
+tripleToList :: (a, a, a) -> [a];
+tripleToList triple = 
+    case triple of
+    (first, second, third) -> [first, second, third];
+    ;
+
+/**
+ * Calculates the value of this cell according to the {@em rule number@}, given the three boolean values of pertinent cells
+ * in the previous generation (the cell to the left of, directly 'above', and to the right of the cell we are
+ * considering in the current generation).
+ * 
+ * The rule number is really the 8-bit binary value that determines whether the generated bit is 'on' or 'off' depending
+ * on each of the possible states of the binary triplet.
+ * 
+ * @arg ruleNumber the rule number.
+ * @arg triple the antecedent boolean values used to calculate the boolean value in this generation.
+ */
+applyCellularAutomatonRuleFromBooleanTriple :: Int -> (Boolean, Boolean, Boolean) -> Boolean;
+applyCellularAutomatonRuleFromBooleanTriple ruleNumber triple =
+    applyCellularAutomatonRule ruleNumber (tripleToList triple);
+
+/**
+ * The infinite list of generations of the 1-dimensional cellular automaton of the given rule.
+ * 
+ * The rule number is really the 8-bit binary value that determines whether the generated bit is 'on' or 'off' depending
+ * on each of the possible states of the binary triplet.
+ * 
+ * @arg ruleNumber the rule number.
+ * @return the infinite list of generations of the 1-dimensional cellular automaton.
+ */
+generationsOfCellularAutomaton :: Int -> [[Boolean]];
+public generationsOfCellularAutomaton ruleNumber =
+    iterate (nextGen (applyCellularAutomatonRuleFromBooleanTriple ruleNumber)) [True];
+
+/**
+ * Plots one generation of the cellular automaton on virtual graph paper.
+ * 
+ * @arg generationNum the generation to plot (determines the Y offset in the plot).
+ * @arg paper the plot document (virtual graph paper) to plot onto.
+ * @arg cells the cells in this generation.
+ * @return the virtual graph paper with the generation plotted.
+ */
+plottedGeneration :: Int -> JPlotDoc -> [Boolean] -> JPlotDoc;
+plottedGeneration generationNum paper cells =
+    let
+        plotPixel :: JPlotDoc -> (Boolean, Int) -> JPlotDoc;
+        plotPixel plotDoc pixelInfo =
+            case pixelInfo of
+            (pixelOn, pixelX) -> 
+                if pixelOn then
+                    plotPoint plotDoc pixelX (negate generationNum)
+                else
+                    plotDoc;
+            ;
+        
+        pixels :: [(Boolean, Int)];
+        pixels = zip cells (upFrom (negate ((length cells) / 2)));
+    in
+        foldLeftStrict plotPixel paper pixels;
+
+/**
+ * Plots all generations of the cellular automaton.
+ * 
+ * @arg paper the plot document (virtual graph paper) to plot onto.
+ * @arg allGenerations the list of cellular automaton generations.
+ * @return the virtual graph paper with the generations plotted.
+ */
+plottedGenerations :: JPlotDoc -> [[Boolean]] -> JPlotDoc;
+public plottedGenerations paper allGenerations =
+    let
+        plottedNumberedGeneration :: JPlotDoc -> ([Boolean], Int) -> JPlotDoc;
+        plottedNumberedGeneration plotDoc generation =
+            case generation of
+            (genPoints, genNumber) ->
+                plottedGeneration genNumber plotDoc genPoints;
+            ;
+        
+        numberedGenerations :: [([Boolean], Int)];
+        numberedGenerations = zip allGenerations (upFrom 0);
+    in
+        foldLeftStrict plottedNumberedGeneration paper numberedGenerations;
+
+/**
+ * The Plotter is used to visualise the evolution of the 1-dimensional cellular automaton of the provided
+ * {@em rule number@} to a certain generation. This will appear as a triangle of points with the apex at the
+ * top of the page.
+ * 
+ * The rule number is really the 8-bit binary value that determines whether the generated bit is 'on' or 'off' depending
+ * on each of the possible states of the binary triplet.
+ * 
+ * @arg numOfGenerations the number of generations to plot
+ * @arg ruleNumber the rule number.
+ * @return whether anything is plotted on the virtual graph paper.
+ */
+plotCellularAutomaton :: Int -> Int -> Boolean;
+public plotCellularAutomaton numOfGenerations ruleNumber =
+    let
+        paper :: JPlotDoc;
+        paper =
+            newPlotDocument (intToString numOfGenerations ++ " Generations of 1D Cellular Automaton, Rule #" ++ intToString ruleNumber);
+        
+        plotDocWithGenerations :: JPlotDoc;
+        plotDocWithGenerations =
+            plottedGenerations paper (take numOfGenerations (generationsOfCellularAutomaton ruleNumber));
+    in
+        Plot.show plotDocWithGenerations;
