@@ -130,6 +130,12 @@ import org.openquark.util.Pair;
  * Many of the different kinds of identifiers have also been represented by the typesafe-enum SourceIdentifier.Category,
  * by Iulian Radu.
  */
+
+/*
+ * Note: Eclipse compilation may mistakenly report compile errors related to cycles in the type hierarchy, etc of the classes in this file.
+ * You can make a small edit to the IdentifierInfo.TopLevel nested class to make Eclipse recompile without errors.
+ */
+
 public abstract class IdentifierInfo {
     
     /**
@@ -194,6 +200,11 @@ public abstract class IdentifierInfo {
      */
     public static abstract class TopLevel extends IdentifierInfo {
         
+    	/*
+		 * Note: Eclipse compilation may mistakenly report compile errors related to cycles in the type hierarchy, etc of the classes in this file.
+		 * You can make a small edit to this nested class to make Eclipse recompile without errors.
+    	 */
+    	
         /**
          * The resolved, fully qualified name of the entity referred to by the identifier.
          */
