@@ -1,0 +1,5 @@
+# ignore all .class files
+*.class
+
+# ignore CAL .cmi files
+*.cmi
