@@ -1,0 +1,215 @@
+/**
+ * A SqlBuilder implementation for PostgreSQL databases.
+ */
+module Cal.Data.SqlBuilder.PostgreSqlBuilder;
+
+import Cal.Core.Prelude using
+    function = error, intToString;
+    typeConstructor = Boolean, String;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, Expr, SqlBuilder, SqlBuilderState;
+    function = expressionText2;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        defaultSqlBuilderFunctions, quoteIdentifierHelper,
+        quotesNeeded_allowUppercaseOnly;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = text;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Utilities.TimeZone using
+    typeConstructor = TimeZone;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_TinyInt, SqlType_SmallInt, SqlType_Integer, SqlType_BigInt,
+        SqlType_Decimal, SqlType_Numeric, SqlType_Real, SqlType_Float,
+        SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char,
+        SqlType_VarChar, SqlType_LongVarChar, SqlType_Clob, SqlType_Binary,
+        SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, SqlType_Date,
+        SqlType_Time, SqlType_TimeStamp;
+    ;
+
+import Cal.Utilities.Locale;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = head;
+    ;
+
+
+
+/**
+ * A SqlBuilder implementation for PostgreSQL databases.
+ *
+ * The SQL builder for PostgreSQL differs from the default SQL builder in that:
+ * 1. 
+ */
+postgreSqlBuilder :: SqlBuilder;
+public postgreSqlBuilder = Sql.makeSqlBuilder postgreSqlBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for PostgreSQL.
+ */
+public postgreSqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    quoteIdentifier           := postgreSql_quoteIdentifier,
+//                    makeSafeName              := db2_makeSafeName,
+//                    buildTableAndAliasText    := db2_tableAndAliasText,
+                    timeToSql                 := postgreSql_timeToSql,
+                    booleanToSql              := postgreSql_booleanToSql,
+//                    prepareQuery              := db2_prepareQuery,
+                    functionToSql             := postgreSql_functionToSql,
+                    functionName              := postgreSql_functionNameText,
+                    operatorText              := postgreSql_operatorText,
+                    buildFieldType            := postgreSql_buildFieldType
+            };
+
+/**
+ * The double-quote character is used for quoting identifiers and this is also best to quote identifiers with lower case letters.
+ */
+postgreSql_quoteIdentifier :: String -> Document;
+postgreSql_quoteIdentifier = quoteIdentifierHelper quotesNeeded_allowUppercaseOnly "\"" "\"";
+
+
+postgreSql_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+postgreSql_functionToSql builder builderState func arguments = 
+    let
+        postgreSql_datePartText :: String -> Document;
+        postgreSql_datePartText datePartString = 
+            let
+                dateArg = head arguments;
+                dateArgText = expressionText2 builder builderState dateArg;
+            in
+                text ("EXTRACT (" ++ datePartString ++ " FROM ") ++ dateArgText ++ text ")";
+    in
+        case func of
+        Sql.YearFunction       -> postgreSql_datePartText "year";
+        Sql.QuarterFunction    -> postgreSql_datePartText "quarter";
+        Sql.MonthFunction      -> postgreSql_datePartText "month";
+        Sql.DayOfMonthFunction -> postgreSql_datePartText "day";
+        Sql.HourFunction       -> postgreSql_datePartText "hour";
+        Sql.MinuteFunction     -> postgreSql_datePartText "minute";
+        Sql.SecondFunction     -> postgreSql_datePartText "second";
+        Sql.DayOfWeekFunction  -> postgreSql_datePartText "dow";
+        Sql.DayOfYearFunction  -> postgreSql_datePartText "doy";
+        Sql.WeekFunction       -> postgreSql_datePartText "week";
+//        Sql.MonthNameFunction  -> ?;
+//        Sql.DayNameFunction    -> ?;
+        _ ->
+            defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+        ;
+
+/* Functions
+    InsertFunction  -> error unsupported???
+    LeftFunction    -> perhap use: substr(string, from [, count])
+    LocateFunction  -> use position, but check signature
+    RightFunction   -> perhap use: substr(string, from [, count])
+    
+    SpaceFunction   -> use repeat with a space char?
+    SubstringFunction -> substr(string, from [, count])
+    
+    DayNameFunction -> unsupported?
+    MonthNameFunction -> unsupported?
+    
+    DateTimeAddFunction {} -> use interval math?
+    DateTimeDiffFunction {} -> ???
+*/
+
+postgreSql_functionNameText :: DbFunction -> String;
+postgreSql_functionNameText func =
+    case func of
+    Sql.LogFunction      -> "LN";
+    Sql.Log10Function    -> "LOG";
+    Sql.RandFunction     -> "RANDOM";
+    Sql.TruncateFunction -> "TRUNC";
+    Sql.CharFunction     -> "CHR";
+    Sql.LcaseFunction    -> "LOWER";
+    Sql.UcaseFunction    -> "UPPER";
+    Sql.DatabaseFunction -> "current_database";
+    Sql.IfNullFunction   -> "COALESCE";
+    Sql.AggrStdDev       -> "STDDEV_SAMP";
+    Sql.AggrStdDevP      -> "STDDEV_POP";
+    Sql.AggrVar          -> "VAR_SAMP";
+    Sql.AggrVarP         -> "VAR_POP";
+    
+    Sql.DifferenceFunction -> 
+        // PostgreSQL doesn't support the SoundEx Difference function.
+        error ("Unsupported function 'DIFFERENCE'");
+    Sql.SoundexFunction    -> 
+        // PostgreSQL doesn't support the SoundEx function.
+        error ("Unsupported function 'SOUNDEX'");
+    _ ->
+        defaultSqlBuilderFunctions.functionName func;
+    ;
+            
+postgreSql_operatorText :: DbFunction -> String;
+postgreSql_operatorText operator =
+    case operator of
+    Sql.OpCat    -> "||";
+    Sql.OpBitXor -> "#";
+    _ -> defaultSqlBuilderFunctions.operatorText operator;
+    ;
+
+
+/**
+* Generates timestamps in the following form:  '2005-05-20 13:23:45.0'
+*/
+postgreSql_timestampPattern :: String;
+postgreSql_timestampPattern = "''yyyy-MM-dd HH:mm:ss.S''";      // TODO: should this be prefixed with "TIMESTAMP "?
+
+postgreSql_timeToSql :: Time -> TimeZone -> Document;
+postgreSql_timeToSql timeVal timeZone = 
+    text (Time.formatTime timeVal timeZone Time.gregorianCalendar postgreSql_timestampPattern Locale.defaultLocale);
+
+postgreSql_booleanToSql :: Boolean -> Document;
+postgreSql_booleanToSql !boolVal =
+    text (if boolVal then "TRUE" else "FALSE");
+
+
+postgreSql_buildFieldType :: SqlType -> Document;
+postgreSql_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "smallint";        // PostgreSQL doesn't seem to have a TinyInt type, so use the SmallInt type instead.
+    SqlType_SmallInt           -> text $ "smallint";
+    SqlType_Integer            -> text $ "integer";
+    SqlType_BigInt             -> text $ "bigint";
+    SqlType_Decimal {precision, scale} -> text $ "decimal(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "numeric(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "real";
+    SqlType_Float              -> text $ "real";
+    SqlType_Double             -> text $ "double precision";
+    SqlType_Bit                -> text $ "bit";             // Is this correct?
+    SqlType_Boolean            -> text $ "boolean";
+    SqlType_Char {length}      -> text $ "char(" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> text $ "varchar(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "text";
+    SqlType_Clob               -> text $ "text";
+    SqlType_Binary {length}    -> text $ "bit(" ++ intToString length ++ ")";
+    SqlType_VarBinary {length} -> text $ "varbit(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> text $ "bytea";
+    SqlType_Blob               -> text $ "bytea";
+    SqlType_Date               -> text $ "date";
+    SqlType_Time               -> text $ "time";
+    SqlType_TimeStamp          -> text $ "timestamp";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+
+
+

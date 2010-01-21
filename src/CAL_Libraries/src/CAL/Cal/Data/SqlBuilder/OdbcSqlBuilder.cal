@@ -1,0 +1,99 @@
+/**
+ * The ODBC SQL builder generates queries which will work with typical ODBC datasources.
+ * More specialized versions might be needed for certain ODBC drivers and/or database servers.
+ */
+module Cal.Data.SqlBuilder.OdbcSqlBuilder;
+
+import Cal.Core.Prelude using
+    typeConstructor = String;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, Expr, SqlBuilder, SqlBuilderState;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        defaultSqlBuilderFunctions, default_quotesNeeded,
+        quoteIdentifierHelper;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = text;
+    ;
+
+
+
+/**
+ * The ODBC SQL builder generates queries which will work with typical ODBC datasources.
+ * More specialized versions might be needed for certain ODBC drivers and/or database servers.
+ *
+ * The SQL builder for ODBC differs from the default SQL builder in that:
+ * 1. 
+ */
+odbcSqlBuilder :: SqlBuilder;
+public odbcSqlBuilder = Sql.makeSqlBuilder odbcSqlBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for ODBC.
+ */
+public odbcSqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    functionToSql     := odbc_functionToSql,
+                    functionName      := odbc_functionNameText,
+                    timeIntervalToSql := odbc_timeIntervalToSql
+            };
+
+
+odbc_timeIntervalToSql :: Sql.TimeInterval -> Document;
+odbc_timeIntervalToSql !timeInterval = 
+    case timeInterval of
+    Sql.YearInterval    -> text "SQL_TSI_YEAR"; 
+    Sql.QuarterInterval -> text "SQL_TSI_QUARTER";
+    Sql.MonthInterval   -> text "SQL_TSI_MONTH";
+    Sql.DayInterval     -> text "SQL_TSI_DAY";
+    Sql.HourInterval    -> text "SQL_TSI_HOUR";
+    Sql.MinuteInterval  -> text "SQL_TSI_MINUTE";
+    Sql.SecondInterval  -> text "SQL_TSI_SECOND";
+    ;
+
+/**
+ * Generates SQL function SQL is the form:  {fn WEEK(Table1.Field1)}
+ */
+odbc_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+odbc_functionToSql builder builderState func arguments = 
+    let
+        baseFunctionSql = defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+    in
+        // Aggregate functions should not include the function escape sequence.
+        if (Sql.isAggregationFunction func || Sql.isOperator func) then baseFunctionSql
+        else text "{fn " ++ baseFunctionSql ++ text "}";
+
+/**
+ * Override the default names of some of the functions for ODBC.
+ */
+odbc_functionNameText :: DbFunction -> String;
+odbc_functionNameText func =
+    case func of
+    Sql.DayOfMonthFunction -> "DAYOFMONTH";
+    _ -> defaultSqlBuilderFunctions.functionName func;
+    ;
+
+
+/**
+ * For ODBC-Access, there are some problems using the square brackets as quotes inside of the 
+ * ODBC function escape syntax, so use back-quotes instead.
+ */
+odbcAccessSqlBuilder :: SqlBuilder;
+public odbcAccessSqlBuilder = Sql.makeSqlBuilder odbcAccessSqlBuilderFunctions;
+
+public odbcAccessSqlBuilderFunctions = 
+            { odbcSqlBuilderFunctions | 
+                    quoteIdentifier := odbcAccess_quoteIdentifier
+//                    timeIntervalToSql := msJetSqlBuilderFunctions.timeIntervalToSql       // TODO: which syntax should be used for time interval constants (ODBC or MS Jet)?
+            };
+
+odbcAccess_quoteIdentifier :: String -> Document;
+odbcAccess_quoteIdentifier = quoteIdentifierHelper default_quotesNeeded "`" "`";
+

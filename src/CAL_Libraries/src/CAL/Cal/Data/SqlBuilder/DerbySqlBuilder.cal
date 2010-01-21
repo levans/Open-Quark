@@ -1,0 +1,91 @@
+/**
+ * A SqlBuilder implementation for Apache Derby databases.
+ */
+module Cal.Data.SqlBuilder.DerbySqlBuilder;
+
+import Cal.Core.Prelude using
+    typeConstructor = String;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, Expr, SqlBuilder, SqlBuilderState;
+    function = expressionText2;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        defaultSqlBuilderFunctions, default_quotesNeeded,
+        quoteIdentifierHelper;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = spread, text;
+    ;
+
+import Cal.Collections.List using
+    function = head, tail;
+    ;
+
+import Cal.Data.DatabaseMetadata using
+    function = getFieldDataType, getFieldName, isFieldNullable;
+    typeConstructor = FieldDescription;
+    ;
+
+
+
+
+
+
+/**
+ * A SqlBuilder implementation for Apache Derby databases.
+ * Note:  This is quite preliminary.  More customizations are likely necessary for this to be generally useful.
+ *
+ * The SQL builder for Derby differs from the default SQL builder in that:
+ * 1. Double-quotes are used to quote identifiers.
+ * 2. Special handling is used for the IfNull function.
+ * 3. Special handling for specifying nullability in table field descriptions.
+ */
+derbySqlBuilder :: SqlBuilder;
+public derbySqlBuilder = Sql.makeSqlBuilder derbySqlBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for Apache Derby.
+ */
+public derbySqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    quoteIdentifier       := derby_quoteIdentifier,
+                    functionToSql         := derby_functionToSql,
+                    buildFieldDescription := derby_buildFieldDescription
+            };
+
+
+derby_quoteIdentifier :: String -> Document;
+derby_quoteIdentifier = quoteIdentifierHelper default_quotesNeeded "\"" "\""; 
+
+derby_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+derby_functionToSql builder builderState func arguments = 
+    let
+        ifNullFunctionText = 
+            let
+                arg1 = head arguments;
+                arg1Text = expressionText2 builder builderState arg1;
+                arg2 = head (tail arguments);
+                arg2Text = expressionText2 builder builderState arg2;
+            in
+                text "( CASE WHEN " ++ arg1Text ++ text " IS NULL THEN " ++ arg2Text ++ text " ELSE " ++ arg1Text ++ text " END )"
+            ;
+    in
+        case func of
+        Sql.IfNullFunction -> ifNullFunctionText;
+        _ -> defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+        ;
+
+derby_buildFieldDescription :: SqlBuilder -> FieldDescription -> Document;
+derby_buildFieldDescription builder fieldDesc = 
+    let
+        fieldTypeText = Sql.fieldTypeText builder (getFieldDataType fieldDesc);
+        nullableText = if (isFieldNullable fieldDesc) then "" else "NOT NULL";
+    in
+        spread [Sql.quoteIdentifier builder (getFieldName fieldDesc), fieldTypeText, text nullableText];
+

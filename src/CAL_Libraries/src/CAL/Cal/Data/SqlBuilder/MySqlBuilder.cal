@@ -1,0 +1,193 @@
+/**
+ * A SqlBuilder implementation for MySQL.
+ * The syntax, functions, and types used here should work with MySQL 5.03 and later.
+ */
+module Cal.Data.SqlBuilder.MySqlBuilder;
+
+import Cal.Core.Prelude using
+    function = error, intToString, isEmpty;
+    typeConstructor = Boolean, String;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = Expr, SqlBuilder, SqlBuilderState;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        defaultSqlBuilderFunctions, default_quotesNeeded,
+        quoteIdentifierHelper;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = text;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Utilities.TimeZone using
+    typeConstructor = TimeZone;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_TinyInt, SqlType_SmallInt, SqlType_Integer, SqlType_BigInt,
+        SqlType_Decimal, SqlType_Numeric, SqlType_Real, SqlType_Float,
+        SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char,
+        SqlType_VarChar, SqlType_LongVarChar, SqlType_Clob, SqlType_Binary,
+        SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, SqlType_Date,
+        SqlType_Time, SqlType_TimeStamp;
+    ;
+
+import Cal.Utilities.Locale;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = head;
+    ;
+
+
+
+/**
+ * A SqlBuilder implementation for MySQL.
+ * The syntax, functions, and types used here should work with MySQL 5.03 and later.
+ *
+ * The SQL builder for MySQL differs from the default SQL builder in that:
+ * 1. Identifiers are quoted using back-quotes.
+ * 2. TRUE and FALSE are used for Boolean literals.
+ * 3. DateTime literals are of the form '1999-12-31 23:59:59.000000'.
+ * 4. String concatenation is done using the CONCAT function instead of an operator in MySQL.
+ * 5. MySQL doesn't seem to support the SoundEx DIFFERENCE function.
+ * 6. Different function names are used for Variance, StdDev, and Time Add/Diff functions.
+ * 7. Different Time interval constants are used (YEAR, MONTH, DAY, etc).
+ * 8. SQL type names and the related CONVERT functions are customized for MySQL.
+ * 9. Parens are not omitted for calls to zero-argument functions -- for example NOW().
+ */
+mySqlBuilder :: SqlBuilder;
+public mySqlBuilder = Sql.makeSqlBuilder mySqlBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for MySQL.
+ */
+public mySqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                  quoteIdentifier   := mySql_quoteIdentifier,
+                  timeToSql         := mySql_timeToSql,
+                  booleanToSql      := mySql_booleanToSql,
+                  buildFieldType    := mySql_buildFieldType,
+                  functionToSql     := mySql_functionToSql,
+                  functionName      := mySql_functionNameText,
+                  timeIntervalToSql := mySql_timeIntervalToSql
+            };
+
+// MySQL uses back-quotes to quote identifiers.
+mySql_quoteIdentifier :: String -> Document;
+mySql_quoteIdentifier = quoteIdentifierHelper default_quotesNeeded "`" "`";
+
+// Generates timestamps in the following form:  '2005-05-20 13:23:45.0'
+mySql_timestampPattern :: String;
+mySql_timestampPattern = "''yyyy-MM-dd HH:mm:ss''";
+
+mySql_timestampPattern_fractional :: String;
+mySql_timestampPattern_fractional = "''yyyy-MM-dd HH:mm:ss.S''";
+
+mySql_timeToSql :: Time -> TimeZone -> Document;
+mySql_timeToSql timeVal timeZone = 
+    let
+        pattern :: String;
+        pattern = if (Time.timeParts timeZone timeVal).ticks == 0 then mySql_timestampPattern
+                  else mySql_timestampPattern_fractional;
+    in
+        text (Time.formatTime timeVal timeZone Time.gregorianCalendar pattern Locale.defaultLocale);
+
+// MySQL recognizes TRUE and FALSE for Boolean literals.
+mySql_booleanToSql :: Boolean -> Document;
+mySql_booleanToSql !boolVal =
+    text (if (boolVal) then "TRUE" else "FALSE");
+
+mySql_buildFieldType :: SqlType -> Document;
+mySql_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "TINYINT";
+    SqlType_SmallInt           -> text $ "SMALLINT";
+    SqlType_Integer            -> text $ "INT";
+    SqlType_BigInt             -> text $ "BIGINT";
+    SqlType_Decimal {precision, scale} -> text $ "DECIMAL(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "NUMERIC(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "REAL";
+    SqlType_Float              -> text $ "FLOAT";
+    SqlType_Double             -> text $ "DOUBLE PRECISION";
+    SqlType_Bit                -> text $ "BIT";
+    SqlType_Boolean            -> text $ "BOOLEAN";
+    SqlType_Char {length}      -> text $ "CHAR(" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> text $ "VARCHAR(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "LONGTEXT";
+    SqlType_Clob               -> text $ "LONGTEXT";
+    SqlType_Binary {length}    -> text $ "BINARY(" ++ intToString length ++ ")";
+    SqlType_VarBinary {length} -> text $ "VARBINARY(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> text $ "LONGBLOB";
+    SqlType_Blob               -> text $ "LONGBLOB";
+    SqlType_Date               -> text $ "DATE";
+    SqlType_Time               -> text $ "TIME";
+    SqlType_TimeStamp          -> text $ "DATETIME";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+
+mySql_functionToSql :: SqlBuilder -> SqlBuilderState -> Sql.DbFunction -> [Expr] -> Document;
+mySql_functionToSql builder builderState func arguments = 
+    let
+        convertFunctionSql :: String -> Document;
+        convertFunctionSql !typeName = 
+            mySql_functionToSql builder builderState (Sql.FunctionOther "CONVERT") [head arguments, 
+                                                                                    Sql.untypedFunctionExpr (Sql.FunctionOther typeName) []];
+    in
+        case func of
+        Sql.OpCat   -> 
+            // MySQL uses a function for concatenation instead of an operator.
+            mySql_functionToSql builder builderState (Sql.FunctionOther "CONCAT") arguments;
+        
+        Sql.ConvertToStringFunction -> convertFunctionSql "CHAR";
+        Sql.ConvertToIntFunction    -> convertFunctionSql "SIGNED INTEGER";
+        Sql.ConvertToDoubleFunction -> convertFunctionSql "DECIMAL";    // TODO: is this OK?
+        Sql.ConvertToTimeFunction   -> convertFunctionSql "DATETIME";
+
+        _ -> 
+            // MySQL doesn't seem to allow the parens to be omitted for zero-argument functions, so ensure that the parens are included in this case.
+            if isEmpty arguments then text (Sql.functionName builder func) ++ text "()"
+            else defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+        ;
+
+mySql_functionNameText :: Sql.DbFunction -> String;
+mySql_functionNameText func =
+    case func of
+    Sql.AggrStdDev              -> "STDDEV_SAMP";
+    Sql.AggrStdDevP             -> "STDDEV";
+    Sql.AggrVar                 -> "VAR_SAMP";
+    Sql.AggrVarP                -> "VARIANCE";
+    Sql.DateTimeAddFunction {}  -> "TIMESTAMPADD";
+    Sql.DateTimeDiffFunction {} -> "TIMESTAMPDIFF";
+    Sql.DifferenceFunction      -> 
+        // MySQL doesn't support the SoundEx Difference function.
+        error ("Unsupported function 'DIFFERENCE'");
+    _ -> defaultSqlBuilderFunctions.functionName func;
+    ;
+
+mySql_timeIntervalToSql :: Sql.TimeInterval -> Document;
+mySql_timeIntervalToSql !timeInterval = 
+    case timeInterval of
+    Sql.YearInterval    -> text "YEAR"; 
+    Sql.QuarterInterval -> text "QUARTER";
+    Sql.MonthInterval   -> text "MONTH";
+    Sql.DayInterval     -> text "DAY";
+    Sql.HourInterval    -> text "HOUR";
+    Sql.MinuteInterval  -> text "MINUTE";
+    Sql.SecondInterval  -> text "SECOND";
+    ;
+

@@ -69,6 +69,16 @@ StandardVault Cal.Utilities.Range
 StandardVault Cal.Utilities.Summary
 StandardVault Cal.Data.Sql
 StandardVault Cal.Data.SqlBuilder
+StandardVault Cal.Data.SqlBuilder.Db2SqlBuilder
+StandardVault Cal.Data.SqlBuilder.DefaultSqlBuilder
+StandardVault Cal.Data.SqlBuilder.DerbySqlBuilder
+StandardVault Cal.Data.SqlBuilder.MsJetSqlBuilder
+StandardVault Cal.Data.SqlBuilder.MsSqlServerBuilder
+StandardVault Cal.Data.SqlBuilder.MySqlBuilder
+StandardVault Cal.Data.SqlBuilder.OdbcSqlBuilder
+StandardVault Cal.Data.SqlBuilder.OracleSqlBuilder
+StandardVault Cal.Data.SqlBuilder.PostgreSqlBuilder
+StandardVault Cal.Data.SqlBuilder.TeradataSqlBuilder
 StandardVault Cal.Data.SqlType
 StandardVault Cal.Utilities.DirectedGraph
 StandardVault Cal.Utilities.Time

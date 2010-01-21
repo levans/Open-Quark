@@ -1,0 +1,265 @@
+/**
+ * A SqlBuilder implementation for Teradata databases.
+ */
+module Cal.Data.SqlBuilder.TeradataSqlBuilder;
+
+import Cal.Core.Prelude using
+    function = error, intToString;
+    typeConstructor = String;
+    dataConstructor = False, True;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, Expr, Query, SqlBuilder, SqlBuilderState;
+    function = expressionText2;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        defaultSqlBuilderFunctions, limitColumnAliasLength,
+        quoteIdentifierHelper, quotesNeeded_allowUppercaseOnly,
+        restructureTopNToRanking;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = nest, text;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Utilities.TimeZone using
+    typeConstructor = TimeZone;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_TinyInt, SqlType_SmallInt, SqlType_Integer, SqlType_BigInt,
+        SqlType_Decimal, SqlType_Numeric, SqlType_Real, SqlType_Float,
+        SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char,
+        SqlType_VarChar, SqlType_LongVarChar, SqlType_Clob, SqlType_Binary,
+        SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, SqlType_Date,
+        SqlType_Time, SqlType_TimeStamp;
+    ;
+
+import Cal.Utilities.Locale;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = chop, head, isSingletonList, map, subscript, tail;
+    ;
+
+import Cal.Core.String using
+    function = equalsIgnoreCase;
+    ;
+
+
+
+/**
+ * A SqlBuilder implementation for Teradata databases.
+ *
+ * The SQL builder for Teradata differs from the default SQL builder in that:
+ * 1. The double-quote character is used for quoting identifiers and this is also needed for identifiers with lower case letters.
+ * 2. A special syntax is used for timestamp literals.
+ * 3. Teradata equivalents are used for SQL type names.
+ * 4. TopN queries are generated using ranking functions.
+ * 5. Special handling is done for IfNull, NullIf, and date-part functions.
+ */
+teradataSqlBuilder :: SqlBuilder;
+public teradataSqlBuilder = Sql.makeSqlBuilder teradataSqlBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for Teradata.
+ */
+public teradataSqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    quoteIdentifier           := teradata_quoteIdentifier,
+                    timeToSql                 := teradataSqlBuilder_timeToSql,
+                    prepareQuery              := teradata_prepareQuery,
+                    functionToSql             := teradata_functionToSql,
+                    buildFieldType            := teradata_buildFieldType
+            };
+
+
+//Generates timestamps in the following form: CAST ( '2006-01-13 12:01:00.0' AS TIMESTAMP  ( 3 )  )
+teradataTimestampPattern :: String;
+teradataTimestampPattern = "'CAST ( '''yyyy-MM-dd HH:mm:ss.S''' AS TIMESTAMP  ( 3 )  )'";
+
+
+teradataSqlBuilder_timeToSql :: Time -> TimeZone -> Document;
+teradataSqlBuilder_timeToSql timeVal timeZone = 
+    text (Time.formatTime timeVal timeZone Time.gregorianCalendar teradataTimestampPattern Locale.defaultLocale);
+    
+    
+teradata_buildFieldType :: SqlType -> Document;
+teradata_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "BYTEINT";
+    SqlType_SmallInt           -> text $ "SMALLINT";
+    SqlType_Integer            -> text $ "INTEGER";
+    SqlType_BigInt             -> text $ "DECIMAL(19, 0)";  // Teradata doesn't seem to have a BigInt type, so use the Decimal type instead.
+    SqlType_Decimal {precision, scale} -> text $ "DECIMAL(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "NUMERIC(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "REAL";
+    SqlType_Float              -> text $ "FLOAT";
+    SqlType_Double             -> text $ "DOUBLE PRECISION";
+    SqlType_Bit                -> text $ "BYTEINT";     // TODO: is this the best type mapping?
+    SqlType_Boolean            -> text $ "BYTEINT";     // TODO: is this the best type mapping?
+    SqlType_Char {length}      -> text $ "CHAR (" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> text $ "VARCHAR(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "LONG VARCHAR";
+    SqlType_Clob               -> text $ "LONG VARCHAR";
+    SqlType_Binary {length}    -> text $ "BYTE(" ++ intToString length ++ ")";
+    SqlType_VarBinary {length} -> text $ "VARBYTE(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> text $ "BLOB";    // TODO: is this the best option here?
+    SqlType_Blob               -> text $ "BLOB";
+    SqlType_Date               -> text $ "DATE";
+    SqlType_Time               -> text $ "TIMESTAMP";     // TODO: is this the best type mapping?
+    SqlType_TimeStamp          -> text $ "TIMESTAMP";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+
+
+teradata_quoteIdentifier :: String -> Document;
+teradata_quoteIdentifier = quoteIdentifierHelper quotesNeeded_allowUppercaseOnly "\"" "\"";
+
+
+teradata_prepareQuery :: SqlBuilderState -> Query -> Query;
+teradata_prepareQuery builderState query = 
+    let
+        ncrTearadata_maxColumnAliasLen = 30;
+
+        //for convertQueryColumnsToCartesianJoins to be effective it requires aliases to be assigned
+        query1 = Sql.modifyQueries Sql.assignMissingColumnAliases query;
+        query2 = Sql.modifyQueries Sql.convertQueryColumnsToCartesianJoins query1;
+
+        // Convert TopN queries to restrict the number of rows using the ranking functions.
+        query3 = restructureTopNToRanking query2;  
+
+        query4 = Sql.modifyQueries teradata_castDateFieldsToTimeStamps query3;
+        
+        query5 = limitColumnAliasLength ncrTearadata_maxColumnAliasLen query4;
+    in
+        query5;
+
+
+//v2r5 does not like operations on different subtypes of a datetime field, so in order to use timestamps
+//we need to make sure all fields are casted to timestamps as well
+teradata_castDateFieldsToTimeStamps :: Query -> Query;
+teradata_castDateFieldsToTimeStamps query =
+    Sql.transformQueryRestrictionExpr Sql.convertDateQueryFieldsToTimeExprs query;
+
+
+// Customize the SQL generated for certain Teradata functions.
+teradata_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+teradata_functionToSql builder builderState func arguments = 
+    let
+        isRankFunction = 
+            case func of 
+            Sql.FunctionOther funcName -> String.equalsIgnoreCase funcName "RANK";
+            _ -> False;
+            ;
+
+        isPercentRankFunction = 
+            case func of 
+            Sql.FunctionOther {funcName} -> equalsIgnoreCase funcName "PERCENT_RANK";
+            _ -> False;
+            ;
+
+        convertToTimeFunctionText = text "CAST (" 
+            ++ nest 4 (expressionText2 builder builderState (head arguments))
+            ++ text " AS TIMESTAMP )"
+            ;
+
+        rankFunctionText isPercentRank = 
+            let
+                argListPairToOrderInfo pr = 
+                    let
+                        orderExpr = head pr;
+                        isAscOrder = isSingletonList pr || subscript pr 1 != Sql.toUntypedExpr Sql.falseConstant;
+                    in
+                        (orderExpr, isAscOrder);
+
+                orderExprs = map argListPairToOrderInfo (chop 2 arguments);
+
+                orderByText = defaultSqlBuilderFunctions.buildOrderByClause builder builderState orderExprs;
+
+                rankFunctionName = if (isPercentRank) then "PERCENT_RANK" else "RANK";
+            in
+                text rankFunctionName ++ text "() OVER (ORDER BY " ++ nest 4 (orderByText ++ text ")");
+
+        ifNullFunctionText = 
+            let
+                arg1 = head arguments;
+                arg1Text = expressionText2 builder builderState arg1;
+                arg2 = head (tail arguments);
+                arg2Text = expressionText2 builder builderState arg2;
+            in
+                text "( CASE WHEN " ++ arg1Text ++ text " IS NULL THEN " ++ arg2Text ++ text " ELSE " ++ arg1Text ++ text " END )"
+            ;
+
+    //although the Tera supports the NULLIF but it does it like ti the way we use it so in order
+    //to skip the regenaration of the outter expression convert it to CASE
+        nullIfFunctionText =            
+            let
+                arg1 = head arguments;
+                arg1Text = expressionText2 builder builderState arg1;
+                arg2 = head (tail arguments);
+                arg2Text = expressionText2 builder builderState arg2;
+            in
+                text "( CASE WHEN " ++ arg1Text ++ text " = " ++ arg2Text ++ text " THEN NULL ELSE " ++ arg1Text ++ text " END )"
+            ;
+
+        // Handle functions to extract a time part value from a time expression.
+        teradataDatePartText :: String -> Document;
+        teradataDatePartText datePartString = 
+            let
+                dateArg = head arguments;
+                dateArgText = expressionText2 builder builderState dateArg;
+            in
+                text ("EXTRACT (" ++ datePartString ++ " FROM ") ++ dateArgText ++ text ")";
+
+        quarterFunctionText =                 
+            let
+                dateArg = head arguments;
+                dateArgText = expressionText2 builder builderState dateArg;
+                monthFromDateText = text " WHEN " ++ teradataDatePartText "MONTH"; 
+                lineText = text "";//line;
+                lessThan4Text = text " < 4 THEN 1";
+                lessThan7Text = text " < 7 THEN 2";
+                lessThan10Text = text " < 10 THEN 3";
+            in
+                text "(" ++ text "CASE"
+                         ++ lineText ++ nest 10 (monthFromDateText ++ lessThan4Text)
+                         ++ lineText ++ nest 4 (monthFromDateText ++ lessThan7Text)
+                         ++ lineText ++ nest 4 (monthFromDateText ++ lessThan10Text)
+                         ++ lineText ++ nest 4 (text "ELSE 4")
+                         ++ lineText ++ text " END )"            
+                ;      
+    in
+        case func of
+        Sql.QuarterFunction    -> quarterFunctionText;
+        Sql.YearFunction       -> teradataDatePartText "YEAR";
+        Sql.MonthFunction      -> teradataDatePartText "MONTH";
+        Sql.DayOfMonthFunction -> teradataDatePartText "DAY";
+        Sql.HourFunction       -> teradataDatePartText "HOUR";
+        Sql.MinuteFunction     -> teradataDatePartText "MINUTE";
+        Sql.SecondFunction     -> teradataDatePartText "SECOND";
+
+        Sql.IfNullFunction -> ifNullFunctionText;
+        Sql.NullIfFunction -> nullIfFunctionText;
+//        Sql.ConvertToStringFunction 
+//        Sql.ConvertToIntFunction 
+//        Sql.ConvertToDoubleFunction
+        Sql.ConvertToTimeFunction -> convertToTimeFunctionText;
+        _ -> 
+            if (isRankFunction) then rankFunctionText False
+            else if (isPercentRankFunction) then rankFunctionText True
+            else defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+        ;

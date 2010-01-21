@@ -1,0 +1,213 @@
+/**
+ * A SqlBuilder implementation for IBM DB2 databases.
+ */
+module Cal.Data.SqlBuilder.Db2SqlBuilder;
+
+import Cal.Core.Prelude using
+    function = error, intToString;
+    typeConstructor = Boolean, String;
+    dataConstructor = False, True;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor =
+        DbFunction, Expr, Query, QueryTable, SqlBuilder, SqlBuilderState;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        buildTableAndAliasTextHelper, defaultSqlBuilderFunctions,
+        default_quotesNeeded, limitColumnAliasLength,
+        makeSafeNameWithLengthCheck, quoteIdentifierHelper,
+        restructureTopNToRanking;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = nest, text;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Utilities.TimeZone using
+    typeConstructor = TimeZone;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_TinyInt, SqlType_SmallInt, SqlType_Integer, SqlType_BigInt,
+        SqlType_Decimal, SqlType_Numeric, SqlType_Real, SqlType_Float,
+        SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char,
+        SqlType_VarChar, SqlType_LongVarChar, SqlType_Clob, SqlType_Binary,
+        SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, SqlType_Date,
+        SqlType_Time, SqlType_TimeStamp, SqlType_Datalink;
+    ;
+
+import Cal.Utilities.Locale;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = chop, head, isSingletonList, map, subscript;
+    ;
+
+import Cal.Core.String using
+    function = equalsIgnoreCase;
+    ;
+
+
+
+/**
+ * A SqlBuilder implementation for DB2 databases.
+ *
+ * The SQL builder for DB2 differs from the default SQL builder in that:
+ * 1. Double-quotes are used for quoting identifiers.
+ * 2. Identifier names are limited to 30 characters.
+ * 3. No 'AS' keyword used between a table name and a table alias in a FROM clause.
+ * 4. Special syntax for timestamp and Boolean literals.
+ * 5. TopN queries are generated using ranking functions.
+ * 6. DB2 equivalents are used for SQL type names.
+ * 7. Special handling for the DayOfWeek function.
+ */
+db2SqlBuilder :: SqlBuilder;
+public db2SqlBuilder = Sql.makeSqlBuilder db2SqlBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for DB2.
+ */
+public db2SqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    quoteIdentifier           := db2_quoteIdentifier,
+                    makeSafeName              := db2_makeSafeName,
+                    buildTableAndAliasText    := db2_tableAndAliasText,
+                    timeToSql                 := db2_timeToSql,
+                    booleanToSql              := db2_booleanToSql,
+                    prepareQuery              := db2_prepareQuery,
+                    functionToSql             := db2_functionToSql,
+                    functionName              := db2_functionNameText,
+                    buildFieldType            := db2_buildFieldType
+            };
+
+
+/**
+ * Quoting of identifiers is different than the default.
+ * The double-quote character is used for quoting.
+ */
+db2_quoteIdentifier :: String -> Document;
+db2_quoteIdentifier = quoteIdentifierHelper default_quotesNeeded "\"" "\"";
+
+db2_makeSafeName :: String -> String;
+db2_makeSafeName = makeSafeNameWithLengthCheck defaultSqlBuilderFunctions.makeSafeName 30;
+
+/**
+ * For DB2, don't include the 'AS' keyword between a table name and the table alias.
+ */
+db2_tableAndAliasText :: SqlBuilder -> SqlBuilderState -> QueryTable -> Document;
+db2_tableAndAliasText = buildTableAndAliasTextHelper False;
+
+
+/**
+* Generates timestamps in the following form:  '2005-05-20 13:23:45.0'
+*/
+db2_timestampPattern :: String;
+db2_timestampPattern = "''yyyy-MM-dd HH:mm:ss.S''";
+
+db2_timeToSql :: Time -> TimeZone -> Document;
+db2_timeToSql timeVal timeZone = 
+    text (Time.formatTime timeVal timeZone Time.gregorianCalendar db2_timestampPattern Locale.defaultLocale);
+
+db2_booleanToSql :: Boolean -> Document;
+db2_booleanToSql !boolVal =
+    text (if (boolVal) then "'1'" else "'0'");
+
+db2_prepareQuery :: SqlBuilderState -> Query -> Query;
+db2_prepareQuery builderState query = 
+    let
+        db2_maxColumnAliasLen = 30;  //Tested on UDB
+
+        // Convert TopN queries to restrict the number of rows using the ranking functions.
+        query1 = restructureTopNToRanking query;
+        query2 = limitColumnAliasLength db2_maxColumnAliasLen query1;
+    in
+        query2;
+
+/**
+ * Customizes the SQL generated for certain DB2 functions.
+ */
+db2_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+db2_functionToSql builder builderState func arguments = 
+    let
+        isRankFunction = 
+            case func of 
+            Sql.FunctionOther {funcName} -> equalsIgnoreCase funcName "RANK";
+            _ -> False;
+            ;
+
+        isPercentRankFunction = 
+            case func of 
+            Sql.FunctionOther {funcName} -> equalsIgnoreCase funcName "PERCENT_RANK";
+            _ -> False;
+            ;
+
+        rankFunctionText isPercentRank = 
+            let
+                argListPairToOrderInfo pr = 
+                    let
+                        orderExpr = head pr;
+                        isAscOrder = isSingletonList pr || subscript pr 1 != Sql.toUntypedExpr Sql.falseConstant;
+                    in
+                        (orderExpr, isAscOrder);
+
+                orderExprs = map argListPairToOrderInfo (chop 2 arguments);
+
+                orderByText = defaultSqlBuilderFunctions.buildOrderByClause builder builderState orderExprs;
+
+                rankFunctionName = if (isPercentRank) then "PERCENT_RANK" else "RANK";
+            in
+                text rankFunctionName ++ text "() OVER (ORDER BY " ++ nest 4 (orderByText ++ text ")");
+    in
+        if (isRankFunction) then rankFunctionText False
+        else if (isPercentRankFunction) then rankFunctionText True
+        else defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+
+db2_functionNameText :: DbFunction -> String;
+db2_functionNameText func =
+    case func of
+    Sql.DayOfWeekFunction  -> "DAYOFWEEK";
+    _ -> defaultSqlBuilderFunctions.functionName func;
+    ;
+
+db2_buildFieldType :: SqlType -> Document;
+db2_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "SMALLINT";        // DB2 doesn't seem to have a TinyInt type, so use the SmallInt type instead.
+    SqlType_SmallInt           -> text $ "SMALLINT";
+    SqlType_Integer            -> text $ "INTEGER";
+    SqlType_BigInt             -> text $ "BIGINT";
+    SqlType_Decimal {precision, scale} -> text $ "DECIMAL(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "NUMERIC(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "REAL";
+    SqlType_Float              -> text $ "FLOAT";
+    SqlType_Double             -> text $ "DOUBLE PRECISION";
+    SqlType_Bit                -> text $ "SMALLINT";        // DB2 doesn't seem to have a Bit type, so use the SmallInt type instead.
+    SqlType_Boolean            -> text $ "SMALLINT";        // DB2 doesn't seem to have a Boolean type, so use the SmallInt type instead.
+    SqlType_Char {length}      -> text $ "CHAR(" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> text $ "VARCHAR(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "LONG VARCHAR";
+    SqlType_Clob               -> text $ "CLOB";
+    SqlType_Binary {length}    -> text $ "CHAR(" ++ intToString length ++ ") FOR BIT DATA";
+    SqlType_VarBinary {length} -> text $ "VARCHAR(" ++ intToString length ++ ") FOR BIT DATA";
+    SqlType_LongVarBinary      -> text $ "BLOB";
+    SqlType_Blob               -> text $ "BLOB";
+    SqlType_Date               -> text $ "DATE";
+    SqlType_Time               -> text $ "TIME";
+    SqlType_TimeStamp          -> text $ "TIMESTAMP";
+    SqlType_Datalink           -> text $ "DATALINK";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+

@@ -1,0 +1,216 @@
+/**
+ * A SqlBuilder implementation for Microsoft SQL Server.
+ */
+module Cal.Data.SqlBuilder.MsSqlServerBuilder;
+
+import Cal.Core.Prelude using
+    function = error, intToString;
+    typeConstructor = Boolean, Int, String;
+    dataConstructor = False;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, Expr, Query, SqlBuilder, SqlBuilderState;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        defaultSqlBuilderFunctions, limitColumnAliasLength;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = line, nest, text;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_TinyInt, SqlType_SmallInt, SqlType_Integer, SqlType_BigInt,
+        SqlType_Decimal, SqlType_Numeric, SqlType_Real, SqlType_Float,
+        SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char,
+        SqlType_VarChar, SqlType_LongVarChar, SqlType_Clob, SqlType_Binary,
+        SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, SqlType_Date,
+        SqlType_Time, SqlType_TimeStamp;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Data.DatabaseMetadata using
+    function =
+        getDatabaseNameFromReference, getTableNameFromReference,
+        getTableReference;
+    typeConstructor = DatabaseReference, TableDescription, TableReference;
+    ;
+
+
+
+/**
+ * A SqlBuilder implementation for Microsoft SQL Server.
+ *
+ * The SQL builder for SQL Server differs from the default SQL builder in that:
+ * 1. Column aliases are limited to 128 chars in length.
+ * 2. As there is no built-in QUARTER function, the DATEPART function is used to extract the quarter value.
+ * 3. Function names for IfNull and Length are ISNULL and LEN.
+ * 4. Statements to create/drop objects are able to avoid doing so if the objects already/don't exist.
+ * 5. The field type names are customized for SQL Server.
+ */
+msSqlServerSqlBuilder :: SqlBuilder;
+public msSqlServerSqlBuilder = Sql.makeSqlBuilder msSqlServerBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for MS SQL Server.
+ */
+public msSqlServerBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    prepareQuery                 := msSqlServer_prepareQuery,
+                    functionToSql                := msSqlServer_functionToSql,
+                    functionName                 := msSqlServer_functionNameText,
+                    buildCreateDatabaseStatement := msSqlServer_buildCreateDatabaseStatement,
+                    buildDropDatabaseStatement   := msSqlServer_buildDropDatabaseStatement,
+                    buildCreateTableStatement    := msSqlServer_buildCreateTableStatement,
+                    buildDropTableStatement      := msSqlServer_buildDropTableStatement,
+                    buildCreateViewStatement     := msSqlServer_buildCreateViewStatement,
+                    buildDropViewStatement       := msSqlServer_buildDropViewStatement,
+                    buildFieldType               := msSqlServer_buildFieldType
+            };
+
+msSqlServer_prepareQuery ::SqlBuilderState -> Query -> Query;
+msSqlServer_prepareQuery builderState query = 
+    let
+        msSqlServer_maxColumnAliasLen = 128 :: Int;
+    in
+        limitColumnAliasLength msSqlServer_maxColumnAliasLen query;
+
+msSqlServer_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+msSqlServer_functionToSql builder builderState func arguments = 
+    case func of
+    Sql.QuarterFunction -> 
+        defaultSqlBuilderFunctions.functionToSql builder builderState (Sql.FunctionOther "DATEPART") (Sql.untypedFunctionExpr (Sql.FunctionOther "q") [] : arguments);
+    _ -> 
+        defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+    ;
+
+/**
+ * Override the default names of some of the functions for SQL Server.
+ */
+msSqlServer_functionNameText :: DbFunction -> String;
+msSqlServer_functionNameText func =
+    case func of
+    Sql.IfNullFunction     -> "ISNULL";
+    Sql.LengthFunction     -> "LEN";
+    _ -> defaultSqlBuilderFunctions.functionName func;
+    ;
+    
+msSqlServer_buildCreateDatabaseStatement :: SqlBuilder -> DatabaseReference -> Boolean -> Document;
+msSqlServer_buildCreateDatabaseStatement builder databaseRef !skipIfDatabaseExists =
+    let
+        createText = defaultSqlBuilderFunctions.buildCreateDatabaseStatement builder databaseRef False;
+        databaseNameText = getDatabaseNameFromReference databaseRef;
+    in
+        if (skipIfDatabaseExists) then
+            text "IF NOT EXISTS("
+                ++ nest 4 (line ++ text "SELECT NAME FROM SYS.DATABASES"
+                                ++ nest 4 (line ++ text "WHERE NAME = '" ++ text databaseNameText ++ text "'")
+                                ++ text ")" ++ line
+                                ++ createText)
+        else createText;
+
+msSqlServer_buildDropDatabaseStatement :: SqlBuilder -> DatabaseReference -> Boolean -> Document;
+msSqlServer_buildDropDatabaseStatement builder databaseRef !onlyIfDatabaseExists =
+    let
+        dropText = defaultSqlBuilderFunctions.buildDropDatabaseStatement builder databaseRef False;
+        databaseNameText = getDatabaseNameFromReference databaseRef;
+    in
+        if (onlyIfDatabaseExists) then
+            text "IF EXISTS("
+                ++ nest 4 (line ++ text "SELECT NAME FROM SYS.DATABASES"
+                                ++ nest 4 (line ++ text "WHERE NAME = '" ++ text databaseNameText ++ text "'")
+                                ++ text ")" ++ line
+                                ++ dropText)
+        else dropText;
+
+msSqlServer_buildCreateTableStatement :: SqlBuilder -> TableDescription -> Boolean -> Document;
+msSqlServer_buildCreateTableStatement builder tableDesc !skipIfTableExists = 
+    let
+        createText = defaultSqlBuilderFunctions.buildCreateTableStatement builder tableDesc False;
+        tableNameText = getTableNameFromReference (getTableReference tableDesc);
+    in
+        if (skipIfTableExists) then
+            text "IF NOT EXISTS("
+                ++ nest 4 (line ++ text "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES" 
+                                ++ nest 4 (line ++ text "WHERE TABLE_NAME = '" ++ text tableNameText ++ text "'") 
+                                ++ text ")" ++ line 
+                                ++ createText)
+        else createText;
+
+msSqlServer_buildDropTableStatement :: SqlBuilder -> TableReference -> Boolean -> Document;
+msSqlServer_buildDropTableStatement builder tableRef !onlyIfTableExists = 
+    let
+        dropText = defaultSqlBuilderFunctions.buildDropTableStatement builder tableRef False;
+    in
+        if (onlyIfTableExists) then
+            text "IF EXISTS("
+                ++ nest 4 (line ++ text "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES" 
+                                ++ nest 4 (line ++ text "WHERE TABLE_NAME = '" ++ text (getTableNameFromReference tableRef) ++ text "'") 
+                                ++ text ")" ++ line 
+                                ++ dropText)
+        else dropText;
+
+msSqlServer_buildCreateViewStatement :: SqlBuilder -> TableReference -> Query -> Boolean -> Document;
+msSqlServer_buildCreateViewStatement builder viewRef viewQuery !skipIfViewExists = 
+    let
+        createText = defaultSqlBuilderFunctions.buildCreateViewStatement builder viewRef viewQuery False;
+        viewNameText = getTableNameFromReference viewRef;
+    in
+        if (skipIfViewExists) then
+            text "IF NOT EXISTS("
+                ++ nest 4 (line ++ text "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS" 
+                                ++ nest 4 (line ++ text "WHERE TABLE_NAME = '" ++ text viewNameText ++ text "'") 
+                                ++ text ")" ++ line 
+                                ++ createText)
+        else createText;
+
+msSqlServer_buildDropViewStatement :: SqlBuilder -> TableReference -> Boolean -> Document;
+msSqlServer_buildDropViewStatement builder viewRef !onlyIfViewExists = 
+    let
+        dropText = defaultSqlBuilderFunctions.buildDropViewStatement builder viewRef False;
+    in
+        if (onlyIfViewExists) then
+            text "IF EXISTS("
+                ++ nest 4 (line ++ text "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS" 
+                                ++ nest 4 (line ++ text "WHERE TABLE_NAME = '" ++ text (getTableNameFromReference viewRef) ++ text "'") 
+                                ++ text ")" ++ line 
+                                ++ dropText)
+        else dropText;
+
+msSqlServer_buildFieldType :: SqlType -> Document;
+msSqlServer_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "tinyint";
+    SqlType_SmallInt           -> text $ "smallint";
+    SqlType_Integer            -> text $ "int";
+    SqlType_BigInt             -> text $ "bigint";
+    SqlType_Decimal {precision, scale} -> text $ "decimal(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "numeric(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "real";
+    SqlType_Float              -> text $ "float";
+    SqlType_Double             -> text $ "float";
+    SqlType_Bit                -> text $ "bit";
+    SqlType_Boolean            -> text $ "bit";
+    SqlType_Char {length}      -> text $ "nchar(" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> text $ "nvarchar(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "ntext"; 
+    SqlType_Clob               -> text $ "ntext";
+    SqlType_Binary {length}    -> text $ "binary(" ++ intToString length ++ ")";
+    SqlType_VarBinary {length} -> text $ "varbinary(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> text $ "image";
+    SqlType_Blob               -> text $ "image";
+    SqlType_Date               -> text $ "datetime";
+    SqlType_Time               -> text $ "datetime";
+    SqlType_TimeStamp          -> text $ "datetime";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+

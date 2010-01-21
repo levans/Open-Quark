@@ -1,0 +1,310 @@
+/**
+ * A SqlBuilder implementation for Oracle databases.
+ */
+module Cal.Data.SqlBuilder.OracleSqlBuilder;
+
+import Cal.Core.Prelude using
+    function = error, intToString;
+    typeConstructor = Boolean, Int, String;
+    dataConstructor = False, True;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor =
+        DbFunction, Expr, Query, QueryTable, SqlBuilder, SqlBuilderState;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        buildTableAndAliasTextHelper, defaultSqlBuilderFunctions,
+        limitColumnAliasLength, makeSafeNameWithLengthCheck,
+        quoteIdentifierHelper, quotesNeeded_allowUppercaseOnly,
+        restructureTopNToRanking;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = line, nest, text;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Utilities.TimeZone using
+    typeConstructor = TimeZone;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_TinyInt, SqlType_SmallInt, SqlType_Integer, SqlType_BigInt,
+        SqlType_Decimal, SqlType_Numeric, SqlType_Real, SqlType_Float,
+        SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char,
+        SqlType_VarChar, SqlType_LongVarChar, SqlType_Clob, SqlType_Binary,
+        SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, SqlType_Date,
+        SqlType_Time, SqlType_TimeStamp;
+    ;
+
+import Cal.Utilities.Locale;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = chop, head, isSingletonList, map, subscript;
+    ;
+
+import Cal.Data.DatabaseMetadata using
+    function = getTableNameFromReference, getTableReference;
+    typeConstructor = TableDescription, TableReference;
+    ;
+
+import Cal.Core.String using
+    function = equalsIgnoreCase;
+    ;
+
+
+
+/**
+ * A SqlBuilder implementation for Oracle databases.
+ *
+ * The SQL builder for Oracle differs from the default SQL builder in that:
+ * 1. Double-quotes are used to quote identifiers.
+ * 2. Identifiers names are limited to 30 characters.
+ * 3. No 'AS' keyword used between a table name and a table alias in a FROM clause.
+ * 4. Special syntax for timestamp and Boolean literals.
+ * 5. TopN queries are generated using ranking functions.
+ * 6. The to_char function is used to extract date component values (year, month, day, etc).
+ * 7. Oracle equivalents are used for SQL type names.
+ * 8. Statements to create/drop objects are able to avoid doing so if the objects already/don't exist.
+ */
+oracleSqlBuilder :: SqlBuilder;
+public oracleSqlBuilder = Sql.makeSqlBuilder oracleSqlBuilderFunctions;
+
+/**
+ * The SqlBuilder functions for Oracle.
+ */
+public oracleSqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    quoteIdentifier           := oracle_quoteIdentifier,
+                    makeSafeName              := oracle_makeSafeName,
+                    buildTableAndAliasText    := oracle_tableAndAliasText,
+                    timeToSql                 := oracle_timeToSql,
+                    booleanToSql              := oracle_booleanToSql,
+                    prepareQuery              := oracle_prepareQuery,
+                    functionToSql             := oracle_functionToSql,
+                    buildFieldType            := oracle_buildFieldType,
+                    buildCreateTableStatement := oracle_buildCreateTableStatement,
+                    buildCreateViewStatement  := oracle_buildCreateViewStatement,
+                    buildDropTableStatement   := oracle_buildDropTableStatement,
+                    buildDropViewStatement    := oracle_buildDropViewStatement
+            };
+
+/**
+ * Quoting of identifiers is different than the default.
+ * The double-quote character is used for quoting and this is also needed for table names with lower case letters.
+ */
+oracle_quoteIdentifier :: String -> Document;
+oracle_quoteIdentifier = quoteIdentifierHelper quotesNeeded_allowUppercaseOnly "\"" "\"";
+
+
+oracle_makeSafeName :: String -> String;
+oracle_makeSafeName = makeSafeNameWithLengthCheck defaultSqlBuilderFunctions.makeSafeName 30;
+
+
+/**
+ * For Oracle, don't include the 'AS' keyword between a table name and the table alias.
+ */
+oracle_tableAndAliasText :: SqlBuilder -> SqlBuilderState -> QueryTable -> Document;
+oracle_tableAndAliasText = buildTableAndAliasTextHelper False;
+
+/**
+ * Generates timestamps in the following form:  TIMESTAMP '2005-05-20 13:23:45.0'
+ */
+oracle_timestampPattern :: String;
+oracle_timestampPattern = "'TIMESTAMP '''yyyy-MM-dd HH:mm:ss.S''";
+
+oracle_timeToSql :: Time -> TimeZone -> Document;
+oracle_timeToSql timeVal timeZone = 
+    text (Time.formatTime timeVal timeZone Time.gregorianCalendar oracle_timestampPattern Locale.defaultLocale);
+
+oracle_booleanToSql :: Boolean -> Document;
+oracle_booleanToSql !boolVal =
+    text (if boolVal then "1" else "0");
+
+oracle_prepareQuery :: SqlBuilderState -> Query -> Query;
+oracle_prepareQuery builderState query = 
+    let
+        oracle_maxColumnAliasLen = 30 :: Int;
+
+        // Convert TopN queries to restrict the number of rows using the ranking functions.
+        query1 = restructureTopNToRanking query;
+
+        query2 = limitColumnAliasLength oracle_maxColumnAliasLen query1;
+    in
+        query2;
+        
+/**
+ * Customizes the SQL generated for certain Oracle functions.
+ */
+oracle_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+oracle_functionToSql builder builderState func arguments = 
+    let
+        isRankFunction = 
+            case func of 
+            Sql.FunctionOther {funcName} -> equalsIgnoreCase funcName "RANK";
+            _ -> False;
+            ;
+
+        isPercentRankFunction = 
+            case func of 
+            Sql.FunctionOther {funcName} -> equalsIgnoreCase funcName "PERCENT_RANK";
+            _ -> False;
+            ;
+
+        rankFunctionText isPercentRank = 
+            let
+                argListPairToOrderInfo pr = 
+                    let
+                        orderExpr = head pr;
+                        isAscOrder = isSingletonList pr || subscript pr 1 != Sql.toUntypedExpr Sql.falseConstant;
+                    in
+                        (orderExpr, isAscOrder);
+
+                orderExprs = map argListPairToOrderInfo (chop 2 arguments);
+
+                orderByText = defaultSqlBuilderFunctions.buildOrderByClause builder builderState orderExprs;
+
+                rankFunctionName = if (isPercentRank) then "PERCENT_RANK" else "RANK";
+            in
+                text rankFunctionName ++ text "() OVER (ORDER BY " ++ nest 4 (orderByText ++ text ")");
+
+        // Handle functions to extract a time part value from a time expression.
+        oracleDatePartText :: Boolean -> String -> Document;
+        oracleDatePartText !isNumericResult datePartString = 
+            let
+                toNumberFn = Sql.FunctionOther "to_number";
+                toCharFn = Sql.FunctionOther "to_char";
+
+                toCharArgs :: [Expr];
+                toCharArgs = [head arguments, Sql.toUntypedExpr $ Sql.stringConstant datePartString];
+            in
+                if isNumericResult then defaultSqlBuilderFunctions.functionToSql builder builderState toNumberFn [Sql.untypedFunctionExpr toCharFn toCharArgs]
+                else defaultSqlBuilderFunctions.functionToSql builder builderState toCharFn toCharArgs;
+    in
+        if (isRankFunction) then rankFunctionText False
+        else if (isPercentRankFunction) then rankFunctionText True
+        else 
+            case func of
+            Sql.YearFunction       -> oracleDatePartText True "YYYY";
+            Sql.QuarterFunction    -> oracleDatePartText True "Q";
+            Sql.MonthFunction      -> oracleDatePartText True "MM";
+            Sql.DayOfMonthFunction -> oracleDatePartText True "DD";
+            Sql.HourFunction       -> oracleDatePartText True "HH24";
+            Sql.MinuteFunction     -> oracleDatePartText True "MI";
+            Sql.SecondFunction     -> oracleDatePartText True "SS";
+            Sql.DayOfWeekFunction  -> oracleDatePartText True "D";
+            Sql.DayOfYearFunction  -> oracleDatePartText True "DDD";
+            Sql.WeekFunction       -> oracleDatePartText True "WW";
+            Sql.MonthNameFunction  -> oracleDatePartText False "MON";
+            Sql.DayNameFunction    -> oracleDatePartText False "DY";
+            _ ->
+                defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+            ;
+
+oracle_buildFieldType :: SqlType -> Document;
+oracle_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "number(38)";  // TODO: are these integer type mappings sensible?
+    SqlType_SmallInt           -> text $ "number(38)";
+    SqlType_Integer            -> text $ "number(38)";
+    SqlType_BigInt             -> text $ "number(38)";
+    SqlType_Decimal {precision, scale} -> text $ "number(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "number(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "real";
+    SqlType_Float              -> text $ "float";
+    SqlType_Double             -> text $ "double precision";
+    SqlType_Bit                -> text $ "number(1)";
+    SqlType_Boolean            -> text $ "number(1)";
+    SqlType_Char {length}      -> text $ "nchar(" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> text $ "nvarchar2(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "nclob";
+    SqlType_Clob               -> text $ "nclob";
+    SqlType_Binary {length}    -> text $ "raw(" ++ intToString length ++ ")";   // Oracle doesn't appear to have a fixed-length binary type.
+    SqlType_VarBinary {length} -> text $ "raw(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> text $ "long raw";
+    SqlType_Blob               -> text $ "blob";
+    SqlType_Date               -> text $ "date";
+    SqlType_Time               -> text $ "timestamp";       // TODO: is this the best type mapping?
+    SqlType_TimeStamp          -> text $ "timestamp";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+
+oracle_buildCreateTableStatement :: SqlBuilder -> TableDescription -> Boolean -> Document;
+oracle_buildCreateTableStatement builder tableDesc !skipIfTableExists =
+    let
+        // TODO escape single quote
+        createTableText :: Document;
+        createTableText = defaultSqlBuilderFunctions.buildCreateTableStatement builder tableDesc False;
+    in
+        if (skipIfTableExists) then
+            text "DECLARE tab_exist PLS_INTEGER;" ++ line
+                ++ text "BEGIN" ++ line
+                ++ nest 4 (text ("SELECT COUNT(1) INTO tab_exist FROM user_tables WHERE table_name = '" ++ (getTableNameFromReference $ getTableReference tableDesc) ++ "';") ++ line
+                         ++ text "IF tab_exist = 0 THEN" ++ line
+                         ++ text "EXECUTE IMMEDIATE '" ++ createTableText ++ text "';" ++ line
+                         ++ text "END IF;") ++ line
+                ++ text "END;"
+        else createTableText;
+
+oracle_buildCreateViewStatement :: SqlBuilder -> TableReference -> Query -> Boolean -> Document;
+oracle_buildCreateViewStatement builder viewRef viewDefinition !skipIfViewExists =
+    let
+        // TODO escape single quote
+        createViewText :: Document;
+        createViewText = defaultSqlBuilderFunctions.buildCreateViewStatement builder viewRef viewDefinition False;
+    in
+        if (skipIfViewExists) then
+            text "DECLARE view_exist PLS_INTEGER;" ++ line
+                ++ text "BEGIN" ++ line
+                ++ nest 4 (text ("SELECT COUNT(1) INTO view_exist FROM user_views WHERE view_name = '" ++ (getTableNameFromReference viewRef) ++ "';") ++ line
+                         ++ text "IF view_exist = 0 THEN" ++ line
+                         ++ text "EXECUTE IMMEDIATE '" ++ createViewText ++ text "';" ++ line
+                         ++ text "END IF;") ++ line
+                ++ text "END;"
+        else createViewText;
+
+oracle_buildDropTableStatement :: SqlBuilder -> TableReference -> Boolean -> Document;
+oracle_buildDropTableStatement builder tableRef !onlyIfTableExists =
+    let
+        dropTableText :: Document;
+        dropTableText = defaultSqlBuilderFunctions.buildDropTableStatement builder tableRef False;
+    in
+        if (onlyIfTableExists) then
+            text "DECLARE tab_exist PLS_INTEGER;" ++ line
+                ++ text "BEGIN" ++ line
+                ++ nest 4 (text ("SELECT COUNT(1) INTO tab_exist FROM user_tables WHERE table_name = '" ++ (getTableNameFromReference tableRef) ++ "';") ++ line
+                         ++ text "IF tab_exist = 1 THEN" ++ line
+                         ++ text "EXECUTE IMMEDIATE '" ++ dropTableText ++ text "';" ++ line
+                         ++ text "END IF;") ++ line
+                ++ text "END;"
+        else dropTableText;
+        
+oracle_buildDropViewStatement :: SqlBuilder -> TableReference -> Boolean -> Document;
+oracle_buildDropViewStatement builder viewRef !onlyIfViewExists =
+    let
+        dropViewText :: Document;
+        dropViewText = defaultSqlBuilderFunctions.buildDropViewStatement builder viewRef False;
+    in
+        if (onlyIfViewExists) then
+            text "DECLARE view_exist PLS_INTEGER;" ++ line
+                ++ text "BEGIN" ++ line
+                ++ nest 4 (text ("SELECT COUNT(1) INTO view_exist FROM user_views WHERE view_name = '" ++ (getTableNameFromReference viewRef) ++ "';") ++ line
+                         ++ text "IF view_exist = 1 THEN" ++ line
+                         ++ text "EXECUTE IMMEDIATE '" ++ dropViewText ++ text "';" ++ line
+                         ++ text "END IF;") ++ line
+                ++ text "END;"
+        else dropViewText;
+

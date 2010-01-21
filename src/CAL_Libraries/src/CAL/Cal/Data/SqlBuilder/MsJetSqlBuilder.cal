@@ -1,0 +1,185 @@
+/**
+ * A SqlBuilder implementation for the Microsoft Jet database engine (which works with MS Access, Excel, Text, CSV, etc).
+ */
+module Cal.Data.SqlBuilder.MsJetSqlBuilder;
+
+import Cal.Core.Prelude using
+    function = error, intToString;
+    typeConstructor = Boolean, Int;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = DbFunction, Expr, Query, SqlBuilder, SqlBuilderState;
+    function = toUntypedExpr;
+    ;
+
+import Cal.Data.SqlBuilder.DefaultSqlBuilder using
+    function =
+        defaultSqlBuilderFunctions, limitColumnAliasLength;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    typeConstructor = Document;
+    function = text;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_TinyInt, SqlType_SmallInt, SqlType_Integer, SqlType_BigInt,
+        SqlType_Decimal, SqlType_Numeric, SqlType_Real, SqlType_Float,
+        SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char,
+        SqlType_VarChar, SqlType_LongVarChar, SqlType_Clob, SqlType_Binary,
+        SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, SqlType_Date,
+        SqlType_Time, SqlType_TimeStamp;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Collections.List using
+    function = chop, concatMap, head, isSingletonList, tail;
+    ;
+
+import Cal.Data.DatabaseMetadata using
+    typeConstructor = DatabaseReference;
+    ;
+
+
+
+/**
+ * A SqlBuilder implementation for the Microsoft Jet database engine (which works with MS Access, Excel, Text, CSV, etc).
+ *
+ * The SQL builder for MS Jet differs from the default SQL builder in that:
+ * 1. Creating and dropping of databases is not supported via SQL.
+ * 2. Column aliases are limited to 64 chars.
+ * 3. Special handling is needed for the Quarter function, as well as for If and Case constructs.
+ * 4. MS Jet equivalents are used for SQL type names and time part names.
+ */
+msJetSqlBuilder :: SqlBuilder;
+public msJetSqlBuilder = Sql.makeSqlBuilder msJetSqlBuilderFunctions;
+
+msAccessSqlBuilder :: SqlBuilder;
+public msAccessSqlBuilder = msJetSqlBuilder;
+
+/**
+ * The SqlBuilder functions for the MS Jet database engine.
+ */
+public msJetSqlBuilderFunctions = 
+            { defaultSqlBuilderFunctions | 
+                    prepareQuery                 := msAccess_prepareQuery,
+                    functionToSql                := msAccess_functionToSql,
+                    buildFieldType               := msAccess_buildFieldType,
+                    timeIntervalToSql            := msAccess_timeIntervalToSql,
+                    buildCreateDatabaseStatement := msAccess_buildCreateDatabaseStatement,
+                    buildDropDatabaseStatement   := msAccess_buildDropDatabaseStatement
+            };
+
+
+msAccess_buildCreateDatabaseStatement :: SqlBuilder -> DatabaseReference -> Boolean -> Document;
+msAccess_buildCreateDatabaseStatement builder databaseRef skipIfDatabaseExists =
+    error "Unsupported operation";
+
+msAccess_buildDropDatabaseStatement :: SqlBuilder -> DatabaseReference -> Boolean -> Document;
+msAccess_buildDropDatabaseStatement builder databaseRef skipIfDatabaseExists =
+    error "Unsupported operation";
+
+msAccess_prepareQuery :: SqlBuilderState -> Query -> Query;
+msAccess_prepareQuery builderState query = 
+    let
+        msAccess_maxColumnAliasLen = 64 :: Int;
+    in
+        limitColumnAliasLength msAccess_maxColumnAliasLen query;
+
+msAccess_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+msAccess_functionToSql builder builderState func arguments = 
+    case func of
+    Sql.QuarterFunction -> 
+        defaultSqlBuilderFunctions.functionToSql builder builderState (Sql.FunctionOther "DATEPART") (toUntypedExpr (Sql.stringConstant "q") : arguments);
+
+    Sql.IfNullFunction -> 
+        let
+            arg1 = head arguments;
+            arg2 = head (tail arguments);
+            isNullArg = Sql.untypedFunctionExpr (Sql.FunctionOther "ISNULL") [arg1];
+        in
+            defaultSqlBuilderFunctions.functionToSql builder builderState (Sql.FunctionOther "IIF") [isNullArg, arg2, arg1];
+
+    Sql.NullIfFunction ->
+        let
+            arg1 = head arguments;
+            arg2 = head (tail arguments);
+            equalArgs = Sql.untypedFunctionExpr Sql.OpEq [arg1, arg2];
+        in
+            defaultSqlBuilderFunctions.functionToSql builder builderState (Sql.FunctionOther "IIF") [equalArgs, toUntypedExpr Sql.nullValue, arg1];
+
+    Sql.OpCase_Simple -> 
+        let
+            caseArg = head arguments;
+            argPairs = chop 2 (tail arguments);
+
+            // Handle the special case where the comparison value is NULL (generate x IS NULL instead of x = NULL).
+            switchArgsForPair pr = 
+                if (isSingletonList pr) then toUntypedExpr Sql.trueConstant : pr
+                else if (Sql.isNullValue (head pr)) then Sql.untypedFunctionExpr Sql.OpIsNull [caseArg] : tail pr
+                else Sql.untypedFunctionExpr Sql.OpEq [caseArg, head pr] : tail pr;
+
+            switchArgs = concatMap switchArgsForPair argPairs;
+        in
+            defaultSqlBuilderFunctions.functionToSql builder builderState (Sql.FunctionOther "SWITCH") switchArgs;
+
+    Sql.OpCase_Searched -> 
+        let
+            argPairs = chop 2 arguments;
+
+            switchArgsForPair pr = 
+                if (isSingletonList pr) then toUntypedExpr Sql.trueConstant : pr
+                else head pr : tail pr;
+
+            switchArgs = concatMap switchArgsForPair argPairs;
+        in
+            defaultSqlBuilderFunctions.functionToSql builder builderState (Sql.FunctionOther "SWITCH") switchArgs;
+
+    _ -> defaultSqlBuilderFunctions.functionToSql builder builderState func arguments;
+    ;
+
+msAccess_buildFieldType :: SqlType -> Document;
+msAccess_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "TINYINT";
+    SqlType_SmallInt           -> text $ "SMALLINT";
+    SqlType_Integer            -> text $ "INTEGER";
+    SqlType_BigInt             -> text $ "DECIMAL(19, 0)";  // MS Access doesn't seem to have a BigInt type, so use the Decimal type instead.
+    SqlType_Decimal {precision, scale} -> text $ "DECIMAL(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "DECIMAL(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "REAL";
+    SqlType_Float              -> text $ "FLOAT";
+    SqlType_Double             -> text $ "FLOAT";
+    SqlType_Bit                -> text $ "BIT";
+    SqlType_Boolean            -> text $ "BIT";
+    SqlType_Char {length}      -> text $ "CHARACTER(" ++ intToString length ++ ")";     // MS Access doesn't have fix length strings, so treat it as variable length.
+    SqlType_VarChar {length}   -> text $ "CHARACTER(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "TEXT";
+    SqlType_Clob               -> text $ "TEXT";
+    SqlType_Binary {length}    -> text $ "BINARY(" ++ intToString length ++ ")";
+    SqlType_VarBinary {length} -> text $ "BINARY(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> text $ "IMAGE";       // TODO: is this the best type mapping?
+    SqlType_Blob               -> text $ "IMAGE";       // TODO: is this the best type mapping?
+    SqlType_Date               -> text $ "DATETIME";
+    SqlType_Time               -> text $ "DATETIME";
+    SqlType_TimeStamp          -> text $ "DATETIME";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+
+msAccess_timeIntervalToSql :: Sql.TimeInterval -> Document;
+msAccess_timeIntervalToSql !timeInterval = 
+    case timeInterval of
+    Sql.YearInterval    -> text "'yyyy'"; 
+    Sql.QuarterInterval -> text "'q'";
+    Sql.MonthInterval   -> text "'m'";
+    Sql.DayInterval     -> text "'d'";
+    Sql.HourInterval    -> text "'h'";
+    Sql.MinuteInterval  -> text "'n'";
+    Sql.SecondInterval  -> text "'s'";
+    ;

@@ -1,0 +1,1034 @@
+/**
+ * An updated version of the original SqlBuilder module.
+ * This version aims to reduce the boilerplate code needed to override small areas of functionality from the default (or any other SqlBuilder).
+ */
+module Cal.Data.SqlBuilder.DefaultSqlBuilder;
+
+import Cal.Core.Prelude using
+    function =
+        doubleToString, empty, error, field1, field2, field3, fromJust,
+        intToString, isEmpty, not, toDouble;
+    typeConstructor = Boolean, Char, Double, Int, Maybe, String;
+    dataConstructor = False, Just, Nothing, True;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor =
+        DbFunction, Expr, JoinNode, JoinType, Parameter,
+        Query, QueryOption, QueryTable, SqlBuilder, SqlBuilderState,
+        TimeInterval, TypedExpr;
+    function =
+        exprOperatorPrecedence, expressionText2, functionName,
+        operatorPrecedence, toUntypedExpr;
+    ;
+
+import Cal.Utilities.PrettyPrinter using
+    function =
+        fillSeparatedList, group, line, nest, singleSpace, spread, stack, text;
+    typeConstructor = Document;
+    ;
+
+import Cal.Data.DatabaseMetadata using
+    typeConstructor =
+        DatabaseReference, FieldDescription, TableDescription, TableReference;
+    function =
+        getDatabaseNameFromReference, getFieldDataType, getFieldName,
+        getTableConstraints, getTableFields, getTableNameFromReference,
+        getTableReference, isFieldNullable;
+    dataConstructor =
+        ForeignKeyConstraint, PrimaryKeyConstraint, UniqueConstraint;
+    ;
+
+import Cal.Data.SqlType using
+    typeConstructor = SqlType;
+    dataConstructor =
+        SqlType_BigInt, SqlType_Binary, SqlType_Bit, SqlType_Blob,
+        SqlType_Boolean, SqlType_Char, SqlType_Clob, SqlType_Date,
+        SqlType_Decimal, SqlType_Double, SqlType_Float, SqlType_Integer,
+        SqlType_LongVarBinary, SqlType_LongVarChar, SqlType_Numeric,
+        SqlType_Real, SqlType_SmallInt, SqlType_Time, SqlType_TimeStamp,
+        SqlType_TinyInt, SqlType_VarBinary, SqlType_VarChar;
+    ;
+
+import Cal.Collections.List using
+    function =
+        chop, concatMap, find, head, isElem, isElemBy, isSingletonList, join,
+        length, map, mapIndexed, subscript, tail;
+    ;
+
+import Cal.Core.String using
+    function = equalsIgnoreCase, replaceAllString, substring;
+    ;
+
+import Cal.Core.Debug using
+    function = show;
+    ;
+
+import Cal.Core.Char;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    ;
+
+import Cal.Utilities.TimeZone using
+    typeConstructor = TimeZone;
+    ;
+
+import Cal.Utilities.Locale;
+
+import Cal.Utilities.Math;
+
+///**
+// * Constructs a SqlBuilder out of a record of functions.
+// * The advantage of this approach is that a SqlBuilder can easily override selected functions from the record of another SqlBuilder.
+// */
+//sqlBuilderFromFunctions :: { prepareQuery                    :: SqlBuilderState -> Query -> Query,
+//                             constructQuery                  :: SqlBuilder -> SqlBuilderState -> Document -> Document -> Document -> Document -> Document -> Document -> Document,
+//                             constructUnionQuery             :: SqlBuilder -> SqlBuilderState -> Document -> Document -> Boolean -> Document,
+//                             
+//                             buildSelectClause               :: SqlBuilder -> SqlBuilderState -> [QueryOption] -> [(Expr, String)] -> Document,
+//                             buildFromClause                 :: SqlBuilder -> SqlBuilderState -> [JoinNode] -> Document,
+//                             buildWhereClause                :: SqlBuilder -> SqlBuilderState -> (Maybe Expr) -> [JoinNode] -> Document,
+//                             buildOrderByClause              :: SqlBuilder -> SqlBuilderState -> [(Expr, Boolean)] -> Document,
+//                             buildGroupByClause              :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document,
+//                             buildHavingClause               :: SqlBuilder -> SqlBuilderState -> (Maybe Expr) -> Document,
+//                             
+//                             buildCreateDatabaseStatement    :: SqlBuilder -> DatabaseReference -> Boolean -> Document,
+//                             buildDropDatabaseStatement      :: SqlBuilder -> DatabaseReference -> Boolean -> Document,
+//                             buildCreateTableStatement       :: SqlBuilder -> TableDescription -> Boolean -> Document,
+//                             buildCreateViewStatement        :: SqlBuilder -> TableReference -> Query -> Boolean -> Document,
+//                             buildDropTableStatement         :: SqlBuilder -> TableReference -> Boolean -> Document,
+//                             buildDropViewStatement          :: SqlBuilder -> TableReference -> Boolean -> Document,
+//                             buildInsertValuesStatement      :: SqlBuilder -> TableReference -> Maybe [String] -> [Expr] -> Document,
+//                             buildInsertQueryValuesStatement :: SqlBuilder -> TableReference -> Maybe [String] -> Query -> Document,
+//                             buildUpdateValuesStatement      :: SqlBuilder -> SqlBuilderState -> TableReference -> [String] -> [Expr] -> TypedExpr Boolean -> Document,
+//                             buildDeleteRowsStatement        :: SqlBuilder -> SqlBuilderState -> TableReference -> TypedExpr Boolean -> Document,
+//                             buildCommitStatement            :: SqlBuilder -> Document,
+//                             
+//                             buildFieldDescription           :: SqlBuilder -> FieldDescription -> Document,
+//                             buildFieldType                  :: SqlType -> Document,
+//                             parameterToSql                  :: SqlBuilder -> Parameter -> Document,
+//                             listToSql                       :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document,
+//                             functionToSql                   :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document,
+//                             functionName                    :: DbFunction -> String,
+//                             operatorText                    :: DbFunction -> String,
+//                             addParens                       :: Document -> Document,
+//                             quoteIdentifier                 :: String -> Document,
+//                             buildTableAndAliasText          :: SqlBuilder -> SqlBuilderState -> QueryTable -> Document,
+//                             makeSafeName                    :: String -> String,
+//                             
+//                             intToSql                        :: Int -> Document,
+//                             doubleToSql                     :: Double -> Document,
+//                             stringToSql                     :: String -> Document,
+//                             timeToSql                       :: Time -> TimeZone -> Document,
+//                             booleanToSql                    :: Boolean -> Document,
+//                             nullToSql                       :: Document,
+//                             timeIntervalToSql               :: TimeInterval -> Document
+//                           } -> SqlBuilder;
+//public sqlBuilderFromFunctions sqlBuilderFns = 
+//    let
+//        valueBuilder :: PrimitiveValueBuilder;
+//        valueBuilder = 
+//            Sql.makePrimitiveValueBuilder sqlBuilderFns.intToSql
+//                                        sqlBuilderFns.doubleToSql
+//                                        sqlBuilderFns.stringToSql
+//                                        sqlBuilderFns.timeToSql
+//                                        sqlBuilderFns.booleanToSql
+//                                        sqlBuilderFns.nullToSql
+//                                        sqlBuilderFns.timeIntervalToSql;
+//       
+//        sqlBuilder = Sql.makeSqlBuilder sqlBuilderFns.prepareQuery
+//        
+//                                        (sqlBuilderFns.constructQuery sqlBuilder)
+//                                        (sqlBuilderFns.constructUnionQuery sqlBuilder)
+//                                        
+//                                        (sqlBuilderFns.buildSelectClause sqlBuilder)
+//                                        (sqlBuilderFns.buildFromClause sqlBuilder)
+//                                        (sqlBuilderFns.buildWhereClause sqlBuilder)
+//                                        (sqlBuilderFns.buildOrderByClause sqlBuilder)
+//                                        (sqlBuilderFns.buildGroupByClause sqlBuilder)
+//                                        (sqlBuilderFns.buildHavingClause sqlBuilder)
+//                                        
+//                                        (sqlBuilderFns.buildCreateDatabaseStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildDropDatabaseStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildCreateTableStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildCreateViewStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildDropTableStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildDropViewStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildInsertValuesStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildInsertQueryValuesStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildUpdateValuesStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildDeleteRowsStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildCommitStatement sqlBuilder)
+//                                        (sqlBuilderFns.buildFieldDescription sqlBuilder)
+//                                        (sqlBuilderFns.buildFieldType)
+//                                        (sqlBuilderFns.parameterToSql sqlBuilder)
+//                                        (sqlBuilderFns.listToSql sqlBuilder)
+//                                        (sqlBuilderFns.functionToSql sqlBuilder)
+//                                        (sqlBuilderFns.functionName)
+//                                        (sqlBuilderFns.operatorText)
+//                                        (sqlBuilderFns.addParens)
+//                                        (sqlBuilderFns.quoteIdentifier)
+//                                        (sqlBuilderFns.buildTableAndAliasText sqlBuilder)
+//                                        (sqlBuilderFns.makeSafeName)
+//                                        
+//                                        valueBuilder;
+//    in
+//        sqlBuilder;
+
+
+/**
+ * Functions for the default SQL builder.
+ * Other SqlBuilders can be made by replacing the functions in this record with functions which provide database-specific functionality.
+ * The new record of functions can then be passed to sqlBuilderFromFunctions to construct the SqlBuilder.
+ */
+public defaultSqlBuilderFunctions = 
+    {
+        prepareQuery        = default_prepareQuery,
+        constructQuery      = default_constructQuery,
+        constructUnionQuery = default_constructUnionQuery,
+        
+        buildSelectClause   = default_buildSelectClause,
+        buildFromClause     = default_buildFromClause,
+        buildWhereClause    = default_buildWhereClause,
+        buildOrderByClause  = default_buildOrderByClause,
+        buildGroupByClause  = default_buildGroupByClause,
+        buildHavingClause   = default_buildHavingClause,
+ 
+        buildCreateDatabaseStatement    = default_buildCreateDatabaseStatement,
+        buildDropDatabaseStatement      = default_buildDropDatabaseStatement,
+        buildCreateTableStatement       = default_buildCreateTableStatement,
+        buildCreateViewStatement        = default_buildCreateViewStatement,
+        buildDropTableStatement         = default_buildDropTableStatement,
+        buildDropViewStatement          = default_buildDropViewStatement,
+        buildInsertValuesStatement      = default_buildInsertValuesStatement,
+        buildInsertQueryValuesStatement = default_buildInsertQueryValuesStatement,
+        buildUpdateValuesStatement      = default_buildUpdateValuesStatement,
+        buildDeleteRowsStatement        = default_buildDeleteRowsStatement,
+        buildCommitStatement            = default_buildCommitStatement,
+ 
+        buildFieldDescription   = default_buildFieldDescription,
+        buildFieldType          = default_buildFieldType,
+        parameterToSql          = default_parameterToSql,
+        listToSql               = default_listToSql,
+        functionToSql           = default_functionToSql,
+        functionName            = default_functionNameText,
+        operatorText            = default_operatorText,
+        addParens               = default_addParens,
+        quoteIdentifier         = default_quoteIdentifier,
+        buildTableAndAliasText  = default_buildTableAndAliasText,
+        makeSafeName            = default_makeSafeName,
+ 
+        intToSql            = default_intToSql,
+        doubleToSql         = default_doubleToSql,
+        stringToSql         = default_stringToSql,
+        timeToSql           = default_timeToSql,
+        booleanToSql        = default_booleanToSql,
+        nullToSql           = default_nullToSql,
+        timeIntervalToSql   = default_timeIntervalToSql
+    };
+
+/**
+ * A default SQL builder which attempts to construct SQL using elements common to most popular databases.
+ */
+defaultSqlBuilder :: SqlBuilder;
+public defaultSqlBuilder = Sql.makeSqlBuilder defaultSqlBuilderFunctions;
+
+default_prepareQuery :: SqlBuilderState -> Query -> Query;
+default_prepareQuery builderState query = query;
+
+default_constructQuery :: SqlBuilder -> SqlBuilderState -> Document -> Document -> Document -> Document -> Document -> Document -> Document;
+default_constructQuery builder builderState selectBody fromBody whereBody groupByBody havingBody orderByBody = 
+    let
+        selectDoc  = group (text "SELECT" ++ nest 4 (line ++ selectBody));
+        fromDoc    = if (isEmpty fromBody)    then empty else group (text "FROM"     ++ nest 4 (line ++ fromBody));
+        whereDoc   = if (isEmpty whereBody)   then empty else group (text "WHERE"    ++ nest 4 (line ++ whereBody));
+        groupByDoc = if (isEmpty groupByBody) then empty else group (text "GROUP BY" ++ nest 4 (line ++ groupByBody));
+        havingDoc  = if (isEmpty havingBody)  then empty else group (text "HAVING"   ++ nest 4 (line ++ havingBody));
+        orderByDoc = if (isEmpty orderByBody) then empty else group (text "ORDER BY" ++ nest 4 (line ++ orderByBody));
+    in
+        group (stack [selectDoc, fromDoc, whereDoc, groupByDoc, havingDoc, orderByDoc]);
+
+
+default_constructUnionQuery :: SqlBuilder -> SqlBuilderState -> Document -> Document -> Boolean -> Document;
+default_constructUnionQuery builder builderState query1Text query2Text !unionAll = 
+    let
+        unionKeyword = if unionAll then "UNION ALL" else "UNION";
+    in
+        group (stack [query1Text, text unionKeyword, query2Text]);
+
+default_buildSelectClause :: SqlBuilder -> SqlBuilderState -> [QueryOption] -> [(Expr, String)] -> Document;
+default_buildSelectClause builder builderState options columns = 
+    let
+        isDistinct = isElem Sql.Distinct options;
+        distinctOptionText = if (isDistinct) then text "DISTINCT" else empty;
+
+        maybeTopNInfo :: Maybe (Int, Boolean, Boolean);
+        maybeTopNInfo = 
+            case (find Sql.isTopNOption options) of
+            Nothing -> Nothing;
+            Just topNOptionValue -> 
+                case topNOptionValue of
+                Sql.TopN {n, percent, withTies} -> Just (n, percent, withTies);
+                ;
+            ;
+        // TODO: there should be an easy way for the SQL builder to change how the TOP N text is generated.
+        //       For example, Access doesn't seem to support the 'WITH TIES' option, so it should be omitted (or perhaps an error thrown).
+        topNOptionText = 
+            let
+                nText = intToString (field1 (fromJust maybeTopNInfo));
+                percent = field2 (fromJust maybeTopNInfo);
+                withTies = field3 (fromJust maybeTopNInfo);
+
+                optionalPercentText = if (percent) then " PERCENT" else "";
+                optionalWithTies = if (withTies) then " WITH TIES" else "";
+            in
+                case maybeTopNInfo of
+                Nothing -> empty;
+                Just _ ->
+                    text ("TOP " ++ nText ++ optionalPercentText ++ optionalWithTies);
+                ;
+                
+        prefixText = spread [distinctOptionText, topNOptionText];
+
+        columnText column = 
+            let
+                (columnExpr, columnAlias) = column;
+
+                columnExprText  = expressionText2 builder builderState columnExpr;
+                columnAliasText = if (isEmpty columnAlias) then empty
+                                  else text "AS " ++ Sql.quoteIdentifier builder columnAlias;
+            in
+                spread [columnExprText, columnAliasText];
+
+        columnTextVals = map columnText columns;
+    in
+        stack [prefixText, fillSeparatedList True "," columnTextVals];
+
+default_buildOrderByClause :: SqlBuilder -> SqlBuilderState -> [(Expr, Boolean)] -> Document;
+default_buildOrderByClause builder builderState orderExprs = 
+    let
+        orderExprText orderExpr = 
+            let
+                exprText = expressionText2 builder builderState (field1 orderExpr);
+                sortDirectionText = if (field2 orderExpr) then "ASC" else "DESC";
+            in
+                spread [exprText, text sortDirectionText];
+    in
+        fillSeparatedList True "," (map orderExprText orderExprs);
+
+default_buildGroupByClause :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document;
+default_buildGroupByClause = fillExpressionList;
+
+default_buildFromClause :: SqlBuilder -> SqlBuilderState -> [JoinNode] -> Document;
+default_buildFromClause builder builderState joins = 
+    fillSeparatedList True "," (map (default_joinNodeText True builder builderState True) joins);
+
+default_joinNodeText :: Boolean -> SqlBuilder -> SqlBuilderState -> Boolean -> JoinNode -> Document;
+default_joinNodeText addJoinParens builder builderState !rootNode joinNode = 
+    case joinNode of
+    Sql.JoinTable {table} -> 
+        Sql.buildTableAndAliasText builder builderState table;
+
+    Sql.JoinSubtree {leftNode, rightNode, linkingExpr, joinType} ->
+        let
+            leftText  = default_joinNodeText addJoinParens builder builderState False leftNode;
+            rightText = default_joinNodeText addJoinParens builder builderState False rightNode;
+
+            // MS Access doesn't accept a 'BETWEEN' expression unless it is wrapped in parens.
+            // To be safe, use parens around the linking expression for anything more than a simple binary comparison operation.
+            baseLinkExprText = expressionText2 builder builderState (toUntypedExpr linkingExpr);
+            linkExprText = if (isSimpleBinaryComaprisonExpr (toUntypedExpr linkingExpr)) then baseLinkExprText
+                           else Sql.addParens builder baseLinkExprText;
+
+            subtreeText = leftText ++ nest 4 (line ++ (default_joinTypeText joinType) ++ singleSpace ++ rightText ++ nest 4 (line ++ text "ON " ++ linkExprText));
+        in
+            // Add parens unless this is the root join node.
+            if (rootNode || not addJoinParens) then subtreeText
+            else Sql.addParens builder subtreeText;
+    ;
+
+default_joinTypeText :: JoinType -> Document;
+default_joinTypeText !joinType = 
+    case joinType of
+    Sql.InnerJoin      -> text "INNER JOIN";
+    Sql.LeftOuterJoin  -> text "LEFT OUTER JOIN";
+    Sql.RightOuterJoin -> text "RIGHT OUTER JOIN";
+    Sql.FullOuterJoin  -> text "FULL OUTER JOIN";
+    ;
+
+/**
+ * Returns whether the expression compares two simple values using a comparison operator.
+ */
+isSimpleBinaryComaprisonExpr :: Expr -> Boolean;
+isSimpleBinaryComaprisonExpr expr = 
+    let
+        args = Sql.getArgumentsFromFunctionExpr expr;
+    in
+        Sql.isOperatorExpr expr && length args == 2 && not (List.any Sql.isOperatorExpr args);
+
+default_buildWhereClause :: SqlBuilder -> SqlBuilderState -> (Maybe Expr) -> [JoinNode] -> Document;
+default_buildWhereClause builder builderState restriction joins =
+    case restriction of
+    Nothing -> empty;
+    Just restrictionValue ->
+        nest 4 (expressionText2 builder builderState restrictionValue);
+    ;
+
+default_buildHavingClause :: SqlBuilder -> SqlBuilderState -> (Maybe Expr) -> Document;
+default_buildHavingClause builder builderState groupRestriction =
+    case groupRestriction of
+    Nothing -> empty;
+    Just groupRestrictionValue -> nest 4 (expressionText2 builder builderState groupRestrictionValue);
+    ;
+
+// TODO: make use of the 'skipIfDatabaseExists' flag
+default_buildCreateDatabaseStatement :: SqlBuilder -> DatabaseReference -> Boolean -> Document;
+default_buildCreateDatabaseStatement builder databaseRef skipIfDatabaseExists =
+    let
+        databaseNameText = getDatabaseNameFromReference databaseRef;
+    in
+        text "CREATE DATABASE" ++ singleSpace ++ Sql.quoteIdentifier builder databaseNameText;
+
+// TODO: make use of the 'onlyIfDatabaseExists' flag
+default_buildDropDatabaseStatement :: SqlBuilder -> DatabaseReference -> Boolean -> Document;
+default_buildDropDatabaseStatement builder databaseRef onlyIfDatabaseExists =
+    let
+        databaseNameText = getDatabaseNameFromReference databaseRef;
+    in
+        text "DROP DATABASE" ++ singleSpace ++ Sql.quoteIdentifier builder databaseNameText;
+    
+// TODO: make use of the 'skipIfTableExists' flag...
+default_buildCreateTableStatement :: SqlBuilder -> TableDescription -> Boolean -> Document;
+default_buildCreateTableStatement builder tableDesc skipIfTableExists = 
+    let
+        tableRef = getTableReference tableDesc;
+        fieldDescriptions = getTableFields tableDesc;
+        constraints = getTableConstraints tableDesc;
+        tableNameText = getTableNameFromReference tableRef;
+
+        fieldDefinitions = map (Sql.fieldDescriptionText builder) fieldDescriptions;
+        constraintDefinitions = mapIndexed constraintDescriptionText constraints;
+
+        constraintName suffix constraintN = 
+            text (Sql.makeSafeSqlName builder (tableNameText ++ "_" ++ suffix ++ (if (constraintN == 0) then "" else intToString constraintN)));
+
+        constraintDescriptionText constraint constraintN = 
+            case constraint of
+            PrimaryKeyConstraint {primaryKeyFieldNames} -> 
+                if (isEmpty primaryKeyFieldNames) then empty
+                else text "CONSTRAINT" ++ singleSpace ++ constraintName "PK" constraintN ++ singleSpace ++ text "PRIMARY KEY" ++ singleSpace 
+                    ++ text "(" ++ join (text ", ") (map (Sql.quoteIdentifier builder) primaryKeyFieldNames) ++ text ")";
+
+            UniqueConstraint {uniqueFieldNames} -> 
+                if (isEmpty uniqueFieldNames) then empty
+                else text "CONSTRAINT" ++ singleSpace ++ constraintName "UNQ" constraintN ++ singleSpace ++ text "UNIQUE" ++ singleSpace 
+                    ++ text "(" ++ join (text ", ") (map (Sql.quoteIdentifier builder) uniqueFieldNames) ++ text ")";
+
+            ForeignKeyConstraint {foreignTableRef, referencedFields} -> 
+                if (isEmpty referencedFields) then empty
+                else text "CONSTRAINT" ++ singleSpace ++ constraintName "FK" constraintN ++ singleSpace ++ text "FOREIGN KEY" ++ singleSpace 
+                    ++ text "(" ++ join (text ", ") (map (\pr -> Sql.quoteIdentifier builder (field1 pr)) referencedFields) ++ text ")"
+                    ++ singleSpace ++ text "REFERENCES" ++ singleSpace ++ Sql.quoteIdentifier builder (getTableNameFromReference foreignTableRef) ++ singleSpace 
+                    ++ text "(" ++ join(text ", ") (map (\pr -> Sql.quoteIdentifier builder (field2 pr)) referencedFields) ++ text ")";
+            ;
+    in
+        text "CREATE TABLE" ++ singleSpace ++ Sql.quoteIdentifier builder tableNameText
+            ++ line ++ text "("
+            ++ nest 4 (line ++ fillSeparatedList True "," (fieldDefinitions ++ constraintDefinitions))
+            ++ line ++ text ")";
+
+default_buildCreateViewStatement :: SqlBuilder -> TableReference -> Query -> Boolean -> Document;
+default_buildCreateViewStatement builder viewRef viewDefinition skipIfViewExists = 
+    group $ 
+        text "CREATE VIEW " 
+            ++ singleSpace ++ Sql.quoteIdentifier builder (getTableNameFromReference viewRef)
+            ++ singleSpace ++ text "AS"
+            ++ nest 4 (line ++ Sql.queryTextDocument builder viewDefinition);
+
+// TODO: make use of the 'onlyIfTableExists' flag...
+default_buildDropTableStatement :: SqlBuilder -> TableReference -> Boolean -> Document;
+default_buildDropTableStatement builder tableRef onlyIfTableExists = 
+    text "DROP TABLE" ++ singleSpace ++ Sql.quoteIdentifier builder (getTableNameFromReference tableRef);
+
+default_buildDropViewStatement :: SqlBuilder -> TableReference -> Boolean -> Document;
+default_buildDropViewStatement builder viewRef onlyIfViewExists = 
+    text "DROP VIEW" ++ singleSpace ++ Sql.quoteIdentifier builder (getTableNameFromReference viewRef);
+
+default_buildInsertValuesStatement :: SqlBuilder -> TableReference -> Maybe [String] -> [Expr] -> Document;
+default_buildInsertValuesStatement builder tableRef maybeDestColumns rowValues = 
+    let
+        destColumnText = 
+            case maybeDestColumns of
+            Nothing -> empty;
+            Just destColumns -> 
+                text "(" ++ join (text ", ") (map (Sql.quoteIdentifier builder) destColumns) ++ text ")";
+            ;
+    in
+        spread [text "INSERT INTO",
+                Sql.quoteIdentifier builder (getTableNameFromReference tableRef),
+                destColumnText,
+                text "VALUES",
+                text ("(" ++ join ", " (map (Sql.expressionText builder) rowValues) ++ ")")
+               ];
+
+default_buildInsertQueryValuesStatement :: SqlBuilder -> TableReference -> Maybe [String] -> Query -> Document;
+default_buildInsertQueryValuesStatement builder tableRef maybeDestColumns insertQuery =
+    let
+        destColumnText = 
+            case maybeDestColumns of
+            Nothing -> empty;
+            Just destColumns -> 
+                text "(" ++ join (text ", ") (map (Sql.quoteIdentifier builder) destColumns) ++ text ")";
+            ;
+    in
+        group $ 
+            spread [text "INSERT INTO",
+                    Sql.quoteIdentifier builder (getTableNameFromReference tableRef),
+                    destColumnText]
+            ++ nest 4 (line ++ Sql.queryTextDocument builder insertQuery);
+
+default_buildUpdateValuesStatement :: SqlBuilder -> SqlBuilderState -> TableReference -> [String] -> [Expr] -> TypedExpr Boolean -> Document;
+default_buildUpdateValuesStatement builder builderState tableRef destColumns newValues condition = 
+    let
+        colValueText :: String -> Expr -> Document;
+        colValueText colName newValue = 
+            Sql.quoteIdentifier builder colName ++ text " = " ++ Sql.expressionText2 builder builderState newValue;
+
+        colValuesText :: Document;
+        colValuesText = 
+            join (text ", ") (List.zipWith colValueText destColumns newValues);
+
+        whereLineText :: Document;
+        whereLineText = 
+            // Don't include a WHERE clause if the restriction is 'True'.
+            if (condition == Sql.trueConstant) then empty
+            else line ++ text "WHERE" ++ singleSpace ++ Sql.expressionText2 builder builderState (toUntypedExpr condition);
+    in
+        group $ 
+            text "UPDATE" ++ singleSpace ++ Sql.quoteIdentifier builder (getTableNameFromReference tableRef)
+            ++ nest 4 (
+                line ++ text "SET" ++ singleSpace ++ colValuesText
+                ++ whereLineText
+            );
+
+default_buildDeleteRowsStatement :: SqlBuilder -> SqlBuilderState -> TableReference -> TypedExpr Boolean -> Document;
+default_buildDeleteRowsStatement builder builderState tableRef condition = 
+    let
+        whereLineText :: Document;
+        whereLineText = 
+            // Don't include a WHERE clause if the restriction is 'True'.
+            if (condition == Sql.trueConstant) then empty
+            else nest 4 (line ++ text "WHERE" ++ singleSpace ++ Sql.expressionText2 builder builderState (toUntypedExpr condition));
+    in
+        group $ 
+            spread [text "DELETE FROM",
+                    Sql.quoteIdentifier builder (getTableNameFromReference tableRef)]
+            ++ whereLineText;
+
+default_buildCommitStatement :: SqlBuilder -> Document;
+default_buildCommitStatement builder = text "COMMIT";
+
+default_buildFieldDescription :: SqlBuilder -> FieldDescription -> Document;
+default_buildFieldDescription builder fieldDesc = 
+    let
+        fieldTypeText = Sql.fieldTypeText builder (getFieldDataType fieldDesc);
+        nullableText = if (isFieldNullable fieldDesc) then "NULL" else "NOT NULL";
+    in
+        spread [Sql.quoteIdentifier builder (getFieldName fieldDesc), fieldTypeText, text nullableText];
+
+// The default SQL built for field types is roughly based on ANSI SQL.
+default_buildFieldType :: SqlType -> Document;
+default_buildFieldType !dataType = 
+    case dataType of
+    SqlType_TinyInt            -> text $ "SMALLINT";        // ANSI SQL doesn't seem to have a TinyInt type, so use the SmallInt type instead.
+    SqlType_SmallInt           -> text $ "SMALLINT";
+    SqlType_Integer            -> text $ "INTEGER";
+    SqlType_BigInt             -> text $ "DECIMAL(19, 0)";  // ANSI SQL doesn't seem to have a BigInt type, so use the Decimal type instead.
+    SqlType_Decimal {precision, scale} -> text $ "DECIMAL(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Numeric {precision, scale} -> text $ "NUMERIC(" ++ intToString precision ++ ", " ++ intToString scale ++ ")";
+    SqlType_Real               -> text $ "REAL";
+    SqlType_Float              -> text $ "FLOAT";
+    SqlType_Double             -> text $ "DOUBLE PRECISION";
+    SqlType_Bit                -> text $ "BIT";
+    SqlType_Boolean            -> text $ "BOOLEAN";
+    SqlType_Char {length}      -> text $ "CHARACTER(" ++ intToString length ++ ")";
+    SqlType_VarChar {length}   -> text $ "CHARACTER VARYING(" ++ intToString length ++ ")";
+    SqlType_LongVarChar        -> text $ "CLOB";    // TODO: is this the best option here?
+    SqlType_Clob               -> text $ "CLOB";
+    SqlType_Binary {length}    -> text $ "BIT(" ++ intToString length ++ ")";
+    SqlType_VarBinary {length} -> text $ "BIT VARYING(" ++ intToString length ++ ")";
+    SqlType_LongVarBinary      -> text $ "BLOB";    // TODO: is this the best option here?
+    SqlType_Blob               -> text $ "BLOB";
+    SqlType_Date               -> text $ "DATE";
+    SqlType_Time               -> text $ "TIME";
+    SqlType_TimeStamp          -> text $ "TIMESTAMP";
+    _ -> error ("Unsupported data type '" ++ show dataType ++ "'.");
+    ;
+
+default_parameterToSql :: SqlBuilder -> Parameter -> Document;
+default_parameterToSql builder parameter =
+    if (Sql.isUnnamedParameter parameter) then text "?"
+    else error "Named parameters are currently not supported!";
+
+default_listToSql :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document;
+default_listToSql builder builderState listValues = 
+    text "(" ++ buildExpressionList builder builderState listValues ++ text ")";
+
+default_functionToSql :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document;
+default_functionToSql builder builderState func arguments = 
+    let
+        nArgs = length arguments;
+
+        arg1Expr = if (nArgs < 1) then error "The wrong number of function arguments was provided"
+                   else head arguments;
+        arg2Expr = if (nArgs < 2) then error "The wrong number of function arguments was provided"
+                   else head (tail arguments);
+        arg3Expr = if (nArgs < 3) then error "The wrong number of function arguments was provided"
+                   else subscript arguments 2;
+
+        arg1Text = expressionText2 builder builderState arg1Expr;
+        arg2Text = expressionText2 builder builderState arg2Expr;
+        arg3Text = expressionText2 builder builderState arg3Expr;
+
+        arg1TextParens = nest 4 (text "(" ++ arg1Text ++ text ")");
+        arg2TextParens = nest 4 (text "(" ++ arg2Text ++ text ")");
+        arg3TextParens = nest 4 (text "(" ++ arg3Text ++ text ")");
+
+        functionName :: String;
+        functionName = Sql.functionName builder func;
+        
+        operatorText :: String;
+        operatorText = Sql.operatorText builder func;
+        
+        unaryOperationText operatorInFront = 
+            let
+                unaryOperatorPrecedence = operatorPrecedence func;
+                argOperatorPrecedence  = exprOperatorPrecedence arg1Expr;
+
+                // Only include parens where needed.
+                argText = if (argOperatorPrecedence > 0 && unaryOperatorPrecedence > argOperatorPrecedence) then arg1TextParens
+                          else arg1Text;
+            in
+                if (operatorInFront) then
+                    text operatorText ++ argText
+                else
+                    argText ++ text operatorText;
+
+        binaryOperationText multiline = 
+            let
+                binaryOperatorPrecedence = operatorPrecedence func;
+                leftOperatorPrecedence  = exprOperatorPrecedence arg1Expr;
+                rightOperatorPrecedence = exprOperatorPrecedence arg2Expr;
+
+                // Only include parens where needed.
+                leftText  = if (leftOperatorPrecedence  > 0 && binaryOperatorPrecedence > leftOperatorPrecedence)  then arg1TextParens else arg1Text;
+                rightText = if (rightOperatorPrecedence > 0 && binaryOperatorPrecedence >= rightOperatorPrecedence) then arg2TextParens else arg2Text;
+            in
+                if (multiline) then
+                    leftText ++ line ++ text operatorText ++ singleSpace ++ rightText
+                else
+                    spread [leftText, text operatorText, rightText];
+
+        betweenOperationText = 
+            let
+                binaryOperatorPrecedence = operatorPrecedence func;
+                leftOperatorPrecedence  = exprOperatorPrecedence arg1Expr;
+                startValOperatorPrecedence = exprOperatorPrecedence arg2Expr;
+                endValOperatorPrecedence = exprOperatorPrecedence arg3Expr;
+
+                // Only include parens where needed.
+                leftText  = if (leftOperatorPrecedence  > 0 && binaryOperatorPrecedence > leftOperatorPrecedence)  then arg1TextParens else arg1Text;
+                startValText = if (startValOperatorPrecedence > 0 && binaryOperatorPrecedence > startValOperatorPrecedence) then arg2TextParens else arg2Text;
+                endValText = if (endValOperatorPrecedence > 0 && binaryOperatorPrecedence > endValOperatorPrecedence) then arg3TextParens else arg3Text;
+            in
+                spread [leftText, text operatorText, startValText, text "AND", endValText];
+
+        // The simpleCase flag will be True for a 'simple' CASE statement, and False for a 'searched' CASE statement.
+        caseOperationText simpleCase = 
+            let
+                argPairs = chop 2 (if simpleCase then tail arguments else arguments);
+                textForPair pr = 
+                    let
+                        fstArgText = expressionText2 builder builderState (head pr);
+                        sndArgText = expressionText2 builder builderState (head (tail pr));
+                    in
+                        if (isSingletonList pr) then line ++ text "ELSE" ++ singleSpace ++ nest 4 fstArgText
+                        else line ++ text "WHEN" ++ singleSpace ++ nest 4 fstArgText ++ singleSpace ++ text "THEN" ++ singleSpace ++ nest 4 sndArgText;
+
+                caseArgText = if simpleCase then singleSpace ++ arg1Text else empty;
+            in
+                text operatorText ++ caseArgText ++ nest 4 (concatMap textForPair argPairs) ++ line ++ text "END";
+
+        distinctSummaryText baseAggrFunction = text (Sql.functionName builder baseAggrFunction) ++ text "(" ++ text "DISTINCT" ++ singleSpace ++ arg1Text ++ text ")";
+    in
+        // The conversion functions need special handling.
+        case func of
+        (Sql.OpNot      // Unary operators which are before the argument.
+            | Sql.OpBitNot
+            | Sql.OpNegate
+            | Sql.OpExists) -> unaryOperationText True;
+            
+        (Sql.OpIsNull   // Unary operators which are after the argument.
+            | Sql.OpIsNotNull) -> unaryOperationText False;
+
+        (Sql.OpEq       // Binary operators which are done on one line.
+            | Sql.OpLt
+            | Sql.OpLtEq
+            | Sql.OpGt
+            | Sql.OpGtEq
+            | Sql.OpNotEq
+            | Sql.OpLike
+            | Sql.OpIn
+            | Sql.OpCat
+            | Sql.OpPlus
+            | Sql.OpMinus
+            | Sql.OpMul
+            | Sql.OpDiv
+            | Sql.OpMod
+            | Sql.OpBitAnd
+            | Sql.OpBitOr
+            | Sql.OpBitXor) -> binaryOperationText False;
+
+        (Sql.OpAnd      // Binary operators which are done on multiple lines.
+            | Sql.OpOr) -> binaryOperationText True;
+        
+        Sql.OpBetween -> betweenOperationText;
+        Sql.OpCase_Simple -> caseOperationText True;
+        Sql.OpCase_Searched -> caseOperationText False;
+        
+        Sql.ConvertToStringFunction -> text "CONVERT(" ++ arg1Text ++ text ", SQL_VARCHAR)";
+        Sql.ConvertToIntFunction    -> text "CONVERT(" ++ arg1Text ++ text ", SQL_INTEGER)";
+        Sql.ConvertToDoubleFunction -> text "CONVERT(" ++ arg1Text ++ text ", SQL_DECIMAL)";
+
+        Sql.AggrDistinctCount -> distinctSummaryText Sql.AggrCount;
+        Sql.AggrDistinctSum -> distinctSummaryText Sql.AggrSum;
+        Sql.AggrDistinctAvg -> distinctSummaryText Sql.AggrAvg;
+
+        Sql.AggrCountAll -> text (Sql.functionName builder Sql.AggrCount) ++ text "(*)";
+
+        (Sql.DateTimeAddFunction 
+            | Sql.DateTimeDiffFunction) {timeInterval} -> 
+            let
+                argExpressionText = Sql.timeIntervalToSql builder timeInterval 
+                                        ++ text ", " 
+                                        ++ buildExpressionList builder builderState arguments;
+            in
+                text functionName++ text "(" ++ argExpressionText ++ text ")";
+
+        _ -> if (isEmpty arguments) then text functionName
+             else text functionName ++ text "(" ++ buildExpressionList builder builderState arguments ++ text ")";
+        ;
+
+default_functionNameText :: DbFunction -> String;
+default_functionNameText func = 
+    Sql.defaultFunctionName func;
+
+default_operatorText :: DbFunction -> String;
+default_operatorText !operator = 
+    case operator of
+    Sql.OpNot            -> "NOT ";
+    Sql.OpBitNot        -> "~";
+    Sql.OpNegate        -> "-";
+    Sql.OpIsNull        -> " IS NULL";
+    Sql.OpIsNotNull     -> " IS NOT NULL";
+    Sql.OpExists        -> "EXISTS ";
+    Sql.OpEq            -> "=";
+    Sql.OpLt            -> "<";
+    Sql.OpLtEq          -> "<=";
+    Sql.OpGt            -> ">";
+    Sql.OpGtEq          -> ">=";
+    Sql.OpNotEq         -> "<>";
+    Sql.OpAnd           -> "AND";
+    Sql.OpOr            -> "OR";
+    Sql.OpLike          -> "LIKE";
+    Sql.OpIn            -> "IN";
+    Sql.OpCat           -> "+";
+    Sql.OpPlus          -> "+";
+    Sql.OpMinus         -> "-";
+    Sql.OpMul           -> "*";
+    Sql.OpDiv           -> "/";
+    Sql.OpMod           -> "MOD";
+    Sql.OpBitAnd        -> "&";
+    Sql.OpBitOr         -> "|";
+    Sql.OpBitXor        -> "^";
+    Sql.OpBetween       -> "BETWEEN";
+    Sql.OpCase_Simple   -> "CASE";
+    Sql.OpCase_Searched -> "CASE";
+    ;
+        
+default_addParens :: Document -> Document;
+default_addParens txt = 
+    text "(" ++ txt ++ text ")";
+
+/**
+ * Adds quotes, if needed to the specified identifier.
+ * For a qualified table name, this will quote each piece of the name separately.
+ */
+default_quoteIdentifier :: String -> Document;
+default_quoteIdentifier = quoteIdentifierHelper default_quotesNeeded "[" "]";
+
+/**
+ * Adds quotes, if needed to the specified identifier.
+ * For a qualified table name, this will quote each piece of the name separately.
+ */
+quoteIdentifierHelper :: (String -> Boolean) -> String -> String -> String -> Document;
+public quoteIdentifierHelper quotesNeededFn openQuote closeQuote txt =
+    let
+        separator = ".";
+        namePieces = String.splitString separator txt;
+        quotedPieces = map (\name -> if (quotesNeededFn name) then enclose openQuote closeQuote name else name) namePieces;
+        newIdentifier = join separator quotedPieces;
+    in
+        text newIdentifier;
+
+/**
+ * Returns whether the specified identifier needs to be quoted.
+ */
+quotesNeededHelper :: (Char -> Boolean) -> (Char -> Boolean) -> String -> Boolean;
+public quotesNeededHelper isValidFirstSqlChar isValidSqlChar !txt = 
+    let
+        txtChars = String.toList txt;
+        firstCharValid = isValidFirstSqlChar (head txtChars);
+        otherCharsValid = List.all isValidSqlChar (tail txtChars);
+
+        allCharsValid = (isEmpty txtChars) || firstCharValid && otherCharsValid;
+    in
+        not allCharsValid;
+
+/**
+ * Returns whether the specified identifier needs to be quoted.
+ */
+default_quotesNeeded :: String -> Boolean;
+public default_quotesNeeded !txt = 
+    // Just quote all identifiers because we don't check for reserved keywords
+    True;
+//        quotesNeededHelper default_isValidFirstSqlChar default_isValidSqlChar txt;
+
+default_isValidFirstSqlChar !char = Char.isLetter char || char == '_';
+default_isValidSqlChar !char = (Char.isLetterOrDigit char) || (char == '.') || (char == '_');
+
+/**
+ * Quote names which contain lower case letters as well.
+ */
+quotesNeeded_allowUppercaseOnly :: String -> Boolean;
+public quotesNeeded_allowUppercaseOnly !txt = 
+    let
+        // Only allow upper case letters in unquoted names.
+        isValidFirstSqlChar char = Char.isLetter char && Char.isUpperCase char;
+        isValidSqlChar char = isValidFirstSqlChar char || Char.isDigit char || (char == '.') || (char == '_');
+    in
+        if (default_quotesNeeded txt) then True
+        else quotesNeededHelper isValidFirstSqlChar isValidSqlChar txt;
+
+
+default_buildTableAndAliasText :: SqlBuilder -> SqlBuilderState -> QueryTable -> Document;
+default_buildTableAndAliasText = buildTableAndAliasTextHelper True;
+
+buildTableAndAliasTextHelper :: Boolean -> SqlBuilder -> SqlBuilderState -> QueryTable -> Document;
+public buildTableAndAliasTextHelper includeAsKeywordWithAlias builder builderState table = 
+    let
+        qualName = Sql.tableNameText builder builderState table;
+        tableAlias = Sql.getQueryTableAlias table;
+        quotedAlias = Sql.quoteIdentifier builder tableAlias;
+
+        aliasSeparator = if includeAsKeywordWithAlias then " AS " else " ";
+    in
+        // Don't bother including the table alias if it is the same as the table name.
+        if (Sql.getQueryTableName table == tableAlias) then qualName
+        else qualName ++ text aliasSeparator ++ quotedAlias;
+
+
+/**
+ * Returns a SQL-safe version of the specified name.
+ */
+default_makeSafeName :: String -> String;
+default_makeSafeName !name = 
+    let
+        nameChars = String.toList name;
+
+        makeSafeChar nameChar = if (default_isValidSqlChar nameChar) then Char.toUpperCase nameChar else '_';
+        safeChars = map makeSafeChar nameChars;
+
+        // Ensure that the name doesn't start with an invalid character.
+        newNameChars = 
+            if (isEmpty safeChars || not (default_isValidFirstSqlChar (head safeChars))) then '_' : safeChars
+            else safeChars;
+    in
+        String.fromList newNameChars;
+
+/**
+ * Returns a SQL-safe version of the specified name and trim the trailing
+ * characters if the length of the name exceeds the specified maximum length.
+ * @arg safeNameFn
+ * @arg maxLength
+ * @arg name
+ */
+makeSafeNameWithLengthCheck :: (String -> String) -> Int -> String -> String;
+public makeSafeNameWithLengthCheck safeNameFn !maxLength !name =
+    let
+        safeName :: String;
+        safeName = safeNameFn name;
+    in
+        if (String.length safeName <= maxLength) then safeName
+        else String.substring safeName 0 maxLength;
+
+
+default_intToSql    = text # intToString;
+default_doubleToSql = text # formatNumber;
+
+formatNumber :: Double -> String;
+formatNumber !numVal = 
+    // If this is a whole number, then format it as a long integer.
+    if (Math.fractionalPart numVal == 0.0 
+        && numVal <= toDouble (Prelude.maxBound :: Int)
+        && numVal >= toDouble (Prelude.minBound :: Int)) then 
+            Prelude.longToString (Math.roundDoubleToLong numVal)
+    else doubleToString numVal;
+
+default_stringToSql :: String -> Document;
+default_stringToSql strVal = 
+    // Escape any single quotes in the string value, and enclose in single quotes.
+    text ("'" ++ (replaceAllString strVal "'" "''") ++ "'");
+
+default_timestampPattern :: String;
+default_timestampPattern = "'{ts '''yyyy-MM-dd HH:mm:ss.S'''}'";
+
+default_timeToSql :: Time -> TimeZone -> Document;
+default_timeToSql timeVal timeZone = 
+    text (Time.formatTime timeVal timeZone Time.gregorianCalendar default_timestampPattern Locale.defaultLocale);
+
+default_booleanToSql :: Boolean -> Document;
+default_booleanToSql !boolVal = 
+    if boolVal then text "1=1" else text "1=0";
+
+default_nullToSql :: Document;
+default_nullToSql = text "NULL";
+
+default_timeIntervalToSql !timeInterval = 
+    case timeInterval of
+    Sql.YearInterval    -> text "yyyy"; 
+    Sql.QuarterInterval -> text "q";
+    Sql.MonthInterval   -> text "m";
+    Sql.DayInterval     -> text "d";
+    Sql.HourInterval    -> text "hh";
+    Sql.MinuteInterval  -> text "n";
+    Sql.SecondInterval  -> text "s";
+    ;
+
+
+enclose :: String -> String -> String -> String;
+enclose !l r x = l ++ x ++ r;
+
+/**
+ * Constructs a comma-separated list of expressions.
+ */
+buildExpressionList :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document;
+buildExpressionList builder builderState exprs = 
+    let
+        exprTextVals = map (expressionText2 builder builderState) exprs;
+    in
+        join (text ", ") exprTextVals;
+
+fillExpressionList :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document;
+fillExpressionList builder builderState exprs = 
+    let
+        exprTextVals = map (expressionText2 builder builderState) exprs;
+    in
+        fillSeparatedList True "," exprTextVals;
+
+
+/**
+ * Limits the length of the projected column aliases in the query.
+ */
+limitColumnAliasLength :: Int -> Query -> Query;
+public limitColumnAliasLength maxColumnAliasLen query = 
+    let
+        oldAliases = Sql.projectedColumnAliases query;
+
+        makeUniqueTruncatedName :: Int -> String -> [String] -> String;
+        makeUniqueTruncatedName counter baseName namesInUse = 
+            let
+                counterText = if (counter == 0) then "" else intToString counter;
+                nextName = substring baseName 0 (maxColumnAliasLen - String.length counterText) ++ counterText;
+            in
+                // Leave the alias alone if it isn't longer than the limit.
+                // TODO: would it make sense to check for uniqueness anyway?
+                if (String.length baseName <= maxColumnAliasLen) then 
+                    baseName
+                else if (isElemBy equalsIgnoreCase nextName namesInUse) then 
+                    makeUniqueTruncatedName (counter + 1) baseName namesInUse
+                else 
+                    nextName;
+
+        makeNewAliases :: [String] -> [String] -> [String];
+        makeNewAliases !origAliases namesInUse = 
+            case origAliases of
+            [] -> [];
+            alias : tailAliases -> 
+                let
+                    uniqueTruncatedName = makeUniqueTruncatedName 0 alias namesInUse;
+                in
+                    uniqueTruncatedName : makeNewAliases tailAliases (uniqueTruncatedName : namesInUse);
+            ;
+
+        newAliases :: [String];
+        newAliases = makeNewAliases oldAliases [];
+    in
+        Sql.setColumnAliases query newAliases;
+
+
+/**
+ * Convert TopN queries to restrict the number of rows using the ranking functions.
+ */
+restructureTopNToRanking :: Query -> Query;
+public restructureTopNToRanking query = 
+    case (find Sql.isTopNOption (Sql.queryOptions query)) of
+    Nothing -> query;
+    Just topNInfo -> 
+        case topNInfo of
+        Sql.TopN {n, percent, withTies} ->
+            let
+                // Remove the topN option from the query.
+                nonTopNQuery :: Query;
+                nonTopNQuery = Sql.removeOption query topNInfo;
+
+                queryOrdering :: [(Expr, Boolean)];
+                queryOrdering = Sql.orderingExpressions query;
+
+                // If there is ordering in the original query, then use a ranking expression, otherwise use the ROWNUM expr.
+                // kbac / agr: should this be an error condition??? -> fix this dummyOrderingFn 
+                rankArgs = concatMap (\pr -> [field1 pr, Sql.toUntypedExpr (Sql.booleanConstant $ field2 pr)]) queryOrdering;
+                rankExpr = 
+                    if (percent) then Sql.untypedFunctionExpr (Sql.FunctionOther "PERCENT_RANK") rankArgs
+                    else Sql.untypedFunctionExpr (Sql.FunctionOther "RANK") rankArgs;
+
+                // Wrap the query as a subquery.
+                additionalExprs = if (isEmpty queryOrdering) then [rowNumberExpr] else [rankExpr];
+                wrapResults = Sql.wrapQuery2 nonTopNQuery additionalExprs;
+
+                wrappedQuery = field1 wrapResults;
+
+                // If there is no ordering in the orginal query, then do the topN based on the row number.
+                // However, this cannot be done for the TopN% case.
+                rowNumberExpr :: Expr;
+                rowNumberExpr = 
+                    if (percent) then error "Unable to build TopN% SQL for a query with no ordering."
+                    else Sql.untypedFunctionExpr (Sql.FunctionOther "ROW_NUMBER() OVER (ORDER BY 1)") [];
+
+                wrappedRankExpr = 
+                        head (field2 wrapResults);
+
+                nExpr :: Sql.TypedExpr Double;
+                nExpr = 
+                    if (percent) then 
+                        Sql.numericConstant (toDouble n / 100.0)
+                    else 
+                        Sql.numericConstant (toDouble n);
+
+                topNRestriction = Sql.ltEqExpr (Sql.toTypedExpr wrappedRankExpr) nExpr;
+            in
+                Sql.restrict wrappedQuery topNRestriction;
+        ;
+    ;
+
