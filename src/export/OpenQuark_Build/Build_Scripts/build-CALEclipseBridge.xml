@@ -75,13 +75,13 @@
         <property name="src.project.dir" value="${project.dir}/src"/>
 
         <patternset id="eclipse.buildpath">
-            <include name="org.eclipse.core.runtime_3.3.100.v20070530.jar" />
-            <include name="org.eclipse.equinox.common_3.3.0.v20070426.jar" />
-            <include name="org.eclipse.osgi_3.3.0.v20070530.jar" />
-            <include name="org.eclipse.ui_3.3.0.I20070614-0800.jar" />
-            <include name="org.eclipse.ui.workbench_3.3.0.I20070608-1100.jar" />
+            <include name="org.eclipse.core.runtime_*.jar" />
+            <include name="org.eclipse.equinox.common_*.jar" />
+            <include name="org.eclipse.osgi_*.jar" />
+            <include name="org.eclipse.ui_*.jar" />
+            <include name="org.eclipse.ui.workbench_*.jar" />
         </patternset>
-   
+
     </target>
 
 </project>

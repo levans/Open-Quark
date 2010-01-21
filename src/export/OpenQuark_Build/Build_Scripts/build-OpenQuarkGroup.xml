@@ -119,37 +119,36 @@
             <include name="External/Sun/JavaHelp/2.0_02/jh.jar"/>
             <include name="Research/Quark_Gems/Help/GemCutterHelpFiles.jar"/>
         </patternset>
-        
+
         <patternset id="eclipse.javadoc.libs">
-            <include name="org.eclipse.core.commands_3.3.0.I20070605-0010.jar" />
-            <include name="org.eclipse.core.filebuffers_3.3.0.v20070606-0010.jar"/>
-            <include name="org.eclipse.core.jobs_3.3.0.v20070423.jar" />
-            <include name="org.eclipse.core.resources_3.3.0.v20070604.jar"/>
-            <include name="org.eclipse.core.runtime_3.3.100.v20070530.jar"/>
-            <include name="org.eclipse.debug.core_3.3.0.v20070607-1800.jar"/>
-            <include name="org.eclipse.debug.ui_3.3.0.v20070607-1800.jar"/>
-            <include name="org.eclipse.equinox.common_3.3.0.v20070426.jar" />
-            <include name="org.eclipse.equinox.preferences_3.2.100.v20070522.jar" />
-            <include name="org.eclipse.equinox.registry_3.3.0.v20070522.jar" />
-            <include name="org.eclipse.jdt.core_3.3.0.v_771.jar"/>
-            <include name="org.eclipse.jdt.debug.ui_3.2.100.v20070531-1800.jar"/>
-            <include name="org.eclipse.jdt.launching_3.3.0.v20070510.jar"/>
-            <include name="org.eclipse.jdt.ui_3.3.0.v20070607-0010.jar"/>
-            <include name="org.eclipse.jface_3.3.0.I20070606-0010.jar"/>
-            <include name="org.eclipse.jface.text_3.3.0.v20070606-0010.jar"/>
-            <include name="org.eclipse.osgi_3.3.0.v20070530.jar"/>
-            <include name="org.eclipse.search_3.3.0.v20070606-0010.jar"/>
-            <include name="org.eclipse.swt_3.3.0.v3346.jar"/>
-            <include name="org.eclipse.swt.win32.win32.x86_3.3.0.v3346.jar"/>
-            <include name="org.eclipse.text_3.3.0.v20070606-0010.jar"/>
-            <include name="org.eclipse.ui_3.3.0.I20070614-0800.jar"/>
-            <include name="org.eclipse.ui.console_3.2.0.v20070530.jar"/>
-            <include name="org.eclipse.ui.editors_3.3.0.v20070606-0010.jar"/>
-            <include name="org.eclipse.ui.forms_3.3.0.v20070511.jar"/>
-            <include name="org.eclipse.ui.ide_3.3.0.I20070620.jar"/>
-            <include name="org.eclipse.ui.views_3.2.100.I20070319-0010.jar"/>
-            <include name="org.eclipse.ui.workbench_3.3.0.I20070608-1100.jar"/>
-            <include name="org.eclipse.ui.workbench.texteditor_3.3.0.v20070606-0010.jar"/>
+            <include name="org.eclipse.core.commands_*.jar" />
+            <include name="org.eclipse.core.filebuffers_*.jar"/>
+            <include name="org.eclipse.core.jobs_*.jar" />
+            <include name="org.eclipse.core.resources_*.jar"/>
+            <include name="org.eclipse.core.runtime_*.jar"/>
+            <include name="org.eclipse.debug.core_*.jar"/>
+            <include name="org.eclipse.debug.ui_*.jar"/>
+            <include name="org.eclipse.equinox.common_*.jar" />
+            <include name="org.eclipse.equinox.preferences_*.jar" />
+            <include name="org.eclipse.equinox.registry_*.jar" />
+            <include name="org.eclipse.jdt.core_*.jar"/>
+            <include name="org.eclipse.jdt.debug.ui_*.jar"/>
+            <include name="org.eclipse.jdt.launching_*.jar"/>
+            <include name="org.eclipse.jdt.ui_*.jar"/>
+            <include name="org.eclipse.jface_*.jar"/>
+            <include name="org.eclipse.jface.text_*.jar"/>
+            <include name="org.eclipse.osgi_*.jar"/>
+            <include name="org.eclipse.search_*.jar"/>
+            <include name="org.eclipse.swt_*.jar"/>
+            <include name="org.eclipse.text_*.jar"/>
+            <include name="org.eclipse.ui_*.jar"/>
+            <include name="org.eclipse.ui.console_*.jar"/>
+            <include name="org.eclipse.ui.editors_*.jar"/>
+            <include name="org.eclipse.ui.forms_*.jar"/>
+            <include name="org.eclipse.ui.ide_*.jar"/>
+            <include name="org.eclipse.ui.views_*.jar"/>
+            <include name="org.eclipse.ui.workbench_*.jar"/>
+            <include name="org.eclipse.ui.workbench.texteditor_*.jar"/>
         </patternset>
 
         <!-- The dirs for which any Cars existing in the Car subfolder will not be generated. -->

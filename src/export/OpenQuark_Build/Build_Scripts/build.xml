@@ -69,7 +69,16 @@
         <delete dir="${build.outputfolder}" />
     </target>
 
-    <target name="checkInputProperties">
+    <target name="checkEclipsePlugins">
+      <pathconvert property="eclipseFound" setonempty="false" pathsep=" ">
+        <path>
+          <fileset dir="${eclipse.plugins.dir}"
+                   includes="org.eclipse.jdt.core_*.jar" />
+        </path>
+      </pathconvert>
+    </target>
+
+    <target name="checkInputProperties" depends="checkEclipsePlugins">
         <available file="${quark.src.folder}/CAL_Platform" property="quarkSrcFolderFound" />
         <fail unless="quarkSrcFolderFound">
             This folder does not appear to have the Quark Platform sources: ${quark.src.folder}
@@ -84,9 +93,8 @@
             (This folder should have subfolders such as CAL_Eclipse_Core, CAL_Eclipse_UI etc.)
         </fail>
 
-        <available file="${eclipse.plugins.dir}/org.eclipse.jdt.core_3.3.0.v_771.jar" property="eclipseFound" />
         <fail unless="eclipseFound">
-            This folder does not appear to have Eclipse 3.3.0 plugins: ${eclipse.plugins.dir}
+            This folder does not appear to have Eclipse plugins: ${eclipse.plugins.dir}
             This is specified by setting the ant property "eclipse.plugins.dir".
             (This folder should be named "plugins").
         </fail>

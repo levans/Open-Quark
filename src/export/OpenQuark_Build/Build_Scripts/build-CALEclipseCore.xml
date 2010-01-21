@@ -74,17 +74,17 @@
         <property name="project.dir" value="${research.src.dir}/${project}"/>
         <property name="src.project.dir" value="${project.dir}/src"/>
      
-        <patternset id="eclipse.buildpath">
-            <include name="org.eclipse.equinox.common_3.3.0.v20070426.jar" />
-            <include name="org.eclipse.equinox.preferences_3.2.100.v20070522.jar" />
-            <include name="org.eclipse.equinox.registry_3.3.0.v20070522.jar" />
-            <include name="org.eclipse.core.jobs_3.3.0.v20070423.jar" />
-            <include name="org.eclipse.core.resources_3.3.0.v20070604.jar" />
-            <include name="org.eclipse.core.runtime_3.3.100.v20070530.jar" />
-            <include name="org.eclipse.jdt.core_3.3.0.v_771.jar" />
-            <include name="org.eclipse.osgi_3.3.0.v20070530.jar" />
+ 	  <patternset id="eclipse.buildpath">
+            <include name="org.eclipse.equinox.common_*.jar" />
+            <include name="org.eclipse.equinox.preferences_*.jar" />
+            <include name="org.eclipse.equinox.registry_*.jar" />
+            <include name="org.eclipse.core.jobs_*.jar" />
+            <include name="org.eclipse.core.resources_*.jar" />
+            <include name="org.eclipse.core.runtime_*.jar" />
+            <include name="org.eclipse.jdt.core_*.jar" />
+            <include name="org.eclipse.osgi_*.jar" />
         </patternset>
-   
+
     </target>
 
 </project>
