@@ -139,7 +139,7 @@
             <include name="org.eclipse.jface.text_*.jar"/>
             <include name="org.eclipse.osgi_*.jar"/>
             <include name="org.eclipse.search_*.jar"/>
-            <include name="org.eclipse.swt_*.jar"/>
+            <include name="org.eclipse.swt*.jar"/>		<!-- include base SWT JAR and the platform-specific one -->
             <include name="org.eclipse.text_*.jar"/>
             <include name="org.eclipse.ui_*.jar"/>
             <include name="org.eclipse.ui.console_*.jar"/>
