@@ -43,8 +43,12 @@
                                                                                                        
      To customize, the following properties may be defined:
      
-       quark.src.folder        The folder containing the unzipped platform and plugin sources.
+       quark.src.folder        The folder containing the unzipped platform sources.
                                This folder is typically the "src" folder whose parent is named "Quark".
+
+       cal.eclipse.plugin.src.folder
+                               The folder containing the unzipped sources for the CAL Eclipse plugin.
+                               This folder is typically the "src" folder whose parent is named "CAL-Eclipse-Plug-in".
 
        build.outputfolder      The folder to which build artifacts will be written.
                                
@@ -60,6 +64,8 @@
     <property name="quark.src.folder" location="${quarkfolder}\src" />
     <property name="build.outputfolder" location="${quarkfolder}\..\QuarkBuild" />
 
+    <property name="cal.eclipse.plugin.src.folder" location="${quarkfolder}\..\CAL-Eclipse-Plug-in\src" />
+
     <property name="eclipse.plugins.dir" location="C:\eclipse\plugins" />
 
     <target name="main" depends="checkInputProperties,copyToExpectedFolderStructure,callBuildOpenQuark,moveOutputToBaseFolder" />
@@ -69,7 +75,15 @@
         <delete dir="${build.outputfolder}" />
     </target>
 
+    <!-- Check that the Eclipse plug-in folder exists and that it contains at least one of the expected JARs.
+         Need to match the JAR file name using a wildcard since the exact version of the JAR isn't known.  -->
     <target name="checkEclipsePlugins">
+      <available file="${eclipse.plugins.dir}" property="eclipsePluginsFolderFound" />
+        <fail unless="eclipsePluginsFolderFound">
+            The specified Eclipse plugins folder is invalid: ${eclipse.plugins.dir}
+            This is specified by setting the ant property "eclipse.plugins.dir".
+            (This folder should be named "plugins").
+        </fail>
       <pathconvert property="eclipseFound" setonempty="false" pathsep=" ">
         <path>
           <fileset dir="${eclipse.plugins.dir}"
@@ -86,10 +100,10 @@
             (This folder should have subfolders such as CAL_Platform, CAL_Libraries etc.)
         </fail>
 
-        <available file="${quark.src.folder}/CAL_Eclipse_Core" property="quarkEclipseSrcFolderFound" />
+        <available file="${cal.eclipse.plugin.src.folder}/CAL_Eclipse_Core" property="quarkEclipseSrcFolderFound" />
         <fail unless="quarkEclipseSrcFolderFound">
-            This folder does not appear to have the Quark Platform Eclipse Plug-in sources: ${quark.src.folder}
-            This is specified by setting the ant property "quark.src.folder".
+            This folder does not appear to have the Quark Platform Eclipse Plug-in sources: ${cal.eclipse.plugin.src.folder}
+            This is specified by setting the ant property "cal.eclipse.plugin.src.folder".
             (This folder should have subfolders such as CAL_Eclipse_Core, CAL_Eclipse_UI etc.)
         </fail>
 
@@ -121,6 +135,17 @@
             <fileset dir="${quark.src.folder}">
                 <include name="BAM_Sample/" />
                 <include name="CAL_Benchmarks/" />
+                <include name="CAL_Samples/" />
+                <include name="IO_Source_Generator/" />
+                <include name="OpenQuark/" />
+                <include name="OpenQuark_Doc_Source/" />
+                <include name="OpenQuark_Website/" />
+                <include name="Quark_Gems/" />
+            </fileset>
+        </copy>
+
+        <copy todir="${build.outputfolder}\Research">
+            <fileset dir="${cal.eclipse.plugin.src.folder}">
                 <include name="CAL_Eclipse_Archived_Update_Site/" />
                 <include name="CAL_Eclipse_Branding/" />
                 <include name="CAL_Eclipse_Bridge/" />
@@ -129,12 +154,6 @@
                 <include name="CAL_Eclipse_Feature/" />
                 <include name="CAL_Eclipse_Help/" />
                 <include name="CAL_Eclipse_UI/" />
-                <include name="CAL_Samples/" />
-                <include name="IO_Source_Generator/" />
-                <include name="OpenQuark/" />
-                <include name="OpenQuark_Doc_Source/" />
-                <include name="OpenQuark_Website/" />
-                <include name="Quark_Gems/" />
             </fileset>
         </copy>
 
