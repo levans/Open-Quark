@@ -12,7 +12,7 @@
  * The constants and methods provided are intended to facilitate accessing the
  * Cal.Internal.Optimizer_Traversers module from Java code.
  *  
- * Creation date: Thu Oct 18 09:03:03 PDT 2007
+ * Creation date: Fri Jan 22 15:07:58 PST 2010
  * --!>
  *  
  */

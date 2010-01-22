@@ -12,7 +12,7 @@
  * The constants and methods provided are intended to facilitate accessing the
  * Cal.Data.SqlBuilder module from Java code.
  *  
- * Creation date: Fri Oct 19 11:45:12 PDT 2007
+ * Creation date: Fri Jan 22 15:13:36 PST 2010
  * --!>
  *  
  */
@@ -24,11 +24,9 @@ import org.openquark.cal.compiler.QualifiedName;
 import org.openquark.cal.compiler.SourceModel;
 
 /**
- * This module contains implementations of <code>Cal.Data.Sql.SqlBuilder</code> for several kinds of RDBMS. 
- * These are generally variations on the <code>Cal.Data.SqlBuilder.defaultSqlBuilder</code>.
- * <p>
- * There is a function <code>Cal.Data.SqlBuilder.bestSqlBuilderForDatabase</code> that attempts to choose a <code>Cal.Data.Sql.SqlBuilder</code> based on an identifying string.
- * 
+ * Individual <code>Cal.Data.Sql.SqlBuilder</code> implementations have been moved into the Cal.Data.SqlBuilder package.
+ * This module now is primarily for compatibility with the earlier versions of the code, and provides the <code>Cal.Data.SqlBuilder.bestSqlBuilderForDatabase</code> function 
+ * which attempts to select the best <code>Cal.Data.Sql.SqlBuilder</code> based on the name of the database type.
  * @author Richard Webster
  */
 public final class CAL_SqlBuilder {
@@ -73,10 +71,8 @@ public final class CAL_SqlBuilder {
 				"bestSqlBuilderForDatabase");
 
 		/**
-		 * The DB2 SQL builder generates queries which will work with IBM DB2 databases.
-		 * Quoting of identifiers is different than the default.
-		 * The double-quote character is used for quoting.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: db2SqlBuilder. 
+		 * @return the SourceModule.expr representing an application of db2SqlBuilder
 		 */
 		public static final SourceModel.Expr db2SqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.db2SqlBuilder);
@@ -90,27 +86,8 @@ public final class CAL_SqlBuilder {
 			QualifiedName.make(CAL_SqlBuilder.MODULE_NAME, "db2SqlBuilder");
 
 		/**
-		 * Creates a default primitive value builder.
-		 * @return (CAL type: <code>Cal.Data.Sql.PrimitiveValueBuilder</code>) 
-		 */
-		public static final SourceModel.Expr defaultPrimitiveValueBuilder() {
-			return 
-				SourceModel.Expr.Var.make(
-					Functions.defaultPrimitiveValueBuilder);
-		}
-
-		/**
-		 * Name binding for function: defaultPrimitiveValueBuilder.
-		 * @see #defaultPrimitiveValueBuilder()
-		 */
-		public static final QualifiedName defaultPrimitiveValueBuilder = 
-			QualifiedName.make(
-				CAL_SqlBuilder.MODULE_NAME, 
-				"defaultPrimitiveValueBuilder");
-
-		/**
-		 * Creates a default implementation of a <code>Cal.Data.Sql.SqlBuilder</code>.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: defaultSqlBuilder. 
+		 * @return the SourceModule.expr representing an application of defaultSqlBuilder
 		 */
 		public static final SourceModel.Expr defaultSqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.defaultSqlBuilder);
@@ -124,9 +101,8 @@ public final class CAL_SqlBuilder {
 			QualifiedName.make(CAL_SqlBuilder.MODULE_NAME, "defaultSqlBuilder");
 
 		/**
-		 * The SQL builder for Derby differs from the default SQL builder
-		 * in the identifier quoting characters - double quotes instead of square brackets
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: derbySqlBuilder. 
+		 * @return the SourceModule.expr representing an application of derbySqlBuilder
 		 */
 		public static final SourceModel.Expr derbySqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.derbySqlBuilder);
@@ -140,10 +116,8 @@ public final class CAL_SqlBuilder {
 			QualifiedName.make(CAL_SqlBuilder.MODULE_NAME, "derbySqlBuilder");
 
 		/**
-		 * The Microsoft Jet SQL builder generates queries which will work with the MS Jet database engine 
-		 * (which supports MS Access, Excel, Text, and others).
-		 * Special syntax is used for a few SQL functions.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: msAccessSqlBuilder. 
+		 * @return the SourceModule.expr representing an application of msAccessSqlBuilder
 		 */
 		public static final SourceModel.Expr msAccessSqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.msAccessSqlBuilder);
@@ -172,9 +146,8 @@ public final class CAL_SqlBuilder {
 			QualifiedName.make(CAL_SqlBuilder.MODULE_NAME, "msJetSqlBuilder");
 
 		/**
-		 * The Microsoft SQL Server SQL builder generates queries which will work with SQL Server databases.
-		 * Special syntax is used for some SQL functions.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: msSqlServerSqlBuilder. 
+		 * @return the SourceModule.expr representing an application of msSqlServerSqlBuilder
 		 */
 		public static final SourceModel.Expr msSqlServerSqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.msSqlServerSqlBuilder);
@@ -190,29 +163,8 @@ public final class CAL_SqlBuilder {
 				"msSqlServerSqlBuilder");
 
 		/**
-		 * Helper binding method for function: ncrTeradataPrimitiveValueBuilder. 
-		 * @return the SourceModule.expr representing an application of ncrTeradataPrimitiveValueBuilder
-		 */
-		public static final SourceModel.Expr ncrTeradataPrimitiveValueBuilder() {
-			return 
-				SourceModel.Expr.Var.make(
-					Functions.ncrTeradataPrimitiveValueBuilder);
-		}
-
-		/**
-		 * Name binding for function: ncrTeradataPrimitiveValueBuilder.
-		 * @see #ncrTeradataPrimitiveValueBuilder()
-		 */
-		public static final QualifiedName ncrTeradataPrimitiveValueBuilder = 
-			QualifiedName.make(
-				CAL_SqlBuilder.MODULE_NAME, 
-				"ncrTeradataPrimitiveValueBuilder");
-
-		/**
-		 * The SQL builder generates queries which will work with Teradata databases.
-		 * Quoting of identifiers is different than the default.
-		 * The double-quote character is used for quoting and this is also needed for table names with lower case letters.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: ncrTeradataSqlBuilder. 
+		 * @return the SourceModule.expr representing an application of ncrTeradataSqlBuilder
 		 */
 		public static final SourceModel.Expr ncrTeradataSqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.ncrTeradataSqlBuilder);
@@ -228,9 +180,8 @@ public final class CAL_SqlBuilder {
 				"ncrTeradataSqlBuilder");
 
 		/**
-		 * For ODBC-Access, there are some problems using the square brackets as quotes inside of the 
-		 * ODBC function escape syntax, so use back-quotes instead.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: odbcAccessSqlBuilder. 
+		 * @return the SourceModule.expr representing an application of odbcAccessSqlBuilder
 		 */
 		public static final SourceModel.Expr odbcAccessSqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.odbcAccessSqlBuilder);
@@ -246,9 +197,8 @@ public final class CAL_SqlBuilder {
 				"odbcAccessSqlBuilder");
 
 		/**
-		 * The ODBC SQL builder generates queries which will work with typical ODBC datasources.
-		 * More specialized versions might be needed for certain ODBC drivers and/or database servers.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: odbcSqlBuilder. 
+		 * @return the SourceModule.expr representing an application of odbcSqlBuilder
 		 */
 		public static final SourceModel.Expr odbcSqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.odbcSqlBuilder);
@@ -262,10 +212,8 @@ public final class CAL_SqlBuilder {
 			QualifiedName.make(CAL_SqlBuilder.MODULE_NAME, "odbcSqlBuilder");
 
 		/**
-		 * The Oracle SQL builder generates queries which will work with Oracle databases.
-		 * Quoting of identifiers is different than the default.
-		 * The double-quote character is used for quoting and this is also needed for table names with lower case letters.
-		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
+		 * Helper binding method for function: oracleSqlBuilder. 
+		 * @return the SourceModule.expr representing an application of oracleSqlBuilder
 		 */
 		public static final SourceModel.Expr oracleSqlBuilder() {
 			return SourceModel.Expr.Var.make(Functions.oracleSqlBuilder);
@@ -283,6 +231,6 @@ public final class CAL_SqlBuilder {
 	 * A hash of the concatenated JavaDoc for this class (including inner classes).
 	 * This value is used when checking for changes to generated binding classes.
 	 */
-	public static final int javaDocHash = 414428870;
+	public static final int javaDocHash = 472277723;
 
 }

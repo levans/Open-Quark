@@ -12,7 +12,7 @@
  * The constants and methods provided are intended to facilitate accessing the
  * Cal.Data.Sql module from Java code.
  *  
- * Creation date: Fri Aug 03 17:58:00 PDT 2007
+ * Creation date: Fri Jan 22 15:13:44 PST 2010
  * --!>
  *  
  */
@@ -119,11 +119,12 @@ public final class CAL_Sql {
 			QualifiedName.make(CAL_Sql.MODULE_NAME, "JoinType");
 
 		/**
-		 * This type holds various functions needed for converting primitive values to
-		 * text for the SQL query.
+		 * A database parameter that can be used in place of a value in a SQL statement.
+		 * The parameter values can be bound in when executing the SQL statement.
+		 * This is often used to execute the same statement multiple times with different values.
 		 */
-		public static final QualifiedName PrimitiveValueBuilder = 
-			QualifiedName.make(CAL_Sql.MODULE_NAME, "PrimitiveValueBuilder");
+		public static final QualifiedName Parameter = 
+			QualifiedName.make(CAL_Sql.MODULE_NAME, "Parameter");
 
 		/**
 		 * A database SELECT query.
@@ -3135,6 +3136,38 @@ public final class CAL_Sql {
 			QualifiedName.make(CAL_Sql.MODULE_NAME, "asinExpr");
 
 		/**
+		 * The <code>assignMissingColumnAliases</code> is a transformation function to assign the missing aliases for all columns 
+		 * of the passed in query
+		 * <p>
+		 * Use it in conjunction with <code>modifyQueries</code> function which can help to perfrom the transaformation 
+		 * for all subqueries
+		 * 
+		 * 
+		 * <dl><dt><b>See Also:</b>
+		 * <dd><b>Functions and Class Methods:</b> Cal.Data.Sql.modifyQueries
+		 * </dl>
+		 * 
+		 * @param query (CAL type: <code>Cal.Data.Sql.Query</code>)
+		 *          to transform
+		 * @return (CAL type: <code>Cal.Data.Sql.Query</code>) 
+		 *          transformed query
+		 */
+		public static final SourceModel.Expr assignMissingColumnAliases(SourceModel.Expr query) {
+			return 
+				SourceModel.Expr.Application.make(
+					new SourceModel.Expr[] {SourceModel.Expr.Var.make(Functions.assignMissingColumnAliases), query});
+		}
+
+		/**
+		 * Name binding for function: assignMissingColumnAliases.
+		 * @see #assignMissingColumnAliases(org.openquark.cal.compiler.SourceModel.Expr)
+		 */
+		public static final QualifiedName assignMissingColumnAliases = 
+			QualifiedName.make(
+				CAL_Sql.MODULE_NAME, 
+				"assignMissingColumnAliases");
+
+		/**
 		 * Helper binding method for function: atan2Expr. 
 		 * @param arg_1
 		 * @param arg_2
@@ -3544,6 +3577,45 @@ public final class CAL_Sql {
 			QualifiedName.make(
 				CAL_Sql.MODULE_NAME, 
 				"convertDateQueryFieldsToTimeExprs");
+
+		/**
+		 * The <code>convertQueryColumnsToCartesianJoins</code> is a transformation function pushing the sub-queries 
+		 * nested as select items down to the from clause to perform cartesian join between datasources.
+		 * <p>
+		 * It is useful on platforms like Teradata that do not support nested subqueries in select items. 
+		 * The conversion will be applied to the passed in query and all its subqueries. 
+		 * After all missign aliases have been assigned.
+		 * <p>
+		 * It expects all aliases to be assigned therefore make sure <code>assignMissingColumnAliases</code> is 
+		 * applied before this transform.
+		 * <p>
+		 * Use it in conjunction with <code>modifyQueries</code> function which can help to perfrom 
+		 * the transaformation for all subqueries
+		 * 
+		 * 
+		 * <dl><dt><b>See Also:</b>
+		 * <dd><b>Functions and Class Methods:</b> Cal.Data.Sql.modifyQueries, Cal.Data.Sql.assignMissingColumnAliases
+		 * </dl>
+		 * 
+		 * @param query (CAL type: <code>Cal.Data.Sql.Query</code>)
+		 *          to transform
+		 * @return (CAL type: <code>Cal.Data.Sql.Query</code>) 
+		 *          transformed query
+		 */
+		public static final SourceModel.Expr convertQueryColumnsToCartesianJoins(SourceModel.Expr query) {
+			return 
+				SourceModel.Expr.Application.make(
+					new SourceModel.Expr[] {SourceModel.Expr.Var.make(Functions.convertQueryColumnsToCartesianJoins), query});
+		}
+
+		/**
+		 * Name binding for function: convertQueryColumnsToCartesianJoins.
+		 * @see #convertQueryColumnsToCartesianJoins(org.openquark.cal.compiler.SourceModel.Expr)
+		 */
+		public static final QualifiedName convertQueryColumnsToCartesianJoins = 
+			QualifiedName.make(
+				CAL_Sql.MODULE_NAME, 
+				"convertQueryColumnsToCartesianJoins");
 
 		/**
 		 * Converts a value to a double value.
@@ -4278,6 +4350,25 @@ public final class CAL_Sql {
 		 */
 		public static final QualifiedName floorExpr = 
 			QualifiedName.make(CAL_Sql.MODULE_NAME, "floorExpr");
+
+		/**
+		 * Returns the name for a SQL function.
+		 * @param sqlBuilder (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>)
+		 * @param func (CAL type: <code>Cal.Data.Sql.DbFunction</code>)
+		 * @return (CAL type: <code>Cal.Core.Prelude.String</code>) 
+		 */
+		public static final SourceModel.Expr functionName(SourceModel.Expr sqlBuilder, SourceModel.Expr func) {
+			return 
+				SourceModel.Expr.Application.make(
+					new SourceModel.Expr[] {SourceModel.Expr.Var.make(Functions.functionName), sqlBuilder, func});
+		}
+
+		/**
+		 * Name binding for function: functionName.
+		 * @see #functionName(org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr)
+		 */
+		public static final QualifiedName functionName = 
+			QualifiedName.make(CAL_Sql.MODULE_NAME, "functionName");
 
 		/**
 		 * Returns the arguments from a function expression.
@@ -6253,30 +6344,6 @@ public final class CAL_Sql {
 			QualifiedName.make(CAL_Sql.MODULE_NAME, "makeOpaqueSubQueryTable");
 
 		/**
-		 * Constructs a new SQL primitive value builder with the specified functions.
-		 * @param arg_1 (CAL type: <code>Cal.Core.Prelude.Int -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_2 (CAL type: <code>Cal.Core.Prelude.Double -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_3 (CAL type: <code>Cal.Core.Prelude.String -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_4 (CAL type: <code>Cal.Utilities.Time.Time -> Cal.Utilities.TimeZone.TimeZone -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_5 (CAL type: <code>Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_6 (CAL type: <code>Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_7 (CAL type: <code>Cal.Data.Sql.TimeInterval -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @return (CAL type: <code>Cal.Data.Sql.PrimitiveValueBuilder</code>) 
-		 */
-		public static final SourceModel.Expr makePrimitiveValueBuilder(SourceModel.Expr arg_1, SourceModel.Expr arg_2, SourceModel.Expr arg_3, SourceModel.Expr arg_4, SourceModel.Expr arg_5, SourceModel.Expr arg_6, SourceModel.Expr arg_7) {
-			return 
-				SourceModel.Expr.Application.make(
-					new SourceModel.Expr[] {SourceModel.Expr.Var.make(Functions.makePrimitiveValueBuilder), arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7});
-		}
-
-		/**
-		 * Name binding for function: makePrimitiveValueBuilder.
-		 * @see #makePrimitiveValueBuilder(org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr)
-		 */
-		public static final QualifiedName makePrimitiveValueBuilder = 
-			QualifiedName.make(CAL_Sql.MODULE_NAME, "makePrimitiveValueBuilder");
-
-		/**
 		 * Constructs a query table using the specified table name.
 		 * The table alias will be based on the table name.
 		 * @param tableName (CAL type: <code>Cal.Core.Prelude.String</code>)
@@ -6397,48 +6464,20 @@ public final class CAL_Sql {
 			QualifiedName.make(CAL_Sql.MODULE_NAME, "makeSafeSqlNames");
 
 		/**
-		 * Constructs a new SQL builder with the specified functions.
-		 * @param arg_1 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Data.Sql.Query -> Cal.Data.Sql.Query</code>)
-		 * @param arg_2 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_3 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_4 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.QueryOption] -> [(Cal.Data.Sql.Expr, Cal.Core.Prelude.String)] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_5 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.JoinNode] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_6 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Core.Prelude.Maybe Cal.Data.Sql.Expr -> [Cal.Data.Sql.JoinNode] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_7 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> [(Cal.Data.Sql.Expr, Cal.Core.Prelude.Boolean)] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_8 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_9 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Core.Prelude.Maybe Cal.Data.Sql.Expr -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_10 (CAL type: <code>Cal.Data.DatabaseMetadata.DatabaseReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_11 (CAL type: <code>Cal.Data.DatabaseMetadata.DatabaseReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_12 (CAL type: <code>Cal.Data.DatabaseMetadata.TableDescription -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_13 (CAL type: <code>Cal.Data.DatabaseMetadata.TableReference -> Cal.Data.Sql.Query -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_14 (CAL type: <code>Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_15 (CAL type: <code>Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_16 (CAL type: <code>Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Maybe [Cal.Core.Prelude.String] -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_17 (CAL type: <code>Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Maybe [Cal.Core.Prelude.String] -> Cal.Data.Sql.Query -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_18 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Data.DatabaseMetadata.TableReference -> [Cal.Core.Prelude.String] -> [Cal.Data.Sql.Expr] -> Cal.Data.Sql.TypedExpr Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_19 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Data.DatabaseMetadata.TableReference -> Cal.Data.Sql.TypedExpr Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_20 (CAL type: <code>Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_21 (CAL type: <code>Cal.Data.DatabaseMetadata.FieldDescription -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_22 (CAL type: <code>Cal.Data.SqlType.SqlType -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_23 (CAL type: <code>Cal.Data.Sql.Parameter -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_24 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_25 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Data.Sql.DbFunction -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_26 (CAL type: <code>Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_27 (CAL type: <code>Cal.Core.Prelude.String -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_28 (CAL type: <code>Cal.Data.Sql.SqlBuilderState -> Cal.Data.Sql.QueryTable -> Cal.Utilities.PrettyPrinter.Document</code>)
-		 * @param arg_29 (CAL type: <code>Cal.Core.Prelude.String -> Cal.Core.Prelude.String</code>)
-		 * @param arg_30 (CAL type: <code>Cal.Data.Sql.PrimitiveValueBuilder</code>)
+		 * Constructs a SqlBuilder using the functions provided in a record.
+		 * The advantage of this approach is that a SqlBuilder can easily override selected functions from the record of another SqlBuilder.
+		 * @param sqlBuilderFns (CAL type: <code>{addParens :: Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document, booleanToSql :: Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildCommitStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Utilities.PrettyPrinter.Document, buildCreateDatabaseStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.DatabaseReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildCreateTableStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.TableDescription -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildCreateViewStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.TableReference -> Cal.Data.Sql.Query -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildDeleteRowsStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Data.DatabaseMetadata.TableReference -> Cal.Data.Sql.TypedExpr Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildDropDatabaseStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.DatabaseReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildDropTableStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildDropViewStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildFieldDescription :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.FieldDescription -> Cal.Utilities.PrettyPrinter.Document, buildFieldType :: Cal.Data.SqlType.SqlType -> Cal.Utilities.PrettyPrinter.Document, buildFromClause :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.JoinNode] -> Cal.Utilities.PrettyPrinter.Document, buildGroupByClause :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document, buildHavingClause :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Core.Prelude.Maybe Cal.Data.Sql.Expr -> Cal.Utilities.PrettyPrinter.Document, buildInsertQueryValuesStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Maybe [Cal.Core.Prelude.String] -> Cal.Data.Sql.Query -> Cal.Utilities.PrettyPrinter.Document, buildInsertValuesStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.DatabaseMetadata.TableReference -> Cal.Core.Prelude.Maybe [Cal.Core.Prelude.String] -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document, buildOrderByClause :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> [(Cal.Data.Sql.Expr, Cal.Core.Prelude.Boolean)] -> Cal.Utilities.PrettyPrinter.Document, buildSelectClause :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.QueryOption] -> [(Cal.Data.Sql.Expr, Cal.Core.Prelude.String)] -> Cal.Utilities.PrettyPrinter.Document, buildTableAndAliasText :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Data.Sql.QueryTable -> Cal.Utilities.PrettyPrinter.Document, buildUpdateValuesStatement :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Data.DatabaseMetadata.TableReference -> [Cal.Core.Prelude.String] -> [Cal.Data.Sql.Expr] -> Cal.Data.Sql.TypedExpr Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, buildWhereClause :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Core.Prelude.Maybe Cal.Data.Sql.Expr -> [Cal.Data.Sql.JoinNode] -> Cal.Utilities.PrettyPrinter.Document, constructQuery :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document, constructUnionQuery :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Utilities.PrettyPrinter.Document -> Cal.Utilities.PrettyPrinter.Document -> Cal.Core.Prelude.Boolean -> Cal.Utilities.PrettyPrinter.Document, doubleToSql :: Cal.Core.Prelude.Double -> Cal.Utilities.PrettyPrinter.Document, functionName :: Cal.Data.Sql.DbFunction -> Cal.Core.Prelude.String, functionToSql :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> Cal.Data.Sql.DbFunction -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document, intToSql :: Cal.Core.Prelude.Int -> Cal.Utilities.PrettyPrinter.Document, listToSql :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.SqlBuilderState -> [Cal.Data.Sql.Expr] -> Cal.Utilities.PrettyPrinter.Document, makeSafeName :: Cal.Core.Prelude.String -> Cal.Core.Prelude.String, nullToSql :: Cal.Utilities.PrettyPrinter.Document, operatorText :: Cal.Data.Sql.DbFunction -> Cal.Core.Prelude.String, parameterToSql :: Cal.Data.Sql.SqlBuilder -> Cal.Data.Sql.Parameter -> Cal.Utilities.PrettyPrinter.Document, prepareQuery :: Cal.Data.Sql.SqlBuilderState -> Cal.Data.Sql.Query -> Cal.Data.Sql.Query, quoteIdentifier :: Cal.Core.Prelude.String -> Cal.Utilities.PrettyPrinter.Document, stringToSql :: Cal.Core.Prelude.String -> Cal.Utilities.PrettyPrinter.Document, timeIntervalToSql :: Cal.Data.Sql.TimeInterval -> Cal.Utilities.PrettyPrinter.Document, timeToSql :: Cal.Utilities.Time.Time -> Cal.Utilities.TimeZone.TimeZone -> Cal.Utilities.PrettyPrinter.Document}</code>)
 		 * @return (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>) 
 		 */
-		public static final SourceModel.Expr makeSqlBuilder(SourceModel.Expr arg_1, SourceModel.Expr arg_2, SourceModel.Expr arg_3, SourceModel.Expr arg_4, SourceModel.Expr arg_5, SourceModel.Expr arg_6, SourceModel.Expr arg_7, SourceModel.Expr arg_8, SourceModel.Expr arg_9, SourceModel.Expr arg_10, SourceModel.Expr arg_11, SourceModel.Expr arg_12, SourceModel.Expr arg_13, SourceModel.Expr arg_14, SourceModel.Expr arg_15, SourceModel.Expr arg_16, SourceModel.Expr arg_17, SourceModel.Expr arg_18, SourceModel.Expr arg_19, SourceModel.Expr arg_20, SourceModel.Expr arg_21, SourceModel.Expr arg_22, SourceModel.Expr arg_23, SourceModel.Expr arg_24, SourceModel.Expr arg_25, SourceModel.Expr arg_26, SourceModel.Expr arg_27, SourceModel.Expr arg_28, SourceModel.Expr arg_29, SourceModel.Expr arg_30) {
+		public static final SourceModel.Expr makeSqlBuilder(SourceModel.Expr sqlBuilderFns) {
 			return 
 				SourceModel.Expr.Application.make(
-					new SourceModel.Expr[] {SourceModel.Expr.Var.make(Functions.makeSqlBuilder), arg_1, arg_2, arg_3, arg_4, arg_5, arg_6, arg_7, arg_8, arg_9, arg_10, arg_11, arg_12, arg_13, arg_14, arg_15, arg_16, arg_17, arg_18, arg_19, arg_20, arg_21, arg_22, arg_23, arg_24, arg_25, arg_26, arg_27, arg_28, arg_29, arg_30});
+					new SourceModel.Expr[] {SourceModel.Expr.Var.make(Functions.makeSqlBuilder), sqlBuilderFns});
 		}
 
 		/**
 		 * Name binding for function: makeSqlBuilder.
-		 * @see #makeSqlBuilder(org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr)
+		 * @see #makeSqlBuilder(org.openquark.cal.compiler.SourceModel.Expr)
 		 */
 		public static final QualifiedName makeSqlBuilder = 
 			QualifiedName.make(CAL_Sql.MODULE_NAME, "makeSqlBuilder");
@@ -6959,6 +6998,25 @@ public final class CAL_Sql {
 		 */
 		public static final QualifiedName operatorPrecedence = 
 			QualifiedName.make(CAL_Sql.MODULE_NAME, "operatorPrecedence");
+
+		/**
+		 * Returns the text for a SQL operator.
+		 * @param sqlBuilder (CAL type: <code>Cal.Data.Sql.SqlBuilder</code>)
+		 * @param operator (CAL type: <code>Cal.Data.Sql.DbFunction</code>)
+		 * @return (CAL type: <code>Cal.Core.Prelude.String</code>) 
+		 */
+		public static final SourceModel.Expr operatorText(SourceModel.Expr sqlBuilder, SourceModel.Expr operator) {
+			return 
+				SourceModel.Expr.Application.make(
+					new SourceModel.Expr[] {SourceModel.Expr.Var.make(Functions.operatorText), sqlBuilder, operator});
+		}
+
+		/**
+		 * Name binding for function: operatorText.
+		 * @see #operatorText(org.openquark.cal.compiler.SourceModel.Expr, org.openquark.cal.compiler.SourceModel.Expr)
+		 */
+		public static final QualifiedName operatorText = 
+			QualifiedName.make(CAL_Sql.MODULE_NAME, "operatorText");
 
 		/**
 		 * Constructs a database expression to test whether either of the operand expressions are True.
@@ -8739,6 +8797,6 @@ public final class CAL_Sql {
 	 * A hash of the concatenated JavaDoc for this class (including inner classes).
 	 * This value is used when checking for changes to generated binding classes.
 	 */
-	public static final int javaDocHash = -40628952;
+	public static final int javaDocHash = 1231102455;
 
 }
