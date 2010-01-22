@@ -142,6 +142,7 @@ package org.openquark.cal.compiler;
 // 1.7.0_0   Open Quark release of Oct 26, 2007.
 // 1.7.0_1   build of Nov  1, 2007
 // 1.7.1_0   Open Quark release of Nov 15, 2007.
+// 1.7.2_0   Open Quark release of Jan 22, 2010.
 
 public final class Version {
             
@@ -151,7 +152,7 @@ public final class Version {
     
     private static final int minorVersion = 7;
         
-    private static final int updateVersion = 1;
+    private static final int updateVersion = 2;
     
     /** build should be incremented by 1 for each build. */
     private static final int build = 0;
