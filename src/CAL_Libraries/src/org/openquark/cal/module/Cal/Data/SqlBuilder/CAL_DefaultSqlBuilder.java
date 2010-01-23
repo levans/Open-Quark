@@ -12,7 +12,7 @@
  * The constants and methods provided are intended to facilitate accessing the
  * Cal.Data.SqlBuilder.DefaultSqlBuilder module from Java code.
  *  
- * Creation date: Fri Jan 22 15:13:20 PST 2010
+ * Creation date: Sat Jan 23 14:26:47 PST 2010
  * --!>
  *  
  */
@@ -24,8 +24,9 @@ import org.openquark.cal.compiler.QualifiedName;
 import org.openquark.cal.compiler.SourceModel;
 
 /**
- * An updated version of the original SqlBuilder module.
- * This version aims to reduce the boilerplate code needed to override small areas of functionality from the default (or any other SqlBuilder).
+ * A default SqlBuilder implementation, which attempts to use common syntax from popular databases.
+ * Other SqlBuilder implementations can be created by overriding the necessary functions in the defaultSqlBuilderFunctions record
+ * and then passing this to Sql.makeSqlBuilder.
  */
 public final class CAL_DefaultSqlBuilder {
 	public static final ModuleName MODULE_NAME = 
@@ -339,6 +340,6 @@ public final class CAL_DefaultSqlBuilder {
 	 * A hash of the concatenated JavaDoc for this class (including inner classes).
 	 * This value is used when checking for changes to generated binding classes.
 	 */
-	public static final int javaDocHash = -1245451172;
+	public static final int javaDocHash = 2087035338;
 
 }
