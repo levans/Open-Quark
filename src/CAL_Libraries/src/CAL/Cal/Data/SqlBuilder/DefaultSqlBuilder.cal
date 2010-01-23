@@ -1,6 +1,42 @@
+
+/* 
+ * Cal.Data.SqlBuilder.DefaultSqlBuilder
+ * A default SqlBuilder implementation, which attempts to use common syntax from popular databases.
+ * 
+ * Orig Author: Richard Webster
+ * 
+ * Copyright (C) 2010 - Indicee Inc.   All Rights Reserved
+ * 
+ *     Redistribution and use in source and binary forms, with or without
+ *     modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *  
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *  
+ *     * The names of the authors and contributors may be used to endorse or promote 
+ *       products derived from this software without specific prior written permission.
+ *  
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /**
- * An updated version of the original SqlBuilder module.
- * This version aims to reduce the boilerplate code needed to override small areas of functionality from the default (or any other SqlBuilder).
+ * A default SqlBuilder implementation, which attempts to use common syntax from popular databases.
+ * Other SqlBuilder implementations can be created by overriding the necessary functions in the defaultSqlBuilderFunctions record
+ * and then passing this to Sql.makeSqlBuilder.
  */
 module Cal.Data.SqlBuilder.DefaultSqlBuilder;
 
@@ -77,104 +113,6 @@ import Cal.Utilities.TimeZone using
 import Cal.Utilities.Locale;
 
 import Cal.Utilities.Math;
-
-///**
-// * Constructs a SqlBuilder out of a record of functions.
-// * The advantage of this approach is that a SqlBuilder can easily override selected functions from the record of another SqlBuilder.
-// */
-//sqlBuilderFromFunctions :: { prepareQuery                    :: SqlBuilderState -> Query -> Query,
-//                             constructQuery                  :: SqlBuilder -> SqlBuilderState -> Document -> Document -> Document -> Document -> Document -> Document -> Document,
-//                             constructUnionQuery             :: SqlBuilder -> SqlBuilderState -> Document -> Document -> Boolean -> Document,
-//                             
-//                             buildSelectClause               :: SqlBuilder -> SqlBuilderState -> [QueryOption] -> [(Expr, String)] -> Document,
-//                             buildFromClause                 :: SqlBuilder -> SqlBuilderState -> [JoinNode] -> Document,
-//                             buildWhereClause                :: SqlBuilder -> SqlBuilderState -> (Maybe Expr) -> [JoinNode] -> Document,
-//                             buildOrderByClause              :: SqlBuilder -> SqlBuilderState -> [(Expr, Boolean)] -> Document,
-//                             buildGroupByClause              :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document,
-//                             buildHavingClause               :: SqlBuilder -> SqlBuilderState -> (Maybe Expr) -> Document,
-//                             
-//                             buildCreateDatabaseStatement    :: SqlBuilder -> DatabaseReference -> Boolean -> Document,
-//                             buildDropDatabaseStatement      :: SqlBuilder -> DatabaseReference -> Boolean -> Document,
-//                             buildCreateTableStatement       :: SqlBuilder -> TableDescription -> Boolean -> Document,
-//                             buildCreateViewStatement        :: SqlBuilder -> TableReference -> Query -> Boolean -> Document,
-//                             buildDropTableStatement         :: SqlBuilder -> TableReference -> Boolean -> Document,
-//                             buildDropViewStatement          :: SqlBuilder -> TableReference -> Boolean -> Document,
-//                             buildInsertValuesStatement      :: SqlBuilder -> TableReference -> Maybe [String] -> [Expr] -> Document,
-//                             buildInsertQueryValuesStatement :: SqlBuilder -> TableReference -> Maybe [String] -> Query -> Document,
-//                             buildUpdateValuesStatement      :: SqlBuilder -> SqlBuilderState -> TableReference -> [String] -> [Expr] -> TypedExpr Boolean -> Document,
-//                             buildDeleteRowsStatement        :: SqlBuilder -> SqlBuilderState -> TableReference -> TypedExpr Boolean -> Document,
-//                             buildCommitStatement            :: SqlBuilder -> Document,
-//                             
-//                             buildFieldDescription           :: SqlBuilder -> FieldDescription -> Document,
-//                             buildFieldType                  :: SqlType -> Document,
-//                             parameterToSql                  :: SqlBuilder -> Parameter -> Document,
-//                             listToSql                       :: SqlBuilder -> SqlBuilderState -> [Expr] -> Document,
-//                             functionToSql                   :: SqlBuilder -> SqlBuilderState -> DbFunction -> [Expr] -> Document,
-//                             functionName                    :: DbFunction -> String,
-//                             operatorText                    :: DbFunction -> String,
-//                             addParens                       :: Document -> Document,
-//                             quoteIdentifier                 :: String -> Document,
-//                             buildTableAndAliasText          :: SqlBuilder -> SqlBuilderState -> QueryTable -> Document,
-//                             makeSafeName                    :: String -> String,
-//                             
-//                             intToSql                        :: Int -> Document,
-//                             doubleToSql                     :: Double -> Document,
-//                             stringToSql                     :: String -> Document,
-//                             timeToSql                       :: Time -> TimeZone -> Document,
-//                             booleanToSql                    :: Boolean -> Document,
-//                             nullToSql                       :: Document,
-//                             timeIntervalToSql               :: TimeInterval -> Document
-//                           } -> SqlBuilder;
-//public sqlBuilderFromFunctions sqlBuilderFns = 
-//    let
-//        valueBuilder :: PrimitiveValueBuilder;
-//        valueBuilder = 
-//            Sql.makePrimitiveValueBuilder sqlBuilderFns.intToSql
-//                                        sqlBuilderFns.doubleToSql
-//                                        sqlBuilderFns.stringToSql
-//                                        sqlBuilderFns.timeToSql
-//                                        sqlBuilderFns.booleanToSql
-//                                        sqlBuilderFns.nullToSql
-//                                        sqlBuilderFns.timeIntervalToSql;
-//       
-//        sqlBuilder = Sql.makeSqlBuilder sqlBuilderFns.prepareQuery
-//        
-//                                        (sqlBuilderFns.constructQuery sqlBuilder)
-//                                        (sqlBuilderFns.constructUnionQuery sqlBuilder)
-//                                        
-//                                        (sqlBuilderFns.buildSelectClause sqlBuilder)
-//                                        (sqlBuilderFns.buildFromClause sqlBuilder)
-//                                        (sqlBuilderFns.buildWhereClause sqlBuilder)
-//                                        (sqlBuilderFns.buildOrderByClause sqlBuilder)
-//                                        (sqlBuilderFns.buildGroupByClause sqlBuilder)
-//                                        (sqlBuilderFns.buildHavingClause sqlBuilder)
-//                                        
-//                                        (sqlBuilderFns.buildCreateDatabaseStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildDropDatabaseStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildCreateTableStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildCreateViewStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildDropTableStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildDropViewStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildInsertValuesStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildInsertQueryValuesStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildUpdateValuesStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildDeleteRowsStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildCommitStatement sqlBuilder)
-//                                        (sqlBuilderFns.buildFieldDescription sqlBuilder)
-//                                        (sqlBuilderFns.buildFieldType)
-//                                        (sqlBuilderFns.parameterToSql sqlBuilder)
-//                                        (sqlBuilderFns.listToSql sqlBuilder)
-//                                        (sqlBuilderFns.functionToSql sqlBuilder)
-//                                        (sqlBuilderFns.functionName)
-//                                        (sqlBuilderFns.operatorText)
-//                                        (sqlBuilderFns.addParens)
-//                                        (sqlBuilderFns.quoteIdentifier)
-//                                        (sqlBuilderFns.buildTableAndAliasText sqlBuilder)
-//                                        (sqlBuilderFns.makeSafeName)
-//                                        
-//                                        valueBuilder;
-//    in
-//        sqlBuilder;
 
 
 /**
