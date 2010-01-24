@@ -1,0 +1,467 @@
+/**
+ * This module contains a test suite for building and executing SQL statements.
+ * The {@link runFullTest@} function will:
+ * - create some tables and populate them with data
+ * - run test queries and check the results
+ * - drop the test tables
+ */
+module Cal.Test.Data.SqlBuilder.SqlBuilder_Tests;
+
+import Cal.Core.Prelude using
+    typeConstructor = Boolean, Double, Int, String;
+    function = error, field1, field2, field3, intToString, seq, uncurry;
+    dataConstructor = False, True;
+    typeClass = Eq;
+    ;
+
+import Cal.Data.DataGems using
+    function =
+        addBatch, executeBatch, executeUpdate, extractInt, extractString,
+        extractTuple2, foldStrictOverResultSet, jdbcGetTablesInfo,
+        jdbcQueryToResultSet;
+    typeConstructor = JDBCConnection, ResultRow, ResultSet;
+    ;
+
+import Cal.Data.Sql using
+    typeConstructor = Expr, JoinInfo, Query, QueryTable, SqlBuilder, Statement, TypedExpr;
+    function =
+        booleanConstant, countExpr, eqExpr, intField, makeCompoundStatement,
+        makeInsertValuesStatement, makeJoinInfo, makeQueryTable,
+        makeQueryTableWithAlias, newQuery, nullValue, numericConstant,
+        queryText, stringConstant, timeConstant, timeField, toUntypedExpr,
+        untypedField, yearExpr;
+    dataConstructor = InnerJoin;
+    ;
+
+import Cal.Data.SqlBuilder.MySqlBuilder;
+import Cal.Data.SqlBuilder.PostgreSqlBuilder;
+
+import Cal.Data.DatabaseMetadata using
+    typeConstructor =
+        FieldDescription, TableConstraint, TableDescription, TableReference;
+    function =
+        getTableReference, makeFieldDescription, makeTableDescription,
+        makeTableReference;
+    dataConstructor = PrimaryKeyConstraint;
+    ;
+
+import Cal.Data.SqlType using
+    dataConstructor =
+        SqlType_Date, SqlType_Decimal, SqlType_Integer, SqlType_VarChar;
+    typeConstructor = SqlType;
+    ;
+
+import Cal.Collections.List using
+    function = foldLeftStrict;
+    ;
+
+import Cal.Core.Exception using
+    function = catch, throw;
+    typeConstructor = JThrowable;
+    ;
+
+import Cal.Core.Debug using
+    function = show, trace;
+    ;
+
+import Cal.Utilities.Time using
+    typeConstructor = Time;
+    function = makeTimeValue;
+    ;
+
+import Cal.Utilities.TimeZone using
+    function = longDisplayName;
+    ;
+
+import Cal.Collections.Array;
+
+
+/** This is the connection to be used for the tests in this module. */
+testConnection :: JDBCConnection;
+testConnection = 
+//    DataGems.jdbcConnectionWithDriverCheck "com.mysql.jdbc.Driver" "jdbc:mysql://localhost/sandbox" "root" "";
+    DataGems.jdbcConnectionWithDriverCheck "org.postgresql.Driver" "jdbc:postgresql://localhost/sandbox" "postgres" "pg123";
+
+/** This is the SqlBuilder to be used for the tests in this module. */
+testSqlBuilder :: SqlBuilder;
+testSqlBuilder = 
+//    MySqlBuilder.mySqlBuilder;
+    PostgreSqlBuilder.postgreSqlBuilder;
+
+/** This prefix will be added to all tables used in this test in order to reduce the chance of destroying existing tables. */
+tablePrefix :: String;
+tablePrefix = "sbtest_";
+
+
+
+// Helper functions to allow compact representation of table values.
+intE :: Int -> Expr;
+intE !intVal = toUntypedExpr $ numericConstant intVal;
+
+dblE :: Double -> Expr;
+dblE !dblVal = toUntypedExpr $ numericConstant dblVal;
+
+strE :: String -> Expr;
+strE !strVal = toUntypedExpr $ stringConstant strVal;
+
+boolE :: Boolean -> Expr;
+boolE !boolVal = toUntypedExpr $ booleanConstant boolVal;
+
+timeE :: Time -> Expr;
+timeE !timeVal = toUntypedExpr $ timeConstant timeVal;
+
+dateE :: Int -> Int -> Int -> Expr;
+dateE !yearVal !monthVal !dayVal = 
+    timeE $ makeTimeValue yearVal monthVal dayVal 0 0 0 0 TimeZone.currentTimeZone;
+
+nullE :: Expr;
+nullE = toUntypedExpr nullValue;
+
+
+customerTableName :: String;
+customerTableName = tablePrefix ++ "customer";
+
+customerTableDesc :: TableDescription;
+customerTableDesc = 
+    makeTableDescription (makeTableReference customerTableName)
+                         [makeFieldDescription "id"      SqlType_Integer       False,
+                          makeFieldDescription "name"    (SqlType_VarChar 100) False,
+                          makeFieldDescription "country" (SqlType_VarChar 100) False,
+                          makeFieldDescription "since"   SqlType_Date          False
+                         ]
+                         [PrimaryKeyConstraint ["id"]];
+
+customerTableData :: [[Expr]];
+customerTableData = [[intE 1,   strE "customer1",   strE "Canada",  dateE 2000  1  1],
+                     [intE 2,   strE "customer2",   strE "US",      dateE 2007  3 26],
+                     [intE 3,   strE "customer3",   strE "US",      dateE 2008 12 10],
+                     [intE 4,   strE "customer4",   strE "Mexico",  dateE 1996  6  8],
+                     [intE 5,   strE "customer5",   strE "US",      dateE 2000 11 20],
+                     [intE 6,   strE "customer6",   strE "Canada",  dateE 2001  2 16],
+                     [intE 7,   strE "customer7",   strE "Canada",  dateE 2001  4 29],
+                     [intE 8,   strE "customer8",   strE "US",      dateE 2009 12  2],
+                     [intE 9,   strE "customer9",   strE "US",      dateE 2000  9  1],
+                     [intE 10,  strE "customer10",  strE "US",      dateE 1998 10 21]
+                    ];
+
+
+ordersTableName :: String;
+ordersTableName = tablePrefix ++ "orders";
+
+ordersTableDesc :: TableDescription;
+ordersTableDesc = 
+    makeTableDescription (makeTableReference ordersTableName)
+    [makeFieldDescription "id"          SqlType_Integer        False,
+     makeFieldDescription "customer id" SqlType_Integer        False,
+     makeFieldDescription "date"        SqlType_Date           False,
+     makeFieldDescription "amount"      (SqlType_Decimal 15 2) False
+    ]
+    [PrimaryKeyConstraint ["id"]];
+
+ordersTableData :: [[Expr]];
+ordersTableData = [[intE 1,   intE 1,   dateE 2000  1  1,   dblE 1000],
+                   [intE 2,   intE 2,   dateE 2000  1  1,   dblE 5000],
+                   [intE 3,   intE 3,   dateE 2000  1  1,   dblE 1000],
+                   [intE 4,   intE 4,   dateE 2000  1  1,   dblE 3000],
+                   [intE 5,   intE 5,   dateE 2000  1  1,   dblE 1000],
+                   [intE 6,   intE 6,   dateE 2000  1  1,   dblE 8000],
+                   [intE 7,   intE 7,   dateE 2000  1  1,   dblE 4000],
+                   [intE 8,   intE 8,   dateE 2000  1  1,   dblE 9000],
+                   [intE 9,   intE 9,   dateE 2000  1  1,   dblE 1000],
+                   [intE 10,  intE 10,  dateE 2000  1  1,   dblE 1000],
+                   [intE 11,  intE 1,   dateE 2000  2  1,   dblE 6000],
+                   [intE 12,  intE 2,   dateE 2000  2  1,   dblE 4000],
+                   [intE 13,  intE 3,   dateE 2000  2  1,   dblE 4000],
+                   [intE 14,  intE 4,   dateE 2000  2  1,   dblE 4000],
+                   [intE 15,  intE 5,   dateE 2000  2  1,   dblE 7000],
+                   [intE 16,  intE 6,   dateE 2000  2  1,   dblE 2000],
+                   [intE 17,  intE 7,   dateE 2000  2  1,   dblE 2000],
+                   [intE 18,  intE 8,   dateE 2000  2  1,   dblE 3000],
+                   [intE 19,  intE 9,   dateE 2000  2  1,   dblE 3000],
+                   [intE 20,  intE 10,  dateE 2000  2  1,   dblE 6000],
+                   [intE 21,  intE 1,   dateE 2000  3  1,   dblE 9000],
+                   [intE 22,  intE 2,   dateE 2000  3  1,   dblE 1000],
+                   [intE 23,  intE 3,   dateE 2000  3  1,   dblE 2000],
+                   [intE 24,  intE 4,   dateE 2000  3  1,   dblE 4000],
+                   [intE 25,  intE 5,   dateE 2000  3  1,   dblE 3000],
+                   [intE 26,  intE 6,   dateE 2000  3  1,   dblE 2000],
+                   [intE 27,  intE 7,   dateE 2000  3  1,   dblE 8000],
+                   [intE 28,  intE 8,   dateE 2000  3  1,   dblE 6000],
+                   [intE 29,  intE 9,   dateE 2000  3  1,   dblE 2000],
+                   [intE 30,  intE 10,  dateE 2000  3  1,   dblE 4000],
+                   [intE 31,  intE 1,   dateE 2000  4  1,   dblE 2000],
+                   [intE 32,  intE 2,   dateE 2000  4  1,   dblE 2000],
+                   [intE 33,  intE 3,   dateE 2000  4  1,   dblE 9000],
+                   [intE 34,  intE 4,   dateE 2000  4  1,   dblE 8000],
+                   [intE 35,  intE 5,   dateE 2000  4  1,   dblE 1000],
+                   [intE 36,  intE 6,   dateE 2000  4  1,   dblE 2000],
+                   [intE 37,  intE 7,   dateE 2000  4  1,   dblE 5000],
+                   [intE 38,  intE 8,   dateE 2000  4  1,   dblE 2000],
+                   [intE 39,  intE 9,   dateE 2000  4  1,   dblE 7000],
+                   [intE 40,  intE 10,  dateE 2000  4  1,   dblE 6000],
+                   [intE 41,  intE 1,   dateE 2000  5  1,   dblE 4000],
+                   [intE 42,  intE 2,   dateE 2000  5  1,   dblE 9000],
+                   [intE 43,  intE 3,   dateE 2000  5  1,   dblE 3000],
+                   [intE 44,  intE 4,   dateE 2000  5  1,   dblE 8000],
+                   [intE 45,  intE 5,   dateE 2000  5  1,   dblE 5000],
+                   [intE 46,  intE 6,   dateE 2000  5  1,   dblE 4000],
+                   [intE 47,  intE 7,   dateE 2000  5  1,   dblE 5000],
+                   [intE 48,  intE 8,   dateE 2000  5  1,   dblE 3000],
+                   [intE 49,  intE 9,   dateE 2000  5  1,   dblE 1000],
+                   [intE 50,  intE 10,  dateE 2000  5  1,   dblE 2000]
+                  ];
+
+// SELECT customer.name, customer.country
+// FROM customer
+// WHERE YEAR(customer.since) = 2000
+// ORDER BY customer.name DESC
+query1 :: Query;
+query1 = 
+    let
+        customerTable:: QueryTable;
+        customerTable = makeQueryTable customerTableName;
+        
+        projectedExprs :: [Expr];
+        projectedExprs = 
+            [untypedField customerTable "name", untypedField customerTable "country"];
+        
+        filterExpr :: TypedExpr Boolean;
+        filterExpr = (yearExpr $ timeField customerTable "since") `eqExpr` numericConstant 2000;
+        
+        orderExprs :: [(Expr, Boolean)];
+        orderExprs = [(untypedField customerTable "name", False)];
+    in
+        newQuery `Sql.project` projectedExprs `Sql.restrict` filterExpr `Sql.order2` orderExprs;
+
+// The same as query1, except with aliases specified for the columns and tables.
+query1WithAliases :: Query;
+query1WithAliases = 
+    let
+        customerTable:: QueryTable;
+        customerTable = makeQueryTableWithAlias customerTableName "cust";
+        
+        projectedExprs :: [(Expr, String)];
+        projectedExprs = 
+            [(untypedField customerTable "name", "c1"), 
+             (untypedField customerTable "country", "c2")];
+        
+        filterExpr :: TypedExpr Boolean;
+        filterExpr = (yearExpr $ timeField customerTable "since") `eqExpr` numericConstant 2000;
+        
+        orderExprs :: [(Expr, Boolean)];
+        orderExprs = [(untypedField customerTable "name", False)];
+    in
+        newQuery `Sql.projectWithAliases` projectedExprs `Sql.restrict` filterExpr `Sql.order2` orderExprs;
+
+query1Extractor :: ResultRow -> (String, String);
+query1Extractor = extractTuple2 (extractString 1) (extractString 2);
+
+query1Answer :: [(String, String)];
+query1Answer = [("customer9", "US"),
+                ("customer5", "US"),
+                ("customer1", "Canada")
+                ];
+
+
+// SELECT customer.country, COUNT(orders.id) 
+// FROM customer INNER JOIN orders ON customer.id == orders.[customer id]
+// GROUP BY customer.country
+// ORDER BY customer.country ASC
+query2 :: Query;
+query2 = 
+    let
+        customerTable:: QueryTable;
+        customerTable = makeQueryTable customerTableName;
+
+        ordersTable:: QueryTable;
+        ordersTable = makeQueryTable ordersTableName;
+
+        projectedExprs :: [Expr];
+        projectedExprs = 
+            [untypedField customerTable "country",
+             toUntypedExpr $ countExpr $ intField ordersTable "id"];
+        
+        joinInfos :: [JoinInfo];
+        joinInfos = [makeJoinInfo (intField customerTable "id") (intField ordersTable "customer id") InnerJoin];
+        
+        groupExprs :: [Expr];
+        groupExprs = [untypedField customerTable "country"];
+        
+        orderExprs :: [(Expr, Boolean)];
+        orderExprs = [(untypedField customerTable "country", True)];
+    in
+        newQuery `Sql.project` projectedExprs `Sql.join2` joinInfos `Sql.group2` groupExprs `Sql.order2` orderExprs;
+
+query2Extractor :: ResultRow -> (String, Int);
+query2Extractor = extractTuple2 (extractString 1) (extractInt 2);
+
+query2Answer :: [(String, Int)];
+query2Answer = [("Canada", 15),
+                ("Mexico",  5),
+                ("US",     30)
+               ];
+
+
+allTables :: [TableDescription];
+allTables = 
+    [customerTableDesc,
+     ordersTableDesc];
+
+allTableDataSets :: [(TableDescription, [[Expr]])];
+allTableDataSets = 
+    [(customerTableDesc, customerTableData),
+     (ordersTableDesc, ordersTableData)];
+
+createTable :: TableDescription -> ();
+createTable !tableDesc = 
+    let
+        createTableCommand :: Sql.Statement;
+        createTableCommand = 
+            Sql.makeCreateTableStatement tableDesc False;
+        
+        commandText :: String;
+        commandText = Sql.statementText testSqlBuilder False createTableCommand;
+    in
+        DataGems.executeUpdate testConnection commandText `seq` 
+        Debug.trace ("created table: " ++ show (getTableReference tableDesc) ++ "\n") ();
+
+populateTable :: TableDescription -> [[Expr]] -> ();
+populateTable !tableDesc !rowsData = 
+    let
+        tableRef :: TableReference;
+        tableRef = DatabaseMetadata.getTableReference tableDesc;
+        
+        insertRowStatement :: [Expr] -> Statement;
+        insertRowStatement !rowVals = makeInsertValuesStatement tableRef rowVals;
+
+        compoundStatement :: Statement;
+        compoundStatement = makeCompoundStatement $ List.map insertRowStatement rowsData;
+            
+        commandText :: String;
+        commandText = 
+Debug.traceShowable "populateTable:commandText = " $ 
+            Sql.statementText testSqlBuilder False compoundStatement;
+        
+        nRowsAffected :: Int;
+        nRowsAffected = 
+// MySQL doesn't allow multiple INSERT statements to be submitted together, so execute them one-at-a-time for now.
+//            DataGems.executeUpdate mySqlConnection commandText;
+//            DataGems.addBatch mySqlConnection commandText `seq` Array.sum $ DataGems.executeBatch mySqlConnection;
+//            List.foldLeftStrict (\!count !rowData -> (DataGems.executeUpdate mySqlConnection $ Sql.statementText testSqlBuilder False $ insertRowStatement rowData) `seq` count + 1) 0 rowsData;
+// 
+            // Add each INSERT to a batch (one at a time), then execute the batch at once.
+            // TODO: is this more efficient than executing each INSERT directly one-at-a-time?
+            // TODO: execute the batches in chunks?
+            List.foldLeftStrict (\!cur !rowData -> (DataGems.addBatch testConnection $ Sql.statementText testSqlBuilder False $ insertRowStatement rowData) `seq` ()) () rowsData
+            `seq` 
+            Array.sum $ DataGems.executeBatch testConnection;
+    in
+        nRowsAffected `seq` 
+        Debug.trace ("inserted " ++ intToString nRowsAffected ++ " row(s) into table: " ++ show tableRef ++ "\n") ();
+
+dropTable :: Boolean -> TableDescription -> ();
+dropTable !ignoreErrors !tableDesc = 
+    let
+        tableRef :: TableReference;
+        tableRef = DatabaseMetadata.getTableReference tableDesc;
+        
+        dropTableCommand :: Sql.Statement;
+        dropTableCommand = Sql.makeDropTableStatement tableRef True;
+        
+        commandText :: String;
+        commandText = Sql.statementText testSqlBuilder False dropTableCommand;
+    in
+        (DataGems.executeUpdate testConnection commandText `seq` 
+         Debug.trace ("dropped table: " ++ show tableRef ++ "\n") ())
+        `catch`
+        (
+            let
+                handler :: JThrowable -> ();
+                handler throwable = 
+                    if  ignoreErrors then Debug.trace ("failed to drop table '" ++ show tableRef ++ "' -- may not exist.\n") ()
+                    else throw throwable;
+            in
+                handler
+        );
+
+runQuery :: Eq a => String -> Query -> [a] -> (ResultRow -> a) -> ();
+runQuery !queryName !query !answerRows !extractor = 
+    let
+        sql :: String;
+        sql = queryText testSqlBuilder False query;
+        
+        rs :: ResultSet;
+        rs = Debug.trace ("executing query: " ++ sql ++ "\n") $ DataGems.jdbcQueryToResultSet testConnection sql;
+        
+        queryResults = 
+//Debug.trace ("resultset:\n" ++ DataGems.resultSetText 100 rs ++ "\n") $
+            DataGems.dataFromResultSet2 True rs extractor;
+    in
+        if queryResults == answerRows then Debug.trace ("query '" ++ queryName ++ "' executed -- results correct\n") ()
+        else error ("query '" ++ queryName ++ "' results do not match the expected values");
+
+
+createAllTables :: ();
+createAllTables = 
+    List.foldLeftStrict (\!cur !table -> createTable table `seq` ()) () allTables;
+
+dropAllTables :: Boolean -> ();
+dropAllTables !ignoreErrors = 
+    List.foldLeftStrict (\!cur !table -> dropTable ignoreErrors table `seq` ()) () allTables;
+
+populateAllTables :: ();
+populateAllTables = 
+    List.foldLeftStrict (\!cur !tableAndData -> uncurry populateTable tableAndData `seq` ()) () allTableDataSets;
+
+runAllQueries :: ();
+runAllQueries = 
+    runAll [runQuery "query1" query1 query1Answer query1Extractor,
+            runQuery "query1WithAliases" query1WithAliases query1Answer query1Extractor,
+            runQuery "query2" query2 query2Answer query2Extractor
+            ];
+
+
+runAll :: [()] -> ();
+runAll !tasks = 
+    List.foldLeftStrict (\!cur !task -> ())  () tasks;
+
+runFullTest :: ();
+runFullTest = 
+    runAll [dropAllTables True,      // Clean-up before rebuilding the tables.
+            createAllTables,
+            populateAllTables,
+            runAllQueries,
+            dropAllTables False,
+            Debug.trace "complete\n" ()
+           ];
+
+/* TODO: 
+     - create and drop the entire database as well?  Does MySQL support this?
+     - use Monads to control sequence?
+     - do batching of requests, especially the insert/updates
+         - split up large lists into chunks
+         - may not be able to do this during the initial clean-up since an error removing a non-existent table would likely terminate the whole batch of commands
+
+    - figure out how to deal with the multiple-insert problem
+        - MySQL does not allow multiple INSERT statements to be executed together
+        - however MySQL and some other DBs do allow multiple rows to be inserted in one statement
+            - see:  http://en.wikipedia.org/wiki/Insert_(SQL)
+        - perhaps extend the Insert statement to accept multiple rows of data
+            - the SqlBuilders for DBs that don't support this can break it up into multiple inserts
+
+        - another option would be to collapse multiple Inserts into one as part of the SqlBuilder if everything matches up properly
+            - however, it might be better to make this batching explicit (to avoid statement length limits, etc)
+            
+        - it seems to work if each INSERT is added to a batch separately, then the batch of inserts is executed together
+            - however, it is hard to tell how this is treated
+
+    - test creating tables with all types
+    - test join types (inner, left/right outer)
+    - test subqueries (correlated and not)
+    - test operators and functions
+    - test CASE statements
+    - test Convert functions
+    - test update statements
+    - test compound statements (where supported)
+*/
+

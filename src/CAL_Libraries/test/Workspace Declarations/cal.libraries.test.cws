@@ -58,6 +58,7 @@ StandardVault Cal.Test.IO.File_Tests
 StandardVault Cal.Test.Utilities.PrettyPrinter_Tests
 StandardVault Cal.Test.Utilities.RangeTests
 StandardVault Cal.Test.Data.Sql_Tests
+StandardVault Cal.Test.Data.SqlBuilder.SqlBuilder_Tests
 StandardVault Cal.Test.Utilities.Summary_Tests
 StandardVault Cal.Test.Data.SqlParser_Tests
 StandardVault Cal.Test.Utilities.Parser_Tests
