@@ -93,7 +93,14 @@ import Cal.Collections.List using
  * A SqlBuilder implementation for PostgreSQL databases.
  *
  * The SQL builder for PostgreSQL differs from the default SQL builder in that:
- * 1. 
+ * 1. Identifiers are quoted using back-quotes.
+ * 2. Generates timestamps in the following form:  '2005-05-20 13:23:45.0'.
+ * 3. TRUE and FALSE are used for Boolean literals.
+ * 4. Some functions unsupported, including SoundEx, Difference, etc.
+ * 5. String concatenation operator is ||.
+ * 6. Bitwise XOR operator is #.
+ * 7. SQL type names are customized for PostgreSQL.
+ * 8. Postgres names used for various functions (including LN, LOG, RANDOM, TRUNC, CHR, LOWER, UPPER, STDDEV_SAMP, STDDEV_POP, etc.)
  */
 postgreSqlBuilder :: SqlBuilder;
 public postgreSqlBuilder = Sql.makeSqlBuilder postgreSqlBuilderFunctions;
@@ -104,11 +111,8 @@ public postgreSqlBuilder = Sql.makeSqlBuilder postgreSqlBuilderFunctions;
 public postgreSqlBuilderFunctions = 
             { defaultSqlBuilderFunctions | 
                     quoteIdentifier           := postgreSql_quoteIdentifier,
-//                    makeSafeName              := db2_makeSafeName,
-//                    buildTableAndAliasText    := db2_tableAndAliasText,
                     timeToSql                 := postgreSql_timeToSql,
                     booleanToSql              := postgreSql_booleanToSql,
-//                    prepareQuery              := db2_prepareQuery,
                     functionToSql             := postgreSql_functionToSql,
                     functionName              := postgreSql_functionNameText,
                     operatorText              := postgreSql_operatorText,
@@ -176,7 +180,7 @@ postgreSql_functionNameText func =
     Sql.CharFunction     -> "CHR";
     Sql.LcaseFunction    -> "LOWER";
     Sql.UcaseFunction    -> "UPPER";
-    Sql.DatabaseFunction -> "current_database";
+    Sql.DatabaseFunction -> "CURRENT_DATABASE";
     Sql.IfNullFunction   -> "COALESCE";
     Sql.AggrStdDev       -> "STDDEV_SAMP";
     Sql.AggrStdDevP      -> "STDDEV_POP";
