@@ -8,17 +8,17 @@
 module Cal.Test.Data.SqlBuilder.SqlBuilder_Tests;
 
 import Cal.Core.Prelude using
-    typeConstructor = Boolean, Double, Int, String;
-    function = error, field1, field2, field3, intToString, seq, uncurry;
+    typeConstructor = Boolean, Byte, Decimal, Double, Int, Long, String;
+    function = concat, error, field1, field2, field3, intToString, seq, stringToDecimal, uncurry;
     dataConstructor = False, True;
     typeClass = Eq;
     ;
 
 import Cal.Data.DataGems using
     function =
-        addBatch, executeBatch, executeUpdate, extractInt, extractString,
-        extractTuple2, foldStrictOverResultSet, jdbcGetTablesInfo,
-        jdbcQueryToResultSet;
+        addBatch, executeBatch, executeUpdate, extractBoolean, extractBytes, extractDecimal, extractDouble, extractInt, extractLong, 
+        extractString, extractTime, extractTuple2, extractTuple3, extractTuple4, extractTuple6, foldStrictOverResultSet, 
+        jdbcGetTablesInfo, jdbcQueryToResultSet;
     typeConstructor = JDBCConnection, ResultRow, ResultSet;
     ;
 
@@ -47,13 +47,20 @@ import Cal.Data.DatabaseMetadata using
 
 import Cal.Data.SqlType using
     dataConstructor =
-        SqlType_Date, SqlType_Decimal, SqlType_Integer, SqlType_VarChar;
+        SqlType_Date, SqlType_Decimal, SqlType_Integer, SqlType_VarChar, SqlType_TinyInt, SqlType_SmallInt, SqlType_BigInt, 
+        SqlType_Numeric, SqlType_Real, SqlType_Float, SqlType_Double, SqlType_Bit, SqlType_Boolean, SqlType_Char, 
+        SqlType_LongVarChar, SqlType_Clob, SqlType_Binary, SqlType_VarBinary, SqlType_LongVarBinary, SqlType_Blob, 
+        SqlType_Time, SqlType_TimeStamp;
     typeConstructor = SqlType;
     ;
 
 import Cal.Collections.List using
     function = foldLeftStrict;
     ;
+
+import Cal.Core.String;
+
+import Cal.Utilities.Math;
 
 import Cal.Core.Exception using
     function = catch, throw;
@@ -62,6 +69,7 @@ import Cal.Core.Exception using
 
 import Cal.Core.Debug using
     function = show, trace;
+    typeClass = Show;
     ;
 
 import Cal.Utilities.Time using
@@ -73,7 +81,9 @@ import Cal.Utilities.TimeZone using
     function = longDisplayName;
     ;
 
-import Cal.Collections.Array;
+import Cal.Collections.Array using
+    typeConstructor = Array;
+    ;
 
 
 /** This is the connection to be used for the tests in this module. */
@@ -116,6 +126,12 @@ dateE !yearVal !monthVal !dayVal =
 
 nullE :: Expr;
 nullE = toUntypedExpr nullValue;
+
+
+/** Helper DataGems extractor to extract a Double value and round to a specified number of decimal places. */
+extractDoubleWithRounding :: Int -> Int -> ResultRow -> Double;
+extractDoubleWithRounding !nDecPlaces !columnN !resultRow = 
+    Math.roundToNPlaces (extractDouble columnN resultRow) nDecPlaces;
 
 
 customerTableName :: String;
@@ -211,6 +227,65 @@ ordersTableData = [[intE 1,   intE 1,   dateE 2000  1  1,   dblE 1000],
                    [intE 50,  intE 10,  dateE 2000  5  1,   dblE 2000]
                   ];
 
+
+typesTableName :: String;
+typesTableName = tablePrefix ++ "types";
+
+typesTableDesc :: TableDescription;
+typesTableDesc = 
+    makeTableDescription (makeTableReference typesTableName)
+                         [makeFieldDescription "typeTinyInt"        SqlType_TinyInt         False,
+                          makeFieldDescription "typeSmallInt"       SqlType_SmallInt        False,
+                          makeFieldDescription "typeInteger"        SqlType_Integer         False,
+                          makeFieldDescription "typeBigInt"         SqlType_BigInt          False,
+                          makeFieldDescription "typeDecimal"        (SqlType_Decimal 25 10) False,
+                          makeFieldDescription "typeNumeric"        (SqlType_Numeric 15 5)  False,
+                          makeFieldDescription "typeReal"           SqlType_Real            False,
+                          makeFieldDescription "typeFloat"          SqlType_Float           False,
+                          makeFieldDescription "typeDouble"         SqlType_Double          False,
+                          makeFieldDescription "typeBit"            SqlType_Bit             True,
+                          makeFieldDescription "typeBoolean"        SqlType_Boolean         False,
+                          makeFieldDescription "typeChar"           (SqlType_Char 20)       False,
+                          makeFieldDescription "typeVarChar"        (SqlType_VarChar 50)    False,
+                          makeFieldDescription "typeLongVarChar"    SqlType_LongVarChar     False,
+                          makeFieldDescription "typeClob"           SqlType_Clob            False,
+                          makeFieldDescription "typeBinary"         (SqlType_Binary 10)     True,
+                          makeFieldDescription "typeVarBinary"      (SqlType_VarBinary 200) True,
+                          makeFieldDescription "typeLongVarBinary"  SqlType_LongVarBinary   True,
+                          makeFieldDescription "typeBlob"           SqlType_Blob            True,
+                          makeFieldDescription "typeDate"           SqlType_Date            True,
+                          makeFieldDescription "typeTime"           SqlType_Time            True,
+                          makeFieldDescription "typeTimeStamp"      SqlType_TimeStamp       True
+                         ]
+                         [];
+
+typesTableData :: [[Expr]];
+typesTableData = [[intE 123,            // TinyInt
+                   intE 20000,          // SmallInt
+                   intE 2000000000,     // Integer
+                   intE 2000000000,     // BigInt               // TODO: test with long int values > MaxInt32
+                   dblE 1.23456789,     // Decimal
+                   dblE (-12345.6789),  // Numeric
+                   dblE 555.55,         // Real
+                   dblE (-999.99),      // Float
+                   dblE 111222333.444,  // Double
+                   strE "1",            // Bit                  // TODO: pass the bit value in a more generic way.
+                   boolE True,          // Boolean
+                   strE "abcdefg",      // Char
+                   strE "abcdefg12345", // VarChar
+                   strE (concat $ List.replicate 1000 "testing1234 "),                    // LongVarChar
+                   strE (concat $ List.replicate 1000 "abcdefghijklmnopqrstuvwxyz1234"),  // Clob
+                   strE "01010101",     // Binary                 // TODO: pass the binary data in a more generic (and compact) way.
+                   strE "0000111100001111",    // VarBinary
+                   strE (concat $ List.replicate 1000 "11110000"),        // LongVarBinary
+                   strE (concat $ List.replicate 100000 "11110000"),      // Blob
+                   dateE 2008 3 15,     // Date
+                   timeE (makeTimeValue 1970 1 1  14 30 59 5000000 TimeZone.currentTimeZone),     // Time
+                   timeE (makeTimeValue 2010 1 24 21 41 37 6500000 TimeZone.currentTimeZone)      // TimeStamp
+                  ]
+                 ];
+                    
+                    
 // SELECT customer.name, customer.country
 // FROM customer
 // WHERE YEAR(customer.since) = 2000
@@ -301,16 +376,172 @@ query2Answer = [("Canada", 15),
                 ("US",     30)
                ];
 
+// SELECT <numeric columns> FROM types
+numericTypesQuery :: Query;
+numericTypesQuery = 
+    let
+        typesTable:: QueryTable;
+        typesTable = makeQueryTable typesTableName;
+        
+        projectedExprs :: [Expr];
+        projectedExprs = [untypedField typesTable "typeTinyInt",
+                          untypedField typesTable "typeSmallInt",
+                          untypedField typesTable "typeInteger",
+                          untypedField typesTable "typeBigInt",
+                          untypedField typesTable "typeDecimal",
+                          untypedField typesTable "typeNumeric"
+                         ];
+    in
+        newQuery `Sql.project` projectedExprs;
+
+numericTypesQueryExtractor :: ResultRow -> (Int, Int, Int, Long, Decimal, Decimal);
+numericTypesQueryExtractor = 
+    extractTuple6 (extractInt 1)       // TinyInt
+                  (extractInt 2)       // SmallInt
+                  (extractInt 3)       // Integer
+                  (extractLong 4)      // BigInt
+                  (extractDecimal 5)   // Decimal
+                  (extractDecimal 6);  // Numeric
+
+numericTypesQueryAnswer :: [(Int, Int, Int, Long, Decimal, Decimal)];
+numericTypesQueryAnswer = [(123, 20000, 2000000000, 2000000000, stringToDecimal "1.23456789", stringToDecimal "-12345.6789")];
+
+// SELECT <float columns> FROM types
+floatTypesQuery :: Query;
+floatTypesQuery = 
+    let
+        typesTable:: QueryTable;
+        typesTable = makeQueryTable typesTableName;
+        
+        projectedExprs :: [Expr];
+        projectedExprs = [untypedField typesTable "typeReal",
+                          untypedField typesTable "typeFloat",
+                          untypedField typesTable "typeDouble"
+                         ];
+    in
+        newQuery `Sql.project` projectedExprs;
+
+floatTypesQueryExtractor :: ResultRow -> (Double, Double, Double);
+floatTypesQueryExtractor = 
+    extractTuple3 (extractDoubleWithRounding 2 1)     // Real
+                  (extractDoubleWithRounding 2 2)     // Float
+                  (extractDoubleWithRounding 4 3);    // Double
+
+floatTypesQueryAnswer :: [(Double, Double, Double)];
+floatTypesQueryAnswer = [(555.55, -999.99, 111222333.444)];
+
+// SELECT <char columns> FROM types
+charTypesQuery :: Query;
+charTypesQuery = 
+    let
+        typesTable:: QueryTable;
+        typesTable = makeQueryTable typesTableName;
+        
+        projectedExprs :: [Expr];
+        projectedExprs = [untypedField typesTable "typeChar",
+                          untypedField typesTable "typeVarChar",
+                          untypedField typesTable "typeLongVarChar",
+                          untypedField typesTable "typeClob"
+                         ];
+    in
+        newQuery `Sql.project` projectedExprs;
+
+charTypesQueryExtractor :: ResultRow -> (String, String, String, String);
+charTypesQueryExtractor = 
+    extractTuple4 (extractString 1)     // Char
+                  (extractString 2)     // VarChar
+                  (extractString 3)     // LongVarChar
+                  (extractString 4);    // Clob
+
+charTypesQueryAnswer :: [(String, String, String, String)];
+charTypesQueryAnswer = [("abcdefg             ", 
+                         "abcdefg12345", 
+                         concat $ List.replicate 1000 "testing1234 ",
+                         concat $ List.replicate 1000 "abcdefghijklmnopqrstuvwxyz1234")];
+
+// SELECT <date columns> FROM types
+dateTypesQuery :: Query;
+dateTypesQuery = 
+    let
+        typesTable:: QueryTable;
+        typesTable = makeQueryTable typesTableName;
+        
+        projectedExprs :: [Expr];
+        projectedExprs = [untypedField typesTable "typeDate",
+                          untypedField typesTable "typeTime",
+                          untypedField typesTable "typeTimeStamp"
+                         ];
+    in
+        newQuery `Sql.project` projectedExprs;
+
+dateTypesQueryExtractor :: ResultRow -> (Time, Time, Time);
+dateTypesQueryExtractor = 
+    extractTuple3 (extractTime 1)     // Date
+                  (extractTime 2)     // Time
+                  (extractTime 3);    // TimeStamp
+
+dateTypesQueryAnswer :: [(Time, Time, Time)];
+dateTypesQueryAnswer = [(makeTimeValue 2008 3 15 0 0 0 0 TimeZone.currentTimeZone,
+                         makeTimeValue 1970 1 1  14 30 59 5000000 TimeZone.currentTimeZone,
+                         makeTimeValue 2010 1 24 21 41 37 123456  TimeZone.currentTimeZone)];
+
+// SELECT <binary columns> FROM types
+binaryTypesQuery :: Query;
+binaryTypesQuery = 
+    let
+        typesTable:: QueryTable;
+        typesTable = makeQueryTable typesTableName;
+        
+        projectedExprs :: [Expr];
+        projectedExprs = [untypedField typesTable "typeBit",
+                          untypedField typesTable "typeBoolean",
+                          untypedField typesTable "typeBinary",
+                          untypedField typesTable "typeVarBinary",
+                          untypedField typesTable "typeLongVarBinary",
+                          untypedField typesTable "typeBlob"
+                         ];
+    in
+        newQuery `Sql.project` projectedExprs;
+
+binaryTypesQueryExtractor :: ResultRow -> (Boolean, Array Byte);
+binaryTypesQueryExtractor = 
+    extractTuple2 (extractBoolean 2)     // Boolean
+                  (extractBytes 3);     // Binary
+
+binaryTypesQueryAnswer :: [(Boolean, Array Byte)];
+binaryTypesQueryAnswer = [(True,
+                           Array.fromList [85])];
+
+/*
+                          makeFieldDescription "typeBit"            SqlType_Bit             True,
+                          makeFieldDescription "typeBoolean"        SqlType_Boolean         False,
+                          
+                          makeFieldDescription "typeBinary"         (SqlType_Binary 10)     True,
+                          makeFieldDescription "typeVarBinary"      (SqlType_VarBinary 200) True,
+                          makeFieldDescription "typeLongVarBinary"  SqlType_LongVarBinary   True,
+                          makeFieldDescription "typeBlob"           SqlType_Blob            True,
+                          
+                          
+                   strE "1",            // Bit                  // TODO: pass the bit value in a more generic way.
+                   boolE True,          // Boolean
+                   
+                   strE "01010101",     // Binary                 // TODO: pass the binary data in a more generic (and compact) way.
+                   strE "0000111100001111",    // VarBinary
+                   strE (concat $ List.replicate 1000 "11110000"),        // LongVarBinary
+                   strE (concat $ List.replicate 100000 "11110000"),      // Blob
+*/
 
 allTables :: [TableDescription];
 allTables = 
     [customerTableDesc,
-     ordersTableDesc];
+     ordersTableDesc,
+     typesTableDesc];
 
 allTableDataSets :: [(TableDescription, [[Expr]])];
 allTableDataSets = 
     [(customerTableDesc, customerTableData),
-     (ordersTableDesc, ordersTableData)];
+     (ordersTableDesc, ordersTableData),
+     (typesTableDesc, typesTableData)];
 
 createTable :: TableDescription -> ();
 createTable !tableDesc = 
@@ -384,7 +615,7 @@ dropTable !ignoreErrors !tableDesc =
                 handler
         );
 
-runQuery :: Eq a => String -> Query -> [a] -> (ResultRow -> a) -> ();
+runQuery :: (Show a, Eq a) => String -> Query -> [a] -> (ResultRow -> a) -> ();
 runQuery !queryName !query !answerRows !extractor = 
     let
         sql :: String;
@@ -398,7 +629,9 @@ runQuery !queryName !query !answerRows !extractor =
             DataGems.dataFromResultSet2 True rs extractor;
     in
         if queryResults == answerRows then Debug.trace ("query '" ++ queryName ++ "' executed -- results correct\n") ()
-        else error ("query '" ++ queryName ++ "' results do not match the expected values");
+        else
+Debug.trace ("queryResults:\n" ++ show queryResults ++ "\n" ++ "answerRows:\n" ++ show answerRows ++ "\n") $ 
+            error ("query '" ++ queryName ++ "' results do not match the expected values");
 
 
 createAllTables :: ();
@@ -417,7 +650,12 @@ runAllQueries :: ();
 runAllQueries = 
     runAll [runQuery "query1" query1 query1Answer query1Extractor,
             runQuery "query1WithAliases" query1WithAliases query1Answer query1Extractor,
-            runQuery "query2" query2 query2Answer query2Extractor
+            runQuery "query2" query2 query2Answer query2Extractor,
+            runQuery "numericTypesQuery" numericTypesQuery numericTypesQueryAnswer numericTypesQueryExtractor,
+            runQuery "floatTypesQuery" floatTypesQuery floatTypesQueryAnswer floatTypesQueryExtractor,
+            runQuery "charTypesQuery" charTypesQuery charTypesQueryAnswer charTypesQueryExtractor,
+            runQuery "dateTypesQuery" dateTypesQuery dateTypesQueryAnswer dateTypesQueryExtractor,
+            runQuery "binaryTypesQuery" binaryTypesQuery binaryTypesQueryAnswer binaryTypesQueryExtractor
             ];
 
 
