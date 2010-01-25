@@ -1089,7 +1089,7 @@ findDuplicate !list =
  * This type class of for any type that can produce XML Elements or Attributes
  */
 public class XmlOutputable a where
-    public toXml :: String -> a -> (Either XmlAttribute XmlNode);
+    public toXml :: String -> a -> Either XmlAttribute XmlNode;
     ;
 
 /**
@@ -1111,7 +1111,7 @@ public class XmlOutputable a => XmlAttributeOutputable a where
  * This type class is for any type that can be input from xml
  */
 public class XmlInputable a where
-    public fromXml :: (Either XmlAttribute XmlNode) -> a;
+    public fromXml :: Either XmlAttribute XmlNode -> a;
     ;
 
 /**
@@ -1139,14 +1139,14 @@ public elementForXmlAttributeOutputable elementName attributeName value =
 /**
  * Helper for implementing toXml from XmlAttributeOutputable types 
  */
-outputFromXmlAttributeOutputable :: XmlAttributeOutputable a => String -> a -> (Either XmlAttribute XmlNode);
+outputFromXmlAttributeOutputable :: XmlAttributeOutputable a => String -> a -> Either XmlAttribute XmlNode;
 public outputFromXmlAttributeOutputable name value =
     Left (toXmlAttribute name value);
 
 /**
  * Helper for implementing fromXml from XmlAttributeInputable types 
  */
-inputFromXmlAttributeInputable :: XmlAttributeInputable a => (Either XmlAttribute XmlNode) -> a;
+inputFromXmlAttributeInputable :: XmlAttributeInputable a => Either XmlAttribute XmlNode -> a;
 public inputFromXmlAttributeInputable either =
     case either of 
     Left attribute -> fromXmlAttribute attribute;
@@ -1156,14 +1156,14 @@ public inputFromXmlAttributeInputable either =
 /**
  * Helper for implementing toXml from XmlElementOutputable types 
  */
-outputFromXmlElementOutputable :: XmlElementOutputable a => String -> a -> (Either XmlAttribute XmlNode);
+outputFromXmlElementOutputable :: XmlElementOutputable a => String -> a -> Either XmlAttribute XmlNode;
 public outputFromXmlElementOutputable name value =
     Right (toXmlElement name value);
 
 /**
  * Helper for implementing fromXml from XmlAttributeOutputable types 
  */
-inputFromXmlElementInputable :: XmlElementInputable a => (Either XmlAttribute XmlNode) -> a;
+inputFromXmlElementInputable :: XmlElementInputable a => Either XmlAttribute XmlNode -> a;
 public inputFromXmlElementInputable either =
     case either of 
     Right node -> fromXmlElement node;
@@ -1186,7 +1186,7 @@ instance XmlOutputable String where
     toXml = outputStringXml;
     ;
 
-outputStringXml :: String -> String -> (Either XmlAttribute XmlNode);
+outputStringXml :: String -> String -> Either XmlAttribute XmlNode;
 outputStringXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1202,7 +1202,7 @@ instance XmlInputable String where
     fromXml = inputStringXml;
     ;
 
-inputStringXml :: (Either XmlAttribute XmlNode) -> String;
+inputStringXml :: Either XmlAttribute XmlNode -> String;
 inputStringXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1223,7 +1223,7 @@ instance XmlOutputable Boolean where
     toXml = outputBooleanXml;
     ;
 
-outputBooleanXml :: String -> Boolean -> (Either XmlAttribute XmlNode);
+outputBooleanXml :: String -> Boolean -> Either XmlAttribute XmlNode;
 outputBooleanXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1239,7 +1239,7 @@ instance XmlInputable Boolean where
     fromXml = inputBooleanXml;
     ;
 
-inputBooleanXml :: (Either XmlAttribute XmlNode) -> Boolean;
+inputBooleanXml :: Either XmlAttribute XmlNode -> Boolean;
 inputBooleanXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1258,7 +1258,7 @@ instance XmlOutputable Int where
     toXml = outputIntXml;
     ;
 
-outputIntXml :: String -> Int -> (Either XmlAttribute XmlNode);
+outputIntXml :: String -> Int -> Either XmlAttribute XmlNode;
 outputIntXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1274,7 +1274,7 @@ instance XmlInputable Int where
     fromXml = inputIntXml;
     ;
 
-inputIntXml :: (Either XmlAttribute XmlNode) -> Int;
+inputIntXml :: Either XmlAttribute XmlNode -> Int;
 inputIntXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1293,7 +1293,7 @@ instance XmlOutputable Long where
     toXml = outputLongXml;
     ;
 
-outputLongXml :: String -> Long -> (Either XmlAttribute XmlNode);
+outputLongXml :: String -> Long -> Either XmlAttribute XmlNode;
 outputLongXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1309,7 +1309,7 @@ instance XmlInputable Long where
     fromXml = inputLongXml;
     ;
 
-inputLongXml :: (Either XmlAttribute XmlNode) -> Long;
+inputLongXml :: Either XmlAttribute XmlNode -> Long;
 inputLongXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1328,7 +1328,7 @@ instance XmlOutputable Integer where
     toXml = outputIntegerXml;
     ;
 
-outputIntegerXml :: String -> Integer -> (Either XmlAttribute XmlNode);
+outputIntegerXml :: String -> Integer -> Either XmlAttribute XmlNode;
 outputIntegerXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1344,7 +1344,7 @@ instance XmlInputable Integer where
     fromXml = inputIntegerXml;
     ;
 
-inputIntegerXml :: (Either XmlAttribute XmlNode) -> Integer;
+inputIntegerXml :: Either XmlAttribute XmlNode -> Integer;
 inputIntegerXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1363,7 +1363,7 @@ instance XmlOutputable Double where
     toXml = outputDoubleXml;
     ;
 
-outputDoubleXml :: String -> Double -> (Either XmlAttribute XmlNode);
+outputDoubleXml :: String -> Double -> Either XmlAttribute XmlNode;
 outputDoubleXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1379,7 +1379,7 @@ instance XmlInputable Double where
     fromXml = inputDoubleXml;
     ;
 
-inputDoubleXml :: (Either XmlAttribute XmlNode) -> Double;
+inputDoubleXml :: Either XmlAttribute XmlNode -> Double;
 inputDoubleXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1398,7 +1398,7 @@ instance XmlOutputable Time where
     toXml = outputTimeXml;
     ;
 
-outputTimeXml :: String -> Time -> (Either XmlAttribute XmlNode);
+outputTimeXml :: String -> Time -> Either XmlAttribute XmlNode;
 outputTimeXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1414,7 +1414,7 @@ instance XmlInputable Time where
     fromXml = inputTimeXml;
     ;
 
-inputTimeXml :: (Either XmlAttribute XmlNode) -> Time;
+inputTimeXml :: Either XmlAttribute XmlNode -> Time;
 inputTimeXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1454,7 +1454,7 @@ instance XmlOutputable Color where
     toXml = outputColorXml;
     ;
 
-outputColorXml :: String -> Color -> (Either XmlAttribute XmlNode);
+outputColorXml :: String -> Color -> Either XmlAttribute XmlNode;
 outputColorXml name value =
     outputFromXmlAttributeOutputable name value;
 
@@ -1470,7 +1470,7 @@ instance XmlInputable Color where
     fromXml = inputColorXml;
     ;
 
-inputColorXml :: (Either XmlAttribute XmlNode) -> Color;
+inputColorXml :: Either XmlAttribute XmlNode -> Color;
 inputColorXml value =
     inputFromXmlAttributeInputable value;
 
@@ -1525,7 +1525,7 @@ instance XmlOutputable a => XmlOutputable [a] where
     toXml = outputListXml;
     ;
 
-outputListXml :: XmlOutputable a => String -> [a] -> (Either XmlAttribute XmlNode);
+outputListXml :: XmlOutputable a => String -> [a] -> Either XmlAttribute XmlNode;
 outputListXml name value =
     outputFromXmlElementOutputable name value;
 
@@ -1564,7 +1564,7 @@ instance XmlInputable a => XmlInputable [a] where
     fromXml = inputListXml;
     ;
 
-inputListXml :: XmlInputable a => (Either XmlAttribute XmlNode) -> [a];
+inputListXml :: XmlInputable a => Either XmlAttribute XmlNode -> [a];
 inputListXml attributeOrNode =
     case attributeOrNode of
     Right node -> inputListXmlElement node;
@@ -1635,7 +1635,7 @@ instance (Ord a, XmlOutputable a) => XmlOutputable (Range a) where
     toXml = outputXmlForRange;
     ;
 
-outputXmlForRange :: (Ord a, XmlOutputable a) => String -> Range a -> (Either XmlAttribute XmlNode);
+outputXmlForRange :: (Ord a, XmlOutputable a) => String -> Range a -> Either XmlAttribute XmlNode;
 outputXmlForRange name value = 
     Right (outputXmlElementForRange name value);
 
@@ -1648,7 +1648,7 @@ instance (Ord a, XmlInputable a) => XmlInputable (Range a) where
     fromXml = inputRangeXml;
     ;
 
-inputRangeXml :: (Ord a, XmlInputable a) => (Either XmlAttribute XmlNode) -> Range a;
+inputRangeXml :: (Ord a, XmlInputable a) => Either XmlAttribute XmlNode -> Range a;
 inputRangeXml nodeOrAttribute =
     case nodeOrAttribute of
     Right node -> inputRangeFromElement node;
@@ -1718,7 +1718,7 @@ instance XmlOutputable r => XmlOutputable {r} where
     toXml = buildXmlForRecord;
     ;
 
-buildXmlForRecord :: XmlOutputable r => String -> {r} -> (Either XmlAttribute XmlNode);
+buildXmlForRecord :: XmlOutputable r => String -> {r} -> Either XmlAttribute XmlNode;
 buildXmlForRecord name value =
     Right (buildXmlElementForRecord name value);
 
