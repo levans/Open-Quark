@@ -1,0 +1,39 @@
+# About Open Quark for Java  
+Open Quark is a programming framework that enables __lazy functional programming on the Java platform__.  
+
+The original motivation for Open Quark was similar to the drive behind Microsoft's LINQ within C#: a way to _express data transformation in composable algebraic terms_ within an application written in an OO language.  Open Quark differs from the approach taken by Microsoft in that we did not attempt to extend the Java language per se, but rather we created Java libraries for compilation and evaluation of functions, under Java control.  Open Quark has also expanded beyond some of these initial ambitions and has become a rather general-purpose functional programming framework for the Java platform.
+
+A key feature of the Open Quark is its __native language CAL__.  CAL is a full functional language in the style of Haskell, Clean, Miranda etc.  Open Quark provides a compiler and tools for the CAL language.  The compiler has pluggable back-ends, but the default target runtime "LECC" _compiles functions directly to Java byte code_.  Various tools allow the creation of JAR files from CAL modules, and so it is possible to use _CAL as a standalone programming language_ without the need to code a Java 'wrapper' to launch your CAL application.
+
+Open Quark was designed from the outset to allow __programmatic control of function creation and evaluation__.  Modules can be created using the Open Quark SDK, which also allows full control of evaluation.  Evaluation can entail passing of values between the CAL runtime and regular Java code, including function 'suspensions'.  In this way, the execution of regular Java and CAL functions can be intertwined as necessary.
+
+CAL supports _parallel evaluation_.  This feature must be enabled with a system property, which then allows a library of 'parallel' functions to be used.
+
+Open Quark has a number of developer features for CAL development, including:  
+
+-   __ICE__ (Interactive CAL Environment) - a console for running/testing functions
+-   A __debug mode__, that allows stopping and stepping in ICE, and rendering of values as they are evaluated
+-   A unique _graphical language_ and development environment called the __Gem Cutter__.  This is a great laboratory for experimenting and testing code.
+-   Tools for generating __CALDoc__ (the CAL equivalent of JavaDoc), attaching _metadata_ to CAL entities, integrating with Java and generating JAR files. 
+
+An __Eclipse plug-in__ for developing in CAL is available.
+An experimental _Embedded CAL Eclipse plug-in_ is available.  This allows you to write CAL code inline with Java source.
+
+![CALLogo](http://09862295870335768118-a-g.googlegroups.com/web/CALlogo3D.png?gda=_1mAkj8AAADmDJqzY4CnftGu0fk_1sAJ4iBypnJtZqmsEn4Jlmv1JKQFpn6RMRgKTlWKGNTUTiiccyFKn-rNKC-d1pM_IdV0)
+
+- - - 
+## Learning More
+
+The [main Open Quark website](http://openquark.org) provides a wealth of information pertaining to Open Quark and has downloads for the latest badged versions (as both binary and source packages).
+
+Open Quark has a [wikipedia page](http://en.wikipedia.org/wiki/Quark_Framework) with some summary material.
+
+A [CAL Language Discussion](http://groups.google.com/group/cal_language) is hosted on Google Groups.  This is a good place to asks questions and share insights.
+
+The Open Quark platform distributions contain a wide range of documentation (in the "docs" folder) covering many aspects of the language and tools.  You'll find reference materials as well as tutorials and examples.
+
+The samples directory contains a file CalIntro.cal that is designed to introduce various language features as you read from top to bottom.   
+
+If you are new to lazy functional programming, you might like to check out the [Haskell language tutorials](http://www.haskell.org/haskellwiki/Learning_Haskell).  Haskell is sufficiently close to CAL syntax, that you should easily be able to convert to CAL once you have the basics of Haskell programming covered.
+
+
