@@ -1145,6 +1145,8 @@ public final class StandaloneJarBuilder {
         supportedLiteralTypesBoxedToUnboxedClassMap.put(Double.class, double.class);
         // String is special - it's not really a boxed type, so it maps to itself
         supportedLiteralTypesBoxedToUnboxedClassMap.put(String.class, String.class);
+        // BigInteger is special - it's not really a boxed type, so it maps to itself
+        supportedLiteralTypesBoxedToUnboxedClassMap.put(BigInteger.class, BigInteger.class);
     }
     
     /** Private constructor. This class is not meant to be instantiated. */
