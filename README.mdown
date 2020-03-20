@@ -26,7 +26,7 @@ An experimental _Embedded CAL Eclipse plug-in_ is available.  This allows you to
 
 The [main Open Quark website](http://openquark.org) provides a wealth of information pertaining to Open Quark and has downloads for the latest badged versions (as both binary and source packages).
 
-Open Quark has a [wikipedia page](http://en.wikipedia.org/wiki/Quark_Framework) with some summary material.
+Open Quark has a [wikipedia page](http://web.archive.org/web/20170728072849/https://en.wikipedia.org/wiki/Quark_Framework) with some summary material.
 
 A [CAL Language Discussion](http://groups.google.com/group/cal_language) is hosted on Google Groups.  This is a good place to asks questions and share insights.
 
